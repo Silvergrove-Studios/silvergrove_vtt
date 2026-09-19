@@ -128,3 +128,40 @@ Also in this pass: Lucide icons on the toolbar, status bar and Layers
 panel (eye/lock/folder/type glyphs), Inter + JetBrains Mono, themed inputs
 and trees, a canvas surround colour with a drop shadow under the map, and
 zoom controls in the status bar.
+
+## Framework samples (September 2026)
+
+Each candidate from the survey was actually installed and applied to the
+editor in the same state (Forest Road, campfire selected). Switch live under
+View → Theme and View → Dockable panels, or `--theme <id> --layout dock`.
+
+| Sample | What it is | Runtime-usable? | Screenshot |
+|---|---|---|---|
+| Godot default | No theme at all, only icons/fonts. The baseline. | yes | `docs/images/frameworks/godot_default.png` |
+| ThemeBuilder (ours) | Tokens → Theme in ~400 lines of our own GDScript, built at start-up, four variants | yes | `docs/images/frameworks/themebuilder_slate.png` |
+| **ThemeGen** (MIT) | Same tokens written in ThemeGen's DSL (`hexmap/ui/themes/slate_gen.gd`, `inherit`/`merge` composition), generated to a `.tres` by an EditorScript; live preview when editing in the Godot editor | yes (the generated `.tres`); generation needs the editor process (`--editor`) | `docs/images/frameworks/themegen_slate.png` |
+| **godot-minimal-theme** (MIT) | The Godot 4.6 "Modern" editor look | **no** — the `.tres` is a script that reads `EditorInterface.get_editor_settings()`; it only exists inside the editor. Its tokens informed Slate. | — |
+| **Themey: Spacey** (MIT/CC0) | Texture-based sci-fi game theme | yes | `docs/images/frameworks/themey_spacey.png` |
+| **Themey: Clashy** (MIT/CC0) | Chunky 3D game buttons | yes | `docs/images/frameworks/themey_clashy.png` |
+| **godot-dockable-container** (CC0) | Panels as tabs: drag onto another panel to tab, to an edge to split; layouts are Resources | yes | `docs/images/frameworks/dockable_container.png` |
+| Lucide addon (MIT) | Editor dock + `LucideIcon` node over the same SVGs | yes, but we already load the SVGs directly (`UiIcons`); the addon adds nothing at run time | — |
+
+What the samples showed:
+
+- **There is no runtime UI framework layer for Godot** in the web sense.
+  Every option is either a Theme resource (a look), a way to author Theme
+  resources (ThemeGen, our builder), or a layout container (dockable). The
+  "framework" decision is therefore three independent choices: how we author
+  the theme, whether we adopt docking, and which icon set.
+- **ThemeGen vs ThemeBuilder** produce the same pixels from the same tokens
+  (compare the two Slate shots; the ThemeGen one lacks icon overrides only
+  because the sample did not port them). ThemeGen's wins are the
+  `inherit`/`merge` composition and live preview *inside the Godot editor*;
+  its costs are an editor-only generation step and a 290 KB generated file
+  to keep in sync. We build our UI in code and rarely open the Godot editor,
+  so the live preview is worth little to us.
+- **Themey** is game UI: readable, but the wrong register for a production
+  tool (Clashy especially). Useful as a reminder of the range, not a
+  candidate.
+- **Dockable container** is the one sample with a behavioural difference,
+  and it works with our theme untouched (panels are TabContainers).

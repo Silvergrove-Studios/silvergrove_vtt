@@ -23,7 +23,8 @@ func _run() -> void:
 			ctx.select_one("props", p.id)
 	main._select_tool("select")
 	main.view.zoom_to_fit()
-	for name in ThemeBuilder.names():
+	var names: Array = args.slice(1) if args.size() > 1 else ThemeBuilder.names()
+	for name in names:
 		main._set_theme(name)
 		await create_timer(0.5).timeout
 		await RenderingServer.frame_post_draw

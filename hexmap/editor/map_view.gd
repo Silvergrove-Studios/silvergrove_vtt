@@ -100,7 +100,7 @@ func _update_texture_density() -> void:
 
 
 func zoom_to_fit() -> void:
-	if ctx.map == null or size.x < 2:
+	if ctx.map == null or size.x < 2 or size.y < 2:
 		return
 	var map_px := ctx.map.grid.map_size() * canvas.ppx
 	var z := minf(size.x / (map_px.x * 1.08), size.y / (map_px.y * 1.08))

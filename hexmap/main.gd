@@ -18,17 +18,30 @@ var status_right: Label
 var undo_item: PopupMenu
 var view_menu: PopupMenu
 var _autosave := Timer.new()
-var _prefs := {"pack_dirs": [], "theme": "slate"}
+var _prefs := {"pack_dirs": [], "theme": "slate", "layout": "splits"}
+var _ui_root: Control
 var theme_menu: PopupMenu
 const TOOL_ICONS := {"select": "mouse-pointer-2", "terrain": "paintbrush", "fill": "paint-bucket", "prop": "trees",
 	"wall": "brick-wall", "light": "lamp", "note": "sticky-note", "erase": "eraser"}
 const V_THEME_BASE := 1000
+## Theme choices offered under View → Theme. Token themes come from
+## ThemeBuilder; the rest are framework samples under evaluation.
+const THEME_SOURCES := [
+	{"id": "slate", "label": "Slate (ThemeBuilder tokens)", "tokens": "slate"},
+	{"id": "forge", "label": "Forge (ThemeBuilder tokens)", "tokens": "forge"},
+	{"id": "studio", "label": "Studio (ThemeBuilder tokens)", "tokens": "studio"},
+	{"id": "parchment", "label": "Parchment (ThemeBuilder tokens)", "tokens": "parchment"},
+	{"id": "slate_gen", "label": "ThemeGen: Slate (generated .tres)", "tres": "res://hexmap/ui/themes/generated/slate_gen.tres", "tokens": "slate"},
+	{"id": "spacey", "label": "Themey: Spacey", "tres": "res://addons/Themey/themes/spacey/spacey.tres", "tokens": "slate"},
+	{"id": "clashy", "label": "Themey: Clashy", "tres": "res://addons/Themey/themes/clashy/clashy.tres", "tokens": "parchment"},
+	{"id": "godot", "label": "Godot default (no theme)", "tokens": "studio"},
+]
 var _native_menus := NativeMenuMirror.new()
 var _last_menu := [-1, -1]   # [id, frame] — the same command from both menu bars in one frame runs once
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_EXPORT_PNG, M_EXPORT_UVTT, M_EXPORT_FOUNDRY, M_EXPORT_TILED, M_EXPORT_PDF, M_EXPORT_BUNDLE, M_QUIT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_GROUP, M_MAP_SETTINGS, M_PREFS,
-	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_HIDDEN, V_DARK, V_FIT, V_100, V_RELOAD_PACKS,
+	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_HIDDEN, V_DARK, V_FIT, V_100, V_RELOAD_PACKS, V_DOCK,
 	L_ADD, L_REMOVE, L_RENAME, L_UP, L_DOWN,
 	H_SHORTCUTS, H_ABOUT }
 
@@ -44,7 +57,10 @@ func _ready() -> void:
 	var ti := args0.find("--theme")
 	if ti >= 0 and ti + 1 < args0.size():
 		_prefs.theme = args0[ti + 1]
-	theme = ThemeBuilder.build(str(_prefs.theme))
+	var li := args0.find("--layout")
+	if li >= 0 and li + 1 < args0.size():
+		_prefs.layout = args0[li + 1]
+	theme = _build_theme(str(_prefs.theme))
 	_set_map(HexMap.create("Untitled", HexGrid.new()))
 	_build_ui()
 	_restyle()
@@ -116,37 +132,29 @@ func _build_ui() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_theme_constant_override("separation", 0)
 	add_child(root)
+	_ui_root = root
 
 	root.add_child(_build_menus())
 	root.add_child(_build_toolbar())
 
-	var split := HSplitContainer.new()
-	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(split)
 	palette = Palette.new(ctx)
+	palette.name = "Palette"
 	palette.picked.connect(_on_palette_pick)
-	split.add_child(palette)
-	var split2 := HSplitContainer.new()
-	split2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	split.add_child(split2)
 	view = MapView.new(ctx)
+	view.name = "Canvas"
 	view.cursor_moved.connect(_on_cursor)
 	view.zoom_changed.connect(func(z: float) -> void: _on_cursor(view.screen_to_hex(view.get_local_mouse_position())))
-	split2.add_child(view)
-	var right := VBoxContainer.new()
-	right.custom_minimum_size.x = 300
-	split2.add_child(right)
-	var vsplit := VSplitContainer.new()
-	vsplit.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right.add_child(vsplit)
 	layers = LayersPanel.new(ctx)
+	layers.name = "Layers"
 	layers.focus_requested.connect(_focus_on)
-	vsplit.add_child(layers)
 	inspector = Inspector.new(ctx)
+	inspector.name = "Inspector"
 	inspector.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inspector.custom_minimum_size.y = 260
-	vsplit.add_child(inspector)
-	right.add_child(_build_view_options())
+
+	if str(_prefs.layout) == "dock":
+		root.add_child(_build_dock_layout())
+	else:
+		root.add_child(_build_split_layout())
 	layers.bind_map()
 
 	var status := HBoxContainer.new()
@@ -174,6 +182,79 @@ func _build_ui() -> void:
 	root.add_child(status_panel)
 	palette.refresh()
 	_refresh_levels()
+
+
+## Fixed three-column layout with draggable splits.
+func _build_split_layout() -> Control:
+	var split := HSplitContainer.new()
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_child(palette)
+	var split2 := HSplitContainer.new()
+	split2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.add_child(split2)
+	split2.add_child(view)
+	var right := VBoxContainer.new()
+	right.custom_minimum_size.x = 300
+	split2.add_child(right)
+	var vsplit := VSplitContainer.new()
+	vsplit.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(vsplit)
+	vsplit.add_child(layers)
+	inspector.custom_minimum_size.y = 260
+	vsplit.add_child(inspector)
+	right.add_child(_build_view_options())
+	return split
+
+
+## godot-dockable-container sample: every panel is a tab that can be dragged
+## onto another panel (to tab with it) or to an edge (to split). Default
+## layout: Palette + Layers tabbed on the left, canvas centre, Inspector right.
+func _build_dock_layout() -> Control:
+	var dock := DockableContainer.new()
+	dock.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	dock.tab_alignment = TabBar.ALIGNMENT_LEFT
+	dock.hide_single_tab = false
+	for c in [palette, view, layers, inspector]:
+		dock.add_child(c)
+	var opts := _build_view_options()
+	opts.name = "View options"
+	dock.add_child(opts)
+	var left := DockableLayoutPanel.new()
+	left.names = PackedStringArray(["Palette", "Layers"])
+	var center := DockableLayoutPanel.new()
+	center.names = PackedStringArray(["Canvas"])
+	var right := DockableLayoutPanel.new()
+	right.names = PackedStringArray(["Inspector", "View options"])
+	var inner := DockableLayoutSplit.new()
+	inner.direction = DockableLayoutSplit.Direction.HORIZONTAL
+	inner.percent = 0.76
+	inner.first = center
+	inner.second = right
+	var outer := DockableLayoutSplit.new()
+	outer.direction = DockableLayoutSplit.Direction.HORIZONTAL
+	outer.percent = 0.2
+	outer.first = left
+	outer.second = inner
+	var layout := DockableLayout.new()
+	layout.root = outer
+	dock.layout = layout
+	return dock
+
+
+## Tear the panels down and build them again (layout switch). Panels are
+## plain views over EditorContext, so nothing is lost.
+func _rebuild_ui() -> void:
+	var map := ctx.map
+	view.set_tool(null)
+	_ui_root.queue_free()
+	_native_menus.free_menus()
+	tool_buttons.clear()
+	_build_ui()
+	_restyle()
+	view.set_map(map)
+	_refresh_levels()
+	inspector.refresh()
+	_select_tool("select")
 
 
 func _build_menus() -> MenuBar:
@@ -236,12 +317,14 @@ func _build_menus() -> MenuBar:
 	view_menu.add_separator()
 	_item(view_menu, "Reload packs", V_RELOAD_PACKS, KEY_R, true, true)
 	view_menu.add_separator()
+	_check(view_menu, "Dockable panels (sample)", V_DOCK, str(_prefs.layout) == "dock")
+	view_menu.add_separator()
 	theme_menu = PopupMenu.new()
 	theme_menu.name = "Theme"
 	var ti := 0
-	for n in ThemeBuilder.names():
-		theme_menu.add_radio_check_item(str(ThemeBuilder.tokens(n).label), V_THEME_BASE + ti)
-		theme_menu.set_item_checked(ti, n == str(_prefs.theme))
+	for src in THEME_SOURCES:
+		theme_menu.add_radio_check_item(str(src.label), V_THEME_BASE + ti)
+		theme_menu.set_item_checked(ti, src.id == str(_prefs.theme))
 		ti += 1
 	theme_menu.id_pressed.connect(_on_menu)
 	view_menu.add_child(theme_menu)
@@ -345,13 +428,32 @@ func _build_view_options() -> Control:
 
 # ====================================================================== theme ==
 
+func _theme_source(name: String) -> Dictionary:
+	for src in THEME_SOURCES:
+		if src.id == name:
+			return src
+	return THEME_SOURCES[0]
+
+
+func _build_theme(name: String) -> Theme:
+	var src := _theme_source(name)
+	if src.has("tres"):
+		var th = load(str(src.tres))
+		if th is Theme:
+			return th
+		push_warning("theme not found: " + str(src.tres))
+	if src.id == "godot":
+		return Theme.new()
+	return ThemeBuilder.build(str(src.tokens))
+
+
 func _set_theme(name: String) -> void:
 	_prefs.theme = name
 	_save_prefs()
-	theme = ThemeBuilder.build(name)
+	theme = _build_theme(name)
 	var i := 0
-	for n in ThemeBuilder.names():
-		theme_menu.set_item_checked(i, n == name)
+	for src in THEME_SOURCES:
+		theme_menu.set_item_checked(i, src.id == name)
 		i += 1
 	_restyle()
 
@@ -359,7 +461,7 @@ func _set_theme(name: String) -> void:
 ## Everything that depends on the theme's tokens but is not a Theme item:
 ## icon colours, the canvas surround, panel icon refreshes.
 func _restyle() -> void:
-	var t := ThemeBuilder.tokens(str(_prefs.theme))
+	var t := ThemeBuilder.tokens(str(_theme_source(str(_prefs.theme)).tokens))
 	var text := ThemeBuilder.c(t, "text")
 	var icon_size: int = t.icon
 	for b in find_children("*", "Button", true, false):
@@ -485,8 +587,8 @@ func _on_menu(id: int) -> void:
 	if _last_menu[0] == id and _last_menu[1] == frame:
 		return
 	_last_menu = [id, frame]
-	if id >= V_THEME_BASE and id < V_THEME_BASE + ThemeBuilder.names().size():
-		_set_theme(ThemeBuilder.names()[id - V_THEME_BASE])
+	if id >= V_THEME_BASE and id < V_THEME_BASE + THEME_SOURCES.size():
+		_set_theme(str(THEME_SOURCES[id - V_THEME_BASE].id))
 		return
 	match id:
 		M_NEW: _new_map_dialog()
@@ -532,6 +634,10 @@ func _on_menu(id: int) -> void:
 					view.canvas.darkness = 0.8 if on else 0.0
 					(find_child("Darkness", true, false) as HSlider).set_value_no_signal(view.canvas.darkness)
 			view.canvas.refresh()
+		V_DOCK:
+			_prefs.layout = "splits" if str(_prefs.layout) == "dock" else "dock"
+			_save_prefs()
+			_rebuild_ui.call_deferred()
 		V_FIT: view.zoom_to_fit()
 		V_100: view.set_zoom(1.0)
 		V_RELOAD_PACKS:

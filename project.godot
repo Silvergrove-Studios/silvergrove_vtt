@@ -22,6 +22,10 @@ window/size/viewport_width=1600
 window/size/viewport_height=1000
 window/stretch/aspect="expand"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/dockable_container/plugin.cfg")
+
 [gui]
 
 theme/default_font_antialiasing=1
