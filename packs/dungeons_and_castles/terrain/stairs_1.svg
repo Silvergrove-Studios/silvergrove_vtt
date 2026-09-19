@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115.47" width="256" height="296">
+<defs><clipPath id="hex"><polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87"/></clipPath></defs>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="#6e6a63"/>
+<g clip-path="url(#hex)">
+<circle cx="37.4" cy="112.5" r="37.6" fill="#66625a" opacity="0.5"/>
+<circle cx="82.1" cy="40.9" r="42.5" fill="#6d6962" opacity="0.5"/>
+<circle cx="58.3" cy="17.8" r="42.9" fill="#656159" opacity="0.5"/>
+<circle cx="87.7" cy="95.7" r="28.4" fill="#77736d" opacity="0.5"/>
+<rect x="-5" y="8.0" width="110" height="15" fill="#7f7c76"/>
+<line x1="-5" y1="8.0" x2="105" y2="8.0" stroke="#3d3a36" stroke-width="2"/>
+<rect x="-5" y="25.0" width="110" height="15" fill="#6e6a63"/>
+<line x1="-5" y1="25.0" x2="105" y2="25.0" stroke="#3d3a36" stroke-width="2"/>
+<rect x="-5" y="42.0" width="110" height="15" fill="#7f7c76"/>
+<line x1="-5" y1="42.0" x2="105" y2="42.0" stroke="#3d3a36" stroke-width="2"/>
+<rect x="-5" y="59.0" width="110" height="15" fill="#6e6a63"/>
+<line x1="-5" y1="59.0" x2="105" y2="59.0" stroke="#3d3a36" stroke-width="2"/>
+<rect x="-5" y="76.0" width="110" height="15" fill="#7f7c76"/>
+<line x1="-5" y1="76.0" x2="105" y2="76.0" stroke="#3d3a36" stroke-width="2"/>
+<rect x="-5" y="93.0" width="110" height="15" fill="#6e6a63"/>
+<line x1="-5" y1="93.0" x2="105" y2="93.0" stroke="#3d3a36" stroke-width="2"/>
+</g>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="none" stroke="#474540" stroke-width="1" opacity="0.5"/>
+</svg>

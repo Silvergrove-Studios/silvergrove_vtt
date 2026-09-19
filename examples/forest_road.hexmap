@@ -1,0 +1,3881 @@
+{
+  "ext": {},
+  "format": "silvergrove.hexmap",
+  "grid": {
+    "columns": 24,
+    "distance": 5,
+    "offset": "odd",
+    "orientation": "pointy",
+    "rows": 16,
+    "units": "ft"
+  },
+  "id": "15d5f6e8-193c-4f1e-be4b-2173cf9a6c11",
+  "levels": [
+    {
+      "elevation_range": [
+        0,
+        1
+      ],
+      "id": "ground",
+      "lights": [
+        {
+          "angle": 360,
+          "animation": "torch",
+          "bright": 1.5,
+          "color": "#ffa040",
+          "dim": 3,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_e3cfd31f",
+          "intensity": 1,
+          "pos": [
+            8.5,
+            5.2
+          ],
+          "shadows": true,
+          "z": 0.5
+        }
+      ],
+      "name": "Ground floor",
+      "notes": [
+        {
+          "gm_only": true,
+          "id": "n_751fd2fa",
+          "pos": [
+            8.5,
+            3.4
+          ],
+          "text": "Three bandits and a lookout in the pine at 6,3. Loot under the left tent.",
+          "title": "Bandit camp"
+        },
+        {
+          "gm_only": true,
+          "id": "n_469ddc82",
+          "pos": [
+            15,
+            8.3
+          ],
+          "text": "Stepping stones: DC 10 to cross without slipping in armour.",
+          "title": "Ford"
+        }
+      ],
+      "props": [
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6119a201",
+          "pos": [
+            3.628,
+            0.873
+          ],
+          "rot": 27.1481323242188,
+          "scale": 0.879061102867126,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_5f05b41a",
+          "pos": [
+            11.69,
+            0.634
+          ],
+          "rot": 327.340759277344,
+          "scale": 0.883134186267853,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_24aacbb8",
+          "pos": [
+            12.59,
+            0.814
+          ],
+          "rot": 194.684387207031,
+          "scale": 0.998875260353088,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_9f184942",
+          "pos": [
+            16.679,
+            0.645
+          ],
+          "rot": 340.1875,
+          "scale": 0.841619312763214,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_4897d3d3",
+          "pos": [
+            17.445,
+            0.705
+          ],
+          "rot": 347.957458496094,
+          "scale": 0.867311000823975,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_64999c9d",
+          "pos": [
+            20.241,
+            0.476
+          ],
+          "rot": 25.2049808502197,
+          "scale": 0.913681030273438,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b8fc0240",
+          "pos": [
+            0.857,
+            1.654
+          ],
+          "rot": 16.8616523742676,
+          "scale": 0.835339725017548,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e25f663a",
+          "pos": [
+            4.074,
+            1.553
+          ],
+          "rot": 259.813018798828,
+          "scale": 0.995065093040466,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_62ea4a9b",
+          "pos": [
+            5.087,
+            1.531
+          ],
+          "rot": 39.4908790588379,
+          "scale": 0.963219702243805,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6a5137a6",
+          "pos": [
+            5.985,
+            1.487
+          ],
+          "rot": 108.309860229492,
+          "scale": 1.07025766372681,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_cdacb254",
+          "pos": [
+            11.03,
+            1.193
+          ],
+          "rot": 148.069427490234,
+          "scale": 1.07842516899109,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_2c0ec268",
+          "pos": [
+            11.799,
+            1.146
+          ],
+          "rot": 325.938568115234,
+          "scale": 1.07013058662415,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d2c429bf",
+          "pos": [
+            12.886,
+            1.672
+          ],
+          "rot": 158.306533813477,
+          "scale": 1.08711302280426,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_cca94ddc",
+          "pos": [
+            14.063,
+            1.509
+          ],
+          "rot": 217.47966003418,
+          "scale": 0.831863939762115,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d94de4ca",
+          "pos": [
+            16.93,
+            1.531
+          ],
+          "rot": 54.1663627624512,
+          "scale": 0.99851405620575,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d10e4c31",
+          "pos": [
+            18.287,
+            1.332
+          ],
+          "rot": 261.177215576172,
+          "scale": 0.941733539104462,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_54899731",
+          "pos": [
+            19.247,
+            1.658
+          ],
+          "rot": 333.6875,
+          "scale": 1.06880569458008,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e22a2ee1",
+          "pos": [
+            21.727,
+            1.389
+          ],
+          "rot": 279.713684082031,
+          "scale": 0.866434097290039,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_4c203f72",
+          "pos": [
+            23.946,
+            1.194
+          ],
+          "rot": 24.2557182312012,
+          "scale": 1.02813220024109,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_aedca6ea",
+          "pos": [
+            1.748,
+            2.229
+          ],
+          "rot": 26.9520111083984,
+          "scale": 1.01948738098145,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_70825555",
+          "pos": [
+            2.466,
+            2.106
+          ],
+          "rot": 336.279571533203,
+          "scale": 0.893210530281067,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_f9c3c132",
+          "pos": [
+            3.446,
+            2.298
+          ],
+          "rot": 321.356567382812,
+          "scale": 1.00352692604065,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_df83d59a",
+          "pos": [
+            4.542,
+            2.067
+          ],
+          "rot": 260.987701416016,
+          "scale": 0.975728213787079,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_8c1a29b0",
+          "pos": [
+            6.721,
+            2.601
+          ],
+          "rot": 130.669204711914,
+          "scale": 0.946564495563507,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d91f2335",
+          "pos": [
+            7.674,
+            2.25
+          ],
+          "rot": 311.913299560547,
+          "scale": 1.13882386684418,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d0e9a2a3",
+          "pos": [
+            9.352,
+            2.53
+          ],
+          "rot": 333.222930908203,
+          "scale": 1.09286415576935,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0e36a3a9",
+          "pos": [
+            10.297,
+            2.473
+          ],
+          "rot": 183.744857788086,
+          "scale": 0.933232486248016,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_16d44a77",
+          "pos": [
+            11.438,
+            2.027
+          ],
+          "rot": 291.057647705078,
+          "scale": 0.818910598754883,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_11238ad6",
+          "pos": [
+            12.431,
+            2.363
+          ],
+          "rot": 243.106323242188,
+          "scale": 0.830154359340668,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_603a958e",
+          "pos": [
+            13.235,
+            2.509
+          ],
+          "rot": 47.3428916931152,
+          "scale": 1.03611016273499,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_2e8fe8db",
+          "pos": [
+            19.364,
+            2.247
+          ],
+          "rot": 314.528839111328,
+          "scale": 0.822674572467804,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_dada4aa5",
+          "pos": [
+            22.234,
+            2.15
+          ],
+          "rot": 276.693786621094,
+          "scale": 1.01085698604584,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_5014bf98",
+          "pos": [
+            23.702,
+            2.308
+          ],
+          "rot": 319.840301513672,
+          "scale": 0.96192479133606,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_26c70add",
+          "pos": [
+            2.251,
+            3.134
+          ],
+          "rot": 349.737091064453,
+          "scale": 0.978379607200623,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_aedb7653",
+          "pos": [
+            3.292,
+            3.422
+          ],
+          "rot": 336.750396728516,
+          "scale": 1.05975842475891,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_1718fc09",
+          "pos": [
+            3.905,
+            2.947
+          ],
+          "rot": 177.424194335938,
+          "scale": 1.11008286476135,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0bccb71f",
+          "pos": [
+            8.722,
+            3.387
+          ],
+          "rot": 244.313583374023,
+          "scale": 0.982678651809692,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_a6b6d7ed",
+          "pos": [
+            11.76,
+            3.086
+          ],
+          "rot": 185.486679077148,
+          "scale": 0.836171090602875,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_293d0881",
+          "pos": [
+            13.16,
+            3.29
+          ],
+          "rot": 63.9131126403809,
+          "scale": 0.804599046707153,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_42b6e594",
+          "pos": [
+            22.225,
+            2.93
+          ],
+          "rot": 73.8268814086914,
+          "scale": 0.918370008468628,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_cd9638d5",
+          "pos": [
+            3.789,
+            4.335
+          ],
+          "rot": 320.863739013672,
+          "scale": 0.818879723548889,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_4823a52f",
+          "pos": [
+            10.467,
+            4.28
+          ],
+          "rot": 193.665878295898,
+          "scale": 0.813468337059021,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_cd3847f4",
+          "pos": [
+            11.556,
+            3.776
+          ],
+          "rot": 14.2654495239258,
+          "scale": 1.04626619815826,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d81d4d6b",
+          "pos": [
+            12.377,
+            3.79
+          ],
+          "rot": 199.590744018555,
+          "scale": 1.10926270484924,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_aba409a2",
+          "pos": [
+            21.418,
+            4.095
+          ],
+          "rot": 192.143920898438,
+          "scale": 1.06549072265625,
+          "z": 0
+        },
+        {
+          "asset": "woodland:bush",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0b162e6e",
+          "pos": [
+            23.32,
+            3.795
+          ],
+          "rot": 202.942687988281,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:stump",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_c8cbbd95",
+          "pos": [
+            4.73,
+            4.93
+          ],
+          "rot": 293.833618164062,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:boulder_small",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_410edc79",
+          "pos": [
+            0.587,
+            5.726
+          ],
+          "rot": 347.983703613281,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:boulder_small",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_bcc6bd71",
+          "pos": [
+            2.459,
+            5.944
+          ],
+          "rot": 91.5547790527344,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:bush",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e13cf629",
+          "pos": [
+            6.68,
+            5.888
+          ],
+          "rot": 229.913360595703,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:boulder_small",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d16cf5aa",
+          "pos": [
+            7.325,
+            5.991
+          ],
+          "rot": 329.657135009766,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:boulder_small",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_ec7f15fa",
+          "pos": [
+            1.996,
+            6.594
+          ],
+          "rot": 288.081420898438,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:bush",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_34877ae0",
+          "pos": [
+            2.747,
+            8.42
+          ],
+          "rot": 49.0495338439941,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:stump",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_be406a93",
+          "pos": [
+            0.944,
+            9.846
+          ],
+          "rot": 114.368179321289,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:stump",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_95adf012",
+          "pos": [
+            5.987,
+            9.958
+          ],
+          "rot": 195.048004150391,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d5b54ec0",
+          "pos": [
+            5.306,
+            10.757
+          ],
+          "rot": 230.985748291016,
+          "scale": 1.14045417308807,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_c23c5a9e",
+          "pos": [
+            8.238,
+            10.941
+          ],
+          "rot": 134.539672851562,
+          "scale": 0.85140585899353,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_3f251d57",
+          "pos": [
+            17.223,
+            10.998
+          ],
+          "rot": 70.7257080078125,
+          "scale": 1.07860219478607,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_7fbbb598",
+          "pos": [
+            18.545,
+            10.898
+          ],
+          "rot": 341.067993164062,
+          "scale": 0.990517556667328,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_be909cc7",
+          "pos": [
+            19.658,
+            10.848
+          ],
+          "rot": 259.257659912109,
+          "scale": 1.05521678924561,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_4c6dd9c1",
+          "pos": [
+            3.199,
+            11.542
+          ],
+          "rot": 56.203067779541,
+          "scale": 1.07580232620239,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_c5f76472",
+          "pos": [
+            4.101,
+            11.714
+          ],
+          "rot": 147.089172363281,
+          "scale": 0.876165866851807,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0a1ddc5a",
+          "pos": [
+            5.72,
+            11.54
+          ],
+          "rot": 349.687774658203,
+          "scale": 0.800250291824341,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_157135f6",
+          "pos": [
+            6.917,
+            11.601
+          ],
+          "rot": 232.541305541992,
+          "scale": 1.01353633403778,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6825a8d7",
+          "pos": [
+            8.741,
+            11.552
+          ],
+          "rot": 2.12847638130188,
+          "scale": 1.13623952865601,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_bb2d89f7",
+          "pos": [
+            16.014,
+            12.071
+          ],
+          "rot": 215.818054199219,
+          "scale": 1.07236838340759,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_bbd2aaab",
+          "pos": [
+            18.786,
+            12.023
+          ],
+          "rot": 165.761245727539,
+          "scale": 0.951230347156525,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_1123786a",
+          "pos": [
+            20.105,
+            11.636
+          ],
+          "rot": 299.281372070312,
+          "scale": 1.13428592681885,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_676e0e3f",
+          "pos": [
+            20.723,
+            11.675
+          ],
+          "rot": 57.8662490844727,
+          "scale": 0.984788537025452,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_09d2e42f",
+          "pos": [
+            0.223,
+            12.985
+          ],
+          "rot": 10.6249723434448,
+          "scale": 1.14704513549805,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b904234a",
+          "pos": [
+            1.402,
+            12.841
+          ],
+          "rot": 5.34129476547241,
+          "scale": 0.989324033260345,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_770d46aa",
+          "pos": [
+            4.296,
+            12.886
+          ],
+          "rot": 106.051055908203,
+          "scale": 0.804872691631317,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_a3f322d4",
+          "pos": [
+            11.276,
+            12.818
+          ],
+          "rot": 322.325897216797,
+          "scale": 1.14020156860352,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_7d69f676",
+          "pos": [
+            12.773,
+            12.519
+          ],
+          "rot": 229.777801513672,
+          "scale": 1.05854821205139,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_80ae0b21",
+          "pos": [
+            13.52,
+            12.49
+          ],
+          "rot": 4.12838077545166,
+          "scale": 0.844081938266754,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_4f879bc0",
+          "pos": [
+            15.391,
+            12.89
+          ],
+          "rot": 68.1315078735352,
+          "scale": 0.950748801231384,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_fcd4aa86",
+          "pos": [
+            18.502,
+            12.681
+          ],
+          "rot": 36.5136337280273,
+          "scale": 0.902711570262909,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_43ec0f05",
+          "pos": [
+            19.561,
+            12.643
+          ],
+          "rot": 56.331615447998,
+          "scale": 0.873469173908234,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_497f3d44",
+          "pos": [
+            20.71,
+            12.584
+          ],
+          "rot": 68.2482070922852,
+          "scale": 1.0124077796936,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_9e33fa9f",
+          "pos": [
+            21.711,
+            12.605
+          ],
+          "rot": 293.853820800781,
+          "scale": 1.14021480083466,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6fb34bc5",
+          "pos": [
+            22.66,
+            12.932
+          ],
+          "rot": 58.9496383666992,
+          "scale": 0.889406204223633,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_80ff02ae",
+          "pos": [
+            23.23,
+            12.933
+          ],
+          "rot": 348.803405761719,
+          "scale": 1.04862415790558,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_fd617379",
+          "pos": [
+            1.03,
+            13.494
+          ],
+          "rot": 115.157821655273,
+          "scale": 0.805888295173645,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_16875905",
+          "pos": [
+            3.226,
+            13.832
+          ],
+          "rot": 166.912811279297,
+          "scale": 0.863069176673889,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_189045d6",
+          "pos": [
+            5.704,
+            13.493
+          ],
+          "rot": 253.220794677734,
+          "scale": 0.873216450214386,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_902e7c75",
+          "pos": [
+            7.87,
+            13.284
+          ],
+          "rot": 54.7764320373535,
+          "scale": 0.822151839733124,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_c721c323",
+          "pos": [
+            9.191,
+            13.752
+          ],
+          "rot": 11.556206703186,
+          "scale": 1.07097887992859,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_08925c71",
+          "pos": [
+            12.057,
+            13.434
+          ],
+          "rot": 48.3300170898438,
+          "scale": 1.06916797161102,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_3ad0425f",
+          "pos": [
+            16.036,
+            13.772
+          ],
+          "rot": 53.4175491333008,
+          "scale": 0.809488594532013,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_3758f027",
+          "pos": [
+            16.929,
+            13.43
+          ],
+          "rot": 123.720481872559,
+          "scale": 1.03266263008118,
+          "z": 0
+        },
+        {
+          "asset": "woodland:birch",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_9edcfc82",
+          "pos": [
+            18.961,
+            13.759
+          ],
+          "rot": 307.723480224609,
+          "scale": 0.971483826637268,
+          "z": 0
+        },
+        {
+          "asset": "woodland:oak_large",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_eb9e96d1",
+          "pos": [
+            21.053,
+            13.802
+          ],
+          "rot": 108.332359313965,
+          "scale": 1.11478757858276,
+          "z": 0
+        },
+        {
+          "asset": "woodland:pine",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_bd50a61b",
+          "pos": [
+            24.298,
+            13.613
+          ],
+          "rot": 236.269073486328,
+          "scale": 1.01353716850281,
+          "z": 0
+        },
+        {
+          "asset": "woodland:campfire",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e166a13a",
+          "pos": [
+            8.5,
+            5.2
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:tent",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0ca4d855",
+          "pos": [
+            7.1,
+            4.6
+          ],
+          "rot": 20,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:tent",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0fe3033d",
+          "pos": [
+            9.8,
+            4.4
+          ],
+          "rot": -15,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:fallen_log",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0caa3f24",
+          "pos": [
+            8.7,
+            6.3
+          ],
+          "rot": 10,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:boulder",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_2ce249b3",
+          "pos": [
+            11.2,
+            10.4
+          ],
+          "rot": 30,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:boulder",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_1238ef6c",
+          "pos": [
+            4,
+            10.8
+          ],
+          "rot": 80,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:stream_stones",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_7590f3a2",
+          "layer": "ground",
+          "pos": [
+            15,
+            8.3
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:mushroom_ring",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_498f5a3d",
+          "layer": "ground",
+          "pos": [
+            19.5,
+            3.5
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        }
+      ],
+      "terrain": {
+        "-1,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-1,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-1,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-1,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-1,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "-1,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-1,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "-1,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-1,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-1,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-1,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-1,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-1,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "-1,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-2,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-2,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-2,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-2,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "-2,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "-2,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-2,4": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 0,
+          "z": 0
+        },
+        "-2,5": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "-2,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "-2,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "-2,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "-2,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-3,10": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 0,
+          "z": 0
+        },
+        "-3,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-3,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-3,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-3,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "-3,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "-3,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-3,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "-3,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "-3,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-4,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-4,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-4,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-4,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "-4,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "-4,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "-4,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "-4,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-5,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "-5,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-5,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "-5,13": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "-5,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-5,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-6,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "-6,13": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "-6,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "-6,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-7,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "-7,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "0,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "0,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "0,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "0,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "0,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "0,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "0,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "0,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "0,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "0,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "0,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "0,7": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "0,8": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "1,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "1,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "1,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "1,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "1,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "1,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "1,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "1,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "1,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "1,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "1,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,7": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "1,8": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "10,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "10,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "10,10": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "10,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "10,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "10,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "10,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "10,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "10,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "10,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "10,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "10,5": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "10,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "10,7": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 1,
+          "z": 0
+        },
+        "10,8": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "10,9": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 1,
+          "z": 0
+        },
+        "11,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "11,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "11,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "11,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "11,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "11,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "11,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "11,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "11,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "11,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "11,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "11,5": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 1,
+          "z": 0
+        },
+        "11,6": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "11,7": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "11,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "11,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "12,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "12,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "12,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "12,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "12,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "12,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "12,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "12,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "12,3": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,4": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "12,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,6": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "12,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "12,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "12,9": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 1,
+          "z": 0
+        },
+        "13,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "13,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "13,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "13,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "13,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "13,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "13,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "13,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "13,2": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 1,
+          "z": 0
+        },
+        "13,3": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 1,
+          "z": 0
+        },
+        "13,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "13,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "13,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "13,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "13,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "13,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "14,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "14,1": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 1,
+          "z": 0
+        },
+        "14,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "14,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "14,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "14,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "14,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "14,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "14,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "14,3": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 1,
+          "z": 0
+        },
+        "14,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "14,5": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 0,
+          "z": 0
+        },
+        "14,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "14,7": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 1,
+          "z": 0
+        },
+        "14,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "14,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "15,0": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "15,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "15,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "15,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "15,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "15,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "15,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "15,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "15,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "15,3": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "15,4": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 0,
+          "z": 0
+        },
+        "15,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "15,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "15,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "15,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "15,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "16,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "16,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "16,13": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "16,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "16,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "16,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "16,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "16,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "16,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,7": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "16,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "16,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "17,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "17,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "17,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "17,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,13": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "17,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "17,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "17,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "17,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "17,8": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "17,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "18,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "18,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "18,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "18,11": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "18,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "18,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "18,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "18,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "18,6": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "18,7": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 0,
+          "z": 0
+        },
+        "18,8": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "19,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "19,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "19,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "19,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "19,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "19,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "19,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,8": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "19,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "2,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "2,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "2,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "2,12": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "2,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "2,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "2,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "2,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "2,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "2,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "2,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "2,7": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "2,8": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 1,
+          "z": 0
+        },
+        "2,9": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "20,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "20,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "20,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "20,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "20,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "20,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "20,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "20,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "21,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "21,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "21,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "21,3": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "21,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "21,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "22,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "22,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "22,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "22,3": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "23,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "23,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "3,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "3,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "3,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "3,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "3,12": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "3,13": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "3,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "3,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "3,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "3,3": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "3,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "3,5": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 0,
+          "z": 0
+        },
+        "3,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "3,7": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "3,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "3,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "4,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "4,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "4,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,13": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "4,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "4,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "4,3": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "4,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "4,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "5,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "5,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "5,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "5,12": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "5,13": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "5,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "5,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "5,3": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "5,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "5,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "5,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "5,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "5,9": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "6,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "6,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "6,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "6,13": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "6,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "6,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "6,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "6,3": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 0,
+          "z": 0
+        },
+        "6,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "6,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "6,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "6,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "6,8": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "6,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        },
+        "7,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "7,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "7,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "7,12": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 0,
+          "z": 0
+        },
+        "7,13": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,14": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "7,15": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 1,
+          "z": 0
+        },
+        "7,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "7,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "7,4": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "7,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "7,7": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,8": {
+          "rot": 0,
+          "t": "woodland:rocky_ground",
+          "v": 1,
+          "z": 0
+        },
+        "7,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "8,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "8,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "8,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,11": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,12": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,13": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "8,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "8,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "8,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "8,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "8,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "8,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "8,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "8,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "8,8": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 1,
+          "z": 0
+        },
+        "9,0": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "9,1": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "9,10": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "9,11": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "9,12": {
+          "rot": 0,
+          "t": "woodland:shallow_stream",
+          "v": 0,
+          "z": 0
+        },
+        "9,13": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "9,14": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "9,15": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "9,2": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 2,
+          "z": 0
+        },
+        "9,3": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 0,
+          "z": 0
+        },
+        "9,4": {
+          "rot": 0,
+          "t": "woodland:forest_floor",
+          "v": 1,
+          "z": 0
+        },
+        "9,5": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 0,
+          "z": 0
+        },
+        "9,6": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 2,
+          "z": 0
+        },
+        "9,7": {
+          "rot": 0,
+          "t": "woodland:grass",
+          "v": 1,
+          "z": 0
+        },
+        "9,8": {
+          "rot": 0,
+          "t": "woodland:tall_grass",
+          "v": 1,
+          "z": 0
+        },
+        "9,9": {
+          "rot": 0,
+          "t": "woodland:dirt_path",
+          "v": 0,
+          "z": 0
+        }
+      },
+      "walls": [
+        {
+          "blocks": {
+            "light": false,
+            "move": true,
+            "sight": false,
+            "sound": false
+          },
+          "door": "none",
+          "hidden": false,
+          "id": "w_bae8b089",
+          "one_way": null,
+          "points": [
+            [
+              2,
+              9.5263
+            ],
+            [
+              3,
+              9.5263
+            ],
+            [
+              4,
+              9.5263
+            ],
+            [
+              5,
+              9.5263
+            ],
+            [
+              6,
+              9.5263
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "style": "woodland:wooden_fence",
+          "z": [
+            0,
+            1
+          ]
+        },
+        {
+          "blocks": {
+            "light": true,
+            "move": false,
+            "sight": true,
+            "sound": false
+          },
+          "door": "none",
+          "hidden": false,
+          "id": "w_ff68f8df",
+          "one_way": null,
+          "points": [
+            [
+              15,
+              0.2887
+            ],
+            [
+              14.5,
+              5.1962
+            ],
+            [
+              15.5,
+              8.6603
+            ]
+          ],
+          "sight_mode": "limited",
+          "state": "closed",
+          "style": "woodland:stream_bank",
+          "z": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "author": "Silvergrove Studios",
+    "created": "2026-09-19T00:00:00",
+    "description": "A woodland track with a camp beside a stream. Ambush country.",
+    "modified": "2026-09-19T00:00:00"
+  },
+  "name": "Forest Road",
+  "packs": {
+    "woodland": "0.1.0"
+  },
+  "reference_ppx": 256,
+  "style": {
+    "background": "#1c1a17",
+    "grid_color": "#00000066",
+    "grid_width": 0.012
+  },
+  "version": 1
+}

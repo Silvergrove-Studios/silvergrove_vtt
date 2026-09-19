@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115.47" width="256" height="296">
+<defs><clipPath id="hex"><polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87"/></clipPath></defs>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="#7a2a2a"/>
+<g clip-path="url(#hex)">
+<circle cx="55.4" cy="53.8" r="33.9" fill="#7a2a2a" opacity="0.5"/>
+<circle cx="17.8" cy="57.0" r="44.5" fill="#782626" opacity="0.5"/>
+<circle cx="92.9" cy="12.1" r="37.2" fill="#701a1a" opacity="0.5"/>
+<circle cx="39.7" cy="37.5" r="37.2" fill="#823737" opacity="0.5"/>
+<polygon points="50,10 91,33.6 91,81.8 50,105.4 9,81.8 9,33.6" fill="none" stroke="#a97575" stroke-width="3"/>
+</g>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="none" stroke="#4f1b1b" stroke-width="1" opacity="0.5"/>
+</svg>

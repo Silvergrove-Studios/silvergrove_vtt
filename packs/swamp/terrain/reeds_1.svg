@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115.47" width="256" height="296">
+<defs><clipPath id="hex"><polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87"/></clipPath></defs>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="#6c8a3e"/>
+<g clip-path="url(#hex)">
+<circle cx="69.8" cy="67.6" r="34.3" fill="#628231" opacity="0.5"/>
+<circle cx="36.8" cy="37.3" r="23.2" fill="#648434" opacity="0.5"/>
+<circle cx="7.5" cy="59.5" r="20.0" fill="#6d8a3f" opacity="0.5"/>
+<circle cx="46.3" cy="46.6" r="33.0" fill="#628232" opacity="0.5"/>
+<path d="M65.9 26.3 q-2 -3.3 -3 -5.6 M65.9 26.3 q0 -3.9 0 -6.7 M65.9 26.3 q2 -3.3 3 -5.6" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M88.5 69.5 q-2 -2.8 -3 -4.7 M88.5 69.5 q0 -3.3 0 -5.6 M88.5 69.5 q2 -2.8 3 -4.7" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M29.2 32.7 q-2 -4.5 -3 -7.5 M29.2 32.7 q0 -5.2 0 -8.9 M29.2 32.7 q2 -4.5 3 -7.5" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M20.2 10.4 q-2 -3.1 -3 -5.2 M20.2 10.4 q0 -3.6 0 -6.3 M20.2 10.4 q2 -3.1 3 -5.2" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M63.1 63.1 q-2 -4.7 -3 -7.9 M63.1 63.1 q0 -5.5 0 -9.5 M63.1 63.1 q2 -4.7 3 -7.9" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M59.0 108.5 q-2 -4.4 -3 -7.3 M59.0 108.5 q0 -5.1 0 -8.8 M59.0 108.5 q2 -4.4 3 -7.3" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M53.3 63.4 q-2 -2.9 -3 -4.8 M53.3 63.4 q0 -3.4 0 -5.8 M53.3 63.4 q2 -2.9 3 -4.8" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M76.1 91.1 q-2 -2.7 -3 -4.5 M76.1 91.1 q0 -3.2 0 -5.4 M76.1 91.1 q2 -2.7 3 -4.5" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M87.4 94.2 q-2 -3.9 -3 -6.6 M87.4 94.2 q0 -4.6 0 -7.9 M87.4 94.2 q2 -3.9 3 -6.6" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M67.5 102.7 q-2 -2.6 -3 -4.3 M67.5 102.7 q0 -3.0 0 -5.1 M67.5 102.7 q2 -2.6 3 -4.3" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M65.7 15.2 q-2 -3.3 -3 -5.4 M65.7 15.2 q0 -3.8 0 -6.5 M65.7 15.2 q2 -3.3 3 -5.4" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M84.8 74.5 q-2 -3.6 -3 -6.0 M84.8 74.5 q0 -4.2 0 -7.3 M84.8 74.5 q2 -3.6 3 -6.0" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M75.7 31.8 q-2 -4.3 -3 -7.2 M75.7 31.8 q0 -5.1 0 -8.7 M75.7 31.8 q2 -4.3 3 -7.2" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M94.3 105.3 q-2 -3.3 -3 -5.4 M94.3 105.3 q0 -3.8 0 -6.5 M94.3 105.3 q2 -3.3 3 -5.4" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M86.0 94.2 q-2 -2.9 -3 -4.8 M86.0 94.2 q0 -3.4 0 -5.8 M86.0 94.2 q2 -2.9 3 -4.8" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M15.3 85.4 q-2 -4.4 -3 -7.3 M15.3 85.4 q0 -5.1 0 -8.7 M15.3 85.4 q2 -4.4 3 -7.3" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M50.2 70.2 q-2 -3.0 -3 -5.0 M50.2 70.2 q0 -3.5 0 -6.0 M50.2 70.2 q2 -3.0 3 -5.0" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M32.4 63.7 q-2 -3.8 -3 -6.4 M32.4 63.7 q0 -4.5 0 -7.7 M32.4 63.7 q2 -3.8 3 -6.4" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M57.9 65.7 q-2 -3.7 -3 -6.1 M57.9 65.7 q0 -4.3 0 -7.4 M57.9 65.7 q2 -3.7 3 -6.1" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M15.1 11.2 q-2 -4.3 -3 -7.1 M15.1 11.2 q0 -5.0 0 -8.5 M15.1 11.2 q2 -4.3 3 -7.1" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M64.7 96.7 q-2 -4.8 -3 -8.0 M64.7 96.7 q0 -5.6 0 -9.7 M64.7 96.7 q2 -4.8 3 -8.0" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M41.4 50.3 q-2 -3.9 -3 -6.5 M41.4 50.3 q0 -4.6 0 -7.8 M41.4 50.3 q2 -3.9 3 -6.5" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M76.9 80.7 q-2 -3.6 -3 -6.0 M76.9 80.7 q0 -4.2 0 -7.2 M76.9 80.7 q2 -3.6 3 -6.0" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M50.7 29.7 q-2 -5.0 -3 -8.3 M50.7 29.7 q0 -5.8 0 -10.0 M50.7 29.7 q2 -5.0 3 -8.3" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M93.0 92.1 q-2 -4.1 -3 -6.9 M93.0 92.1 q0 -4.8 0 -8.2 M93.0 92.1 q2 -4.1 3 -6.9" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+<path d="M7.3 52.7 q-2 -2.6 -3 -4.4 M7.3 52.7 q0 -3.1 0 -5.3 M7.3 52.7 q2 -2.6 3 -4.4" stroke="#51682f" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+</g>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="none" stroke="#465a28" stroke-width="1" opacity="0.5"/>
+</svg>

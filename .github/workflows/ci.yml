@@ -1,0 +1,28 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.7.1-stable
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hexmap/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+      - name: Install Godot
+        run: ./run.sh install
+      - name: Script check
+        run: ./run.sh check
+      - name: Unit tests
+        run: ./run.sh test
+      - name: Examples regenerate cleanly
+        run: |
+          ./run.sh examples
+          git diff --exit-code -- examples/
+      - name: Pack contact sheet renders headless
+        run: ./run.sh sheet woodland out/woodland.png 64

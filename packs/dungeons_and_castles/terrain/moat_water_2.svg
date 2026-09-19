@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115.47" width="256" height="296">
+<defs><clipPath id="hex"><polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87"/></clipPath></defs>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="#3f5f7a"/>
+<g clip-path="url(#hex)">
+<circle cx="78.1" cy="64.8" r="35.3" fill="#4a6881" opacity="0.5"/>
+<circle cx="64.0" cy="111.9" r="43.7" fill="#385975" opacity="0.5"/>
+<circle cx="82.8" cy="95.4" r="31.8" fill="#3e5e79" opacity="0.5"/>
+<circle cx="83.8" cy="83.7" r="38.9" fill="#486680" opacity="0.5"/>
+<path d="M-8.2 8.7 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#627c92" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M-5.0 23.1 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#627c92" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M-0.4 37.1 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#627c92" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M9.9 51.6 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#627c92" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M-0.5 70.3 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#627c92" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M-5.3 83.7 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#627c92" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M5.4 98.9 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#627c92" stroke-width="1.4" fill="none" opacity="0.7"/>
+</g>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="none" stroke="#293e4f" stroke-width="1" opacity="0.5"/>
+</svg>

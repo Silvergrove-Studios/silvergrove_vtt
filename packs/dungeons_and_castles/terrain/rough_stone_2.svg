@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115.47" width="256" height="296">
+<defs><clipPath id="hex"><polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87"/></clipPath></defs>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="#5a5652"/>
+<g clip-path="url(#hex)">
+<circle cx="4.0" cy="106.4" r="30.1" fill="#4e4a45" opacity="0.5"/>
+<circle cx="44.2" cy="55.2" r="29.2" fill="#57534f" opacity="0.5"/>
+<circle cx="93.4" cy="109.2" r="39.6" fill="#55514c" opacity="0.5"/>
+<circle cx="73.4" cy="100.3" r="27.3" fill="#4e4945" opacity="0.5"/>
+<path d="M60.9 50.0 L70.4 55.5 L63.5 51.3 L77.1 55.1 L88.9 64.4" stroke="#322f2d" stroke-width="0.9" fill="none" stroke-linejoin="round"/>
+<path d="M43.1 81.0 L38.5 90.3 L43.4 79.4 L34.6 77.4 L34.4 87.3" stroke="#322f2d" stroke-width="1.4" fill="none" stroke-linejoin="round"/>
+<path d="M52.3 94.3 L51.0 107.8 L42.1 112.2 L47.0 102.9 L53.8 106.1" stroke="#322f2d" stroke-width="1.0" fill="none" stroke-linejoin="round"/>
+<path d="M45.3 68.0 L40.9 78.1 L53.7 78.3 L42.4 75.3 L46.1 87.2" stroke="#322f2d" stroke-width="0.9" fill="none" stroke-linejoin="round"/>
+<path d="M56.7 99.8 L46.8 89.1 L39.2 87.4 L38.1 95.4 L51.8 87.1" stroke="#322f2d" stroke-width="0.9" fill="none" stroke-linejoin="round"/>
+<path d="M60.3 57.8 L57.9 63.7 L47.8 73.5 L54.4 80.4 L46.3 79.3" stroke="#322f2d" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+</g>
+<polygon points="50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87" fill="none" stroke="#3b3835" stroke-width="1" opacity="0.5"/>
+</svg>

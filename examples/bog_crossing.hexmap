@@ -1,0 +1,2638 @@
+{
+  "ext": {},
+  "format": "silvergrove.hexmap",
+  "grid": {
+    "columns": 20,
+    "distance": 1.5,
+    "offset": "odd",
+    "orientation": "flat",
+    "rows": 14,
+    "units": "m"
+  },
+  "id": "5902d4fd-9c01-45e4-becf-5b71bf9decb5",
+  "levels": [
+    {
+      "elevation_range": [
+        0,
+        1
+      ],
+      "id": "ground",
+      "lights": [
+        {
+          "angle": 360,
+          "animation": "flicker",
+          "bright": 1,
+          "color": "#ffd080",
+          "dim": 2,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_9c578e99",
+          "intensity": 1,
+          "pos": [
+            16.1,
+            7.2
+          ],
+          "shadows": true,
+          "z": 0.5
+        },
+        {
+          "angle": 360,
+          "animation": "pulse",
+          "bright": 0.5,
+          "color": "#a0ffd0",
+          "dim": 1.5,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_ec2832f1",
+          "intensity": 1,
+          "pos": [
+            8.291,
+            6.535
+          ],
+          "shadows": true,
+          "z": 0.5
+        },
+        {
+          "angle": 360,
+          "animation": "pulse",
+          "bright": 0.5,
+          "color": "#a0ffd0",
+          "dim": 1.5,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_9637c58d",
+          "intensity": 1,
+          "pos": [
+            8.779,
+            4.98
+          ],
+          "shadows": true,
+          "z": 0.5
+        },
+        {
+          "angle": 360,
+          "animation": "pulse",
+          "bright": 0.5,
+          "color": "#a0ffd0",
+          "dim": 1.5,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_b617b5bc",
+          "intensity": 1,
+          "pos": [
+            6.74,
+            8.102
+          ],
+          "shadows": true,
+          "z": 0.5
+        }
+      ],
+      "name": "Ground floor",
+      "notes": [
+        {
+          "gm_only": true,
+          "id": "n_2de0fe91",
+          "pos": [
+            17.3,
+            6.3
+          ],
+          "text": "Mother Sedge is home. She wants the frog totem back before she talks.",
+          "title": "The hut"
+        },
+        {
+          "gm_only": true,
+          "id": "n_ea5aac8e",
+          "pos": [
+            9.5,
+            9.6
+          ],
+          "text": "A strongbox in the mud beneath, guarded by a bog lurker.",
+          "title": "Sunken boat"
+        }
+      ],
+      "props": [
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_cdb5b07e",
+          "pos": [
+            8.511,
+            1.114
+          ],
+          "rot": 220.454040527344,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_8d05a5a9",
+          "pos": [
+            12.783,
+            0.367
+          ],
+          "rot": 152.558822631836,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_c119387f",
+          "pos": [
+            14.23,
+            0.529
+          ],
+          "rot": 266.251586914062,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_a82eb1c3",
+          "pos": [
+            16.917,
+            1.076
+          ],
+          "rot": 60.7595672607422,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e284c0fb",
+          "pos": [
+            9.006,
+            3.388
+          ],
+          "rot": 219.142227172852,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_00c34ab3",
+          "pos": [
+            13.761,
+            3.814
+          ],
+          "rot": 77.0836181640625,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_950ba5b4",
+          "pos": [
+            5.112,
+            5.252
+          ],
+          "rot": 154.763809204102,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0f4206ae",
+          "pos": [
+            5.94,
+            4.549
+          ],
+          "rot": 45.283504486084,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_50e79366",
+          "layer": "ground",
+          "pos": [
+            11.934,
+            5.121
+          ],
+          "rot": 61.538028717041,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b53d6f8c",
+          "pos": [
+            14.426,
+            4.302
+          ],
+          "rot": 154.834182739258,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6e578cd7",
+          "pos": [
+            16.94,
+            5.264
+          ],
+          "rot": 143.997589111328,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_9634443f",
+          "pos": [
+            1.499,
+            5.723
+          ],
+          "rot": 285.276458740234,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_f0197280",
+          "pos": [
+            3.176,
+            5.816
+          ],
+          "rot": 148.808822631836,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b8ef13d3",
+          "layer": "ground",
+          "pos": [
+            14.145,
+            5.578
+          ],
+          "rot": 190.448837280273,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_a9ed908c",
+          "pos": [
+            2.274,
+            6.355
+          ],
+          "rot": 166.704299926758,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_817d6df1",
+          "layer": "ground",
+          "pos": [
+            12.067,
+            6.931
+          ],
+          "rot": 68.9394683837891,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mangrove",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6b2da139",
+          "pos": [
+            12.902,
+            6.748
+          ],
+          "rot": 309.452880859375,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_f5d59a02",
+          "pos": [
+            14.142,
+            6.442
+          ],
+          "rot": 185.864959716797,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b7907fd0",
+          "pos": [
+            4.773,
+            7.972
+          ],
+          "rot": 159.422103881836,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_97ecdd04",
+          "pos": [
+            5.699,
+            7.375
+          ],
+          "rot": 285.972106933594,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_4e6c2345",
+          "layer": "ground",
+          "pos": [
+            11.686,
+            9.003
+          ],
+          "rot": 298.065612792969,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_89e13c7e",
+          "layer": "ground",
+          "pos": [
+            13.304,
+            9.266
+          ],
+          "rot": 59.6948890686035,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_0ce293da",
+          "pos": [
+            4.016,
+            9.521
+          ],
+          "rot": 312.831817626953,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mangrove",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_505dcd8a",
+          "pos": [
+            8.13,
+            10.037
+          ],
+          "rot": 189.771331787109,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_08df7d2f",
+          "layer": "ground",
+          "pos": [
+            10.855,
+            9.674
+          ],
+          "rot": 80.1248474121094,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_989cf90f",
+          "layer": "ground",
+          "pos": [
+            11.951,
+            9.732
+          ],
+          "rot": 344.927001953125,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_1b36b76d",
+          "layer": "ground",
+          "pos": [
+            12.501,
+            9.65
+          ],
+          "rot": 198.417877197266,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_1c0b50b1",
+          "pos": [
+            15.057,
+            10.057
+          ],
+          "rot": 221.390319824219,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_cd5747d8",
+          "pos": [
+            1.27,
+            11.225
+          ],
+          "rot": 233.788787841797,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_49b8a19e",
+          "pos": [
+            2.153,
+            10.365
+          ],
+          "rot": 235.028289794922,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:lily_pads",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e943ab5a",
+          "layer": "ground",
+          "pos": [
+            9.185,
+            10.496
+          ],
+          "rot": 312.942474365234,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_66da05c8",
+          "pos": [
+            16.185,
+            10.401
+          ],
+          "rot": 204.040832519531,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_7a4b80cc",
+          "pos": [
+            1.51,
+            12.019
+          ],
+          "rot": 204.542297363281,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_c80257aa",
+          "pos": [
+            2.933,
+            12.023
+          ],
+          "rot": 69.8486862182617,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:cypress_knees",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_20985125",
+          "pos": [
+            8.371,
+            12.092
+          ],
+          "rot": 105.459907531738,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e3a5f241",
+          "pos": [
+            6.875,
+            13.279
+          ],
+          "rot": 230.409393310547,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:mossy_stone",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6582865f",
+          "pos": [
+            0.588,
+            13.635
+          ],
+          "rot": 187.000579833984,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:dead_tree",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_f1ff66e8",
+          "pos": [
+            16.149,
+            13.74
+          ],
+          "rot": 229.664840698242,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:witch_hut",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e86429fd",
+          "pos": [
+            17.3,
+            6.3
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:rickety_dock",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b924c6f7",
+          "layer": "ground",
+          "pos": [
+            15.6,
+            6.6
+          ],
+          "rot": 15,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:sunken_boat",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_c37864f3",
+          "pos": [
+            9.5,
+            9.6
+          ],
+          "rot": -25,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:will_o_wisp",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_6b519017",
+          "pos": [
+            8.291,
+            6.535
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:will_o_wisp",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_fa4fe525",
+          "pos": [
+            8.779,
+            4.98
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:will_o_wisp",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b35aa06f",
+          "pos": [
+            6.74,
+            8.102
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:frog_totem",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_bcdff492",
+          "pos": [
+            4.6,
+            8.4
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "swamp:skull_pile",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_10c1661a",
+          "pos": [
+            12.3,
+            8.5
+          ],
+          "rot": 40,
+          "scale": 1,
+          "z": 0
+        }
+      ],
+      "terrain": {
+        "0,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "0,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "0,11": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,12": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "0,13": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "0,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "0,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,7": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "0,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "0,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "1,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "1,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "1,11": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,12": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "1,13": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "1,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "1,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "1,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "1,6": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 0,
+          "z": 0
+        },
+        "1,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "1,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "1,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "10,-1": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "10,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "10,-3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "10,-4": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 0,
+          "z": 0
+        },
+        "10,-5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "10,0": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 0,
+          "z": 0
+        },
+        "10,1": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "10,2": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "10,3": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 0,
+          "z": 0
+        },
+        "10,4": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 0,
+          "z": 0
+        },
+        "10,5": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "10,6": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "10,7": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 1,
+          "z": 0
+        },
+        "10,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "11,-1": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "11,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "11,-3": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 1,
+          "z": 0
+        },
+        "11,-4": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 0,
+          "z": 0
+        },
+        "11,-5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "11,0": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "11,1": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "11,2": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 0,
+          "z": 0
+        },
+        "11,3": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "11,4": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "11,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "11,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "11,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "11,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,-1": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "12,-2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "12,-3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "12,-5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "12,-6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,0": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 0,
+          "z": 0
+        },
+        "12,1": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "12,2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "12,3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "12,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "12,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "12,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "13,-1": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "13,-2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "13,-3": {
+          "rot": 0,
+          "t": "swamp:mud",
+          "v": 1,
+          "z": 0
+        },
+        "13,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "13,-5": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 0,
+          "z": 0
+        },
+        "13,-6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "13,0": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "13,1": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "13,2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "13,3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "13,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "13,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "13,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "13,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "14,-1": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "14,-2": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "14,-3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "14,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "14,-5": {
+          "rot": 0,
+          "t": "swamp:mud",
+          "v": 1,
+          "z": 0
+        },
+        "14,-6": {
+          "rot": 0,
+          "t": "swamp:mud",
+          "v": 0,
+          "z": 0
+        },
+        "14,-7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "14,0": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "14,1": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "14,2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "14,3": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 0,
+          "z": 0
+        },
+        "14,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "14,5": {
+          "rot": 0,
+          "t": "swamp:mud",
+          "v": 1,
+          "z": 0
+        },
+        "14,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "15,-1": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "15,-2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "15,-3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "15,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "15,-5": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 0,
+          "z": 0
+        },
+        "15,-6": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 0,
+          "z": 0
+        },
+        "15,-7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "15,0": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "15,1": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "15,2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "15,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "15,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "15,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "15,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,-1": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "16,-2": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "16,-3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "16,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "16,-5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "16,-6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,-7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "16,-8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "16,0": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "16,1": {
+          "rot": 0,
+          "t": "swamp:mud",
+          "v": 1,
+          "z": 0
+        },
+        "16,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "16,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "16,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "16,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,-2": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 0,
+          "z": 0
+        },
+        "17,-3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "17,-5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,-6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "17,-7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "17,-8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "17,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "17,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "17,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "17,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "18,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,-3": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "18,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "18,-5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,-6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "18,-7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,-8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,-9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "18,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "18,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "18,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "19,-3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "19,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "19,-5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "19,-6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "19,-7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,-8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,-9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "19,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "19,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "19,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "19,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "2,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "2,11": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "2,12": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "2,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "2,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "2,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "2,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,6": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 0,
+          "z": 0
+        },
+        "2,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "2,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "3,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "3,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "3,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "3,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "3,11": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "3,12": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "3,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "3,3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "3,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "3,5": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "3,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "3,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "3,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "3,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "4,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "4,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,11": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,3": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "4,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,5": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "4,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "4,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "4,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "5,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "5,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,11": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "5,2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,3": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "5,4": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 0,
+          "z": 0
+        },
+        "5,5": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "5,6": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "5,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "5,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "5,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "6,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "6,-3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "6,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "6,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,2": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "6,3": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 1,
+          "z": 0
+        },
+        "6,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,5": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "6,6": {
+          "rot": 0,
+          "t": "swamp:reeds",
+          "v": 1,
+          "z": 0
+        },
+        "6,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "6,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,-1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "7,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "7,-3": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "7,0": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 1,
+          "z": 0
+        },
+        "7,1": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,10": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "7,3": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 0,
+          "z": 0
+        },
+        "7,4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "7,5": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "7,6": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 0,
+          "z": 0
+        },
+        "7,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "7,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "7,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,-1": {
+          "rot": 0,
+          "t": "swamp:mud",
+          "v": 1,
+          "z": 0
+        },
+        "8,-2": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,-3": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "8,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,0": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "8,1": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "8,2": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 0,
+          "z": 0
+        },
+        "8,3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "8,4": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "8,5": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "8,6": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "8,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "8,8": {
+          "rot": 0,
+          "t": "swamp:mud",
+          "v": 0,
+          "z": 0
+        },
+        "8,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "9,-1": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "9,-2": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "9,-3": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 1,
+          "z": 0
+        },
+        "9,-4": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "9,0": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 0,
+          "z": 0
+        },
+        "9,1": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "9,2": {
+          "rot": 0,
+          "t": "swamp:rotting_boardwalk",
+          "v": 0,
+          "z": 0
+        },
+        "9,3": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 1,
+          "z": 0
+        },
+        "9,4": {
+          "rot": 0,
+          "t": "swamp:deep_water",
+          "v": 0,
+          "z": 0
+        },
+        "9,5": {
+          "rot": 0,
+          "t": "swamp:murky_water",
+          "v": 0,
+          "z": 0
+        },
+        "9,6": {
+          "rot": 0,
+          "t": "swamp:peat",
+          "v": 1,
+          "z": 0
+        },
+        "9,7": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 0,
+          "z": 0
+        },
+        "9,8": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        },
+        "9,9": {
+          "rot": 0,
+          "t": "swamp:marsh_grass",
+          "v": 2,
+          "z": 0
+        }
+      },
+      "walls": [
+        {
+          "blocks": {
+            "light": false,
+            "move": true,
+            "sight": false,
+            "sound": false
+          },
+          "door": "none",
+          "hidden": false,
+          "id": "w_88dce3cd",
+          "one_way": null,
+          "points": [
+            [
+              0.866,
+              7
+            ],
+            [
+              5.1962,
+              6.5
+            ],
+            [
+              8.9489,
+              6
+            ],
+            [
+              12.1244,
+              7.5
+            ],
+            [
+              15.8771,
+              6
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "style": "swamp:boardwalk_rail",
+          "z": [
+            0,
+            1
+          ]
+        },
+        {
+          "blocks": {
+            "light": true,
+            "move": true,
+            "sight": true,
+            "sound": true
+          },
+          "door": "none",
+          "hidden": false,
+          "id": "w_4cf1c906",
+          "one_way": null,
+          "points": [
+            [
+              15.8771,
+              6
+            ],
+            [
+              15.5885,
+              5.5
+            ],
+            [
+              15.8771,
+              5
+            ],
+            [
+              16.4545,
+              5
+            ],
+            [
+              16.7432,
+              4.5
+            ],
+            [
+              17.3205,
+              4.5
+            ],
+            [
+              17.6092,
+              5
+            ],
+            [
+              18.1865,
+              5
+            ],
+            [
+              18.4752,
+              5.5
+            ],
+            [
+              18.1865,
+              6
+            ],
+            [
+              18.4752,
+              6.5
+            ],
+            [
+              18.1865,
+              7
+            ],
+            [
+              17.6092,
+              7
+            ],
+            [
+              17.3205,
+              7.5
+            ],
+            [
+              16.7432,
+              7.5
+            ],
+            [
+              16.4545,
+              7
+            ],
+            [
+              15.8771,
+              7
+            ],
+            [
+              15.5885,
+              6.5
+            ],
+            [
+              15.8771,
+              6
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "style": "swamp:palisade",
+          "z": [
+            0,
+            1
+          ]
+        },
+        {
+          "blocks": {
+            "light": true,
+            "move": true,
+            "sight": true,
+            "sound": true
+          },
+          "door": "door",
+          "hidden": false,
+          "id": "w_c9f0bfc8",
+          "one_way": null,
+          "points": [
+            [
+              16.4545,
+              7
+            ],
+            [
+              16.4545,
+              6
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "z": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "author": "Silvergrove Studios",
+    "created": "2026-09-19T00:00:00",
+    "description": "A rotting boardwalk across open bog to a hut on stilts. Flat-top hexes.",
+    "modified": "2026-09-19T00:00:00"
+  },
+  "name": "Bog Crossing",
+  "packs": {
+    "swamp": "0.1.0"
+  },
+  "reference_ppx": 256,
+  "style": {
+    "background": "#1c1a17",
+    "grid_color": "#00000066",
+    "grid_width": 0.012
+  },
+  "version": 1
+}
