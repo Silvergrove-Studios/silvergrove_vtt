@@ -10,9 +10,9 @@ application, three modes:
 - **Table** — run an encounter on those maps: tokens, doors, lights, fog,
   turn order, and a look at the scene through each player's eyes.
 - **Player** — see the map from your tokens' eyes and move them, on a
-  laptop, tablet or phone. Today it opens an encounter on the same device
-  (a second screen for the table, or the DM's preview); joining over the
-  network is next.
+  laptop, tablet or phone. Joins a Table on the same wifi (it finds them
+  by itself, or you type the address the Table shows), or opens an
+  encounter on the same device.
 
 The Editor and the Table are desktop tools (macOS, Windows). The Player is
 built to run everywhere, so the modules it shares with the others stay free
@@ -119,13 +119,26 @@ the map.
 
 ## Using the player
 
-`./run.sh player examples/chapel_ambush.encounter`, or Player on the home
-screen. Pick who you are; you get the scene the table is showing, through
-your tokens: fog, their vision, nothing the DM has hidden. Drag a token of
-yours to move it — the table's turn mode decides whether that is allowed
-right now, and you are told if not. When the DM saves the encounter, your
-view updates. Everything is sized for a finger: pinch to zoom, two fingers
-to pan, tap a token button to find it.
+On the Table, press **Host** (or Network → Host on this network); the
+status bar shows the address. On the Player, tables on the wifi appear by
+themselves — tap one, or type that address — then pick who you are. You
+get the scene the table is showing, through your tokens: fog, their
+vision, nothing the DM has hidden; maps and art you lack stream from the
+table. Drag a token of yours to move it — the table's turn mode decides
+whether that is allowed right now, and you are told if not. Everything is
+sized for a finger: pinch to zoom, two fingers to pan, tap a token button
+to find it. `./run.sh player examples/chapel_ambush.encounter` opens an
+encounter on this device instead, for a second screen or a preview.
+
+## Builds
+
+`.github/workflows/release.yml` builds a debug-signed **Android APK** and
+Linux, Windows and macOS zips. Push a `vX.Y.Z` tag and they land on that
+release; run the workflow by hand and they land on the `dev-build`
+prerelease. Sideload the APK, open Player, and it lists Tables hosting on
+your wifi. `tools/check_export.gd` mounts an exported pack and checks the
+files the app reads itself (icons, fonts) made it in — they are marked
+"keep" so Godot ships them raw.
 
 ## Files
 

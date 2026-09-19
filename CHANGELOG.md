@@ -37,6 +37,14 @@
   and the view refreshed when the DM saves. Finger-first: no menus, no
   dialogs, pinch and two-finger pan. `Session` / `LocalSession` are the
   seam the network version drops into. `tools/player_smoke.gd`.
+- Networking on the LAN: the Table hosts (WebSocket, JSON), announces
+  itself by multicast and broadcast, hands players the encounter and
+  every event, applies their requests through its own commands, and
+  streams maps and pack art to devices that lack them. The Player lists
+  tables it hears or takes a typed address.
+- A release workflow that builds an Android APK and desktop zips and
+  publishes them (tags, or a `dev-build` prerelease on demand). Icons and
+  fonts are now "keep" imports so exported builds carry them.
 - Example maps: doors now sit in a gap in the wall instead of on top of it,
   so opening one opens the room.
 

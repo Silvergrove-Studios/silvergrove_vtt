@@ -7,8 +7,10 @@ extends RefCounted
 static var _cache: Dictionary = {}
 
 
+## A res:// path on purpose: it reads the same from the editor and from
+## inside an exported build's pack (the export preset includes the SVGs).
 static func dir() -> String:
-	return ProjectSettings.globalize_path("res://hexmap/ui/icons")
+	return "res://hexmap/ui/icons"
 
 
 ## `name` is the Lucide file name without extension ("eye-off").

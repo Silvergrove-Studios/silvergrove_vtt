@@ -23,7 +23,8 @@ table/      the Table: encounter panels and tools               desktop
 player/     the Player: touch-first client                      portable
 encounter/  Encounter, EncounterState, events, Vision, undo,    portable
             TurnSystem
-net/        Session (what a Player talks to), LocalSession      portable
+net/        Session, LocalSession, NetSession, HostSession,     portable
+            Protocol, Discovery
 render/     MapCanvas, MapRenderer, CanvasView                  portable
 core/       HexMap, HexGrid, LayerTree, Lighting, PackLibrary   portable
 io/         exporters and the PDF writer                        desktop
@@ -151,6 +152,22 @@ change. `PlayerWindow` is the first portable window: join screen, player
 picker, then `CanvasView` with the player's viewpoint, one move tool, a
 bar of the player's tokens, and the turn summary — no docking, dialogs or
 menus, and nothing that needs a hover or a right-click.
+
+## Over the network
+
+`HostSession` (on the Table) is a WebSocket server; `NetSession` (on the
+Player) is a `Session` over a WebSocket client; `Protocol` is the handful
+of JSON message types between them, versioned. The Table is the authority:
+a request is applied only if `allowed()` and `validate()` pass, through
+the Table's own `EncounterCommands` (so the DM can undo a player's move
+and it explores fog like any other), and every applied event — the DM's
+or a player's — is broadcast to every client, which applies it to its own
+copy. Maps and pack files stream on demand into `user://packs`, so a phone
+with nothing installed draws the scene. `Discovery` multicasts (and
+broadcasts, for phones that filter multicast) an announcement once a
+second; the Player lists what it hears, or takes a typed address. LAN
+only for now; a relay would sit between `NetSession` and `HostSession`
+speaking the same protocol.
 
 ## Turns and game systems
 

@@ -12,6 +12,9 @@ class Announcer extends RefCounted:
 	var port := Protocol.DEFAULT_PORT
 	var every := 1.0
 	var _udp := PacketPeerUDP.new()
+	## Phones often drop multicast unless an app holds a lock Godot cannot
+	## take, so the same announcement also goes out as a subnet broadcast.
+	var _bcast := PacketPeerUDP.new()
 	var _since := 10.0
 	var _ok := false
 
@@ -19,11 +22,14 @@ class Announcer extends RefCounted:
 		name = p_name
 		port = p_port
 		var err := _udp.set_dest_address(Protocol.DISCOVERY_GROUP, Protocol.DISCOVERY_PORT)
+		_bcast.set_broadcast_enabled(true)
+		_bcast.set_dest_address("255.255.255.255", Protocol.DISCOVERY_PORT)
 		_ok = err == OK
 		return err
 
 	func stop() -> void:
 		_udp.close()
+		_bcast.close()
 		_ok = false
 
 	func poll(delta: float) -> void:
@@ -38,6 +44,7 @@ class Announcer extends RefCounted:
 	func announce() -> void:
 		var text := Protocol.encode(Protocol.announcement(name, port, OS.get_environment("HOSTNAME") if OS.get_environment("HOSTNAME") != "" else OS.get_environment("COMPUTERNAME")))
 		_udp.put_packet(text.to_utf8_buffer())
+		_bcast.put_packet(text.to_utf8_buffer())
 
 
 class Browser extends RefCounted:

@@ -58,7 +58,7 @@ static func tokens(name: String) -> Dictionary:
 static func font(file: String) -> Font:
 	if _fonts.has(file):
 		return _fonts[file]
-	var path := ProjectSettings.globalize_path("res://hexmap/ui/fonts").path_join(file)
+	var path := "res://hexmap/ui/fonts".path_join(file)
 	var f := FontFile.new()
 	if FileAccess.file_exists(path) and f.load_dynamic_font(path) == OK:
 		f.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
