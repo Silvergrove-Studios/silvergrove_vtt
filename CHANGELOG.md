@@ -18,6 +18,19 @@
   walls and open doors), `EncounterCommands` (undoable table actions).
   Example `examples/chapel_ambush.encounter`, built through events.
 - Packs may carry a `tokens` collection for token art.
+- The Table: open an encounter, add map levels as scenes, place and move
+  tokens (snapped or free), click doors open and closed and lights on and
+  off, reveal GM-only things, brush fog or let tokens' vision explore it,
+  "See as" a player (fog, vision, hidden tokens as they get them), turn
+  modes — free, DM picks, ordered by a turn system (built-in: as listed) —
+  players, autosave, undo throughout. `tools/table_smoke.gd` screenshots
+  it in play.
+- `MapCanvas` draws an encounter scene: effective doors and lights, tokens
+  (discs or pack art, owner rings, carried lights), fog by viewpoint.
+- `CanvasView`: the shared pan/zoom canvas with two-finger touch; the
+  editor's `MapView` is built on it.
+- `TurnSystem`: the interface game systems plug into; plugins will be data
+  with a sandboxed expression, not scripts.
 - Example maps: doors now sit in a gap in the wall instead of on top of it,
   so opening one opens the room.
 

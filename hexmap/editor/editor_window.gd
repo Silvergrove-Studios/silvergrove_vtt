@@ -424,7 +424,7 @@ func _restyle() -> void:
 func _select_tool(tool_name: String) -> void:
 	view.set_tool(EditorTools.make(tool_name, ctx))
 	if tool_buttons.has(tool_name):
-		(tool_buttons[tool_name] as Button).set_pressed_no_signal(true)
+		(tool_buttons[tool_name] as Button).button_pressed = true
 	if tool_options != null:
 		tool_options.show_for(tool_name)
 	if palette != null:

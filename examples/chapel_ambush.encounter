@@ -3,19 +3,6 @@
   "ext": {},
   "format": "silvergrove.encounter",
   "id": "a3ef7ad6-e8d3-4f40-86e6-06113470c6f1",
-  "initiative": {
-    "order": [
-      "t_b10e8ea8",
-      "t_bdb237f2",
-      "t_fa48f390",
-      "t_23c5de64",
-      "t_9f6bc772",
-      "t_c0850280"
-    ],
-    "round": 1,
-    "running": false,
-    "turn": 0
-  },
   "meta": {
     "author": "Silvergrove Studios",
     "created": "2026-09-19T00:00:00",
@@ -316,5 +303,22 @@
       ]
     }
   ],
+  "turns": {
+    "active": [],
+    "data": {},
+    "mode": "ordered",
+    "order": [
+      "t_b10e8ea8",
+      "t_bdb237f2",
+      "t_fa48f390",
+      "t_23c5de64",
+      "t_9f6bc772",
+      "t_c0850280"
+    ],
+    "round": 1,
+    "running": false,
+    "system": "list",
+    "turn": 0
+  },
   "version": 1
 }

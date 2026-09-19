@@ -21,9 +21,10 @@ shell/      App (prefs, packs, theme), home screen, mode switch
 editor/     the Editor: panels, tools, Commands + History       desktop
 table/      the Table: encounter panels and tools               desktop
 player/     the Player: touch-first client                      portable
-encounter/  Encounter, EncounterState, events, Vision, undo     portable
+encounter/  Encounter, EncounterState, events, Vision, undo,    portable
+            TurnSystem
 net/        Session host/client, protocol, asset transfer       portable   (later)
-render/     MapCanvas, MapRenderer                              portable
+render/     MapCanvas, MapRenderer, CanvasView                  portable
 core/       HexMap, HexGrid, LayerTree, Lighting, PackLibrary   portable
 io/         exporters and the PDF writer                        desktop
 ui/         theme, icons, fonts; dock panes for desktop modes
@@ -128,9 +129,34 @@ token they own. The Table is authoritative: players send events as
 `Vision` computes what tokens see from the *effective* level (overrides
 merged, so an open door does not block) with `Lighting.visibility_polygon`
 against sight-blocking walls; fog is the set of cells a player's tokens have
-seen. `MapCanvas` will take the state as an optional input and a
+seen. `MapCanvas` takes the state as an optional input (`set_scene`) and a
 *viewpoint* — the GM sees everything; a player sees what their tokens can,
-fog for the rest. Editor and exports pass no state and are untouched.
+fog for the rest, hidden tokens never. Editor and exports pass no state and
+are untouched.
+
+`CanvasView` is the shared canvas-under-a-camera with pan and zoom from
+mouse, trackpad and two-finger touch; the Editor's `MapView` and the
+Table's `TableView` add their context and hand a tool to it. Tools are
+duck-typed objects (`press`/`drag`/`release`/`move`/`key`/`draw_overlay`).
+
+## Turns and game systems
+
+Who may move is the encounter's `turns.mode`: **free** (any visible
+token), **dm** (the DM ticks who is up), **ordered** (a turn system orders
+the tokens and the Table steps through them). `EncounterState.may_move()`
+is the one place that rule lives, and `allowed()` uses it for players'
+requests.
+
+Ordering is where game rules enter, so it is pluggable and Hexmap ships
+only "as listed". `TurnSystem` is the internal interface (`build_order`,
+`next`, `previous`); a system keeps its own state in `turns.data`, which
+Hexmap stores and replicates without reading. **Plugins are data, not
+code**: a game system is a manifest (the token stats it needs, a sandboxed
+ordering expression evaluated with Godot's `Expression` against a
+whitelisted object) loaded by a built-in `TurnSystem` subclass — never a
+script dropped into a folder, which would hand it the engine. Only the
+Table runs a system; players receive the order and its `data.labels` as
+plain data and need nothing installed.
 
 The JSON conventions both document types share — stable key order, ids,
 merge-with-null-removes — live in `JsonDoc`.

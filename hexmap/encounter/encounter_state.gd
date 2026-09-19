@@ -17,7 +17,7 @@ signal applied(event: Dictionary, inverse: Dictionary)
 
 const EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
 	"token.add", "token.remove", "token.set", "element.set",
-	"fog.set", "fog.reveal", "fog.hide", "initiative.set",
+	"fog.set", "fog.reveal", "fog.hide", "turns.set",
 	"player.add", "player.remove", "player.set"]
 ## What a player may change on a token they own.
 const PLAYER_TOKEN_FIELDS := ["pos", "rot", "elevation"]
@@ -173,11 +173,18 @@ func validate(ev: Dictionary) -> String:
 			var e := _need_dict(ev, "changes")
 			if e != "":
 				return e
-			for k in ["format", "version", "id", "scenes", "active_scene", "initiative", "players"]:
+			for k in ["format", "version", "id", "scenes", "active_scene", "turns", "players"]:
 				if ev.changes.has(k):
 					return "encounter.set cannot change '%s'; use its own events" % k
-		"initiative.set":
-			return _need_dict(ev, "changes")
+		"turns.set":
+			var e := _need_dict(ev, "changes")
+			if e != "":
+				return e
+			if ev.changes.has("mode") and not Encounter.TURN_MODES.has(str(ev.changes.mode)):
+				return "turns.set: mode must be one of %s" % [Encounter.TURN_MODES]
+			for k in ["order", "active"]:
+				if ev.changes.has(k) and not (ev.changes[k] is Array):
+					return "turns.set: '%s' must be a list of token ids" % k
 		"scene.add":
 			if not (ev.get("scene") is Dictionary) or str(ev.scene.get("id", "")) == "":
 				return "scene.add needs a scene with an id"
@@ -280,14 +287,15 @@ func _need_token(ev: Dictionary) -> String:
 
 
 ## May `player_id` send this event? The table ("" — the DM) may send
-## anything. A player may only move a token they own.
+## anything. A player may only move a token, and only one the turn mode
+## lets them move now (may_move).
 func allowed(ev: Dictionary, player_id: String) -> bool:
 	if player_id == "":
 		return true
 	if str(ev.get("t", "")) != "token.set":
 		return false
 	var tk := token(str(ev.get("scene", "")), str(ev.get("id", "")))
-	if tk.is_empty() or tk.get("owner", null) == null or str(tk.owner) != player_id:
+	if tk.is_empty() or not may_move(tk, player_id):
 		return false
 	if not (ev.get("changes") is Dictionary):
 		return false
@@ -295,6 +303,52 @@ func allowed(ev: Dictionary, player_id: String) -> bool:
 		if not PLAYER_TOKEN_FIELDS.has(str(k)):
 			return false
 	return true
+
+
+## Whether a player may move a token right now, by the turn mode:
+## free — any token they can see; dm — one of theirs the DM has enabled;
+## ordered — one of theirs whose turn it is.
+func may_move(tk: Dictionary, player_id: String) -> bool:
+	if player_id == "":
+		return true
+	if bool(tk.get("hidden", false)):
+		return false
+	var turns := encounter.turns
+	match str(turns.get("mode", "free")):
+		"free":
+			return true
+		"dm":
+			return _owns(tk, player_id) and (turns.get("active", []) as Array).has(str(tk.id))
+		"ordered":
+			return _owns(tk, player_id) and current_turn_token() == str(tk.id)
+	return false
+
+
+static func _owns(tk: Dictionary, player_id: String) -> bool:
+	return tk.get("owner", null) != null and str(tk.owner) == player_id
+
+
+## The token whose turn it is in ordered mode, or "".
+func current_turn_token() -> String:
+	var turns := encounter.turns
+	if str(turns.get("mode", "free")) != "ordered" or not bool(turns.get("running", false)):
+		return ""
+	var order: Array = turns.get("order", [])
+	var turn := int(turns.get("turn", 0))
+	return str(order[turn]) if turn >= 0 and turn < order.size() else ""
+
+
+## Tokens the table should mark as "up": the DM's picks in dm mode, the
+## current turn in ordered mode, nobody in free mode.
+func highlighted_token_ids() -> Array:
+	var turns := encounter.turns
+	match str(turns.get("mode", "free")):
+		"dm":
+			return (turns.get("active", []) as Array).duplicate()
+		"ordered":
+			var cur := current_turn_token()
+			return [cur] if cur != "" else []
+	return []
 
 
 # --------------------------------------------------------------------- apply --
@@ -409,9 +463,9 @@ func apply(ev: Dictionary) -> Dictionary:
 			fog.explored = kept
 			inv = {"t": "fog.reveal", "scene": scene_id, "cells": removed}
 			what = "fog"
-		"initiative.set":
-			inv = {"t": t, "changes": JsonDoc.merge(doc.initiative, ev.changes)}
-			what = "initiative"
+		"turns.set":
+			inv = {"t": t, "changes": JsonDoc.merge(doc.turns, ev.changes)}
+			what = "turns"
 		"player.add":
 			(doc.players as Array).append(JsonDoc.deep(ev.player))
 			inv = {"t": "player.remove", "id": str(ev.player.id)}

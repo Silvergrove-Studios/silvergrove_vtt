@@ -8,7 +8,7 @@ application, three modes:
   people actually use (Universal VTT, Foundry VTT, Tiled) or to a
   print-ready PDF with hexes at a real physical size.
 - **Table** — run an encounter on those maps: tokens, doors, lights, fog,
-  initiative. *(In progress.)*
+  turn order, and a look at the scene through each player's eyes.
 - **Player** — join a table and see the map from your tokens' eyes, on a
   laptop, tablet or phone. *(Planned.)*
 
@@ -103,6 +103,17 @@ Undo is unlimited within a session. The map autosaves beside its file every
 minute while dirty, and offers to restore that on open if it is newer.
 
 Space+drag or middle-drag pans, the wheel zooms, Ctrl/Cmd+0 fits.
+
+## Using the table
+
+`./run.sh table examples/chapel_ambush.encounter`, or pick Table on the
+home screen. Add a map level as a scene (Ctrl/Cmd+M), place tokens with
+the Token tool, click doors to open them and lights to put them out, brush
+fog away as the party explores — or leave fog on and let their tokens'
+vision reveal it as they move. "See as" shows the scene the way a player
+will get it. Turns are **free**, **DM picks**, or **ordered** by a turn
+system; `docs/encounter-format.md` has the model, and nothing in it edits
+the map.
 
 ## Files
 

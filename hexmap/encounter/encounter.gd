@@ -9,7 +9,11 @@ signal changed(what: String, scene_id: String)
 
 const FORMAT := "silvergrove.encounter"
 const VERSION := 1
-const DEFAULT_INITIATIVE := {"order": [], "round": 1, "turn": 0, "running": false}
+## mode: free (anyone moves any visible token) | dm (the DM picks who may
+## move: `active`) | ordered (a turn system orders them: `order`, `turn`,
+## `round`; `system` names it, `data` is its own state).
+const TURN_MODES := ["free", "dm", "ordered"]
+const DEFAULT_TURNS := {"mode": "free", "order": [], "turn": 0, "round": 1, "running": false, "active": [], "system": "list", "data": {}}
 
 var doc: Dictionary = {}
 ## Where it was loaded from / last saved to. Empty for a new encounter.
@@ -27,7 +31,7 @@ static func create(p_name: String) -> Encounter:
 		"name": p_name,
 		"scenes": [],
 		"active_scene": "",
-		"initiative": DEFAULT_INITIATIVE.duplicate(true),
+		"turns": DEFAULT_TURNS.duplicate(true),
 		"players": [],
 		"notes": [],
 		"meta": {"author": "", "description": "", "created": now, "modified": now},
@@ -86,8 +90,8 @@ var scenes: Array:
 var players: Array:
 	get: return doc.get("players", [])
 
-var initiative: Dictionary:
-	get: return doc.get("initiative", {})
+var turns: Dictionary:
+	get: return doc.get("turns", {})
 
 var active_scene_id: String:
 	get: return str(doc.get("active_scene", ""))
@@ -197,12 +201,19 @@ func _upgrade(_from_version: int) -> void:
 	for k in ["meta", "ext"]:
 		if not doc.has(k):
 			doc[k] = {}
-	if not doc.has("initiative"):
-		doc["initiative"] = {}
-	var ini: Dictionary = doc["initiative"]
-	for k in DEFAULT_INITIATIVE:
-		if not ini.has(k):
-			ini[k] = JsonDoc.deep(DEFAULT_INITIATIVE[k])
+	if doc.has("initiative") and not doc.has("turns"):
+		# Pre-release files had a D&D-shaped "initiative" block.
+		doc["turns"] = doc["initiative"]
+		doc["turns"]["mode"] = "ordered" if not (doc["turns"].get("order", []) as Array).is_empty() else "free"
+	doc.erase("initiative")
+	if not doc.has("turns"):
+		doc["turns"] = {}
+	var turns: Dictionary = doc["turns"]
+	for k in DEFAULT_TURNS:
+		if not turns.has(k):
+			turns[k] = JsonDoc.deep(DEFAULT_TURNS[k])
+	if not TURN_MODES.has(str(turns.mode)):
+		turns.mode = "free"
 	for s in doc["scenes"]:
 		if not s.has("overrides"):
 			s["overrides"] = {}

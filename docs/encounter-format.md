@@ -29,7 +29,8 @@ Whatever system is being played keeps its numbers elsewhere.
   "name": "Chapel ambush",
   "scenes": [ { …scene… } ],
   "active_scene": "s_1a2b",
-  "initiative": { "order": ["t_7f", "t_02"], "round": 1, "turn": 0, "running": false },
+  "turns": { "mode": "ordered", "system": "list", "order": ["t_7f", "t_02"], "turn": 0, "round": 1,
+             "running": true, "active": [], "data": {} },
   "players": [ { "id": "pl_a1", "name": "Ana", "color": "#4f9cf6" } ],
   "notes": [ { "id": "n_01", "title": "If they flee…", "text": "…" } ],
   "meta": { "author": "", "description": "", "created": "…", "modified": "…" },
@@ -38,9 +39,21 @@ Whatever system is being played keeps its numbers elsewhere.
 ```
 
 - `active_scene`: the scene the table is showing. Players see this one.
-- `initiative.order` is token ids, in order; `turn` indexes it, `round`
-  counts from 1. `running` is whether the tracker is in use. Tokens not in
-  the order simply have no turn.
+- `turns` is who may move, and in what order. `mode` is one of:
+  - `free` — anyone may move any token they can see. Exploration, roleplay.
+  - `dm` — the DM ticks tokens; `active` lists them, and only their owners
+    may move them now.
+  - `ordered` — a **turn system** orders the tokens: `order` is token ids,
+    `turn` indexes it, `round` counts from 1, `running` says whether turns
+    are being stepped. Only the owner of the token whose turn it is may
+    move it. `system` names the turn system that built the order (`list`
+    is the built-in "as the DM arranged it"); `data` is that system's own
+    state — rolled values, phases, and `labels` (token id → text shown in
+    the order) — stored and replicated as is, never interpreted by Hexmap.
+    A client without the system installed still shows the order and its
+    labels, because they are data.
+
+  Tokens not in the order simply have no turn.
 - `players`: who can join and what they own. `id` is stable across sessions;
   `color` tints their tokens' rings. The DM is not a player.
 - `notes`: encounter-level DM notes (map notes stay on the map).
@@ -136,7 +149,7 @@ inverse), autosave, replication to players and replay.
 | `fog.set` | `scene`, `enabled` | `fog.set` |
 | `fog.reveal` | `scene`, `cells` | `fog.hide` of the cells that were new |
 | `fog.hide` | `scene`, `cells` | `fog.reveal` of the cells that were explored |
-| `initiative.set` | `changes` | `initiative.set` |
+| `turns.set` | `changes` | `turns.set` |
 | `player.add` | `player` | `player.remove` |
 | `player.remove` | `id` | `player.add` |
 | `player.set` | `id`, `changes` | `player.set` |
@@ -148,9 +161,11 @@ before `apply()` is asked.
 
 **Who may send what.** The table (DM) may apply anything. A player's client
 sends the same events as *requests*; `EncounterState.allowed(event,
-player_id)` lets through only `token.set` on a token that player owns, and
-only its `pos`, `rot` and `elevation`. The table validates, applies, and
-rebroadcasts what it applied.
+player_id)` lets through only `token.set` with `pos`, `rot` or `elevation`,
+and only on a token the turn mode lets that player move now
+(`may_move`): in `free` mode any token they can see, in `dm` mode one of
+theirs the DM has ticked, in `ordered` mode one of theirs whose turn it
+is. The table validates, applies, and rebroadcasts what it applied.
 
 ## Bundles
 

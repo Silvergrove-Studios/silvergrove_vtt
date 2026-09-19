@@ -3,7 +3,7 @@ extends RefCounted
 ## The Table's undoable actions over an EncounterState. `run()` applies an
 ## event and commits it with its inverse to a History, so one gesture is one
 ## undo step; the named methods are the events the Table's tools send, with
-## the bookkeeping (fog after a move, initiative wrap-around) done here so
+## the bookkeeping (fog after a move, turn order stepping) done here so
 ## every caller gets it right. Nothing here needs a window: the Player's
 ## client will reuse it for its own local moves once networking arrives.
 
@@ -17,13 +17,21 @@ func _init(p_state: EncounterState, p_history: History) -> void:
 
 
 ## Validate, apply and record. Returns "" or why the event was refused.
+## History.commit runs the redo closure at once; that first run's inverse is
+## the one undo keeps, since undo and redo always alternate on this state.
 func run(ev: Dictionary, label := "") -> String:
 	var why := state.validate(ev)
 	if why != "":
 		return why
-	var inv := state.apply(ev)
 	var redo: Dictionary = JsonDoc.deep(ev)
-	history.commit(label if label != "" else str(ev.t), func() -> void: state.apply(redo), func() -> void: state.apply(inv))
+	var box := {"inv": {}}
+	history.commit(label if label != "" else str(ev.t),
+		func() -> void:
+			var inv := state.apply(redo)
+			if (box.inv as Dictionary).is_empty():
+				box.inv = inv,
+		func() -> void:
+			state.apply(box.inv))
 	return ""
 
 
@@ -150,42 +158,58 @@ func reset_fog(scene_id: String) -> String:
 	return run({"t": "fog.hide", "scene": scene_id, "cells": state.explored(scene_id).keys()}, "Reset fog")
 
 
-# --------------------------------------------------------------- initiative --
+# -------------------------------------------------------------------- turns --
 
-func set_initiative_order(order: Array, running := true) -> String:
-	return run({"t": "initiative.set", "changes": {"order": order, "turn": 0, "round": 1, "running": running}}, "Set initiative")
+func set_turn_mode(mode: String) -> String:
+	return run({"t": "turns.set", "changes": {"mode": mode}}, {"free": "Free movement", "dm": "DM picks who moves", "ordered": "Ordered turns"}.get(mode, "Turn mode"))
 
 
-func stop_initiative() -> String:
-	return run({"t": "initiative.set", "changes": {"running": false}}, "End combat")
+## dm mode: who may move now.
+func set_active_tokens(ids: Array) -> String:
+	return run({"t": "turns.set", "changes": {"active": ids}}, "Who may move")
+
+
+func toggle_active_token(id: String) -> String:
+	var active: Array = (state.encounter.turns.get("active", []) as Array).duplicate()
+	if active.has(id):
+		active.erase(id)
+	else:
+		active.append(id)
+	return set_active_tokens(active)
+
+
+## ordered mode: let the turn system order the scene's tokens and begin.
+func start_turns(scene_id: String, system_id := "") -> String:
+	var turns := state.encounter.turns
+	var sid := system_id if system_id != "" else str(turns.get("system", "list"))
+	var sys := TurnSystem.get_system(sid)
+	var built := sys.build_order(state, scene_id)
+	return run({"t": "turns.set", "changes": {"mode": "ordered", "system": sys.id, "order": built.get("order", []), "data": built.get("data", {}),
+		"turn": 0, "round": 1, "running": true}}, "Start turns")
+
+
+func set_turn_order(order: Array) -> String:
+	return run({"t": "turns.set", "changes": {"order": order}}, "Reorder")
+
+
+func stop_turns() -> String:
+	return run({"t": "turns.set", "changes": {"running": false}}, "End turns")
 
 
 func next_turn() -> String:
-	var ini := state.encounter.initiative
-	var n: int = (ini.get("order", []) as Array).size()
-	if n == 0:
-		return "no initiative order"
-	var turn := int(ini.get("turn", 0)) + 1
-	var round := int(ini.get("round", 1))
-	if turn >= n:
-		turn = 0
-		round += 1
-	return run({"t": "initiative.set", "changes": {"turn": turn, "round": round, "running": true}}, "Next turn")
+	var turns := state.encounter.turns
+	var changes := TurnSystem.get_system(str(turns.get("system", "list"))).next(turns)
+	if changes.is_empty():
+		return "no turn order"
+	return run({"t": "turns.set", "changes": changes}, "Next turn")
 
 
 func previous_turn() -> String:
-	var ini := state.encounter.initiative
-	var n: int = (ini.get("order", []) as Array).size()
-	if n == 0:
-		return "no initiative order"
-	var turn := int(ini.get("turn", 0)) - 1
-	var round := int(ini.get("round", 1))
-	if turn < 0:
-		if round <= 1:
-			return "already at the start"
-		turn = n - 1
-		round -= 1
-	return run({"t": "initiative.set", "changes": {"turn": turn, "round": round}}, "Previous turn")
+	var turns := state.encounter.turns
+	var changes := TurnSystem.get_system(str(turns.get("system", "list"))).previous(turns)
+	if changes.is_empty():
+		return "already at the start" if not (turns.get("order", []) as Array).is_empty() else "no turn order"
+	return run({"t": "turns.set", "changes": changes}, "Previous turn")
 
 
 # ------------------------------------------------------------------ players --

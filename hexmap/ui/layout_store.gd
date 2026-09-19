@@ -2,13 +2,19 @@ class_name LayoutStore
 extends RefCounted
 ## The dock arrangement (a DockableLayout resource) as the user left it,
 ## saved per user and repaired on load so a panel added by a newer build
-## always shows up somewhere.
+## always shows up somewhere. The editor's layout is the default; the Table
+## passes its own panel list, file and default builder.
 
 const PANELS := ["Palette", "Layers", "Canvas", "Inspector", "View options"]
+const TABLE_PANELS := ["Scenes", "Tokens", "Canvas", "Inspector", "Turns", "Players"]
 
 
 static func default_path() -> String:
 	return "user://layout.tres"
+
+
+static func table_path() -> String:
+	return "user://table_layout.tres"
 
 
 ## Left column: Palette over Layers. Centre: canvas. Right column: Inspector
@@ -26,6 +32,26 @@ static func default_layout() -> DockableLayout:
 	var outer := DockableLayoutSplit.new()
 	outer.direction = DockableLayoutSplit.Direction.HORIZONTAL
 	outer.percent = 0.2
+	outer.first = left
+	outer.second = inner
+	var layout := DockableLayout.new()
+	layout.root = outer
+	return layout
+
+
+## The Table: Scenes over Tokens on the left, canvas in the middle,
+## Inspector over Turns over Players on the right.
+static func table_layout() -> DockableLayout:
+	var left := _vsplit(_leaf("Scenes"), _leaf("Tokens"), 0.35)
+	var right := _vsplit(_leaf("Inspector"), _vsplit(_leaf("Turns"), _leaf("Players"), 0.65), 0.45)
+	var inner := DockableLayoutSplit.new()
+	inner.direction = DockableLayoutSplit.Direction.HORIZONTAL
+	inner.percent = 0.76
+	inner.first = _leaf("Canvas")
+	inner.second = right
+	var outer := DockableLayoutSplit.new()
+	outer.direction = DockableLayoutSplit.Direction.HORIZONTAL
+	outer.percent = 0.18
 	outer.first = left
 	outer.second = inner
 	var layout := DockableLayout.new()
@@ -55,7 +81,7 @@ static func save(layout: DockableLayout, path: String = "") -> Error:
 ## Load the saved layout, or the default when there is none or it is
 ## unusable. Panels the saved layout does not mention are appended to the
 ## first leaf so nothing can disappear.
-static func load_or_default(path: String = "") -> DockableLayout:
+static func load_or_default(path: String = "", panels: Array = PANELS, fallback: Callable = default_layout) -> DockableLayout:
 	var p := path if path != "" else default_path()
 	var layout: DockableLayout = null
 	if ResourceLoader.exists(p):
@@ -63,20 +89,20 @@ static func load_or_default(path: String = "") -> DockableLayout:
 		if res is DockableLayout:
 			layout = res
 	if layout == null:
-		return default_layout()
-	return repair(layout)
+		return fallback.call()
+	return repair(layout, panels, fallback)
 
 
 ## Make sure every panel name appears exactly once.
-static func repair(layout: DockableLayout) -> DockableLayout:
+static func repair(layout: DockableLayout, panels: Array = PANELS, fallback: Callable = default_layout) -> DockableLayout:
 	var names := layout.get_names()
 	if names.is_empty():
-		return default_layout()
+		return fallback.call()
 	var seen := {}
 	for n in names:
 		seen[n] = true
 	var missing := PackedStringArray()
-	for n in PANELS:
+	for n in panels:
 		if not seen.has(n):
 			missing.append(n)
 	if not missing.is_empty():

@@ -7,10 +7,22 @@ extends Node2D
 ##
 ## Drawing is split into child layers so lights can blend additively and so
 ## tools can put an overlay on top without redrawing everything.
+##
+## With an EncounterState and a scene (set_scene) it draws the scene's
+## *effective* level — overrides merged, so an open door is open and a light
+## that was put out is dark — plus tokens and fog, from a viewpoint: the GM
+## ("") sees everything, a player id sees only what their tokens can.
 
 var map: HexMap
 var packs: PackLibrary
 var level_index := 0
+## Encounter drawing; null for the editor and exports.
+var state: EncounterState
+var scene_id := ""
+## "" = the GM sees everything; a player id sees through their tokens.
+var viewpoint := ""
+var show_tokens := true
+var show_fog := true
 ## Pixels per hex unit for geometry.
 var ppx := 256.0
 ## Pixels per hex the textures should be rasterised for; the live view sets
@@ -34,11 +46,14 @@ var _lights := DrawLayer.new()
 var _dark := DrawLayer.new()
 var _grid := DrawLayer.new()
 var _walls := DrawLayer.new()
+var _tokens := DrawLayer.new()
 var _notes := DrawLayer.new()
+var _fog := DrawLayer.new()
 ## Tools draw selection boxes and previews here.
 var overlay := DrawLayer.new()
 
 var _radial: GradientTexture2D
+const FOG_UNSEEN := Color(0.03, 0.03, 0.05, 1.0)
 
 ## Per-refresh derived state from the layer tree.
 var _order: Dictionary = {}       # ref -> draw index
@@ -47,6 +62,11 @@ var _locked: Dictionary = {}      # ref -> effective lock
 var _segments: Array = []         # light-blocking wall segments (hex units)
 var _poly_cache: Dictionary = {}  # light key -> PackedVector2Array
 var _segments_key := ""
+## Encounter-derived state, per refresh.
+var _eff_level: Dictionary = {}    # effective level of the scene
+var _explored: Dictionary = {}     # cell key -> true
+var _seen_cells: Dictionary = {}   # cell key -> true, what the viewpoint sees now
+var _seen_polys: Array = []        # vision polygons of the viewpoint's tokens
 ## Meshes handed to draw_mesh must stay alive until the renderer has consumed
 ## the draw list that references them. Each layer keeps the meshes from its
 ## current and previous draw; older ones are released when it draws again.
@@ -72,11 +92,13 @@ func _init() -> void:
 	_dark.fn = _draw_darkness
 	_grid.fn = _draw_grid
 	_walls.fn = _draw_walls
+	_tokens.fn = _draw_tokens
 	_notes.fn = _draw_notes
+	_fog.fn = _draw_fog
 	var add := CanvasItemMaterial.new()
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_lights.material = add
-	for l in [_terrain, _props, _dark, _lights, _grid, _walls, _notes, overlay]:
+	for l in [_terrain, _props, _dark, _lights, _grid, _walls, _tokens, _notes, _fog, overlay]:
 		l.canvas = self
 		add_child(l)
 	if _radial == null:
@@ -100,14 +122,46 @@ func refresh() -> void:
 	queue_redraw()
 
 
+## Draw a scene of an encounter: its map, level and overlay, tokens and fog.
+func set_scene(p_state: EncounterState, p_scene_id: String) -> void:
+	state = p_state
+	scene_id = p_scene_id
+	_eff_level = {}
+	map = state.map_for(scene_id) if state != null else null
+	if map != null:
+		var want := str(state.encounter.scene(scene_id).get("level", ""))
+		level_index = 0
+		for i in map.levels.size():
+			if str(map.level(i).get("id", "")) == want:
+				level_index = i
+		ppx = float(map.reference_ppx)
+	refresh()
+
+
+func gm_view() -> bool:
+	return viewpoint == ""
+
+
 ## Recompute what the layer tree implies and which walls block light.
 func _rebuild_state() -> void:
 	_order.clear()
 	_visible.clear()
 	_locked.clear()
 	_segments.clear()
+	_eff_level = {}
+	_explored.clear()
+	_seen_cells.clear()
+	_seen_polys.clear()
 	if map == null:
 		return
+	if state != null and scene_id != "":
+		_eff_level = state.effective_level(scene_id)
+		_explored = state.explored(scene_id)
+		var eyes: Array = state.tokens_owned_by(scene_id, viewpoint) if not gm_view() else _player_tokens()
+		var v := Vision.of(state, scene_id, eyes)
+		_seen_polys = v.polygons
+		for c in v.cells:
+			_seen_cells[HexMap.cell_key(c)] = true
 	var lvl := level()
 	if lvl.is_empty():
 		return
@@ -137,7 +191,7 @@ func is_shown(collection: String, o: Dictionary) -> bool:
 	if not is_layer_visible(collection, str(o.get("id", ""))):
 		return false
 	var gm := bool(o.get("gm_only", false)) if collection == "notes" else bool(o.get("hidden", false))
-	return show_hidden or not gm
+	return (show_hidden and gm_view()) or not gm
 
 
 ## Props in draw order (bottom first), visible ones only.
@@ -152,7 +206,42 @@ func props_in_order() -> Array:
 
 
 func level() -> Dictionary:
+	if state != null and scene_id != "":
+		if _eff_level.is_empty():
+			_eff_level = state.effective_level(scene_id)
+		return _eff_level
 	return map.level(level_index) if map != null else {}
+
+
+## Every token a player owns: what the GM's fog preview is computed from.
+func _player_tokens() -> Array:
+	var out := []
+	for t in state.tokens(scene_id):
+		if t.get("owner", null) != null:
+			out.append(t)
+	return out
+
+
+## Is a canvas point (hex units) seen by the viewpoint right now? The GM
+## sees everywhere; with fog off, so does everyone.
+func point_seen(p: Vector2) -> bool:
+	if gm_view() or state == null or not state.fog_enabled(scene_id):
+		return true
+	return Vision.sees(_seen_polys, p)
+
+
+## How fog covers a cell for the viewpoint: 0 clear, 1 explored but not in
+## sight now, 2 never seen. The GM only gets 0 or 2 (a preview of what the
+## players have not found).
+func fog_of(cell: Vector2i) -> int:
+	if state == null or not state.fog_enabled(scene_id):
+		return 0
+	var k := HexMap.cell_key(cell)
+	if gm_view():
+		return 0 if _explored.has(k) or _seen_cells.has(k) else 2
+	if _seen_cells.has(k):
+		return 0
+	return 1 if _explored.has(k) else 2
 
 
 func px(p: Vector2) -> Vector2:
@@ -169,6 +258,10 @@ func _draw() -> void:
 	if map == null:
 		return
 	var size := map.grid.map_size() * ppx
+	if state != null and not gm_view() and state.fog_enabled(scene_id):
+		# Under fog the gaps between the edge hexes are unseen too.
+		draw_rect(Rect2(Vector2.ZERO, size), FOG_UNSEEN)
+		return
 	if shadow_color.a > 0.0:
 		# A few expanding rects fading out read as a soft drop shadow at any zoom.
 		var steps := 8
@@ -285,9 +378,19 @@ func _draw_lights(c: Node2D) -> void:
 	if _order.is_empty():
 		_rebuild_state()
 	for l in level().get("lights", []):
-		if not is_shown("lights", l):
+		if not is_shown("lights", l) or not bool(l.get("on", true)):
 			continue
 		draw_light(c, l, 1.0)
+	# Lights tokens carry: a torch moves with its bearer.
+	if state != null and show_tokens:
+		for t in tokens_in_view():
+			var tl = t.get("light", null)
+			if tl is Dictionary and not (tl as Dictionary).is_empty():
+				var l: Dictionary = (tl as Dictionary).duplicate()
+				l["pos"] = t.get("pos", [0, 0])
+				if not l.has("shadows"):
+					l["shadows"] = true
+				draw_light(c, l, 1.0)
 
 
 ## Lights are drawn as the radial gradient mapped onto the polygon the light
@@ -463,6 +566,138 @@ func draw_wall(c: Node2D, w: Dictionary, alpha := 1.0, selected := false) -> voi
 static func _dashed(c: Node2D, pts: PackedVector2Array, color: Color, width: float) -> void:
 	for i in pts.size() - 1:
 		c.draw_dashed_line(pts[i], pts[i + 1], color, width, width * 3.0, true, true)
+
+
+# ---------------------------------------------------------------------- tokens --
+
+## Tokens the viewpoint gets to see: the GM all of them, a player the ones
+## not hidden and either theirs or in sight.
+func tokens_in_view() -> Array:
+	var out := []
+	if state == null or scene_id == "":
+		return out
+	for t in state.tokens(scene_id):
+		if gm_view():
+			out.append(t)
+			continue
+		if bool(t.get("hidden", false)):
+			continue
+		var mine := t.get("owner", null) != null and str(t.owner) == viewpoint
+		if mine or point_seen(Vision.token_pos(t)):
+			out.append(t)
+	return out
+
+
+func _draw_tokens(c: Node2D) -> void:
+	if not show_tokens or state == null:
+		return
+	if _eff_level.is_empty():
+		_rebuild_state()
+	var up := state.highlighted_token_ids()
+	for t in tokens_in_view():
+		draw_token(c, t, 0.5 if bool(t.get("hidden", false)) else 1.0, up.has(str(t.get("id", ""))))
+
+
+func token_radius_px(tk: Dictionary) -> float:
+	return 0.5 * float(tk.get("size", 1)) * ppx * 0.92
+
+
+## A token: a disc in its colour (or its art, clipped round), a ring in its
+## owner's colour, its label. Also used by tools for ghosts (alpha < 1).
+func draw_token(c: Node2D, tk: Dictionary, alpha := 1.0, active := false, selected := false) -> void:
+	var pos := Vision.token_pos(tk) * ppx
+	var r := token_radius_px(tk)
+	var color := Color(str(tk.get("color", "#c0392b")))
+	var ring := Color.WHITE
+	if tk.get("owner", null) != null and state != null:
+		var p := state.encounter.player(str(tk.owner))
+		if not p.is_empty():
+			ring = Color(str(p.get("color", "#ffffff")))
+	var art := str(tk.get("art", ""))
+	var tex: Texture2D = packs.token_texture(art, texture_ppx, float(tk.get("size", 1))) if packs != null and art != "" else null
+	var n := 48
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	pts.resize(n)
+	uvs.resize(n)
+	var rot := deg_to_rad(float(tk.get("rot", 0.0)))
+	for i in n:
+		var a := TAU * i / n
+		pts[i] = pos + Vector2(cos(a), sin(a)) * r
+		uvs[i] = Vector2(0.5, 0.5) + Vector2(cos(a - rot), sin(a - rot)) * 0.5
+	c.draw_circle(pos + Vector2(r * 0.06, r * 0.08), r, Color(0, 0, 0, 0.35 * alpha))
+	if tex != null:
+		var white := PackedColorArray()
+		white.resize(n)
+		white.fill(Color(1, 1, 1, alpha))
+		c.draw_polygon(pts, white, uvs, tex)
+	else:
+		c.draw_colored_polygon(pts, Color(color, alpha))
+		var label := str(tk.get("label", ""))
+		if label != "":
+			var font := ThemeDB.fallback_font
+			var fs := int(r * (0.9 if label.length() <= 2 else 0.6))
+			var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
+			var at := pos + Vector2(-w / 2.0, fs * 0.36)
+			c.draw_string_outline(font, at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(maxf(2.0, fs * 0.12)), Color(0, 0, 0, 0.8 * alpha))
+			c.draw_string(font, at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, alpha))
+	var ring_w := maxf(r * 0.09, 1.5)
+	c.draw_arc(pos, r - ring_w * 0.5, 0.0, TAU, n, Color(0, 0, 0, 0.6 * alpha), ring_w + 1.5, true)
+	c.draw_arc(pos, r - ring_w * 0.5, 0.0, TAU, n, Color(ring, alpha), ring_w, true)
+	if bool(tk.get("hidden", false)):
+		# Dotted outer ring: the GM's reminder that players cannot see it.
+		for i in range(0, n, 4):
+			var a := TAU * i / n
+			c.draw_arc(pos, r + ring_w * 1.2, a, a + TAU / n * 2.0, 4, Color(1, 1, 1, 0.7), ring_w, true)
+	if active:
+		c.draw_arc(pos, r + ring_w * 2.2, 0.0, TAU, n, Color("#ffd75a"), ring_w * 1.2, true)
+	if selected:
+		c.draw_arc(pos, r + ring_w * 3.6, 0.0, TAU, n, Color(1, 1, 0.3, 0.9), ring_w, true)
+	# Facing tick when rotated.
+	if absf(float(tk.get("rot", 0.0))) > 0.01:
+		var d := Vector2(cos(rot - PI / 2.0), sin(rot - PI / 2.0))
+		c.draw_line(pos + d * r * 0.75, pos + d * (r + ring_w), Color(1, 1, 1, alpha), ring_w, true)
+
+
+func token_hit(tk: Dictionary, p: Vector2) -> bool:
+	return Vision.token_pos(tk).distance_to(p) * ppx <= token_radius_px(tk)
+
+
+# ------------------------------------------------------------------------- fog --
+
+## Fog: for players, the unexplored is black and the explored-but-out-of-
+## sight is dim; for the GM, a light hatch over what the players have not
+## found yet.
+func _draw_fog(c: Node2D) -> void:
+	if not show_fog or state == null or map == null or not state.fog_enabled(scene_id):
+		return
+	if _eff_level.is_empty():
+		_rebuild_state()
+	var grid := map.grid
+	var unseen := FOG_UNSEEN if not gm_view() else Color(0.05, 0.05, 0.12, 0.55)
+	var dim := Color(0.03, 0.03, 0.05, 0.62)
+	var size := grid.map_size() * ppx
+	if not gm_view():
+		# Off-map surround is never seen either.
+		var pad := 3.0 * ppx
+		c.draw_rect(Rect2(Vector2(-pad, -pad), Vector2(size.x + pad * 2.0, pad)), unseen)
+		c.draw_rect(Rect2(Vector2(-pad, size.y), Vector2(size.x + pad * 2.0, pad)), unseen)
+		c.draw_rect(Rect2(Vector2(-pad, 0), Vector2(pad, size.y)), unseen)
+		c.draw_rect(Rect2(Vector2(size.x, 0), Vector2(pad, size.y)), unseen)
+	for cell in grid.all_cells():
+		var f := fog_of(cell)
+		if f == 0:
+			continue
+		var corners := grid.cell_corners(cell)
+		var pts := PackedVector2Array()
+		pts.resize(6)
+		for i in 6:
+			pts[i] = corners[i] * ppx
+		# Overdraw a hair so neighbouring cells leave no seam.
+		var center := grid.cell_center(cell) * ppx
+		for i in 6:
+			pts[i] = center + (pts[i] - center) * 1.02
+		c.draw_colored_polygon(pts, unseen if f == 2 else dim)
 
 
 # ----------------------------------------------------------------------- notes --

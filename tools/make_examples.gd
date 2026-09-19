@@ -450,6 +450,6 @@ func _chapel_ambush(m: HexMap) -> Encounter:
 	var order := []
 	for t in st.tokens(sid):
 		order.append(t.id)
-	st.apply({"t": "initiative.set", "changes": {"order": order, "round": 1, "turn": 0, "running": false}})
+	st.apply({"t": "turns.set", "changes": {"mode": "ordered", "system": "list", "order": order, "round": 1, "turn": 0, "running": false}})
 	e.doc.notes.append({"id": JsonDoc.new_id("n"), "title": "If the party lights the braziers", "text": "The goblins bolt for the trapdoor; the chief bars it from below."})
 	return e
