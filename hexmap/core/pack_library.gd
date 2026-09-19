@@ -94,6 +94,42 @@ func pack_version(pack_id: String) -> String:
 	return str(packs.get(pack_id, {}).get("pack_version", "0.0.0"))
 
 
+func pack_dir(pack_id: String) -> String:
+	return str(packs.get(pack_id, {}).get("_dir", ""))
+
+
+## The manifest without the loader's own keys: what to send to a client.
+func manifest(pack_id: String) -> Dictionary:
+	var m: Dictionary = packs.get(pack_id, {}).duplicate()
+	m.erase("_dir")
+	return m
+
+
+## Every file of a pack, relative to its directory (images and the
+## manifest), for streaming it to a client.
+func pack_files(pack_id: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var dir := pack_dir(pack_id)
+	if dir == "":
+		return out
+	_walk(dir, "", out)
+	return out
+
+
+static func _walk(root: String, rel: String, out: PackedStringArray) -> void:
+	var d := DirAccess.open(root.path_join(rel) if rel != "" else root)
+	if d == null:
+		return
+	for f in d.get_files():
+		if f.begins_with("."):
+			continue
+		out.append(rel.path_join(f) if rel != "" else f)
+	for sub in d.get_directories():
+		if sub.begins_with("."):
+			continue
+		_walk(root, rel.path_join(sub) if rel != "" else sub, out)
+
+
 ## Split "pack:asset" into [pack, asset]; [] if malformed.
 static func split_ref(ref: String) -> PackedStringArray:
 	var i := ref.find(":")

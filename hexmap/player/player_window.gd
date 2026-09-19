@@ -23,6 +23,10 @@ var _pick: Control
 var _play: Control
 var _address: LineEdit
 var _files: ItemList
+var _tables: ItemList
+var _tables_label: Label
+var browser := Discovery.Browser.new()
+var _browsing := false
 var _players: ItemList
 var _pick_title: Label
 var _title: Label
@@ -120,6 +124,17 @@ func _build_join() -> Control:
 	h.text = "Join a table"
 	h.theme_type_variation = "DimLabel"
 	column.add_child(h)
+	_tables_label = Label.new()
+	_tables_label.text = "Listening for tables on this network…"
+	_tables_label.theme_type_variation = "DimLabel"
+	column.add_child(_tables_label)
+	_tables = ItemList.new()
+	_tables.custom_minimum_size = Vector2(0, 120)
+	_tables.item_selected.connect(func(i: int) -> void:
+		var t: Dictionary = _tables.get_item_metadata(i)
+		_connect_to(str(t.address), int(t.port)))
+	column.add_child(_tables)
+	browser.updated.connect(_refresh_tables)
 	var row := HBoxContainer.new()
 	_address = LineEdit.new()
 	_address.placeholder_text = "Table address or code"
@@ -224,7 +239,34 @@ func show_screen(name: String) -> void:
 	_play.visible = name == "play"
 	if name == "join":
 		_refresh_files()
+		_start_browsing()
+	else:
+		_stop_browsing()
 	get_window().title = "Player — " + App.NAME
+
+
+func _start_browsing() -> void:
+	if _browsing:
+		return
+	_browsing = browser.start() == OK
+	if not _browsing:
+		_tables_label.text = "Cannot listen for tables here; type the address the DM sees."
+	_refresh_tables()
+
+
+func _stop_browsing() -> void:
+	if _browsing:
+		browser.stop()
+		_browsing = false
+
+
+func _refresh_tables() -> void:
+	_tables.clear()
+	for t in browser.list():
+		var i := _tables.add_item("%s  —  %s:%d" % [str(t.name), str(t.address), int(t.port)])
+		_tables.set_item_metadata(i, t)
+	if _browsing:
+		_tables_label.text = "Tables on this network" if _tables.item_count > 0 else "Listening for tables on this network…"
 
 
 # ====================================================================== join ==
@@ -253,7 +295,50 @@ func _refresh_files() -> void:
 
 
 func _join_address() -> void:
-	_join_status("Joining over the network is not built yet. Open an encounter on this device below.")
+	var text := _address.text.strip_edges()
+	if text == "":
+		_join_status("Type the address the DM's table shows, or pick a table above.")
+		return
+	var hp := Protocol.parse_address(text)
+	_connect_to(str(hp[0]), int(hp[1]))
+
+
+## Connect to a table; the welcome brings the players to pick from.
+func _connect_to(address: String, port: int) -> void:
+	if session != null:
+		session.leave()
+		session = null
+	var s := NetSession.new(address, port, app.packs, OS.get_environment("USER"))
+	var err := s.connect_to_host()
+	if err != OK:
+		_join_status("Could not connect to %s:%d: %s" % [address, port, error_string(err)])
+		return
+	session = s
+	_join_status("Connecting to %s:%d…" % [address, port])
+	s.connected.connect(func() -> void:
+		_pending_path = ""
+		_pick_title.text = s.state.encounter.name
+		_players.clear()
+		for p in s.state.encounter.players:
+			var i := _players.add_item(str(p.get("name", "")))
+			_players.set_item_metadata(i, str(p.get("id", "")))
+			_players.set_item_custom_fg_color(i, Color(str(p.get("color", "#ffffff"))))
+		if s.state.encounter.players.is_empty():
+			s.leave()
+			session = null
+			_join_status("'%s' has no players yet. Ask the DM to add them." % s.state.encounter.name)
+			return
+		show_screen("pick"))
+	s.joined_as.connect(func(_pid: String) -> void:
+		_bind(s)
+		show_screen("play"))
+	s.closed.connect(func(reason: String) -> void:
+		if session == s:
+			_leave()
+			_join_status(reason))
+	s.status.connect(func(t: String) -> void:
+		if screen != "play":
+			_join_status(t))
 
 
 func _join_status(text: String) -> void:
@@ -284,6 +369,9 @@ func _choose_file(path: String) -> void:
 
 ## Start playing as this player.
 func _start(player_id: String) -> void:
+	if session is NetSession:
+		(session as NetSession).join(player_id)
+		return
 	var s := LocalSession.new(_pending_path, player_id)
 	var err := s.open()
 	if err != "":
@@ -297,14 +385,15 @@ func _start(player_id: String) -> void:
 
 
 func _bind(s: Session) -> void:
-	if session != null:
+	if session != null and session != s:
 		session.leave()
 	session = s
 	session.changed.connect(_on_changed)
 	session.status.connect(_say)
-	session.closed.connect(func(reason: String) -> void:
-		_leave()
-		_join_status(reason))
+	if not (s is NetSession):
+		session.closed.connect(func(reason: String) -> void:
+			_leave()
+			_join_status(reason))
 	tool = PlayerTools.MoveTool.new(session, view.canvas)
 	tool.zoom = view.zoom()
 	view.set_handler(tool)
@@ -338,10 +427,11 @@ func _on_changed(what: String, _scene: String) -> void:
 	if session == null:
 		return
 	if what == "" or what == "active_scene" or what == "scenes" or view.canvas.scene_id != session.scene_id():
-		# A reload or a scene switch: the map may be different.
+		# A reload, a scene switch, or a map that just arrived.
+		var had_map := view.canvas.map != null
 		view.canvas.viewpoint = session.player_id
 		view.canvas.set_scene(session.state, session.scene_id())
-		if what == "active_scene":
+		if what == "active_scene" or (not had_map and view.canvas.map != null):
 			view.zoom_to_fit.call_deferred()
 	else:
 		view.canvas.refresh()
@@ -387,6 +477,8 @@ func _say(text: String) -> void:
 
 
 func _process(delta: float) -> void:
+	if _browsing:
+		browser.poll(delta)
 	if session == null:
 		return
 	if session is LocalSession:
@@ -400,6 +492,7 @@ func _process(delta: float) -> void:
 
 
 func _exit_tree() -> void:
+	_stop_browsing()
 	if app != null and app.theme_changed.is_connected(_on_theme):
 		app.theme_changed.disconnect(_on_theme)
 	if session != null:

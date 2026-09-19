@@ -8,6 +8,8 @@ var list: ItemList
 var _actions: Array = []
 var _name_edit: LineEdit
 var _color: ColorPickerButton
+## Player ids connected over the network right now.
+var online: Dictionary = {}
 
 
 func _init(p_ctx: TableContext) -> void:
@@ -106,6 +108,8 @@ func refresh() -> void:
 		var owned := 0
 		for s in ctx.encounter().scenes:
 			owned += ctx.state.tokens_owned_by(str(s.id), str(p.id)).size()
-		var i := list.add_item("%s  (%d token%s)" % [str(p.get("name", "")), owned, "" if owned == 1 else "s"])
+		var i := list.add_item("%s%s  (%d token%s)" % ["● " if online.has(str(p.id)) else "", str(p.get("name", "")), owned, "" if owned == 1 else "s"])
+		if online.has(str(p.id)):
+			list.set_item_tooltip(i, "Connected")
 		list.set_item_metadata(i, str(p.id))
 		list.set_item_custom_fg_color(i, Color(str(p.get("color", "#ffffff"))))

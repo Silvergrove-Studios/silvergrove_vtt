@@ -14,6 +14,8 @@ const V_PLAYER_BASE := 2000
 
 var app: App
 var ctx := TableContext.new()
+var host: HostSession
+var host_button: Button
 var view: TableView
 var scenes: ScenesPanel
 var tokens: TokensPanel
@@ -42,7 +44,7 @@ var _token_form: PropertyForm
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK,
-	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG,
+	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
 	T_FREE, T_DM, T_ORDERED, T_START, T_NEXT, T_PREV, T_END,
 	H_SHORTCUTS, H_ABOUT }
 
@@ -72,6 +74,11 @@ func _ready() -> void:
 	_update_title()
 
 
+func _process(delta: float) -> void:
+	if host != null:
+		host.poll(delta)
+
+
 ## An encounter path from the command line or the home screen.
 func open_argument(path: String) -> void:
 	_open_path(path if path.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(path))
@@ -84,6 +91,8 @@ func prepare_shot() -> void:
 func _set_encounter(e: Encounter) -> void:
 	ctx.set_encounter(e)
 	e.changed.connect(_on_encounter_changed)
+	if host != null:
+		host.set_state(ctx.state)
 	if view != null:
 		_bind_panels()
 		_refresh_scene_select()
@@ -271,6 +280,12 @@ func _build_menus() -> MenuBar:
 	tm.id_pressed.connect(_on_menu)
 	bar.add_child(tm)
 
+	var net := PopupMenu.new()
+	net.name = "Network"
+	_check(net, "Host on this network", N_HOST, false)
+	net.id_pressed.connect(_on_menu)
+	bar.add_child(net)
+
 	var help := PopupMenu.new()
 	help.name = "Help"
 	_item(help, "Shortcuts", H_SHORTCUTS, KEY_SLASH, true)
@@ -324,6 +339,15 @@ func _build_toolbar() -> HBoxContainer:
 		b.pressed.connect(_select_tool.bind(t.name))
 		bar.add_child(b)
 		tool_buttons[t.name] = b
+	host_button = Button.new()
+	host_button.text = "Host"
+	host_button.set_meta("icon", "scan")
+	host_button.toggle_mode = true
+	host_button.tooltip_text = "Host this encounter on the local network so players can join"
+	host_button.theme_type_variation = "ToolButton"
+	host_button.focus_mode = Control.FOCUS_NONE
+	host_button.toggled.connect(func(on: bool) -> void: _set_hosting(on))
+	bar.add_child(host_button)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(spacer)
@@ -608,6 +632,7 @@ func _on_menu(id: int) -> void:
 		S_RESET_FOG:
 			if sid != "":
 				ctx.commands.reset_fog(sid)
+		N_HOST: _set_hosting(host == null)
 		T_FREE: ctx.commands.set_turn_mode("free")
 		T_DM: ctx.commands.set_turn_mode("dm")
 		T_ORDERED: ctx.commands.set_turn_mode("ordered")
@@ -620,6 +645,67 @@ func _on_menu(id: int) -> void:
 		H_SHORTCUTS: _shortcuts_dialog()
 		H_ABOUT:
 			_info("%s %s — Table\n\nRun encounters on your maps.\nSilvergrove Studios.\nGodot %s" % [App.NAME, App.version(), Engine.get_version_info().string])
+
+
+# =================================================================== hosting ==
+
+func _set_hosting(on: bool) -> void:
+	if on and host == null:
+		host = HostSession.new(ctx.state, app.packs)
+		host.apply_request = _apply_player_request
+		host.log.connect(ctx.say)
+		host.client_joined.connect(func(_p: String) -> void: _refresh_online())
+		host.client_left.connect(func(_p: String) -> void: _refresh_online())
+		var err := host.start()
+		if err != OK:
+			_info("Could not start hosting: %s" % error_string(err))
+			host = null
+			on = false
+		else:
+			ctx.say("Hosting '%s' at %s — players on this network can find it" % [ctx.encounter().name, host_address()])
+	elif not on and host != null:
+		host.stop()
+		host = null
+		_refresh_online()
+	host_button.set_pressed_no_signal(host != null)
+	var net := _menu("Network")
+	if net != null:
+		net.set_item_checked(net.get_item_index(N_HOST), host != null)
+
+
+## "192.168.1.5:47777" — the address to type when discovery does not work.
+func host_address() -> String:
+	if host == null:
+		return ""
+	var ips := []
+	for a in IP.get_local_addresses():
+		var s := str(a)
+		if s.is_valid_ip_address() and not s.contains(":") and not s.begins_with("127."):
+			ips.append(s)
+	return "%s:%d" % [ips[0] if not ips.is_empty() else "127.0.0.1", host.port]
+
+
+func _refresh_online() -> void:
+	players.online.clear()
+	if host != null:
+		for p in host.connected_players():
+			players.online[p] = true
+	players.refresh()
+
+
+## A player's request, applied through the table's commands so it is one
+## undo step for the DM and explores fog like the DM's own moves.
+func _apply_player_request(ev: Dictionary, pid: String) -> String:
+	var who := str(ctx.encounter().player(pid).get("name", "player"))
+	if str(ev.get("t", "")) == "token.set" and (ev.get("changes", {}) as Dictionary).has("pos"):
+		var tk := ctx.state.token(str(ev.scene), str(ev.id))
+		ctx.commands.begin_group()
+		var why := ctx.commands.run(ev)
+		if why == "":
+			ctx.commands.explore_from(str(ev.scene), [ctx.state.token(str(ev.scene), str(ev.id))])
+		ctx.commands.end_group("%s moves %s" % [who, str(tk.get("name", "token"))])
+		return why
+	return ctx.commands.run(ev, who)
 
 
 # ====================================================================== files ==
@@ -772,6 +858,9 @@ func request_quit() -> void:
 
 func _exit_tree() -> void:
 	_autosave.stop()
+	if host != null:
+		host.stop()
+		host = null
 	if dock != null and is_instance_valid(dock):
 		LayoutStore.save(dock.layout, LayoutStore.table_path())
 	_native_menus.free_menus()

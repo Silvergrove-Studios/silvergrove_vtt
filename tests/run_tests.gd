@@ -2126,7 +2126,7 @@ func test_player_window() -> void:
 	root.add_child(win)
 	check(win.screen == "join" and win._files.item_count >= 1, "starts on the join screen with the example listed")
 	win._join_address()
-	check((win._join.find_child("JoinStatus", true, false) as Label).text.contains("not built yet"), "joining an address says so, honestly")
+	check((win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Type the address"), "joining an empty address asks for one")
 	win._choose_file("/nowhere/x.encounter")
 	check(win.screen == "join" and (win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Could not open"), "a bad file is reported")
 	var path := ProjectSettings.globalize_path("res://examples/chapel_ambush.encounter")
@@ -2158,6 +2158,243 @@ func test_player_window() -> void:
 	check(win._status.text == "", "and fades")
 	win._leave()
 	check(win.screen == "join" and win.session == null and win.view.canvas.state == null, "leave returns to join")
+	win._stop_browsing()   # free the discovery port now; queue_free waits for the frame
 	win.queue_free()
 	await process_frame
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_player.json"))
+
+
+# ----------------------------------------------------------------------- net --
+
+## Pump host and client until `done` says so, or give up.
+func _pump(host: HostSession, clients: Array, done: Callable, max_ms := 4000) -> bool:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < max_ms:
+		host.poll(0.016)
+		for c in clients:
+			(c as NetSession).poll()
+		if done.call():
+			return true
+		OS.delay_msec(5)
+	return false
+
+
+func test_protocol() -> void:
+	check(Protocol.decode(Protocol.encode({"t": "ping"})) == {"t": "ping"}, "encode/decode")
+	check(Protocol.decode("[1]").is_empty() and Protocol.decode("{}").is_empty() and Protocol.decode("nope").is_empty(), "not messages")
+	check(Protocol.parse_address("192.168.1.4") == ["192.168.1.4", Protocol.DEFAULT_PORT], "bare host")
+	check(Protocol.parse_address(" ws://table.local:5000/ ") == ["table.local", 5000], "url with port")
+	check(Protocol.parse_address("10.0.0.2:abc") == ["10.0.0.2:abc", Protocol.DEFAULT_PORT], "a non-number is part of the host")
+	var a := Protocol.parse_announcement(Protocol.encode(Protocol.announcement("Chapel", 47777, "mac")))
+	check(a.name == "Chapel" and int(a.port) == 47777 and a.host == "mac", "announcement round trip")
+	check(Protocol.parse_announcement('{"hexmap": 99, "name": "x", "port": 1}').is_empty() and Protocol.parse_announcement("junk").is_empty(), "other versions and junk ignored")
+	var b := Discovery.Browser.new()
+	var updates := []
+	b.updated.connect(func() -> void: updates.append(1))
+	check(b.heard({"name": "A", "port": 1}, "10.0.0.1") and not b.heard({"name": "A", "port": 1}, "10.0.0.1"), "heard: new then repeat")
+	check(b.heard({"name": "A", "port": 1}, "10.0.0.2") and b.list().size() == 2, "same name, other host: another table")
+	check(b.heard({"name": "B", "port": 1}, "10.0.0.1") and b.list()[0].name == "A" and b.list()[1].name == "B", "renamed; list sorted by name")
+
+
+func test_discovery_loopback() -> void:
+	# Best effort: multicast on this machine's loopback. Skipped, not
+	# failed, where the OS or CI runner does not route it.
+	var browser := Discovery.Browser.new()
+	if browser.start() != OK:
+		print("  (skipped: cannot bind the discovery port)")
+		return
+	var ann := Discovery.Announcer.new()
+	check(ann.start("Loopback table", 47777) == OK, "announcer starts")
+	var heard := false
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 1500 and not heard:
+		ann.announce()
+		OS.delay_msec(50)
+		browser.poll(0.05)
+		for t in browser.list():
+			if str(t.name) == "Loopback table":
+				heard = true
+	if heard:
+		check(int(browser.list()[0].port) == 47777, "the announced port is what the browser lists")
+		print("  discovery over loopback works")
+	else:
+		print("  (skipped: no multicast on loopback here)")
+	ann.stop()
+	browser.stop()
+
+
+func test_host_and_net_session() -> void:
+	var packs := PackLibrary.new()
+	packs.reload()
+	var e := Encounter.load_file(ProjectSettings.globalize_path("res://examples/chapel_ambush.encounter"))
+	var st := EncounterState.new(e)
+	st.resolve_maps()
+	var history := History.new()
+	var cmds := EncounterCommands.new(st, history)
+	var host := HostSession.new(st, packs)
+	var applied := []
+	host.apply_request = func(ev: Dictionary, pid: String) -> String:
+		applied.append(pid)
+		return cmds.run(ev, "Player move")
+	var joined := []
+	host.client_joined.connect(func(p: String) -> void: joined.append(p))
+	check(host.start(0, false) == OK and host.port > 0 and host.is_running(), "host listens on a free port (%d)" % host.port)
+	# A client with its own pack library pointed at a scratch cache.
+	var cache := "user://packs_test"
+	var cpacks := PackLibrary.new()
+	cpacks.reload()
+	var client := NetSession.new("127.0.0.1", host.port, cpacks, "test client")
+	client.cache_dir = cache
+	var told := []
+	client.status.connect(func(t: String) -> void: told.append(t))
+	var closed := []
+	client.closed.connect(func(r: String) -> void: closed.append(r))
+	check(client.connect_to_host() == OK, "client connects")
+	check(_pump(host, [client], func() -> bool: return client.state != null and client.maps_ready()), "welcome and maps arrive")
+	check(client.state.encounter.name == "Chapel Ambush" and client.state.maps.size() == 1 and client.state.map_for(client.scene_id()).name == "Ruined Chapel", "the client has the encounter and its map")
+	check(host.client_count() == 1 and host.connected_players().is_empty(), "connected, not yet joined")
+	var ana: Dictionary = e.players[0]
+	var sid := e.active_scene_id
+	var fighter: Dictionary = st.tokens_owned_by(sid, str(ana.id))[0]
+	var mv := {"t": "token.set", "scene": sid, "id": fighter.id, "changes": {"pos": [1.5, 1.5]}}
+	check(client.request(mv) == "Not joined yet", "requests need a join")
+	client.join("pl_nobody")
+	check(_pump(host, [client], func() -> bool: return told.has("no such player")), "an unknown player is refused")
+	client.join(str(ana.id))
+	check(_pump(host, [client], func() -> bool: return client.joined), "joined as Ana")
+	check(joined == [str(ana.id)] and host.connected_players() == [str(ana.id)], "the host says so too")
+	# The example is ordered-not-running: the client refuses locally with the reason, nothing is sent.
+	check(client.request(mv) == "Turns have not begun" and applied.is_empty(), "pre-checked locally")
+	cmds.set_turn_mode("free")
+	check(_pump(host, [client], func() -> bool: return client.state.encounter.turns.mode == "free"), "the host's change reached the client as an event")
+	check(client.request(mv) == "", "in free mode the request goes out")
+	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) == Vector2(1.5, 1.5)), "applied at the host and echoed back")
+	check(applied == [str(ana.id)] and history.undo_label() == "Player move" and Vision.token_pos(st.token(sid, fighter.id)) == Vector2(1.5, 1.5), "the host applied it through the table's commands, undoably")
+	check(client.state.encounter.to_json() == st.encounter.to_json(), "host and client documents are identical")
+	history.undo()
+	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) != Vector2(1.5, 1.5)), "the DM's undo reaches the client")
+	check(client.state.encounter.to_json() == st.encounter.to_json(), "still identical after undo")
+	# A second client, as Ben, sees Ana's next move.
+	var client2 := NetSession.new("127.0.0.1", host.port, cpacks, "second")
+	client2.cache_dir = cache
+	client2.connect_to_host()
+	check(_pump(host, [client, client2], func() -> bool: return client2.state != null and client2.maps_ready()), "second client welcomed")
+	client2.join(str(e.players[1].id))
+	check(_pump(host, [client, client2], func() -> bool: return client2.joined), "Ben joined")
+	client.request({"t": "token.set", "scene": sid, "id": fighter.id, "changes": {"pos": [2.5, 2.5]}})
+	check(_pump(host, [client, client2], func() -> bool: return Vision.token_pos(client2.state.token(sid, fighter.id)) == Vector2(2.5, 2.5)), "Ben sees Ana's move")
+	# A tampered request: the host refuses what allowed() forbids.
+	client2._send({"t": "request", "ev": {"t": "element.set", "scene": sid, "ref": "walls:x", "changes": {"state": "open"}}})
+	var told2 := []
+	client2.status.connect(func(t: String) -> void: told2.append(t))
+	check(_pump(host, [client, client2], func() -> bool: return told2.has("not allowed")), "the host refuses a forged request")
+	# Packs: the client pretends it lacks the swamp pack and gets it streamed.
+	cpacks.packs.erase("swamp")
+	(st.maps.values()[0] as HexMap).doc.packs["swamp"] = "0.1.0"
+	var ready := []
+	client.assets_ready.connect(func() -> void: ready.append(1))
+	client._send({"t": "need", "kind": "packs"})
+	check(_pump(host, [client, client2], func() -> bool: return not ready.is_empty(), 8000), "pack files streamed")
+	var cdir := ProjectSettings.globalize_path(cache.path_join("swamp"))
+	check(FileAccess.file_exists(cdir.path_join("pack.json")) and FileAccess.file_exists(cdir.path_join("props/witch_hut.svg")), "files landed in the cache")
+	check(FileAccess.get_file_as_bytes(cdir.path_join("props/witch_hut.svg")) == FileAccess.get_file_as_bytes(packs.pack_dir("swamp").path_join("props/witch_hut.svg")), "byte-identical")
+	check(client.assets_pending() == 0, "nothing pending")
+	# Path traversal is refused.
+	client._send({"t": "need", "kind": "file", "pack": "swamp", "file": "../../project.godot"})
+	check(_pump(host, [client, client2], func() -> bool: return told.any(func(t: String) -> bool: return t.begins_with("no file"))), "traversal refused")
+	# Leaving and stopping.
+	client2.leave()
+	check(_pump(host, [client], func() -> bool: return host.client_count() == 1), "a client that leaves is dropped")
+	host.stop()
+	check(_pump(host, [client], func() -> bool: return not closed.is_empty()), "stopping the host closes the client (%s)" % [closed])
+	check(not host.is_running(), "host stopped")
+	# Clean the cache.
+	for f in ["props/witch_hut.svg", "pack.json"]:
+		DirAccess.remove_absolute(cdir.path_join(f))
+	_rm_tree(cdir)
+	history.clear()
+
+
+func _rm_tree(dir: String) -> void:
+	var d := DirAccess.open(dir)
+	if d == null:
+		return
+	for f in d.get_files():
+		DirAccess.remove_absolute(dir.path_join(f))
+	for sub in d.get_directories():
+		_rm_tree(dir.path_join(sub))
+	DirAccess.remove_absolute(dir)
+
+
+func test_table_hosts_player_joins() -> void:
+	var app := App.new("user://test_prefs_net.json")
+	var table := TableWindow.new()
+	table.app = app
+	root.add_child(table)
+	table._open_path(ProjectSettings.globalize_path("res://examples/chapel_ambush.encounter"))
+	table.ctx.commands.set_turn_mode("free")
+	table._set_hosting(true)
+	check(table.host != null and table.host.is_running() and table.host_button.button_pressed, "the table hosts")
+	check(table.host_address().ends_with(":%d" % table.host.port), "and shows an address: %s" % table.host_address())
+	var player := PlayerWindow.new()
+	player.app = app
+	root.add_child(player)
+	check(player.screen == "join", "player on the join screen")
+	var pump := func(done: Callable, max_ms := 4000) -> bool:
+		var t0 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < max_ms:
+			table._process(0.05)
+			player._process(0.05)
+			if done.call():
+				return true
+			OS.delay_msec(10)
+		return false
+	# Discovery (where loopback multicast works) or the typed address.
+	var found: bool = player._browsing and pump.call(func() -> bool: return player._tables.item_count > 0, 2500)
+	if found:
+		print("  found the table by discovery: %s" % player._tables.get_item_text(0))
+		check(str(player._tables.get_item_text(0)).begins_with("Chapel Ambush"), "discovered table is named")
+		player._tables.item_selected.emit(0)
+	else:
+		print("  (no discovery on loopback here; using the address)")
+		player._address.text = "127.0.0.1:%d" % table.host.port
+		player._join_address()
+	check(player.session is NetSession, "connecting")
+	check(pump.call(func() -> bool: return player.screen == "pick"), "welcomed: the player picker shows")
+	check(player._players.item_count == 2 and player._pick_title.text == "Chapel Ambush", "players listed from the table's document")
+	player._start(str(player._players.get_item_metadata(0)))
+	check(pump.call(func() -> bool: return player.screen == "play" and player.view.canvas.map != null), "joined as Ana and the map arrived")
+	check(table.players.online.size() == 1 and table.players.list.get_item_text(0).begins_with("●"), "the table shows Ana online")
+	check(player.view.canvas.tokens_in_view().size() == 2, "Ana sees the party")
+	# Ana moves her fighter; the table applies it as an undoable step and the DM sees it.
+	var sid := player.session.scene_id()
+	var fighter: Dictionary = player.session.my_tokens()[0]
+	var from := Vision.token_pos(fighter)
+	var g := player.view.canvas.map.grid
+	var to := g.cell_center(g.world_to_axial(from) + Vector2i(1, 0))
+	var mods := {"shift": false, "ctrl": false, "alt": false}
+	player.tool.press(from, MOUSE_BUTTON_LEFT, mods)
+	player.tool.drag(to, MOUSE_BUTTON_LEFT, mods)
+	player.tool.release(to, MOUSE_BUTTON_LEFT, mods)
+	check(pump.call(func() -> bool: return Vision.token_pos(table.ctx.state.token(sid, fighter.id)) == to), "the table got the move")
+	check(table.ctx.history.undo_label().begins_with("Ana moves"), "as one labelled undo step: %s" % table.ctx.history.undo_label())
+	check(pump.call(func() -> bool: return Vision.token_pos(player.session.state.token(sid, fighter.id)) == to), "echoed to the player")
+	check(table.ctx.state.explored(sid).size() >= 88, "the move explored fog at the table")
+	# The DM opens the door and switches turn mode; the player is told.
+	var door := _door_of(table.ctx)
+	table.ctx.commands.set_door(sid, door.id, "open")
+	table.ctx.commands.set_turn_mode("ordered")
+	table.ctx.commands.start_turns(sid)
+	check(pump.call(func() -> bool: return player.session.state.effective(sid, "walls", door).state == "open" and player.session.state.encounter.turns.running), "door and turns reached the player")
+	check(player._turn.text.begins_with("Your turn: Ana's fighter"), "the player's bar says it is her turn")
+	check(player.session.state.encounter.to_json() == table.ctx.state.encounter.to_json(), "documents identical across the wire")
+	# Leaving and stopping.
+	player._leave()
+	check(pump.call(func() -> bool: return table.players.online.is_empty()), "the table sees her leave")
+	table._set_hosting(false)
+	check(table.host == null and not table.host_button.button_pressed, "hosting stopped")
+	player._stop_browsing()
+	player.queue_free()
+	table.queue_free()
+	await process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_net.json"))

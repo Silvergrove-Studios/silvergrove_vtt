@@ -50,7 +50,7 @@ func request(ev: Dictionary) -> String:
 	if state == null:
 		return "no encounter open"
 	if not state.allowed(ev, player_id):
-		return _why_not(ev)
+		return why_not(state, ev)
 	var why := state.validate(ev)
 	if why != "":
 		return why
@@ -59,7 +59,7 @@ func request(ev: Dictionary) -> String:
 
 
 ## A player-facing reason a request was refused.
-func _why_not(ev: Dictionary) -> String:
+static func why_not(state: EncounterState, ev: Dictionary) -> String:
 	if str(ev.get("t", "")) != "token.set":
 		return "Only the DM can do that"
 	var tk := state.token(str(ev.get("scene", "")), str(ev.get("id", "")))
