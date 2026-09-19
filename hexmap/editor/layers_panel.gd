@@ -56,12 +56,12 @@ func _init(p_ctx: EditorContext) -> void:
 	var head := HBoxContainer.new()
 	var title := Label.new()
 	title.text = "Layers"
-	title.add_theme_font_size_override("font_size", 15)
+	title.theme_type_variation = "HeaderLabel"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	head.add_child(_button("Group", "Put the selection in a new folder (Ctrl/Cmd+G)", _group_selection))
-	head.add_child(_button("Folder", "New empty folder", func() -> void: _new_folder()))
-	head.add_child(_button("Delete", "Delete selected elements; folders are unwrapped", _delete_selected))
+	head.add_child(_button("group", "Group the selection into a new folder (Ctrl/Cmd+G)", _group_selection))
+	head.add_child(_button("folder-plus", "New empty folder", func() -> void: _new_folder()))
+	head.add_child(_button("trash", "Delete selected elements; folders are unwrapped", _delete_selected))
 	add_child(head)
 	tree = LayerTreeControl.new()
 	tree.panel = self
@@ -73,14 +73,12 @@ func _init(p_ctx: EditorContext) -> void:
 	tree.set_column_expand(COL_NAME, true)
 	tree.set_column_expand(COL_VIS, false)
 	tree.set_column_expand(COL_LOCK, false)
-	tree.set_column_custom_minimum_width(COL_VIS, 28)
-	tree.set_column_custom_minimum_width(COL_LOCK, 28)
-	tree.set_column_title(COL_NAME, "Layer")
-	tree.set_column_title(COL_VIS, "👁")
-	tree.set_column_title(COL_LOCK, "🔒")
-	tree.column_titles_visible = true
+	tree.set_column_custom_minimum_width(COL_VIS, 30)
+	tree.set_column_custom_minimum_width(COL_LOCK, 30)
+	tree.column_titles_visible = false
 	tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tree.item_edited.connect(_on_item_edited)
+	tree.button_clicked.connect(_on_button)
 	tree.multi_selected.connect(_on_multi_selected)
 	tree.item_collapsed.connect(_on_collapsed)
 	tree.item_activated.connect(_on_activated)
@@ -90,22 +88,46 @@ func _init(p_ctx: EditorContext) -> void:
 			ctx.clear_selection())
 	add_child(tree)
 	var hint := Label.new()
-	hint.text = "Drag to reorder or move into folders. Top is drawn on top. Double-click to rename or jump to."
-	hint.add_theme_font_size_override("font_size", 11)
-	hint.modulate = Color(1, 1, 1, 0.6)
+	hint.text = "Drag to reorder or into folders; top draws on top. Double-click renames or jumps to."
+	hint.theme_type_variation = "DimLabel"
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(hint)
 	ctx.selection_changed.connect(_sync_selection)
 	ctx.level_changed.connect(request_rebuild)
 
 
-func _button(text: String, tip: String, fn: Callable) -> Button:
+func _button(icon: String, tip: String, fn: Callable) -> Button:
 	var b := Button.new()
-	b.text = text
+	b.set_meta("icon", icon)
 	b.tooltip_text = tip
+	b.theme_type_variation = "ToolButton"
 	b.focus_mode = Control.FOCUS_NONE
 	b.pressed.connect(fn)
 	return b
+
+
+var _tokens: Dictionary = ThemeBuilder.tokens("slate")
+var _icons: Dictionary = {}
+
+## Re-rasterise icons for the current theme's colours.
+func restyle(t: Dictionary) -> void:
+	_tokens = t
+	var text := ThemeBuilder.c(t, "text")
+	var dim := ThemeBuilder.c(t, "text_dim")
+	var faint := Color(ThemeBuilder.c(t, "text_disabled"), 0.8)
+	var size: int = t.icon - 2
+	_icons = {
+		"eye": UiIcons.get_icon("eye", size, dim, t.stroke), "eye-off": UiIcons.get_icon("eye-off", size, faint, t.stroke),
+		"lock-open": UiIcons.get_icon("lock-open", size, faint, t.stroke), "lock": UiIcons.get_icon("lock", size, ThemeBuilder.c(t, "accent"), t.stroke),
+		"folder": UiIcons.get_icon("folder", size, ThemeBuilder.c(t, "accent"), t.stroke),
+		"wall": UiIcons.get_icon("brick-wall", size, text, t.stroke), "light": UiIcons.get_icon("lamp", size, text, t.stroke),
+		"note": UiIcons.get_icon("sticky-note", size, text, t.stroke), "door": UiIcons.get_icon("door-open", size, text, t.stroke),
+	}
+	_folder_tex = null
+	for b in find_children("*", "Button", true, false):
+		if b.has_meta("icon"):
+			(b as Button).icon = UiIcons.get_icon(str(b.get_meta("icon")), t.icon, text, t.stroke)
+	request_rebuild()
 
 
 var _rebuild_pending := false
@@ -153,9 +175,9 @@ func _build_children(parent: TreeItem, children: Array) -> void:
 			item.set_metadata(0, n.id)
 			item.set_text(COL_NAME, str(n.name))
 			item.set_icon(COL_NAME, _folder_icon())
+			item.set_icon_max_width(COL_NAME, 18)
 			item.set_editable(COL_NAME, true)
 			item.collapsed = not bool(n.get("open", true))
-			item.set_custom_color(COL_NAME, Color(0.9, 0.85, 0.6))
 			_build_children(item, n.children)
 		else:
 			var r := str(n.ref)
@@ -164,11 +186,19 @@ func _build_children(parent: TreeItem, children: Array) -> void:
 			item.set_icon(COL_NAME, _element_icon(r))
 			item.set_icon_max_width(COL_NAME, 18)
 			item.set_editable(COL_NAME, true)
-		for col in [COL_VIS, COL_LOCK]:
-			item.set_cell_mode(col, TreeItem.CELL_MODE_CHECK)
-			item.set_editable(col, true)
-		item.set_checked(COL_VIS, bool(n.get("visible", true)))
-		item.set_checked(COL_LOCK, bool(n.get("locked", false)))
+		var vis := bool(n.get("visible", true))
+		var locked := bool(n.get("locked", false))
+		if not _icons.is_empty():
+			item.add_button(COL_VIS, _icons["eye" if vis else "eye-off"], 0, false, "Hide / show")
+			item.add_button(COL_LOCK, _icons["lock" if locked else "lock-open"], 1, false, "Lock / unlock")
+		else:
+			for col in [COL_VIS, COL_LOCK]:
+				item.set_cell_mode(col, TreeItem.CELL_MODE_CHECK)
+				item.set_editable(col, true)
+			item.set_checked(COL_VIS, vis)
+			item.set_checked(COL_LOCK, locked)
+		if not vis:
+			item.set_custom_color(COL_NAME, ThemeBuilder.c(_tokens, "text_disabled"))
 		_items[str(item.get_metadata(0))] = item
 
 
@@ -208,6 +238,8 @@ func _items_name(key: String) -> String:
 
 var _folder_tex: Texture2D
 func _folder_icon() -> Texture2D:
+	if _icons.has("folder"):
+		return _icons["folder"]
 	if _folder_tex == null:
 		var img := Image.create(18, 14, false, Image.FORMAT_RGBA8)
 		img.fill(Color(0, 0, 0, 0))
@@ -221,10 +253,15 @@ func _element_icon(r: String) -> Texture2D:
 	var parts := LayerTree.split(r)
 	var o := HexMap.find_in(ctx.level(), parts[0], parts[1])
 	match parts[0]:
-		"props": return ctx.packs.prop_texture(str(o.get("asset", "")), 18.0 / maxf(0.2, float(o.get("size", [1])[0]) if o.has("size") else 18.0))
-		"walls": return ctx.packs.placeholder(MapCanvas.wall_color(o))
-		"lights": return ctx.packs.placeholder(Color(str(o.get("color", "#ffb060"))))
-		"notes": return ctx.packs.placeholder(Color("#f0d060"))
+		"props":
+			var def := ctx.packs.prop(str(o.get("asset", "")))
+			return ctx.packs.prop_texture(str(o.get("asset", "")), 18.0 / maxf(0.2, float(def.get("size", [1])[0])))
+		"walls":
+			if _icons.is_empty():
+				return ctx.packs.placeholder(MapCanvas.wall_color(o))
+			return _icons["door"] if str(o.get("door", "none")) != "none" else _icons["wall"]
+		"lights": return _icons.get("light", ctx.packs.placeholder(Color(str(o.get("color", "#ffb060")))))
+		"notes": return _icons.get("note", ctx.packs.placeholder(Color("#f0d060")))
 	return ctx.packs.placeholder(Color.GRAY)
 
 
@@ -323,6 +360,19 @@ func _on_item_edited() -> void:
 			else:
 				var parts := LayerTree.split(key)
 				ctx.commands.update_object(ctx.level_index, parts[0], parts[1], {"name": text if text != "" else null}, "Rename")
+
+
+func _on_button(item: TreeItem, column: int, id: int, mouse_button: int) -> void:
+	if mouse_button != MOUSE_BUTTON_LEFT:
+		return
+	var key := str(item.get_metadata(0))
+	var node := LayerTree.find(ctx.level().tree, key)
+	if node.is_empty():
+		return
+	if id == 0:
+		ctx.commands.tree_set(ctx.level_index, key, {"visible": not bool(node.get("visible", true))}, "Toggle visibility")
+	elif id == 1:
+		ctx.commands.tree_set(ctx.level_index, key, {"locked": not bool(node.get("locked", false))}, "Toggle lock")
 
 
 func _on_collapsed(item: TreeItem) -> void:

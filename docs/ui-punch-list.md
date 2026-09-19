@@ -110,3 +110,21 @@ polish.
 first impression. Then 5 and 6 (gizmos, palette) because they are where
 hands spend the time. 7 (docking) and 8 (status bar) next. The rest as they
 bite.
+
+## First pass: theme variants (September 2026)
+
+`hexmap/ui/theme_builder.gd` builds the Theme from tokens; four variants are
+switchable live under View → Theme (also `--theme <name>` on the command
+line). Same map, same state:
+
+| Variant | Idea | Screenshot |
+|---|---|---|
+| Slate | Neutral cool greys, blue accent, 6px radii — the godot-minimal-theme lineage | `docs/images/themes/theme_slate.png` |
+| Forge | Warm near-black, amber accent that matches torchlight, softer 8px radii, bigger icons | `docs/images/themes/theme_forge.png` |
+| Studio | Mid-grey Photoshop/Blender density, teal accent, 3px radii, compact 12px type | `docs/images/themes/theme_studio.png` |
+| Parchment | Light warm paper, ink text, deep-red accent — the print/rulebook feel | `docs/images/themes/theme_parchment.png` |
+
+Also in this pass: Lucide icons on the toolbar, status bar and Layers
+panel (eye/lock/folder/type glyphs), Inter + JetBrains Mono, themed inputs
+and trees, a canvas surround colour with a drop shadow under the map, and
+zoom controls in the status bar.

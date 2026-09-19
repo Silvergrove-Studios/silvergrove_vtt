@@ -24,6 +24,9 @@ var show_notes := true
 var show_hidden := true      # GM view: hidden props/notes are drawn
 var darkness := 0.0          # 0 = daylight preview, 1 = only lights show
 var grid_color_override := Color(0, 0, 0, 0)
+## Soft shadow around the map in the editor view; transparent = none. The
+## export renderer leaves it off.
+var shadow_color := Color(0, 0, 0, 0)
 
 var _terrain := DrawLayer.new()
 var _props := DrawLayer.new()
@@ -166,6 +169,15 @@ func _draw() -> void:
 	if map == null:
 		return
 	var size := map.grid.map_size() * ppx
+	if shadow_color.a > 0.0:
+		# A few expanding rects fading out read as a soft drop shadow at any zoom.
+		var steps := 8
+		var spread := ppx * 0.35
+		for i in steps:
+			var f := float(i) / steps
+			var grow := spread * f
+			var a := shadow_color.a * (1.0 - f) * (1.0 - f) * 0.35
+			draw_rect(Rect2(Vector2(-grow, -grow * 0.6 + spread * 0.25), size + Vector2(grow, grow) * 2.0), Color(shadow_color, a))
 	var bg := Color(str(map.style.get("background", "#1c1a17")))
 	draw_rect(Rect2(Vector2.ZERO, size), bg)
 

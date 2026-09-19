@@ -25,7 +25,7 @@ func _init(p_ctx: EditorContext) -> void:
 	custom_minimum_size.x = 290
 	_title = Label.new()
 	_title.text = "Nothing selected"
-	_title.add_theme_font_size_override("font_size", 15)
+	_title.theme_type_variation = "HeaderLabel"
 	add_child(_title)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -36,11 +36,14 @@ func _init(p_ctx: EditorContext) -> void:
 	scroll.add_child(_form)
 	_hint = Label.new()
 	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hint.add_theme_font_size_override("font_size", 11)
-	_hint.modulate = Color(1, 1, 1, 0.6)
+	_hint.theme_type_variation = "DimLabel"
 	add_child(_hint)
 	ctx.selection_changed.connect(refresh)
 	ctx.map.changed.connect(func(_w: String) -> void: refresh())
+
+
+func restyle(_t: Dictionary) -> void:
+	pass
 
 
 func refresh() -> void:

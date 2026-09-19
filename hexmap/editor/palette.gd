@@ -68,8 +68,7 @@ func _build_tab(kind: String, title: String) -> void:
 			box.add_child(row)
 			var hint := Label.new()
 			hint.text = "R rotate · F flip · [ ] scale · Shift: free placement"
-			hint.add_theme_font_size_override("font_size", 11)
-			hint.modulate = Color(1, 1, 1, 0.6)
+			hint.theme_type_variation = "DimLabel"
 			hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			box.add_child(hint)
 		"walls":
@@ -92,8 +91,7 @@ func _build_tab(kind: String, title: String) -> void:
 			box.add_child(_wall_snap)
 			var hint := Label.new()
 			hint.text = "Style is how the wall is drawn; type is what it blocks. Doors are two clicks."
-			hint.add_theme_font_size_override("font_size", 11)
-			hint.modulate = Color(1, 1, 1, 0.6)
+			hint.theme_type_variation = "DimLabel"
 			hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			box.add_child(hint)
 	var list := ItemList.new()
@@ -113,6 +111,16 @@ func _label(t: String) -> Label:
 	var l := Label.new()
 	l.text = t
 	return l
+
+
+var _tokens: Dictionary = ThemeBuilder.tokens("slate")
+
+func restyle(t: Dictionary) -> void:
+	_tokens = t
+	var dim := ThemeBuilder.c(t, "text_dim")
+	for f in _filters.values():
+		(f as LineEdit).right_icon = UiIcons.get_icon("search", t.icon - 4, dim, t.stroke)
+	refresh()
 
 
 func refresh() -> void:

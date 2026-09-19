@@ -18,7 +18,11 @@ var status_right: Label
 var undo_item: PopupMenu
 var view_menu: PopupMenu
 var _autosave := Timer.new()
-var _prefs := {"pack_dirs": []}
+var _prefs := {"pack_dirs": [], "theme": "slate"}
+var theme_menu: PopupMenu
+const TOOL_ICONS := {"select": "mouse-pointer-2", "terrain": "paintbrush", "fill": "paint-bucket", "prop": "trees",
+	"wall": "brick-wall", "light": "lamp", "note": "sticky-note", "erase": "eraser"}
+const V_THEME_BASE := 1000
 var _native_menus := NativeMenuMirror.new()
 var _last_menu := [-1, -1]   # [id, frame] — the same command from both menu bars in one frame runs once
 
@@ -36,8 +40,14 @@ func _ready() -> void:
 	ctx.packs.set_extra_dirs(PackedStringArray(_prefs.pack_dirs))
 	ctx.packs.reload()
 	ctx.history = History.new()
+	var args0 := OS.get_cmdline_user_args()
+	var ti := args0.find("--theme")
+	if ti >= 0 and ti + 1 < args0.size():
+		_prefs.theme = args0[ti + 1]
+	theme = ThemeBuilder.build(str(_prefs.theme))
 	_set_map(HexMap.create("Untitled", HexGrid.new()))
 	_build_ui()
+	_restyle()
 	ctx.status.connect(func(t: String) -> void: status_left.text = t)
 	ctx.selection_changed.connect(func() -> void: view.canvas.overlay.queue_redraw())
 	ctx.history.changed.connect(_update_menus)
@@ -140,13 +150,28 @@ func _build_ui() -> void:
 	layers.bind_map()
 
 	var status := HBoxContainer.new()
+	status.name = "StatusBar"
 	status_left = Label.new()
 	status_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_left.clip_text = true
+	status_left.theme_type_variation = "DimLabel"
 	status_right = Label.new()
+	status_right.theme_type_variation = "MonoLabel"
 	status.add_child(status_left)
 	status.add_child(status_right)
-	root.add_child(status)
+	for entry in [["zoom-out", "Zoom out", func() -> void: view.set_zoom(view.zoom() / 1.25)],
+			["maximize", "Zoom to fit (Ctrl/Cmd+0)", func() -> void: view.zoom_to_fit()],
+			["zoom-in", "Zoom in", func() -> void: view.set_zoom(view.zoom() * 1.25)]]:
+		var zb := Button.new()
+		zb.set_meta("icon", entry[0])
+		zb.tooltip_text = entry[1]
+		zb.theme_type_variation = "ToolButton"
+		zb.focus_mode = Control.FOCUS_NONE
+		zb.pressed.connect(entry[2])
+		status.add_child(zb)
+	var status_panel := PanelContainer.new()
+	status_panel.add_child(status)
+	root.add_child(status_panel)
 	palette.refresh()
 	_refresh_levels()
 
@@ -210,6 +235,17 @@ func _build_menus() -> MenuBar:
 	_item(view_menu, "Zoom 100%", V_100, KEY_1, true)
 	view_menu.add_separator()
 	_item(view_menu, "Reload packs", V_RELOAD_PACKS, KEY_R, true, true)
+	view_menu.add_separator()
+	theme_menu = PopupMenu.new()
+	theme_menu.name = "Theme"
+	var ti := 0
+	for n in ThemeBuilder.names():
+		theme_menu.add_radio_check_item(str(ThemeBuilder.tokens(n).label), V_THEME_BASE + ti)
+		theme_menu.set_item_checked(ti, n == str(_prefs.theme))
+		ti += 1
+	theme_menu.id_pressed.connect(_on_menu)
+	view_menu.add_child(theme_menu)
+	view_menu.add_submenu_node_item("Theme", theme_menu)
 	view_menu.id_pressed.connect(_on_menu)
 	bar.add_child(view_menu)
 
@@ -252,22 +288,26 @@ func _check(menu: PopupMenu, label: String, id: int, checked: bool, key := KEY_N
 func _build_toolbar() -> HBoxContainer:
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 2)
-	for entry in [["New", M_NEW, "New map (Ctrl/Cmd+N)"], ["Open", M_OPEN, "Open a map (Ctrl/Cmd+O)"], ["Save", M_SAVE, "Save (Ctrl/Cmd+S)"]]:
+	for entry in [["file-plus", M_NEW, "New map (Ctrl/Cmd+N)"], ["folder-open", M_OPEN, "Open a map (Ctrl/Cmd+O)"], ["save", M_SAVE, "Save (Ctrl/Cmd+S)"],
+			["undo-2", M_UNDO, "Undo (Ctrl/Cmd+Z)"], ["redo-2", M_REDO, "Redo (Shift+Ctrl/Cmd+Z)"]]:
 		var fb := Button.new()
-		fb.text = entry[0]
+		fb.set_meta("icon", entry[0])
 		fb.tooltip_text = entry[2]
-		fb.flat = true
+		fb.theme_type_variation = "ToolButton"
 		fb.focus_mode = Control.FOCUS_NONE
 		fb.pressed.connect(_on_menu.bind(entry[1]))
 		bar.add_child(fb)
+		if entry[0] == "save":
+			bar.add_child(VSeparator.new())
 	bar.add_child(VSeparator.new())
 	var group := ButtonGroup.new()
 	for t in EditorTools.all_tools():
 		var b := Button.new()
-		b.text = "%s (%s)" % [t.label, t.key]
+		b.set_meta("icon", TOOL_ICONS[t.name])
 		b.toggle_mode = true
 		b.button_group = group
-		b.tooltip_text = t.hint
+		b.tooltip_text = "%s (%s)\n%s" % [t.label, t.key, t.hint]
+		b.theme_type_variation = "ToolButton"
 		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(_select_tool.bind(t.name))
 		bar.add_child(b)
@@ -301,6 +341,35 @@ func _build_view_options() -> Control:
 	slider.name = "Darkness"
 	box.add_child(slider)
 	return box
+
+
+# ====================================================================== theme ==
+
+func _set_theme(name: String) -> void:
+	_prefs.theme = name
+	_save_prefs()
+	theme = ThemeBuilder.build(name)
+	var i := 0
+	for n in ThemeBuilder.names():
+		theme_menu.set_item_checked(i, n == name)
+		i += 1
+	_restyle()
+
+
+## Everything that depends on the theme's tokens but is not a Theme item:
+## icon colours, the canvas surround, panel icon refreshes.
+func _restyle() -> void:
+	var t := ThemeBuilder.tokens(str(_prefs.theme))
+	var text := ThemeBuilder.c(t, "text")
+	var icon_size: int = t.icon
+	for b in find_children("*", "Button", true, false):
+		if b.has_meta("icon"):
+			(b as Button).icon = UiIcons.get_icon(str(b.get_meta("icon")), icon_size, text, t.stroke)
+	view.set_surround(ThemeBuilder.c(t, "canvas"), ThemeBuilder.c(t, "shadow"))
+	layers.restyle(t)
+	palette.restyle(t)
+	inspector.restyle(t)
+	view.canvas.refresh()
 
 
 # ================================================================== tools etc ==
@@ -416,6 +485,9 @@ func _on_menu(id: int) -> void:
 	if _last_menu[0] == id and _last_menu[1] == frame:
 		return
 	_last_menu = [id, frame]
+	if id >= V_THEME_BASE and id < V_THEME_BASE + ThemeBuilder.names().size():
+		_set_theme(ThemeBuilder.names()[id - V_THEME_BASE])
+		return
 	match id:
 		M_NEW: _new_map_dialog()
 		M_OPEN: _open_dialog()

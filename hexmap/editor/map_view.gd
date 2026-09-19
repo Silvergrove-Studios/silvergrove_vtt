@@ -12,6 +12,7 @@ var viewport: SubViewport
 var camera: Camera2D
 var canvas: MapCanvas
 var tool: EditorTools.Tool
+var _bg: ColorRect
 var _panning := false
 var _pressed_button := 0
 var _space := false
@@ -32,6 +33,15 @@ func _init(p_ctx: EditorContext) -> void:
 	viewport.disable_3d = true
 	viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(viewport)
+	# Surround colour behind the map, fixed to the viewport (not the camera).
+	var bg_layer := CanvasLayer.new()
+	bg_layer.layer = -1
+	_bg = ColorRect.new()
+	_bg.color = Color("#131416")
+	_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg_layer.add_child(_bg)
+	viewport.add_child(bg_layer)
 	var root := Node2D.new()
 	viewport.add_child(root)
 	canvas = MapCanvas.new()
@@ -50,6 +60,12 @@ func _init(p_ctx: EditorContext) -> void:
 
 func _ready() -> void:
 	zoom_to_fit.call_deferred()
+
+
+func set_surround(color: Color, shadow: Color) -> void:
+	_bg.color = color
+	canvas.shadow_color = shadow
+	canvas.queue_redraw()
 
 
 func set_map(map: HexMap) -> void:
