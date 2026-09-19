@@ -57,6 +57,16 @@ Picking something in the left palette switches to the matching tool.
   pixel (Shift: ten). The inspector on the right edits every field,
   including positions in pixels at the map's authoring density
   (`reference_ppx`, default 256 px per hex) for artists who think that way.
+- **Layers** (right, top) lists every element on the level, Photoshop style:
+  folders, eye and lock toggles, drag to reorder or to move into a folder —
+  which never moves anything on the canvas. Top of the list is drawn on
+  top. Selecting a row selects on the canvas and vice versa; double-click
+  jumps to it or renames it. **Group** (Ctrl/Cmd+G) wraps the selection in a
+  new folder. Hidden layers are left out of exports; locked ones can't be
+  picked. Clicking the same spot on the canvas again cycles through whatever
+  is stacked there.
+- **Lights** cast shadows from anything whose wall type blocks light (closed
+  doors included), so the preview shows where a torch actually reaches.
 - **Levels** (floors) are in the toolbar dropdown and the Level menu.
 - **View** toggles the grid, walls, lights, notes and GM-only objects, and
   the darkness slider previews where lights reach.

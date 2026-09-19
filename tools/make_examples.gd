@@ -5,10 +5,12 @@ extends SceneTree
 ## smoke test on its own.
 
 var rng := RandomNumberGenerator.new()
+var packs := PackLibrary.new()
 
 
 func _init() -> void:
 	rng.seed = 20260919
+	packs.reload()
 	seed(20260919)   # HexMap.new_id uses the global RNG; keep ids stable too
 	var dir := ProjectSettings.globalize_path("res://examples")
 	DirAccess.make_dir_recursive_absolute(dir)
@@ -43,8 +45,9 @@ func _fill(m: HexMap, lvl: Dictionary, t: String, variants: int) -> void:
 func _prop(lvl: Dictionary, asset: String, pos: Vector2, rot := 0.0, scale := 1.0, layer := "", extra := {}) -> Dictionary:
 	var p := {"id": HexMap.new_id("p"), "asset": asset, "pos": [snappedf(pos.x, 0.001), snappedf(pos.y, 0.001)],
 		"rot": rot, "scale": scale, "flip": rng.randf() < 0.3, "z": 0, "height": 0.5, "hidden": false}
-	if layer != "":
-		p["layer"] = layer
+	# The legacy `layer` hint files the prop into the right default folder
+	# when the map is saved (LayerTree.ensure migrates it).
+	p["layer"] = layer if layer != "" else str(packs.prop(asset).get("layer", "objects"))
 	for k in extra:
 		p[k] = extra[k]
 	lvl.props.append(p)

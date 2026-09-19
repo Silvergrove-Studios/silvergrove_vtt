@@ -64,61 +64,61 @@ class Tool extends RefCounted:
 		c.draw_polyline(pts, color, width, true)
 
 	## What is under a point, most specific first: notes, lights, props (top
-	## layer first, last drawn first), wall points, wall segments.
+	## of the draw order first), wall points, wall segments. Hidden and locked
+	## layers are skipped.
 	func pick(p: Vector2) -> Dictionary:
+		var all := pick_all(p)
+		return all[0] if not all.is_empty() else {}
+
+	## Everything under a point, in pick order. Clicking the same spot again
+	## cycles through these.
+	func pick_all(p: Vector2) -> Array:
 		var lvl := level()
-		var ppx := ctx.canvas.ppx
-		var r_note := 0.14
-		var show_hidden := ctx.canvas.show_hidden
-		if ctx.canvas.show_notes:
+		var canvas := ctx.canvas
+		var ppx := canvas.ppx
+		var out: Array = []
+		var ok := func(coll: String, o: Dictionary) -> bool:
+			return canvas.is_shown(coll, o) and not canvas.is_layer_locked(coll, str(o.get("id", "")))
+		if canvas.show_notes:
 			for n in lvl.get("notes", []):
-				if not show_hidden and n.get("gm_only", true):
-					continue
-				if Vector2(n.pos[0], n.pos[1]).distance_to(p) < r_note:
-					return {"collection": "notes", "id": n.id}
-		if ctx.canvas.show_lights:
+				if ok.call("notes", n) and Vector2(n.pos[0], n.pos[1]).distance_to(p) < 0.14:
+					out.append({"collection": "notes", "id": n.id})
+		if canvas.show_lights:
 			for l in lvl.get("lights", []):
-				if not show_hidden and l.get("hidden", false):
-					continue
-				if Vector2(l.pos[0], l.pos[1]).distance_to(p) < 0.2:
-					return {"collection": "lights", "id": l.id}
-		var props: Array = lvl.get("props", [])
-		for layer_name in ["overhead", "objects", "ground"]:
-			for i in range(props.size() - 1, -1, -1):
-				var pr: Dictionary = props[i]
-				if not show_hidden and pr.get("hidden", false):
-					continue
-				var def := ctx.packs.prop(str(pr.get("asset", "")))
-				var layer := str(pr.get("layer", def.get("layer", "objects")))
-				if layer != layer_name:
-					continue
-				if ctx.canvas.prop_hit(pr, def, p * ppx):
-					return {"collection": "props", "id": pr.id}
-		if ctx.canvas.show_walls:
-			var best := {}
-			var best_d := 0.12
+				if ok.call("lights", l) and Vector2(l.pos[0], l.pos[1]).distance_to(p) < 0.2:
+					out.append({"collection": "lights", "id": l.id})
+		var props: Array = canvas.props_in_order()
+		for i in range(props.size() - 1, -1, -1):
+			var pr: Dictionary = props[i]
+			if canvas.is_layer_locked("props", str(pr.get("id", ""))):
+				continue
+			var def := ctx.packs.prop(str(pr.get("asset", "")))
+			if canvas.prop_hit(pr, def, p * ppx):
+				out.append({"collection": "props", "id": pr.id})
+		if canvas.show_walls:
+			var points: Array = []
+			var segments: Array = []
 			for w in lvl.get("walls", []):
-				if not show_hidden and w.get("hidden", false):
+				if not ok.call("walls", w):
 					continue
 				var pts: Array = w.get("points", [])
 				for i in pts.size():
 					var d := Vector2(pts[i][0], pts[i][1]).distance_to(p)
-					if d < best_d:
-						best_d = d
-						best = {"collection": "walls", "id": w.id, "point": i}
-			if not best.is_empty():
-				return best
-			for w in lvl.get("walls", []):
-				if not show_hidden and w.get("hidden", false):
-					continue
-				var pts: Array = w.get("points", [])
+					if d < 0.12:
+						points.append({"d": d, "hit": {"collection": "walls", "id": w.id, "point": i}})
 				for i in pts.size() - 1:
 					var a := Vector2(pts[i][0], pts[i][1])
 					var b := Vector2(pts[i + 1][0], pts[i + 1][1])
 					var q := Geometry2D.get_closest_point_to_segment(p, a, b)
 					if q.distance_to(p) < 0.08:
-						return {"collection": "walls", "id": w.id, "segment": i}
-		return {}
+						segments.append({"d": q.distance_to(p), "hit": {"collection": "walls", "id": w.id, "segment": i}})
+			points.sort_custom(func(x, y): return x.d < y.d)
+			segments.sort_custom(func(x, y): return x.d < y.d)
+			for e in points:
+				out.append(e.hit)
+			for e in segments:
+				out.append(e.hit)
+		return out
 
 
 # =============================================================================
@@ -137,7 +137,14 @@ class SelectTool extends Tool:
 	func press(p: Vector2, button: int, mods: Dictionary) -> bool:
 		if button != MOUSE_BUTTON_LEFT:
 			return false
-		var hit := pick(p)
+		var hits := pick_all(p)
+		var hit: Dictionary = hits[0] if not hits.is_empty() else {}
+		# Clicking again on a stack of things cycles down through it.
+		if hits.size() > 1 and not mods.shift and ctx.selection.size() == 1:
+			for i in hits.size():
+				if hits[i].collection == ctx.selection[0].collection and hits[i].id == ctx.selection[0].id:
+					hit = hits[(i + 1) % hits.size()]
+					break
 		if hit.is_empty():
 			var cell := grid().world_to_axial(p)
 			if grid().in_bounds(cell) and level().get("terrain", {}).has(HexMap.cell_key(cell)):
@@ -266,10 +273,16 @@ class SelectTool extends Tool:
 					ctx.commands.update_object(ctx.level_index, "props", obj.id, {"scale": snappedf(float(obj.get("scale", 1.0)) * f, 0.001)}, "Scale")
 					return true
 			KEY_PAGEUP, KEY_PAGEDOWN:
-				if ctx.selection.size() == 1 and ctx.selection[0].collection == "props":
-					var lvl := level()
-					var i := HexMap.index_in(lvl, "props", ctx.selection[0].id)
-					ctx.commands.reorder_object(ctx.level_index, "props", ctx.selection[0].id, i + (1 if event.keycode == KEY_PAGEUP else -1))
+				if ctx.selection.size() == 1 and ctx.selection[0].collection != "terrain":
+					var tree: Array = level().tree
+					var r := LayerTree.ref(ctx.selection[0].collection, ctx.selection[0].id)
+					var loc := LayerTree.locate(tree, r)
+					if loc.is_empty():
+						return true
+					var anc := LayerTree.ancestors(tree, r)
+					var parent: String = anc[-1] if not anc.is_empty() else ""
+					var to: int = loc[1] + (2 if event.keycode == KEY_PAGEUP else -1)   # later = drawn on top
+					ctx.commands.tree_move(ctx.level_index, r, parent, clampi(to, 0, (loc[0] as Array).size()))
 					return true
 		if d != Vector2.ZERO:
 			ctx.commands.move_objects(ctx.level_index, _movable(), d, "Nudge")
@@ -464,7 +477,7 @@ class PropTool extends Tool:
 		var def := ctx.packs.prop(ctx.prop_ref)
 		var light = def.get("light", null)
 		ctx.history.begin_group()
-		ctx.commands.add_object(ctx.level_index, "props", prop, "Place prop")
+		ctx.commands.add_object(ctx.level_index, "props", prop, "Place prop", ctx.folder_for_prop(def))
 		if light is Dictionary and mods.get("alt", false) == false:
 			var l := ctx.new_light(pos)
 			for k in light:

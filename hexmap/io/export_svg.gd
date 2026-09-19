@@ -19,8 +19,11 @@ static func overlay(map: HexMap, level_index: int, ppx: float) -> String:
 			pts.append("%s,%s" % [_n(c.x * ppx), _n(c.y * ppx)])
 		s.append('<polygon points="%s"/>' % " ".join(pts))
 	s.append('</g>')
+	var shown := LayerTree.visible_refs(lvl)
 	s.append('<g id="walls" fill="none" stroke-linecap="round" stroke-linejoin="round">')
 	for w in lvl.get("walls", []):
+		if not shown.get(LayerTree.ref("walls", str(w.get("id", ""))), true):
+			continue
 		var pts := PackedStringArray()
 		for p in w.get("points", []):
 			pts.append("%s,%s" % [_n(float(p[0]) * ppx), _n(float(p[1]) * ppx)])
@@ -31,6 +34,8 @@ static func overlay(map: HexMap, level_index: int, ppx: float) -> String:
 	s.append('</g>')
 	s.append('<g id="lights" fill="none" stroke-dasharray="4 4">')
 	for l in lvl.get("lights", []):
+		if not shown.get(LayerTree.ref("lights", str(l.get("id", ""))), true):
+			continue
 		var c := Vector2(float(l.pos[0]), float(l.pos[1])) * ppx
 		var color := _hex(Color(str(l.get("color", "#ffb060"))))
 		for radius in [float(l.get("bright", 0.0)), float(l.get("dim", 0.0))]:
@@ -40,6 +45,8 @@ static func overlay(map: HexMap, level_index: int, ppx: float) -> String:
 	s.append('</g>')
 	s.append('<g id="notes" font-family="Helvetica, Arial, sans-serif" font-size="%s">' % _n(ppx * 0.14))
 	for n_ in lvl.get("notes", []):
+		if not shown.get(LayerTree.ref("notes", str(n_.get("id", ""))), true):
+			continue
 		var c := Vector2(float(n_.pos[0]), float(n_.pos[1])) * ppx
 		s.append('<circle cx="%s" cy="%s" r="%s" fill="#f0d060" stroke="#000" stroke-width="1"/>' % [_n(c.x), _n(c.y), _n(ppx * 0.1)])
 		s.append('<text x="%s" y="%s">%s</text>' % [_n(c.x + ppx * 0.14), _n(c.y + ppx * 0.05), str(n_.get("title", "")).xml_escape()])

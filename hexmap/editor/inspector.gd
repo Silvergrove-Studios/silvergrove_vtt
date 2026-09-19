@@ -81,24 +81,25 @@ func refresh() -> void:
 			var def := ctx.packs.prop(str(obj.get("asset", "")))
 			_title.text = str(def.get("name", obj.get("asset", "Prop")))
 			_set_form(sel, [
+				{"key": "name", "label": "Name", "type": "string", "tooltip": "Shown in the Layers panel"},
 				{"key": "asset", "label": "Asset", "type": "string"},
 				{"key": "pos_px", "label": "Position (px)", "type": "vec2", "step": 1, "tooltip": "Authored pixels at %d px per hex" % int(ppx)},
 				{"key": "pos", "label": "Position (hex)", "type": "vec2", "step": 0.01},
 				{"key": "rot", "label": "Rotation", "type": "float", "step": 0.5, "suffix": "°"},
 				{"key": "scale", "label": "Scale", "type": "float", "step": 0.01, "min": 0.01},
 				{"key": "flip", "label": "Flip", "type": "bool"},
-				{"key": "layer", "label": "Layer", "type": "enum", "options": LAYERS},
 				{"key": "z", "label": "Elevation", "type": "float", "step": 0.25, "suffix": " hex"},
 				{"key": "height", "label": "Height", "type": "float", "step": 0.25, "suffix": " hex"},
 				{"key": "tint", "label": "Tint", "type": "color"},
 				{"key": "hidden", "label": "GM only", "type": "bool"},
 			], _with_px(obj, ppx))
-			_hint.text = "Size %s hex · anchor %s · %s" % [str(def.get("size", "?")), str(def.get("anchor", "?")), "PgUp/PgDn change draw order"]
+			_hint.text = "Size %s hex · anchor %s · in %s · PgUp/PgDn change draw order" % [str(def.get("size", "?")), str(def.get("anchor", "?")), _folder_path(sel)]
 		"walls":
 			_title.text = "Wall" if str(obj.get("door", "none")) == "none" else str(obj.get("door")).capitalize() + " door"
 			var blocks: Dictionary = obj.get("blocks", {})
 			var z: Array = obj.get("z", [0, 1])
 			_set_form(sel, [
+				{"key": "name", "label": "Name", "type": "string"},
 				{"key": "b_move", "label": "Blocks movement", "type": "bool"},
 				{"key": "b_sight", "label": "Blocks sight", "type": "bool"},
 				{"key": "b_light", "label": "Blocks light", "type": "bool"},
@@ -112,6 +113,7 @@ func refresh() -> void:
 				{"key": "style", "label": "Style", "type": "string"},
 				{"key": "hidden", "label": "GM only", "type": "bool"},
 			], {
+				"name": obj.get("name", ""),
 				"b_move": blocks.get("move", true), "b_sight": blocks.get("sight", true), "b_light": blocks.get("light", true), "b_sound": blocks.get("sound", true),
 				"sight_mode": obj.get("sight_mode", "normal"), "door": obj.get("door", "none"), "state": obj.get("state", "closed"),
 				"one_way": str(obj.get("one_way", "none")) if obj.get("one_way", null) != null else "none",
@@ -121,6 +123,7 @@ func refresh() -> void:
 		"lights":
 			_title.text = "Light"
 			_set_form(sel, [
+				{"key": "name", "label": "Name", "type": "string"},
 				{"key": "pos_px", "label": "Position (px)", "type": "vec2", "step": 1},
 				{"key": "pos", "label": "Position (hex)", "type": "vec2", "step": 0.01},
 				{"key": "bright", "label": "Bright radius", "type": "float", "step": 0.25, "min": 0, "suffix": " hex"},
@@ -152,11 +155,17 @@ func _with_px(obj: Dictionary, ppx: float) -> Dictionary:
 	var v := obj.duplicate()
 	var pos: Array = obj.get("pos", [0, 0])
 	v["pos_px"] = [roundf(float(pos[0]) * ppx), roundf(float(pos[1]) * ppx)]
-	if not v.has("layer") and v.has("asset"):
-		v["layer"] = ctx.packs.prop(str(v.asset)).get("layer", "objects")
 	if not v.has("tint"):
 		v["tint"] = "#ffffff"
 	return v
+
+
+func _folder_path(sel: Dictionary) -> String:
+	var tree: Array = ctx.level().tree
+	var names := PackedStringArray()
+	for fid in LayerTree.ancestors(tree, LayerTree.ref(sel.collection, sel.id)):
+		names.append(str(LayerTree.find(tree, fid).get("name", fid)))
+	return "/".join(names) if not names.is_empty() else "root"
 
 
 func _set_form(sel: Dictionary, schema: Array, values: Dictionary) -> void:
@@ -205,6 +214,8 @@ func _on_value(key: String, value: Variant) -> void:
 				changes["z"] = z
 			"style":
 				changes["style"] = str(value) if str(value) != "" else null
+			"name":
+				changes["name"] = str(value) if str(value) != "" else null
 			_:
 				changes[key] = value
 		ctx.commands.update_object(ctx.level_index, coll, id, changes, "Edit " + key)

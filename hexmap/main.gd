@@ -10,6 +10,7 @@ var ctx := EditorContext.new()
 var view: MapView
 var palette: Palette
 var inspector: Inspector
+var layers: LayersPanel
 var tool_buttons: Dictionary = {}
 var level_select: OptionButton
 var status_left: Label
@@ -20,7 +21,7 @@ var _autosave := Timer.new()
 var _prefs := {"pack_dirs": []}
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_EXPORT_PNG, M_EXPORT_UVTT, M_EXPORT_FOUNDRY, M_EXPORT_TILED, M_EXPORT_PDF, M_EXPORT_BUNDLE, M_QUIT,
-	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_MAP_SETTINGS, M_PREFS,
+	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_GROUP, M_MAP_SETTINGS, M_PREFS,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_HIDDEN, V_DARK, V_FIT, V_100, V_RELOAD_PACKS,
 	L_ADD, L_REMOVE, L_RENAME, L_UP, L_DOWN,
 	H_SHORTCUTS, H_ABOUT }
@@ -80,6 +81,7 @@ func _set_map(m: HexMap) -> void:
 		view.set_map(m)
 		_refresh_levels()
 		inspector.refresh()
+		layers.bind_map()
 		ctx.selection_changed.emit()
 	_update_title()
 
@@ -122,10 +124,18 @@ func _build_ui() -> void:
 	var right := VBoxContainer.new()
 	right.custom_minimum_size.x = 300
 	split2.add_child(right)
+	var vsplit := VSplitContainer.new()
+	vsplit.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(vsplit)
+	layers = LayersPanel.new(ctx)
+	layers.focus_requested.connect(_focus_on)
+	vsplit.add_child(layers)
 	inspector = Inspector.new(ctx)
 	inspector.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right.add_child(inspector)
+	inspector.custom_minimum_size.y = 260
+	vsplit.add_child(inspector)
 	right.add_child(_build_view_options())
+	layers.bind_map()
 
 	var status := HBoxContainer.new()
 	status_left = Label.new()
@@ -174,6 +184,7 @@ func _build_menus() -> MenuBar:
 	edit.add_separator()
 	_item(edit, "Delete", M_DELETE)
 	_item(edit, "Select all objects", M_SELECT_ALL, KEY_A, true)
+	_item(edit, "Group selection into folder", M_GROUP, KEY_G, true)
 	edit.add_separator()
 	_item(edit, "Map settings…", M_MAP_SETTINGS, KEY_COMMA, true)
 	_item(edit, "Pack folders…", M_PREFS)
@@ -317,6 +328,27 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		_select_tool("select")
 
 
+## Pan the view to an element (double-click in the Layers panel).
+func _focus_on(collection: String, id: String) -> void:
+	var o := HexMap.find_in(ctx.level(), collection, id)
+	if o.is_empty():
+		return
+	var pos: Vector2
+	if o.has("pos"):
+		pos = Vector2(o.pos[0], o.pos[1])
+	else:
+		var pts: Array = o.get("points", [])
+		if pts.is_empty():
+			return
+		for p in pts:
+			pos += Vector2(p[0], p[1])
+		pos /= pts.size()
+	view.camera.position = pos * view.canvas.ppx
+	if view.zoom() < 0.4:
+		view.set_zoom(0.6)
+	_select_tool("select")
+
+
 func _on_cursor(hex: Vector2) -> void:
 	if ctx.map == null:
 		return
@@ -391,6 +423,7 @@ func _on_menu(id: int) -> void:
 					sel.append({"collection": coll, "id": o.id})
 			ctx.set_selection(sel)
 			_select_tool("select")
+		M_GROUP: layers._group_selection()
 		M_MAP_SETTINGS: _map_settings_dialog()
 		M_PREFS: _prefs_dialog()
 		V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_HIDDEN, V_DARK:

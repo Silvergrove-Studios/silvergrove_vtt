@@ -13,6 +13,11 @@ drawing); `./run.sh export` opens a small one for the duration.
 | PDF | Export → Print PDF | `pdf <out.pdf> [key=value…]` | Raster at DPI + vector grid/overlays. Tiled sheets or fit-to-page. |
 | Print bundle | Export → Print bundle | `bundle <dir> [dpi] [hex_in] [level]` | `map.png`, `overlay.svg`, `map.json`, `bundle.json`. |
 
+Elements on hidden layers (Layers panel eye off) are left out of every
+export, like hidden layers in an image editor. GM-only (`hidden: true`)
+elements are a different thing: they are exported as GM data where the
+target has such a notion and drawn into images only when GM layers are on.
+
 `ppx` is pixels per hex (flat-to-flat). VTTs are happy around 100–200;
 Foundry uses it directly as `grid.size`.
 

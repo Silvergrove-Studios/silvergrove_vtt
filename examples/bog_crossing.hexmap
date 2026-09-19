@@ -229,7 +229,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_50e79366",
-          "layer": "ground",
           "pos": [
             11.934,
             5.121
@@ -300,7 +299,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_b8ef13d3",
-          "layer": "ground",
           "pos": [
             14.145,
             5.578
@@ -329,7 +327,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_817d6df1",
-          "layer": "ground",
           "pos": [
             12.067,
             6.931
@@ -400,7 +397,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_4e6c2345",
-          "layer": "ground",
           "pos": [
             11.686,
             9.003
@@ -415,7 +411,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_89e13c7e",
-          "layer": "ground",
           "pos": [
             13.304,
             9.266
@@ -458,7 +453,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_08df7d2f",
-          "layer": "ground",
           "pos": [
             10.855,
             9.674
@@ -473,7 +467,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_989cf90f",
-          "layer": "ground",
           "pos": [
             11.951,
             9.732
@@ -488,7 +481,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_1b36b76d",
-          "layer": "ground",
           "pos": [
             12.501,
             9.65
@@ -545,7 +537,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_e943ab5a",
-          "layer": "ground",
           "pos": [
             9.185,
             10.496
@@ -672,7 +663,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_b924c6f7",
-          "layer": "ground",
           "pos": [
             15.6,
             6.6
@@ -2448,6 +2438,227 @@
           "z": 0
         }
       },
+      "tree": [
+        {
+          "children": [
+            {
+              "ref": "props:p_50e79366"
+            },
+            {
+              "ref": "props:p_b8ef13d3"
+            },
+            {
+              "ref": "props:p_817d6df1"
+            },
+            {
+              "ref": "props:p_4e6c2345"
+            },
+            {
+              "ref": "props:p_89e13c7e"
+            },
+            {
+              "ref": "props:p_08df7d2f"
+            },
+            {
+              "ref": "props:p_989cf90f"
+            },
+            {
+              "ref": "props:p_1b36b76d"
+            },
+            {
+              "ref": "props:p_e943ab5a"
+            },
+            {
+              "ref": "props:p_b924c6f7"
+            }
+          ],
+          "id": "f_ground",
+          "locked": false,
+          "name": "Ground",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "props:p_cdb5b07e"
+            },
+            {
+              "ref": "props:p_8d05a5a9"
+            },
+            {
+              "ref": "props:p_c119387f"
+            },
+            {
+              "ref": "props:p_e284c0fb"
+            },
+            {
+              "ref": "props:p_950ba5b4"
+            },
+            {
+              "ref": "props:p_b53d6f8c"
+            },
+            {
+              "ref": "props:p_a9ed908c"
+            },
+            {
+              "ref": "props:p_f5d59a02"
+            },
+            {
+              "ref": "props:p_b7907fd0"
+            },
+            {
+              "ref": "props:p_97ecdd04"
+            },
+            {
+              "ref": "props:p_0ce293da"
+            },
+            {
+              "ref": "props:p_1c0b50b1"
+            },
+            {
+              "ref": "props:p_cd5747d8"
+            },
+            {
+              "ref": "props:p_49b8a19e"
+            },
+            {
+              "ref": "props:p_7a4b80cc"
+            },
+            {
+              "ref": "props:p_c80257aa"
+            },
+            {
+              "ref": "props:p_20985125"
+            },
+            {
+              "ref": "props:p_6582865f"
+            },
+            {
+              "ref": "props:p_e86429fd"
+            },
+            {
+              "ref": "props:p_c37864f3"
+            },
+            {
+              "ref": "props:p_bcdff492"
+            },
+            {
+              "ref": "props:p_10c1661a"
+            }
+          ],
+          "id": "f_props",
+          "locked": false,
+          "name": "Props",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "props:p_a82eb1c3"
+            },
+            {
+              "ref": "props:p_00c34ab3"
+            },
+            {
+              "ref": "props:p_0f4206ae"
+            },
+            {
+              "ref": "props:p_6e578cd7"
+            },
+            {
+              "ref": "props:p_9634443f"
+            },
+            {
+              "ref": "props:p_f0197280"
+            },
+            {
+              "ref": "props:p_6b2da139"
+            },
+            {
+              "ref": "props:p_505dcd8a"
+            },
+            {
+              "ref": "props:p_66da05c8"
+            },
+            {
+              "ref": "props:p_e3a5f241"
+            },
+            {
+              "ref": "props:p_f1ff66e8"
+            },
+            {
+              "ref": "props:p_6b519017"
+            },
+            {
+              "ref": "props:p_fa4fe525"
+            },
+            {
+              "ref": "props:p_b35aa06f"
+            }
+          ],
+          "id": "f_overhead",
+          "locked": false,
+          "name": "Overhead",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "walls:w_88dce3cd"
+            },
+            {
+              "ref": "walls:w_4cf1c906"
+            },
+            {
+              "ref": "walls:w_c9f0bfc8"
+            }
+          ],
+          "id": "f_walls",
+          "locked": false,
+          "name": "Walls & doors",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "lights:l_9c578e99"
+            },
+            {
+              "ref": "lights:l_ec2832f1"
+            },
+            {
+              "ref": "lights:l_9637c58d"
+            },
+            {
+              "ref": "lights:l_b617b5bc"
+            }
+          ],
+          "id": "f_lights",
+          "locked": false,
+          "name": "Lights",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "notes:n_2de0fe91"
+            },
+            {
+              "ref": "notes:n_ea5aac8e"
+            }
+          ],
+          "id": "f_notes",
+          "locked": false,
+          "name": "Notes",
+          "open": true,
+          "visible": true
+        }
+      ],
       "walls": [
         {
           "blocks": {
@@ -2634,5 +2845,5 @@
     "grid_color": "#00000066",
     "grid_width": 0.012
   },
-  "version": 1
+  "version": 2
 }

@@ -26,9 +26,7 @@ var darkness := 0.0          # 0 = daylight preview, 1 = only lights show
 var grid_color_override := Color(0, 0, 0, 0)
 
 var _terrain := DrawLayer.new()
-var _ground := DrawLayer.new()
-var _objects := DrawLayer.new()
-var _overhead := DrawLayer.new()
+var _props := DrawLayer.new()
 var _lights := DrawLayer.new()
 var _dark := DrawLayer.new()
 var _grid := DrawLayer.new()
@@ -38,6 +36,17 @@ var _notes := DrawLayer.new()
 var overlay := DrawLayer.new()
 
 static var _radial: GradientTexture2D
+
+## Per-refresh derived state from the layer tree.
+var _order: Dictionary = {}       # ref -> draw index
+var _visible: Dictionary = {}     # ref -> effective visibility
+var _locked: Dictionary = {}      # ref -> effective lock
+var _segments: Array = []         # light-blocking wall segments (hex units)
+var _poly_cache: Dictionary = {}  # light key -> PackedVector2Array
+var _segments_key := ""
+## Meshes handed to draw_mesh must outlive the frame; these hold them until
+## the layer that drew them redraws.
+var _mesh_keep: Dictionary = {}   # layer instance id -> Array[ArrayMesh]
 
 
 class DrawLayer extends Node2D:
@@ -51,9 +60,7 @@ func _init() -> void:
 	texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	_terrain.fn = _draw_terrain
-	_ground.fn = func(c: Node2D) -> void: _draw_props(c, "ground")
-	_objects.fn = func(c: Node2D) -> void: _draw_props(c, "objects")
-	_overhead.fn = func(c: Node2D) -> void: _draw_props(c, "overhead")
+	_props.fn = _draw_props
 	_lights.fn = _draw_lights
 	_dark.fn = _draw_darkness
 	_grid.fn = _draw_grid
@@ -62,7 +69,7 @@ func _init() -> void:
 	var add := CanvasItemMaterial.new()
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_lights.material = add
-	for l in [_terrain, _ground, _objects, _overhead, _dark, _lights, _grid, _walls, _notes, overlay]:
+	for l in [_terrain, _props, _dark, _lights, _grid, _walls, _notes, overlay]:
 		add_child(l)
 	if _radial == null:
 		_radial = GradientTexture2D.new()
@@ -79,9 +86,61 @@ func _init() -> void:
 
 
 func refresh() -> void:
+	_rebuild_state()
 	for c in get_children():
 		(c as Node2D).queue_redraw()
 	queue_redraw()
+
+
+## Recompute what the layer tree implies and which walls block light.
+func _rebuild_state() -> void:
+	_order.clear()
+	_visible.clear()
+	_locked.clear()
+	_segments.clear()
+	if map == null:
+		return
+	var lvl := level()
+	if lvl.is_empty():
+		return
+	LayerTree.ensure(lvl)
+	var tree: Array = lvl.tree
+	_order = LayerTree.order(tree)
+	_visible = LayerTree.effective(tree, "visible")
+	_locked = LayerTree.effective(tree, "locked")
+	_segments = Lighting.blocking_segments(lvl, _visible)
+	var key := str(_segments.hash())
+	if key != _segments_key:
+		_segments_key = key
+		_poly_cache.clear()
+
+
+## Effective visibility of an element, as the layer tree has it.
+func is_layer_visible(collection: String, id: String) -> bool:
+	return _visible.get(LayerTree.ref(collection, id), true)
+
+
+func is_layer_locked(collection: String, id: String) -> bool:
+	return _locked.get(LayerTree.ref(collection, id), false)
+
+
+## Is this element drawn right now (layer visible, and GM-only rules)?
+func is_shown(collection: String, o: Dictionary) -> bool:
+	if not is_layer_visible(collection, str(o.get("id", ""))):
+		return false
+	var gm := bool(o.get("gm_only", false)) if collection == "notes" else bool(o.get("hidden", false))
+	return show_hidden or not gm
+
+
+## Props in draw order (bottom first), visible ones only.
+func props_in_order() -> Array:
+	var out: Array = []
+	for p in level().get("props", []):
+		if is_shown("props", p):
+			out.append(p)
+	out.sort_custom(func(a, b) -> bool:
+		return _order.get(LayerTree.ref("props", str(a.get("id", ""))), 1 << 30) < _order.get(LayerTree.ref("props", str(b.get("id", ""))), 1 << 30))
+	return out
 
 
 func level() -> Dictionary:
@@ -152,16 +211,13 @@ func _draw_terrain(c: Node2D) -> void:
 
 # ----------------------------------------------------------------------- props --
 
-func _draw_props(c: Node2D, layer_name: String) -> void:
+func _draw_props(c: Node2D) -> void:
 	if map == null or packs == null:
 		return
-	for p in level().get("props", []):
+	if _order.is_empty():
+		_rebuild_state()
+	for p in props_in_order():
 		var def := packs.prop(str(p.get("asset", "")))
-		var layer := str(p.get("layer", def.get("layer", "objects")))
-		if layer != layer_name:
-			continue
-		if p.get("hidden", false) and not show_hidden:
-			continue
 		draw_prop(c, p, def, 1.0 if not p.get("hidden", false) else 0.55)
 
 
@@ -209,36 +265,63 @@ func prop_hit(p: Dictionary, def: Dictionary, point: Vector2) -> bool:
 func _draw_lights(c: Node2D) -> void:
 	if map == null or not show_lights:
 		return
+	if _order.is_empty():
+		_rebuild_state()
+	_mesh_keep[c.get_instance_id()] = []
 	for l in level().get("lights", []):
-		if l.get("hidden", false) and not show_hidden:
+		if not is_shown("lights", l):
 			continue
 		draw_light(c, l, 1.0)
 
 
+## Lights are drawn as the radial gradient mapped onto the polygon the light
+## can actually reach, so walls that block light cast shadows in the editor
+## the way they will in the VTT. `shadows: false` lights ignore walls.
 func draw_light(c: Node2D, l: Dictionary, alpha := 1.0) -> void:
-	var pos := from_list(l.get("pos", [0, 0])) * ppx
+	var origin := from_list(l.get("pos", [0, 0]))
 	var color := Color(str(l.get("color", "#ffb060")))
 	var intensity := float(l.get("intensity", 1.0))
-	var dim := float(l.get("dim", 0.0)) * ppx
-	var bright := float(l.get("bright", 0.0)) * ppx
-	var angle := float(l.get("angle", 360.0))
-	if angle < 359.0:
-		# Cones: a wedge of the radial. Approximate with a clipped polygon fan.
-		_draw_cone(c, pos, maxf(dim, bright), deg_to_rad(float(l.get("direction", 0.0))), deg_to_rad(angle), Color(color, 0.35 * intensity * alpha))
+	var dim := float(l.get("dim", 0.0))
+	var bright := float(l.get("bright", 0.0))
+	var outer := maxf(dim, bright)
+	if outer <= 0.0:
 		return
-	if dim > 0.0:
-		c.draw_texture_rect(_radial, Rect2(pos - Vector2.ONE * dim, Vector2.ONE * dim * 2.0), false, Color(color, 0.30 * intensity * alpha))
-	if bright > 0.0:
-		c.draw_texture_rect(_radial, Rect2(pos - Vector2.ONE * bright, Vector2.ONE * bright * 2.0), false, Color(color, 0.45 * intensity * alpha))
+	var angle := float(l.get("angle", 360.0))
+	var direction := float(l.get("direction", 0.0))
+	var segs := _segments if bool(l.get("shadows", true)) else []
+	var key := "%s|%s|%s|%s|%d" % [origin, outer, angle, direction, segs.size()]
+	var poly: PackedVector2Array
+	if _poly_cache.has(key):
+		poly = _poly_cache[key]
+	else:
+		poly = Lighting.visibility_polygon(origin, outer, segs, 64, angle, direction)
+		_poly_cache[key] = poly
+	if poly.size() < 3:
+		return
+	_draw_fan(c, origin, outer, poly, Color(color, 0.30 * intensity * alpha))
+	if bright > 0.0 and bright < outer:
+		_draw_fan(c, origin, bright, Lighting.clamp_radius(origin, poly, bright), Color(color, 0.45 * intensity * alpha))
+	elif bright > 0.0:
+		_draw_fan(c, origin, outer, poly, Color(color, 0.45 * intensity * alpha))
 
 
-func _draw_cone(c: Node2D, pos: Vector2, radius: float, dir: float, angle: float, color: Color) -> void:
-	var pts := PackedVector2Array([pos])
-	var steps := 24
-	for i in steps + 1:
-		var a := dir - angle / 2.0 + angle * i / steps
-		pts.append(pos + Vector2(cos(a), sin(a)) * radius)
-	c.draw_colored_polygon(pts, color)
+func _draw_fan(c: Node2D, origin: Vector2, radius: float, poly: PackedVector2Array, color: Color) -> void:
+	var f := Lighting.fan(origin, radius, poly, ppx)
+	if (f.vertices as PackedVector2Array).is_empty():
+		return
+	var mesh := ArrayMesh.new()
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = f.vertices
+	arrays[Mesh.ARRAY_TEX_UV] = f.uvs
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	if not _mesh_keep.has(c.get_instance_id()):
+		_mesh_keep[c.get_instance_id()] = []
+	var keep: Array = _mesh_keep[c.get_instance_id()]
+	if c == overlay and keep.size() > 8:
+		keep.clear()   # the overlay redraws constantly; keep only the recent ones
+	keep.append(mesh)
+	c.draw_mesh(mesh, _radial, Transform2D.IDENTITY, color)
 
 
 ## Darkness preview: a tinted sheet with lights punched out. Cheap and
@@ -296,8 +379,10 @@ static func wall_color(w: Dictionary) -> Color:
 func _draw_walls(c: Node2D) -> void:
 	if map == null or not show_walls:
 		return
+	if _order.is_empty():
+		_rebuild_state()
 	for w in level().get("walls", []):
-		if w.get("hidden", false) and not show_hidden:
+		if not is_shown("walls", w):
 			continue
 		draw_wall(c, w, 1.0)
 
@@ -361,8 +446,10 @@ func _draw_notes(c: Node2D) -> void:
 	if map == null or not show_notes:
 		return
 	var font := ThemeDB.fallback_font
+	if _order.is_empty():
+		_rebuild_state()
 	for n in level().get("notes", []):
-		if n.get("gm_only", true) and not show_hidden:
+		if not is_shown("notes", n):
 			continue
 		var pos := from_list(n.get("pos", [0, 0])) * ppx
 		var r := ppx * 0.12

@@ -10,7 +10,7 @@ extends RefCounted
 signal changed(what: String)
 
 const FORMAT := "silvergrove.hexmap"
-const VERSION := 1
+const VERSION := 2
 const DEFAULT_PPX := 256
 
 var doc: Dictionary = {}
@@ -44,6 +44,7 @@ static func new_level(id: String, p_name: String) -> Dictionary:
 	return {
 		"id": id, "name": p_name, "elevation_range": [0, 1],
 		"terrain": {}, "props": [], "walls": [], "lights": [], "notes": [],
+		"tree": LayerTree.default_tree(),
 	}
 
 
@@ -126,6 +127,8 @@ func to_json() -> String:
 	doc["format"] = FORMAT
 	doc["version"] = VERSION
 	doc["grid"] = grid.to_dict()
+	for l in levels:
+		LayerTree.ensure(l)
 	return JSON.stringify(_sorted(doc), "  ", false) + "\n"
 
 
@@ -165,6 +168,9 @@ func _upgrade(_from_version: int) -> void:
 			l["terrain"] = {}
 		if not l.has("elevation_range"):
 			l["elevation_range"] = [0, 1]
+		# v1 had a fixed ground/objects/overhead `layer` on props; v2 has the
+		# layer tree. ensure() migrates and reconciles either way.
+		LayerTree.ensure(l)
 	for k in ["style", "packs", "meta", "ext"]:
 		if not doc.has(k):
 			doc[k] = {}

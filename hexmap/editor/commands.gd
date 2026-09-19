@@ -58,19 +58,29 @@ func set_terrain_cells(level_index: int, changes: Dictionary) -> void:
 
 # --------------------------------------------------------------------- objects --
 
-## Add to "props" | "walls" | "lights" | "notes".
-func add_object(level_index: int, collection: String, obj: Dictionary, label := "") -> void:
+## Add to "props" | "walls" | "lights" | "notes", with a leaf in the layer
+## tree under `folder_id` ("" = the default folder for the collection).
+func add_object(level_index: int, collection: String, obj: Dictionary, label := "", folder_id := "") -> void:
 	var lvl := map.level(level_index)
 	var arr: Array = lvl[collection]
 	var id := str(obj.get("id", ""))
+	var r := LayerTree.ref(collection, id)
+	var tree: Array = lvl.tree
+	if folder_id == "" or LayerTree.find(tree, folder_id).is_empty():
+		folder_id = str(LayerTree.DEFAULT_FOR.get(collection, ""))
+		if LayerTree.find(tree, folder_id).is_empty():
+			folder_id = ""
 	history.commit(label if label != "" else "Add " + collection.trim_suffix("s"),
 		func() -> void:
 			arr.append(obj)
+			LayerTree.detach(tree, r)
+			LayerTree.insert(tree, {"ref": r}, folder_id)
 			map.touch(collection),
 		func() -> void:
 			var i := HexMap.index_in(lvl, collection, id)
 			if i >= 0:
 				arr.remove_at(i)
+			LayerTree.detach(tree, r)
 			map.touch(collection))
 
 
@@ -82,14 +92,26 @@ func remove_object(level_index: int, collection: String, id: String) -> void:
 		return
 	var obj: Dictionary = arr[i]
 	var index := i
+	var tree: Array = lvl.tree
+	var r := LayerTree.ref(collection, id)
+	var anc := LayerTree.ancestors(tree, r)
+	var parent_id: String = anc[-1] if not anc.is_empty() else ""
+	var loc := LayerTree.locate(tree, r)
+	var leaf_index: int = loc[1] if not loc.is_empty() else -1
+	var leaf := LayerTree.find(tree, r)
+	if leaf.is_empty():
+		leaf = {"ref": r}
 	history.commit("Delete " + collection.trim_suffix("s"),
 		func() -> void:
 			var j := HexMap.index_in(lvl, collection, id)
 			if j >= 0:
 				arr.remove_at(j)
+			LayerTree.detach(tree, r)
 			map.touch(collection),
 		func() -> void:
 			arr.insert(mini(index, arr.size()), obj)
+			if not LayerTree.insert(tree, leaf, parent_id, leaf_index):
+				LayerTree.insert(tree, leaf, "")
 			map.touch(collection))
 
 
@@ -161,22 +183,113 @@ func move_wall_point(level_index: int, id: String, index: int, to: Vector2) -> v
 	update_object(level_index, "walls", id, {"points": pts}, "Move wall point")
 
 
-## Reorder within its collection (draw order for props).
-func reorder_object(level_index: int, collection: String, id: String, to_index: int) -> void:
+# ------------------------------------------------------------------ layer tree --
+
+## Move a folder or leaf to `parent_id` ("" = root) at `index` (-1 = end).
+## Positions on the canvas are untouched; only order/grouping changes.
+func tree_move(level_index: int, key: String, parent_id: String, index: int = -1) -> void:
 	var lvl := map.level(level_index)
-	var arr: Array = lvl[collection]
-	var from := HexMap.index_in(lvl, collection, id)
-	if from < 0:
+	var tree: Array = lvl.tree
+	var loc := LayerTree.locate(tree, key)
+	if loc.is_empty():
 		return
-	to_index = clampi(to_index, 0, arr.size() - 1)
-	if from == to_index:
+	var from_anc := LayerTree.ancestors(tree, key)
+	var from_parent: String = from_anc[-1] if not from_anc.is_empty() else ""
+	var from_index: int = loc[1]
+	if from_parent == parent_id and (from_index == index or (index < 0 and from_index == (loc[0] as Array).size() - 1)):
 		return
-	var mv := func(a: int, b: int) -> void:
-		var o = arr[a]
-		arr.remove_at(a)
-		arr.insert(b, o)
-		map.touch(collection)
-	history.commit("Reorder", mv.bind(from, to_index), mv.bind(to_index, from))
+	# Moving within the same list to a later index: account for the removal.
+	var to_index := index
+	if from_parent == parent_id and index > from_index:
+		to_index = index - 1
+	var node: Dictionary = loc[0][from_index]
+	# Validate before committing (no folder into itself).
+	if LayerTree.is_folder(node) and parent_id != "" and (node.id == parent_id or not LayerTree.find(node.children, parent_id).is_empty()):
+		return
+	history.commit("Move layer",
+		func() -> void:
+			LayerTree.detach(tree, key)
+			if not LayerTree.insert(tree, node, parent_id, to_index):
+				LayerTree.insert(tree, node, from_parent, from_index)
+			map.touch("tree"),
+		func() -> void:
+			LayerTree.detach(tree, key)
+			LayerTree.insert(tree, node, from_parent, from_index)
+			map.touch("tree"))
+
+
+## Move several keys into a folder, keeping their relative order.
+func tree_move_many(level_index: int, keys: Array, parent_id: String, index: int = -1) -> void:
+	if keys.is_empty():
+		return
+	history.begin_group()
+	var i := index
+	for k in keys:
+		tree_move(level_index, k, parent_id, i)
+		if i >= 0:
+			i += 1
+	history.end_group("Move layers")
+
+
+func tree_add_folder(level_index: int, p_name: String, parent_id: String = "", index: int = -1) -> Dictionary:
+	var lvl := map.level(level_index)
+	var tree: Array = lvl.tree
+	var folder := LayerTree.new_folder(LayerTree.new_folder_id(), p_name)
+	history.commit("New folder",
+		func() -> void:
+			LayerTree.insert(tree, folder, parent_id, index)
+			map.touch("tree"),
+		func() -> void:
+			LayerTree.detach(tree, folder.id)
+			map.touch("tree"))
+	return folder
+
+
+## Remove a folder; its children move to where it was.
+func tree_remove_folder(level_index: int, id: String) -> void:
+	var lvl := map.level(level_index)
+	var tree: Array = lvl.tree
+	var folder := LayerTree.find(tree, id)
+	if folder.is_empty() or not LayerTree.is_folder(folder):
+		return
+	var anc := LayerTree.ancestors(tree, id)
+	var parent_id: String = anc[-1] if not anc.is_empty() else ""
+	var loc := LayerTree.locate(tree, id)
+	var index: int = loc[1]
+	var children: Array = folder.children.duplicate()
+	history.commit("Remove folder",
+		func() -> void:
+			LayerTree.detach(tree, id)
+			var i := index
+			for c in children:
+				LayerTree.insert(tree, c, parent_id, i)
+				i += 1
+			map.touch("tree"),
+		func() -> void:
+			for c in children:
+				LayerTree.detach(tree, c.id if LayerTree.is_folder(c) else c.ref)
+			folder.children = children.duplicate()
+			LayerTree.insert(tree, folder, parent_id, index)
+			map.touch("tree"))
+
+
+## Change a node's flags: visible, locked, name.
+func tree_set(level_index: int, key: String, changes: Dictionary, label := "Layer") -> void:
+	var lvl := map.level(level_index)
+	var node := LayerTree.find(lvl.tree, key)
+	if node.is_empty():
+		return
+	var before := {}
+	for k in changes:
+		before[k] = node.get(k, null)
+	var apply := func(state: Dictionary) -> void:
+		for k in state:
+			if state[k] == null:
+				node.erase(k)
+			else:
+				node[k] = state[k]
+		map.touch("tree")
+	history.commit(label, apply.bind(changes.duplicate()), apply.bind(before))
 
 
 # ---------------------------------------------------------------------- levels --

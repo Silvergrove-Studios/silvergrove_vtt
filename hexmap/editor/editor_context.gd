@@ -135,9 +135,19 @@ func new_prop(pos: Vector2) -> Dictionary:
 		"id": HexMap.new_id("p"), "asset": prop_ref,
 		"pos": [snappedf(pos.x, 0.0001), snappedf(pos.y, 0.0001)],
 		"rot": prop_rotation, "scale": prop_scale, "flip": prop_flip,
-		"z": 0, "height": float(def.get("height", 0.5)),
-		"layer": str(def.get("layer", "objects")), "hidden": false,
+		"z": 0, "height": float(def.get("height", 0.5)), "hidden": false,
 	}
+
+
+## Which layer folder a prop of this definition goes into: the folder
+## selected in the layers panel if any, else the default for the pack's
+## `layer` hint (ground / objects / overhead).
+var target_folder := ""
+
+func folder_for_prop(def: Dictionary) -> String:
+	if target_folder != "" and not LayerTree.find(level().tree, target_folder).is_empty():
+		return target_folder
+	return str(LayerTree.LEGACY_LAYER.get(str(def.get("layer", "objects")), "f_props"))
 
 
 func new_terrain_cell() -> Dictionary:

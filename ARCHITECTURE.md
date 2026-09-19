@@ -20,6 +20,15 @@ name.hexmap ──► HexMap ────────┤        │
 - **HexMap** is the document: a dictionary in the shape of
   `docs/map-format.md`, plus load/save and stable serialisation. It holds
   no logic beyond that; it emits `changed(what)`.
+- **LayerTree** (`hexmap/core/layer_tree.gd`) is the per-level folder/leaf
+  stack: draw order for props, visibility and locking for everything.
+  Pure functions over the level dictionary; `ensure()` reconciles the tree
+  with the collections so files can be hand-edited.
+- **Lighting** (`hexmap/core/lighting.gd`) turns walls into light-blocking
+  segments and computes the visibility polygon a light reaches (rays to
+  segment endpoints plus a ring, one-way walls by right-hand rule). MapCanvas
+  draws each light as its radial gradient mapped onto that polygon, so the
+  preview is honest about shadows. VTTs recompute from the exported walls.
 - **PackLibrary** finds packs, reads manifests, and rasterises textures per
   density bucket (32…2048 px per hex). SVGs are rasterised at the density
   they are drawn at, so zooming in stays sharp and print stays crisp.
@@ -34,6 +43,8 @@ name.hexmap ──► HexMap ────────┤        │
   grouped so one gesture is one undo step.
 - **Tools** (`hexmap/editor/tools.gd`) are small state machines fed events
   in hex units by **MapView**, which owns the camera, pan and zoom.
+- **LayersPanel** is a `Tree` over the LayerTree with drag-and-drop; it
+  edits only through Commands and syncs selection both ways.
 - **Palette** and **Inspector** read and write through **EditorContext**,
   the one object holding "what is open, what is selected, what is picked".
   **PropertyForm** builds forms from schemas and is reused for dialogs.

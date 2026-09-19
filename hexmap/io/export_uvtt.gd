@@ -31,7 +31,7 @@ static func build(map: HexMap, level_index: int, ppx: int, image_png: PackedByte
 	var portals: Array = []
 	for w in lvl.get("walls", []):
 		var pts: Array = w.get("points", [])
-		if pts.size() < 2:
+		if pts.size() < 2 or not LayerTree.shown(lvl, "walls", str(w.get("id", ""))):
 			continue
 		var door := str(w.get("door", "none"))
 		if door != "none":
@@ -54,6 +54,8 @@ static func build(map: HexMap, level_index: int, ppx: int, image_png: PackedByte
 		los.append(line)
 	var lights: Array = []
 	for l in lvl.get("lights", []):
+		if not LayerTree.shown(lvl, "lights", str(l.get("id", ""))):
+			continue
 		var dim := float(l.get("dim", 0.0))
 		var bright := float(l.get("bright", 0.0))
 		var c := Color(str(l.get("color", "#ffb060")))

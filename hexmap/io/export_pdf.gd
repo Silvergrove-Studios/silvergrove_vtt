@@ -166,7 +166,10 @@ static func _strip_background(img: Image, map: HexMap, region_hex: Rect2, ppx: f
 
 
 static func _gm_overlays(pdf: PdfWriter, page: int, lvl: Dictionary, to_page: Callable, hex_pt: float) -> void:
+	var shown := LayerTree.visible_refs(lvl)
 	for w in lvl.get("walls", []):
+		if not shown.get(LayerTree.ref("walls", str(w.get("id", ""))), true):
+			continue
 		var pts := PackedVector2Array()
 		for p in w.get("points", []):
 			pts.append(to_page.call(Vector2(float(p[0]), float(p[1]))))
@@ -181,6 +184,8 @@ static func _gm_overlays(pdf: PdfWriter, page: int, lvl: Dictionary, to_page: Ca
 		pdf.set_line(page, width, color, dash)
 		pdf.polyline(page, pts)
 	for l in lvl.get("lights", []):
+		if not shown.get(LayerTree.ref("lights", str(l.get("id", ""))), true):
+			continue
 		var c: Vector2 = to_page.call(Vector2(float(l.pos[0]), float(l.pos[1])))
 		var color := Color(str(l.get("color", "#ffb060"))).darkened(0.2)
 		pdf.set_line(page, 0.8, color, PackedFloat32Array([3.0, 3.0]))
@@ -194,6 +199,8 @@ static func _gm_overlays(pdf: PdfWriter, page: int, lvl: Dictionary, to_page: Ca
 			pdf.polyline(page, pts, true)
 		pdf.fill_polygon(page, _star(c, hex_pt * 0.12), color)
 	for n_ in lvl.get("notes", []):
+		if not shown.get(LayerTree.ref("notes", str(n_.get("id", ""))), true):
+			continue
 		var c: Vector2 = to_page.call(Vector2(float(n_.pos[0]), float(n_.pos[1])))
 		pdf.fill_polygon(page, _circle(c, hex_pt * 0.1), Color("#f0d060"))
 		pdf.text(page, str(n_.get("title", "")), c + Vector2(hex_pt * 0.14, hex_pt * 0.04), maxf(hex_pt * 0.14, 5.0), Color.BLACK)

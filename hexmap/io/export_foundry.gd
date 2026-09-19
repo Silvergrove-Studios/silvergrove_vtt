@@ -30,11 +30,15 @@ static func build(map: HexMap, level_index: int, ppx: int, background_src: Strin
 	var distance := grid.distance
 	var walls: Array = []
 	for w in lvl.get("walls", []):
+		if not LayerTree.shown(lvl, "walls", str(w.get("id", ""))):
+			continue
 		var pts: Array = w.get("points", [])
 		for i in pts.size() - 1:
 			walls.append(_wall(w, _pt(pts[i]) * ppx, _pt(pts[i + 1]) * ppx, distance))
 	var lights: Array = []
 	for l in lvl.get("lights", []):
+		if not LayerTree.shown(lvl, "lights", str(l.get("id", ""))):
+			continue
 		var pos := _pt(l.get("pos", [0, 0])) * ppx
 		var anim = ANIMATION.get(str(l.get("animation", "none")), null)
 		lights.append({

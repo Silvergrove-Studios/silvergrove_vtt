@@ -1452,7 +1452,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_7590f3a2",
-          "layer": "ground",
           "pos": [
             15,
             8.3
@@ -1467,7 +1466,6 @@
           "height": 0.5,
           "hidden": false,
           "id": "p_498f5a3d",
-          "layer": "ground",
           "pos": [
             19.5,
             3.5
@@ -3783,6 +3781,380 @@
           "z": 0
         }
       },
+      "tree": [
+        {
+          "children": [
+            {
+              "ref": "props:p_7590f3a2"
+            },
+            {
+              "ref": "props:p_498f5a3d"
+            }
+          ],
+          "id": "f_ground",
+          "locked": false,
+          "name": "Ground",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "props:p_0b162e6e"
+            },
+            {
+              "ref": "props:p_c8cbbd95"
+            },
+            {
+              "ref": "props:p_410edc79"
+            },
+            {
+              "ref": "props:p_bcc6bd71"
+            },
+            {
+              "ref": "props:p_e13cf629"
+            },
+            {
+              "ref": "props:p_d16cf5aa"
+            },
+            {
+              "ref": "props:p_ec7f15fa"
+            },
+            {
+              "ref": "props:p_34877ae0"
+            },
+            {
+              "ref": "props:p_be406a93"
+            },
+            {
+              "ref": "props:p_95adf012"
+            },
+            {
+              "ref": "props:p_e166a13a"
+            },
+            {
+              "ref": "props:p_0ca4d855"
+            },
+            {
+              "ref": "props:p_0fe3033d"
+            },
+            {
+              "ref": "props:p_0caa3f24"
+            },
+            {
+              "ref": "props:p_2ce249b3"
+            },
+            {
+              "ref": "props:p_1238ef6c"
+            }
+          ],
+          "id": "f_props",
+          "locked": false,
+          "name": "Props",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "props:p_6119a201"
+            },
+            {
+              "ref": "props:p_5f05b41a"
+            },
+            {
+              "ref": "props:p_24aacbb8"
+            },
+            {
+              "ref": "props:p_9f184942"
+            },
+            {
+              "ref": "props:p_4897d3d3"
+            },
+            {
+              "ref": "props:p_64999c9d"
+            },
+            {
+              "ref": "props:p_b8fc0240"
+            },
+            {
+              "ref": "props:p_e25f663a"
+            },
+            {
+              "ref": "props:p_62ea4a9b"
+            },
+            {
+              "ref": "props:p_6a5137a6"
+            },
+            {
+              "ref": "props:p_cdacb254"
+            },
+            {
+              "ref": "props:p_2c0ec268"
+            },
+            {
+              "ref": "props:p_d2c429bf"
+            },
+            {
+              "ref": "props:p_cca94ddc"
+            },
+            {
+              "ref": "props:p_d94de4ca"
+            },
+            {
+              "ref": "props:p_d10e4c31"
+            },
+            {
+              "ref": "props:p_54899731"
+            },
+            {
+              "ref": "props:p_e22a2ee1"
+            },
+            {
+              "ref": "props:p_4c203f72"
+            },
+            {
+              "ref": "props:p_aedca6ea"
+            },
+            {
+              "ref": "props:p_70825555"
+            },
+            {
+              "ref": "props:p_f9c3c132"
+            },
+            {
+              "ref": "props:p_df83d59a"
+            },
+            {
+              "ref": "props:p_8c1a29b0"
+            },
+            {
+              "ref": "props:p_d91f2335"
+            },
+            {
+              "ref": "props:p_d0e9a2a3"
+            },
+            {
+              "ref": "props:p_0e36a3a9"
+            },
+            {
+              "ref": "props:p_16d44a77"
+            },
+            {
+              "ref": "props:p_11238ad6"
+            },
+            {
+              "ref": "props:p_603a958e"
+            },
+            {
+              "ref": "props:p_2e8fe8db"
+            },
+            {
+              "ref": "props:p_dada4aa5"
+            },
+            {
+              "ref": "props:p_5014bf98"
+            },
+            {
+              "ref": "props:p_26c70add"
+            },
+            {
+              "ref": "props:p_aedb7653"
+            },
+            {
+              "ref": "props:p_1718fc09"
+            },
+            {
+              "ref": "props:p_0bccb71f"
+            },
+            {
+              "ref": "props:p_a6b6d7ed"
+            },
+            {
+              "ref": "props:p_293d0881"
+            },
+            {
+              "ref": "props:p_42b6e594"
+            },
+            {
+              "ref": "props:p_cd9638d5"
+            },
+            {
+              "ref": "props:p_4823a52f"
+            },
+            {
+              "ref": "props:p_cd3847f4"
+            },
+            {
+              "ref": "props:p_d81d4d6b"
+            },
+            {
+              "ref": "props:p_aba409a2"
+            },
+            {
+              "ref": "props:p_d5b54ec0"
+            },
+            {
+              "ref": "props:p_c23c5a9e"
+            },
+            {
+              "ref": "props:p_3f251d57"
+            },
+            {
+              "ref": "props:p_7fbbb598"
+            },
+            {
+              "ref": "props:p_be909cc7"
+            },
+            {
+              "ref": "props:p_4c6dd9c1"
+            },
+            {
+              "ref": "props:p_c5f76472"
+            },
+            {
+              "ref": "props:p_0a1ddc5a"
+            },
+            {
+              "ref": "props:p_157135f6"
+            },
+            {
+              "ref": "props:p_6825a8d7"
+            },
+            {
+              "ref": "props:p_bb2d89f7"
+            },
+            {
+              "ref": "props:p_bbd2aaab"
+            },
+            {
+              "ref": "props:p_1123786a"
+            },
+            {
+              "ref": "props:p_676e0e3f"
+            },
+            {
+              "ref": "props:p_09d2e42f"
+            },
+            {
+              "ref": "props:p_b904234a"
+            },
+            {
+              "ref": "props:p_770d46aa"
+            },
+            {
+              "ref": "props:p_a3f322d4"
+            },
+            {
+              "ref": "props:p_7d69f676"
+            },
+            {
+              "ref": "props:p_80ae0b21"
+            },
+            {
+              "ref": "props:p_4f879bc0"
+            },
+            {
+              "ref": "props:p_fcd4aa86"
+            },
+            {
+              "ref": "props:p_43ec0f05"
+            },
+            {
+              "ref": "props:p_497f3d44"
+            },
+            {
+              "ref": "props:p_9e33fa9f"
+            },
+            {
+              "ref": "props:p_6fb34bc5"
+            },
+            {
+              "ref": "props:p_80ff02ae"
+            },
+            {
+              "ref": "props:p_fd617379"
+            },
+            {
+              "ref": "props:p_16875905"
+            },
+            {
+              "ref": "props:p_189045d6"
+            },
+            {
+              "ref": "props:p_902e7c75"
+            },
+            {
+              "ref": "props:p_c721c323"
+            },
+            {
+              "ref": "props:p_08925c71"
+            },
+            {
+              "ref": "props:p_3ad0425f"
+            },
+            {
+              "ref": "props:p_3758f027"
+            },
+            {
+              "ref": "props:p_9edcfc82"
+            },
+            {
+              "ref": "props:p_eb9e96d1"
+            },
+            {
+              "ref": "props:p_bd50a61b"
+            }
+          ],
+          "id": "f_overhead",
+          "locked": false,
+          "name": "Overhead",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "walls:w_bae8b089"
+            },
+            {
+              "ref": "walls:w_ff68f8df"
+            }
+          ],
+          "id": "f_walls",
+          "locked": false,
+          "name": "Walls & doors",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "lights:l_e3cfd31f"
+            }
+          ],
+          "id": "f_lights",
+          "locked": false,
+          "name": "Lights",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "notes:n_751fd2fa"
+            },
+            {
+              "ref": "notes:n_469ddc82"
+            }
+          ],
+          "id": "f_notes",
+          "locked": false,
+          "name": "Notes",
+          "open": true,
+          "visible": true
+        }
+      ],
       "walls": [
         {
           "blocks": {
@@ -3877,5 +4249,5 @@
     "grid_color": "#00000066",
     "grid_width": 0.012
   },
-  "version": 1
+  "version": 2
 }

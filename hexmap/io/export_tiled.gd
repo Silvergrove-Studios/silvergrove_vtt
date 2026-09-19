@@ -62,9 +62,12 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 		clean.erase("_variant")
 		tileset.tiles.append(clean)
 
+	var shown := LayerTree.visible_refs(lvl)
 	var objects_props: Array = []
 	var next_id := 1
 	for p in lvl.get("props", []):
+		if not shown.get(LayerTree.ref("props", str(p.get("id", ""))), true):
+			continue
 		var pos := _pt(p.get("pos", [0, 0])) * ppx
 		objects_props.append({
 			"id": next_id, "name": str(p.get("id", "")), "type": "prop", "point": true,
@@ -72,7 +75,7 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 			"rotation": float(p.get("rot", 0.0)), "visible": not bool(p.get("hidden", false)),
 			"properties": _props({
 				"asset": str(p.get("asset", "")), "scale": float(p.get("scale", 1.0)),
-				"flip": bool(p.get("flip", false)), "layer": str(p.get("layer", "objects")),
+				"flip": bool(p.get("flip", false)), "layer": _folder_path(lvl, "props", str(p.get("id", ""))),
 				"z": float(p.get("z", 0.0)), "height": float(p.get("height", 0.0)),
 			}),
 		})
@@ -80,7 +83,7 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 	var objects_walls: Array = []
 	for w in lvl.get("walls", []):
 		var pts: Array = w.get("points", [])
-		if pts.size() < 2:
+		if pts.size() < 2 or not shown.get(LayerTree.ref("walls", str(w.get("id", ""))), true):
 			continue
 		var origin := _pt(pts[0]) * ppx
 		var poly: Array = []
@@ -106,6 +109,8 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 		next_id += 1
 	var objects_lights: Array = []
 	for l in lvl.get("lights", []):
+		if not shown.get(LayerTree.ref("lights", str(l.get("id", ""))), true):
+			continue
 		var pos := _pt(l.get("pos", [0, 0])) * ppx
 		var r := float(l.get("dim", 0.0)) * ppx
 		objects_lights.append({
@@ -122,6 +127,8 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 		next_id += 1
 	var objects_notes: Array = []
 	for n_ in lvl.get("notes", []):
+		if not shown.get(LayerTree.ref("notes", str(n_.get("id", ""))), true):
+			continue
 		var pos := _pt(n_.get("pos", [0, 0])) * ppx
 		objects_notes.append({
 			"id": next_id, "name": str(n_.get("title", "")), "type": "note", "point": true,
@@ -164,6 +171,14 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 static func to_json(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles") -> Dictionary:
 	var b := build(map, level_index, ppx, tiles_dir)
 	return {"json": JSON.stringify(b.map, " ", false) + "\n", "tiles": b.tiles}
+
+
+static func _folder_path(lvl: Dictionary, collection: String, id: String) -> String:
+	var tree: Array = lvl.get("tree", [])
+	var names := PackedStringArray()
+	for fid in LayerTree.ancestors(tree, LayerTree.ref(collection, id)):
+		names.append(str(LayerTree.find(tree, fid).get("name", fid)))
+	return "/".join(names)
 
 
 static func _props(d: Dictionary) -> Array:

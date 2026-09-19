@@ -32,7 +32,7 @@ units.
 ```json
 {
   "format": "silvergrove.hexmap",
-  "version": 1,
+  "version": 2,
   "id": "6f1c0e2a-…",
   "name": "Ruined Chapel",
   "grid": {
@@ -85,12 +85,45 @@ A level is a floor. Every map has at least one. Levels share the grid.
   "props": [ … ],
   "walls": [ … ],
   "lights": [ … ],
-  "notes": [ … ]
+  "notes": [ … ],
+  "tree": [ … ]
 }
 ```
 
 `elevation_range` is `[bottom, top]` in hex units; a level with several
 storeys of headroom just has a taller range.
+
+### Layer tree
+
+`tree` is the Photoshop-style layer stack: folders and one leaf per element.
+It **is** the draw order for props (depth-first, first = bottom) and it is
+where visibility and locking live. Elements keep their own positions; moving
+a leaf between folders changes grouping and order only.
+
+```json
+"tree": [
+  { "id": "f_ground", "name": "Ground", "children": [ { "ref": "props:p_rug1" } ],
+    "visible": true, "locked": false, "open": true },
+  { "id": "f_props", "name": "Props", "children": [
+      { "id": "f_tables", "name": "Tables", "children": [ { "ref": "props:p_8f3a" } ] },
+      { "ref": "props:p_1c2d", "visible": false }
+  ] },
+  { "id": "f_walls", "name": "Walls & doors", "children": [ { "ref": "walls:w_1b2c" } ] }
+]
+```
+
+- Folder: `id`, `name`, `children`, and optional `visible` (default true),
+  `locked` (default false), `open` (UI state).
+- Leaf: `ref` = `"<collection>:<id>"`, optional `visible` / `locked`.
+- Visibility is the AND of the leaf and its ancestors; locking is the OR.
+  Hidden elements are neither drawn nor exported; locked ones cannot be
+  picked or moved on the canvas.
+- A fresh level has the folders Ground, Props, Overhead, Walls & doors,
+  Lights, Notes (`f_ground` … `f_notes`). Nothing depends on them existing.
+- Readers reconcile on load: every element gets a leaf (in its default
+  folder), dangling leaves are dropped. Hand-written files may omit `tree`.
+- Version 1 files had a `layer: ground|objects|overhead` field on props; it
+  is migrated into the corresponding folder.
 
 ### Terrain
 
@@ -106,17 +139,20 @@ Keyed by `"q,r"` (axial). Missing cells are bare background.
 ### Prop
 
 ```json
-{ "id": "p_8f3a", "asset": "dungeons_and_castles:end_table",
+{ "id": "p_8f3a", "asset": "dungeons_and_castles:end_table", "name": "Bedside table",
   "pos": [3.71, 2.18], "rot": 15.0, "scale": 1.0, "flip": false,
-  "z": 0, "height": 0.3, "layer": "objects", "tint": "#ffffff", "hidden": false }
+  "z": 0, "height": 0.3, "tint": "#ffffff", "hidden": false }
 ```
 
 - `pos` is the asset's anchor point on the canvas, in hex units. Floats.
 - `rot` in degrees, `scale` is uniform, `flip` mirrors horizontally.
 - `z` is the bottom of the prop above the level floor; `height` its extent.
-- `layer` orders drawing: `ground` (rugs, stains) < `objects` < `overhead`
-  (canopies, beams). Within a layer, list order is draw order.
-- `hidden`: GM-only, exported as such where the target supports it.
+- `name` is optional, shown in the Layers panel instead of the asset name.
+  Walls, lights and notes may carry one too.
+- Draw order and grouping come from the level's `tree`, not from the prop.
+- `hidden`: GM-only, exported as such where the target supports it. This is
+  different from layer visibility: a hidden prop is still on a player-facing
+  export's GM layer; an invisible layer is simply not there.
 
 ### Wall
 
