@@ -59,6 +59,27 @@ static func mode_blurb(mode: String) -> String:
 	return ""
 
 
+# ------------------------------------------------------------------- paths --
+
+## A document path from the command line or the home screen, made absolute.
+## Relative paths are tried against the shell's working directory (so
+## `Hexmap -- examples/x.encounter` works from any folder), then the
+## project, then the app's own bundled files (res://examples in a build).
+static func resolve_path(arg: String) -> String:
+	if arg == "" or arg.is_absolute_path() or arg.begins_with("res://") or arg.begins_with("user://"):
+		return arg
+	var candidates := []
+	var cwd := OS.get_environment("PWD")
+	if cwd != "":
+		candidates.append(cwd.path_join(arg))
+	candidates.append(ProjectSettings.globalize_path("res://").path_join(arg))
+	candidates.append("res://".path_join(arg))
+	for c in candidates:
+		if FileAccess.file_exists(c) or DirAccess.dir_exists_absolute(c):
+			return c
+	return candidates[0]
+
+
 # ------------------------------------------------------------------- theme --
 
 var theme_name: String:
@@ -105,6 +126,17 @@ func recent() -> Array:
 	for p in prefs.get("recent", []):
 		if FileAccess.file_exists(str(p)) or DirAccess.dir_exists_absolute(str(p)):
 			out.append(str(p))
+	return out
+
+
+## Documents that ship inside the app (a build carries the examples).
+static func bundled(extension: String) -> Array:
+	var out := []
+	var d := DirAccess.open("res://examples")
+	if d != null:
+		for f in d.get_files():
+			if f.ends_with(extension):
+				out.append("res://examples".path_join(f))
 	return out
 
 

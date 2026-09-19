@@ -26,9 +26,13 @@ func search_dirs() -> PackedStringArray:
 	var dirs := PackedStringArray()
 	dirs.append(ProjectSettings.globalize_path("res://packs"))
 	dirs.append(ProjectSettings.globalize_path("user://packs"))
-	var beside := OS.get_executable_path().get_base_dir().path_join("packs")
-	if not dirs.has(beside):
-		dirs.append(beside)
+	# Builds ship packs beside the executable; on macOS that is inside the
+	# bundle's Resources, or next to the .app itself.
+	var exe := OS.get_executable_path().get_base_dir()
+	for beside in [exe.path_join("packs"), exe.path_join("../Resources/packs"), exe.path_join("../../../packs")]:
+		var b: String = str(beside).simplify_path()
+		if not dirs.has(b):
+			dirs.append(b)
 	for d in _extra_dirs:
 		if not dirs.has(d):
 			dirs.append(d)

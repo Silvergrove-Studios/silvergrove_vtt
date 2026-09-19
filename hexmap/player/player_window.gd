@@ -51,7 +51,7 @@ func _ready() -> void:
 ## address to join.
 func open_argument(arg: String) -> void:
 	if arg.ends_with(".encounter") or DirAccess.dir_exists_absolute(arg):
-		_choose_file(arg if arg.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(arg))
+		_choose_file(App.resolve_path(arg))
 	else:
 		_address.text = arg
 		_join_address()
@@ -277,12 +277,9 @@ func encounter_files() -> Array:
 	for p in app.recent():
 		if str(p).ends_with(".encounter") and not out.has(p):
 			out.append(p)
-	var ex := ProjectSettings.globalize_path("res://examples")
-	var d := DirAccess.open(ex)
-	if d != null:
-		for f in d.get_files():
-			if f.ends_with(".encounter") and not out.has(ex.path_join(f)):
-				out.append(ex.path_join(f))
+	for p in App.bundled(".encounter"):
+		if not out.has(p):
+			out.append(p)
 	return out
 
 

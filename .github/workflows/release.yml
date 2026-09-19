@@ -140,7 +140,15 @@ jobs:
           mkdir -p "$(dirname '${{ matrix.out }}')"
           "$godot" --headless --path . --export-release "${{ matrix.preset }}" "${{ matrix.out }}" 2>&1 | tee out/export.log
           ! grep -q "^ERROR" out/export.log
-          if [ "${{ matrix.preset }}" = "macOS" ]; then cp "${{ matrix.out }}" "out/${{ matrix.zip }}"; else (cd "$(dirname '${{ matrix.out }}')" && zip -qr "../${{ matrix.zip }}" .); fi
+          # The placeholder packs travel beside the executable (next to the .app on macOS).
+          if [ "${{ matrix.preset }}" = "macOS" ]; then
+            mkdir -p out/macos/bundle && (cd out/macos/bundle && unzip -q ../Hexmap.zip)
+            cp -R packs out/macos/bundle/packs
+            (cd out/macos/bundle && zip -qr "../../${{ matrix.zip }}" .)
+          else
+            cp -R packs "$(dirname '${{ matrix.out }}')/packs"
+            (cd "$(dirname '${{ matrix.out }}')" && zip -qr "../${{ matrix.zip }}" .)
+          fi
           ls -la out/
       - uses: actions/upload-artifact@v4
         with:

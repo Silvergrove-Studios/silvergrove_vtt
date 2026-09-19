@@ -79,7 +79,7 @@ func prepare_shot() -> void:
 
 ## A map path from the command line or the home screen (via the shell).
 func open_argument(path: String) -> void:
-	_open_path(path if path.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(path))
+	_open_path(App.resolve_path(path))
 
 
 func _set_map(m: HexMap) -> void:
@@ -730,7 +730,8 @@ func _open_path(path: String) -> void:
 
 
 func _save(as_new: bool) -> void:
-	if ctx.map.path == "" or as_new:
+	# A bundled example is read-only: save it somewhere of the user's.
+	if ctx.map.path == "" or as_new or ctx.map.path.begins_with("res://"):
 		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.hexmap ; Hex maps"])
 		fd.current_file = ctx.map.name.to_snake_case() + ".hexmap"
 		fd.file_selected.connect(func(p: String) -> void: _save_to(p))

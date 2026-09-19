@@ -81,7 +81,7 @@ func _process(delta: float) -> void:
 
 ## An encounter path from the command line or the home screen.
 func open_argument(path: String) -> void:
-	_open_path(path if path.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(path))
+	_open_path(App.resolve_path(path))
 
 
 func prepare_shot() -> void:
@@ -796,7 +796,8 @@ func _load(e: Encounter) -> void:
 
 
 func _save(as_new: bool) -> void:
-	if ctx.encounter().path == "" or as_new:
+	# A bundled example is read-only: save it somewhere of the user's.
+	if ctx.encounter().path == "" or as_new or ctx.encounter().path.begins_with("res://"):
 		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.encounter ; Encounters"])
 		fd.current_file = ctx.encounter().name.to_snake_case() + ".encounter"
 		fd.file_selected.connect(func(p: String) -> void: _save_to(p))

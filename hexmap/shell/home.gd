@@ -56,24 +56,36 @@ func _build() -> void:
 
 	var rec := app.recent()
 	if not rec.is_empty():
-		var h := Label.new()
-		h.text = "Recent"
-		h.theme_type_variation = "DimLabel"
-		column.add_child(h)
-		_recent_box = VBoxContainer.new()
-		_recent_box.add_theme_constant_override("separation", 4)
-		column.add_child(_recent_box)
-		for p in rec:
-			var b := Button.new()
-			b.text = p.get_file()
-			b.tooltip_text = p
-			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			b.theme_type_variation = "ToolButton"
-			b.custom_minimum_size = Vector2(0, 40)
-			var mode := "table" if p.ends_with(".encounter") else "editor"
-			b.disabled = not App.mode_available(mode)
-			b.pressed.connect(func() -> void: open_mode.emit(mode, p))
-			_recent_box.add_child(b)
+		_recent_box = _file_list(column, "Recent", rec)
+	# The examples that ship inside the app, for a fresh install.
+	var examples := []
+	for p in App.bundled(".encounter") + App.bundled(".hexmap"):
+		if not rec.has(p):
+			examples.append(p)
+	if not examples.is_empty():
+		_file_list(column, "Examples", examples)
+
+
+func _file_list(column: VBoxContainer, title: String, paths: Array) -> VBoxContainer:
+	var h := Label.new()
+	h.text = title
+	h.theme_type_variation = "DimLabel"
+	column.add_child(h)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	column.add_child(box)
+	for p in paths:
+		var b := Button.new()
+		b.text = str(p).get_file()
+		b.tooltip_text = str(p)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.theme_type_variation = "ToolButton"
+		b.custom_minimum_size = Vector2(0, 40)
+		var mode := "table" if str(p).ends_with(".encounter") else "editor"
+		b.disabled = not App.mode_available(mode)
+		b.pressed.connect(func() -> void: open_mode.emit(mode, str(p)))
+		box.add_child(b)
+	return box
 
 
 func _restyle() -> void:
