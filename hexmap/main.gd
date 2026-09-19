@@ -19,6 +19,8 @@ var undo_item: PopupMenu
 var view_menu: PopupMenu
 var _autosave := Timer.new()
 var _prefs := {"pack_dirs": []}
+var _native_menus := NativeMenuMirror.new()
+var _last_menu := [-1, -1]   # [id, frame] — the same command from both menu bars in one frame runs once
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_EXPORT_PNG, M_EXPORT_UVTT, M_EXPORT_FOUNDRY, M_EXPORT_TILED, M_EXPORT_PDF, M_EXPORT_BUNDLE, M_QUIT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_GROUP, M_MAP_SETTINGS, M_PREFS,
@@ -152,8 +154,8 @@ func _build_ui() -> void:
 func _build_menus() -> MenuBar:
 	var bar := MenuBar.new()
 	bar.flat = true
-	# Keep the menus in the window. On macOS Godot would otherwise move them
-	# into the system menu bar, where nobody looks for a tool's File menu.
+	# Keep the menus in the window; on macOS NativeMenuMirror also puts a copy
+	# in the system menu bar (see the end of this function).
 	bar.prefer_global_menu = false
 	var file := PopupMenu.new()
 	file.name = "File"
@@ -228,6 +230,7 @@ func _build_menus() -> MenuBar:
 	_item(help, "About", H_ABOUT)
 	help.id_pressed.connect(_on_menu)
 	bar.add_child(help)
+	_native_menus.mirror(bar)
 	return bar
 
 
@@ -384,6 +387,7 @@ func _update_menus() -> void:
 	i = undo_item.get_item_index(M_REDO)
 	undo_item.set_item_text(i, "Redo %s" % ctx.history.redo_label() if ctx.history.can_redo() else "Redo")
 	undo_item.set_item_disabled(i, not ctx.history.can_redo())
+	_native_menus.sync_all()
 	_update_title()
 
 
@@ -408,6 +412,10 @@ func _on_level_selected(i: int) -> void:
 # ====================================================================== menus ==
 
 func _on_menu(id: int) -> void:
+	var frame := Engine.get_process_frames()
+	if _last_menu[0] == id and _last_menu[1] == frame:
+		return
+	_last_menu = [id, frame]
 	match id:
 		M_NEW: _new_map_dialog()
 		M_OPEN: _open_dialog()
@@ -653,6 +661,7 @@ func _notification(what: int) -> void:
 ## tools hold the context) so nothing is reported leaked at exit.
 func _exit_tree() -> void:
 	_autosave.stop()
+	_native_menus.free_menus()
 	if ctx.history != null:
 		ctx.history.clear()
 	if view != null:
