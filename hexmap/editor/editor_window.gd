@@ -1,11 +1,16 @@
+class_name EditorWindow
 extends Control
-## The editor window. Builds the whole UI in code, owns the open map, and
-## routes menus, shortcuts, files and exports. Panels and tools live under
-## hexmap/editor/; this file is the glue.
+## The Editor mode's window. Builds the whole UI in code, owns the open map,
+## and routes menus, shortcuts, files and exports. Panels and tools live
+## under hexmap/editor/; this file is the glue. The shell
+## (hexmap/shell/main.gd) creates it with an App and swaps it out for the
+## home screen or another mode on `go_home`.
+
+signal go_home
 
 const AUTOSAVE_SECONDS := 60.0
-const APP := "Hexmap"
 
+var app: App
 var ctx := EditorContext.new()
 var view: MapView
 var palette: Palette
@@ -19,7 +24,6 @@ var status_right: Label
 var undo_item: PopupMenu
 var view_menu: PopupMenu
 var _autosave := Timer.new()
-var _prefs := {"pack_dirs": [], "theme": "slate"}
 var _ui_root: Control
 var dock: DockableContainer
 var _panes: Array = []
@@ -34,7 +38,7 @@ static func theme_ids() -> PackedStringArray:
 var _native_menus := NativeMenuMirror.new()
 var _last_menu := [-1, -1]   # [id, frame] — the same command from both menu bars in one frame runs once
 
-enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_EXPORT_PNG, M_EXPORT_UVTT, M_EXPORT_FOUNDRY, M_EXPORT_TILED, M_EXPORT_PDF, M_EXPORT_BUNDLE, M_QUIT,
+enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_EXPORT_PNG, M_EXPORT_UVTT, M_EXPORT_FOUNDRY, M_EXPORT_TILED, M_EXPORT_PDF, M_EXPORT_BUNDLE, M_HOME, M_QUIT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_GROUP, M_MAP_SETTINGS, M_PREFS,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_HIDDEN, V_DARK, V_FIT, V_100, V_RELOAD_PACKS, V_DOCK,
 	L_ADD, L_REMOVE, L_RENAME, L_UP, L_DOWN,
@@ -42,19 +46,12 @@ enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_EXPORT_PNG, M_EXPORT_UVTT, M_EXPORT_F
 
 
 func _ready() -> void:
-	get_tree().set_auto_accept_quit(false)
-	_load_prefs()
-	ctx.packs = PackLibrary.new()
-	ctx.packs.set_extra_dirs(PackedStringArray(_prefs.pack_dirs))
-	ctx.packs.reload()
+	if app == null:
+		app = App.new()
+	ctx.packs = app.packs
 	ctx.history = History.new()
-	var args0 := OS.get_cmdline_user_args()
-	var ti := args0.find("--theme")
-	if ti >= 0 and ti + 1 < args0.size():
-		_prefs.theme = args0[ti + 1]
-	if not ThemeBuilder.VARIANTS.has(str(_prefs.theme)):
-		_prefs.theme = "slate"
-	theme = ThemeBuilder.build(str(_prefs.theme))
+	theme = app.build_theme()
+	app.theme_changed.connect(_on_theme_changed)
 	_set_map(HexMap.create("Untitled", HexGrid.new()))
 	_build_ui()
 	_restyle()
@@ -72,26 +69,17 @@ func _ready() -> void:
 	_select_tool("select")
 	for w in ctx.packs.warnings:
 		push_warning(w)
-	var args := OS.get_cmdline_user_args()
-	if args.size() > 0 and (args[0].ends_with(".hexmap") or args[0].ends_with(".json")):
-		_open_path(args[0] if args[0].is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(args[0]))
 	_update_title()
-	var shot := args.find("--shot")
-	if shot >= 0 and shot + 1 < args.size():
-		_screenshot_and_quit(args[shot + 1])
 
 
-## `-- map.hexmap --shot out.png`: render the window once and exit. Used by
-## run.sh shot and by the docs.
-func _screenshot_and_quit(path: String) -> void:
-	await get_tree().create_timer(1.0).timeout
+## The shell is about to screenshot the window (`--shot`).
+func prepare_shot() -> void:
 	view.zoom_to_fit()
-	await RenderingServer.frame_post_draw
-	await RenderingServer.frame_post_draw
-	var img := get_viewport().get_texture().get_image()
-	img.save_png(path if path.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(path))
-	print("screenshot: ", path)
-	get_tree().quit()
+
+
+## A map path from the command line or the home screen (via the shell).
+func open_argument(path: String) -> void:
+	_open_path(path if path.is_absolute_path() else ProjectSettings.globalize_path("res://").path_join(path))
 
 
 func _set_map(m: HexMap) -> void:
@@ -255,6 +243,7 @@ func _build_menus() -> MenuBar:
 	file.add_child(exp)
 	file.add_submenu_node_item("Export", exp)
 	file.add_separator()
+	_item(file, "Home", M_HOME)
 	_item(file, "Quit", M_QUIT, KEY_Q, true)
 	file.id_pressed.connect(_on_menu)
 	bar.add_child(file)
@@ -294,7 +283,7 @@ func _build_menus() -> MenuBar:
 	var ti := 0
 	for n in theme_ids():
 		theme_menu.add_radio_check_item(str(ThemeBuilder.tokens(n).label), V_THEME_BASE + ti)
-		theme_menu.set_item_checked(ti, n == str(_prefs.theme))
+		theme_menu.set_item_checked(ti, n == app.theme_name)
 		ti += 1
 	theme_menu.id_pressed.connect(_on_menu)
 	view_menu.add_child(theme_menu)
@@ -399,11 +388,11 @@ func _build_view_options() -> Control:
 # ====================================================================== theme ==
 
 func _set_theme(name: String) -> void:
-	if not ThemeBuilder.VARIANTS.has(name):
-		name = "slate"
-	_prefs.theme = name
-	_save_prefs()
-	theme = ThemeBuilder.build(name)
+	app.set_theme(name)
+
+
+func _on_theme_changed(name: String) -> void:
+	theme = app.build_theme()
 	var i := 0
 	for n in theme_ids():
 		theme_menu.set_item_checked(i, n == name)
@@ -414,7 +403,7 @@ func _set_theme(name: String) -> void:
 ## Everything that depends on the theme's tokens but is not a Theme item:
 ## icon colours, the canvas surround, panel icon refreshes.
 func _restyle() -> void:
-	var t := ThemeBuilder.tokens(str(_prefs.theme))
+	var t := ThemeBuilder.tokens(app.theme_name)
 	var text := ThemeBuilder.c(t, "text")
 	var icon_size: int = t.icon
 	for b in find_children("*", "Button", true, false):
@@ -512,7 +501,7 @@ func _on_cursor(hex: Vector2) -> void:
 func _update_title() -> void:
 	if ctx.map == null:
 		return
-	var t := "%s%s — %s" % [ctx.map.name, "*" if ctx.map.dirty else "", APP]
+	var t := "%s%s — %s" % [ctx.map.name, "*" if ctx.map.dirty else "", App.NAME]
 	get_window().title = t
 
 
@@ -560,7 +549,8 @@ func _on_menu(id: int) -> void:
 		M_OPEN: _open_dialog()
 		M_SAVE: _save(false)
 		M_SAVE_AS: _save(true)
-		M_QUIT: _request_quit()
+		M_HOME: _guard_unsaved(func() -> void: go_home.emit())
+		M_QUIT: request_quit()
 		M_EXPORT_PNG: _export_png_dialog()
 		M_EXPORT_UVTT: _export_simple("uvtt")
 		M_EXPORT_FOUNDRY: _export_simple("foundry")
@@ -640,7 +630,7 @@ func _on_menu(id: int) -> void:
 				_refresh_levels()
 		H_SHORTCUTS: _shortcuts_dialog()
 		H_ABOUT:
-			_info("%s %s\n\nHex-grid encounter map editor.\nSilvergrove Studios.\nGodot %s" % [APP, ProjectSettings.get_setting("application/config/version", "dev"), Engine.get_version_info().string])
+			_info("%s %s\n\nHex-grid encounter maps: editor, table and player.\nSilvergrove Studios.\nGodot %s" % [App.NAME, App.version(), Engine.get_version_info().string])
 
 
 # ================================================================ file actions ==
@@ -699,16 +689,13 @@ func _map_settings_dialog() -> void:
 
 func _prefs_dialog() -> void:
 	var form := PropertyForm.new()
-	form.build([{"key": "dirs", "label": "Extra pack folders\n(one per line)", "type": "text"}], {"dirs": "\n".join(PackedStringArray(_prefs.pack_dirs))})
+	form.build([{"key": "dirs", "label": "Extra pack folders\n(one per line)", "type": "text"}], {"dirs": "\n".join(PackedStringArray(app.prefs.pack_dirs))})
 	_form_dialog("Pack folders", form, func(v: Dictionary) -> void:
 		var dirs := []
 		for line in str(v.dirs).split("\n"):
 			if line.strip_edges() != "":
 				dirs.append(line.strip_edges())
-		_prefs.pack_dirs = dirs
-		_save_prefs()
-		ctx.packs.set_extra_dirs(PackedStringArray(dirs))
-		ctx.packs.reload()
+		app.set_pack_dirs(dirs)
 		view.canvas.refresh())
 
 
@@ -738,6 +725,7 @@ func _open_path(path: String) -> void:
 				_set_map(m))
 		return
 	_set_map(m)
+	app.note_recent(path)
 	ctx.say("Opened " + path)
 
 
@@ -760,6 +748,7 @@ func _save_to(path: String) -> void:
 		return
 	DirAccess.remove_absolute(path + ".autosave")
 	_update_title()
+	app.note_recent(path)
 	ctx.say("Saved " + path)
 
 
@@ -788,13 +777,9 @@ func _guard_unsaved(then: Callable) -> void:
 	d.popup_centered()
 
 
-func _request_quit() -> void:
+## The shell asks on window close; unsaved work gets a chance to be kept.
+func request_quit() -> void:
 	_guard_unsaved(func() -> void: get_tree().quit())
-
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_request_quit()
 
 
 ## Break the reference cycles (history commands capture the Commands object,
@@ -804,6 +789,8 @@ func _exit_tree() -> void:
 	if dock != null and is_instance_valid(dock):
 		LayoutStore.save(dock.layout)
 	_native_menus.free_menus()
+	if app != null and app.theme_changed.is_connected(_on_theme_changed):
+		app.theme_changed.disconnect(_on_theme_changed)
 	if ctx.history != null:
 		ctx.history.clear()
 	if view != null:
@@ -976,24 +963,3 @@ func _shortcuts_dialog() -> void:
 	lines.append("Ctrl/Cmd+Z / Shift+Ctrl/Cmd+Z: undo / redo · Ctrl/Cmd+S: save · Ctrl/Cmd+P: print PDF")
 	lines.append("G: grid · Shift+D: darkness preview · Esc: select tool")
 	_info("\n".join(lines))
-
-
-# ====================================================================== prefs ==
-
-func _prefs_path() -> String:
-	return "user://prefs.json"
-
-
-func _load_prefs() -> void:
-	if FileAccess.file_exists(_prefs_path()):
-		var d = JSON.parse_string(FileAccess.get_file_as_string(_prefs_path()))
-		if d is Dictionary:
-			for k in d:
-				_prefs[k] = d[k]
-
-
-func _save_prefs() -> void:
-	var f := FileAccess.open(_prefs_path(), FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(_prefs, "  "))
-		f.close()

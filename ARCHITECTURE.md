@@ -1,6 +1,44 @@
 # Architecture
 
-## The shape of it
+## One application, three modes
+
+Hexmap is one Godot project that runs as one of three modes. The **shell**
+(`hexmap/shell/`) owns what they share — preferences, the pack library, the
+theme, recent files, all in `App` — and shows one window at a time: the home
+screen or a mode.
+
+| mode | what | where it runs |
+|---|---|---|
+| **Editor** `hexmap/editor/` | author `.hexmap` maps and export them | desktop |
+| **Table** `hexmap/table/` | a DM runs an `.encounter` on one or more maps | desktop |
+| **Player** `hexmap/player/` | joins a table; sees the map through their tokens | desktop, iOS, Android, web |
+
+Desktop builds ship all three; mobile builds ship the Player only
+(`App.available_modes()`). Everything below the mode windows is shared:
+
+```
+shell/      App (prefs, packs, theme), home screen, mode switch
+editor/     the Editor: panels, tools, Commands + History       desktop
+table/      the Table: encounter panels and tools               desktop
+player/     the Player: touch-first client                      portable
+encounter/  Encounter document, EncounterState, events          portable   (next)
+net/        Session host/client, protocol, asset transfer       portable   (later)
+render/     MapCanvas, MapRenderer                              portable
+core/       HexMap, HexGrid, LayerTree, Lighting, PackLibrary   portable
+io/         exporters and the PDF writer                        desktop
+ui/         theme, icons, fonts; dock panes for desktop modes
+```
+
+**Portable modules may not depend on a desk.** No `DockableContainer`,
+`FileDialog`, `MenuBar`/`PopupMenu`, native menus, editor state, or shelling
+out; input must work from a finger as well as a mouse (no hover-only
+affordances, no right-click-only actions, no keyboard-only paths).
+`tools/check_scripts.gd` (`./run.sh check`, run in CI) fails the build if
+`core/`, `render/`, `encounter/`, `net/` or `player/` name one of those.
+`packs/` is `.gdignore`d and so never inside a build: a Player gets its
+assets from the Table it joins, into `user://packs/`.
+
+## The editor
 
 ```
 pack folders ──► PackLibrary ──┐
@@ -10,7 +48,7 @@ name.hexmap ──► HexMap ────────┤        │
                   │            │
    Commands ──────┘  (undoable edits, History)
       ▲
-   Tools (mouse/keys in hex units) ◄── MapView ◄── Main (menus, dialogs, files)
+   Tools (mouse/keys in hex units) ◄── MapView ◄── EditorWindow (menus, dialogs, files)
 ```
 
 - **HexGrid** (`hexmap/core/hex_grid.gd`) is the only code that knows hex
@@ -68,14 +106,39 @@ door type/state, one-way side and Z range. "Window", "fence" and the rest
 are editor presets over those fields. Exporters therefore never guess:
 Foundry gets the full model, UVTT gets what it can hold.
 
+## Encounters: an overlay, driven by events
+
+An **encounter** (`.encounter`, JSON like `.hexmap`) *references* maps by id
+and never copies or edits them. What the DM changes at the table — a door
+opened, a light put out, a prop revealed, fog lifted, tokens — is an
+**overlay keyed by element id** on top of the base map. One map serves many
+encounters, and re-exporting a map never loses a session.
+
+Every change to an encounter is a **serializable event**
+(`{"t": "token.move", "id": "t_1", "to": [4, 2]}`) applied to an
+`EncounterState`. The same event log gives undo (inverse events), autosave
+(the log), replication (send it to players), replay, and headless tests. The
+Table is authoritative: players send *requests* for what they own, the
+Table validates, applies and rebroadcasts. `MapCanvas` takes the state as an
+optional input and a *viewpoint* — the GM sees everything; a player sees
+what `Lighting.visibility_polygon` says their tokens can, with fog for the
+rest. Editor and exports pass no state and are untouched.
+
+Networking, when it comes, is the Table hosting directly (LAN or a forwarded
+port; join by code or QR) over `WebSocketPeer` with JSON messages — the one
+transport that works on every platform including web. The protocol is
+client ↔ session, so a relay can be put in front of it later without
+changing clients. Tokens' art comes from packs (a `tokens` collection) plus
+a built-in generic set, and streams from the Table to players.
+
 ## What is not here on purpose
 
-Rules (movement cost, cover, damage) — maps are reused across systems.
-Tokens — an encounter is a separate document that references a map. Freeform
-blended terrain — per-cell tiles are hex-native and simple; the schema does
-not preclude adding a blend layer later. A 3D view — Z is stored on
-everything (cells, walls, props, lights, levels) and exported, but edited as
-numbers.
+Rules (movement cost, cover, damage) — maps are reused across systems, and
+tokens carry no stats for the same reason. Tokens in maps — they live in
+encounters. Freeform blended terrain — per-cell tiles are hex-native and
+simple; the schema does not preclude adding a blend layer later. A 3D view —
+Z is stored on everything (cells, walls, props, lights, levels) and
+exported, but edited as numbers.
 
 ## Rendering constraints
 

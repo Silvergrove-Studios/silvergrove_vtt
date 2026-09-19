@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://hexmap_main_scene"]
 
-[ext_resource type="Script" path="res://hexmap/main.gd" id="1"]
+[ext_resource type="Script" path="res://hexmap/shell/main.gd" id="1"]
 
 [node name="Main" type="Control"]
 layout_mode = 3

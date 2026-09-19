@@ -12,7 +12,8 @@ func _run() -> void:
 	if not out.is_absolute_path():
 		out = ProjectSettings.globalize_path("res://").path_join(out)
 	DirAccess.make_dir_recursive_absolute(out)
-	var main = load("res://hexmap/main.tscn").instantiate()
+	var main := EditorWindow.new()
+	main.app = App.new()
 	root.add_child(main)
 	await create_timer(0.4).timeout
 	main._open_path(ProjectSettings.globalize_path("res://examples/forest_road.hexmap"))

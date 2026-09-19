@@ -13,7 +13,8 @@ func _init() -> void:
 
 
 func _run(out: String) -> void:
-	var main = load("res://hexmap/main.tscn").instantiate()
+	var main := EditorWindow.new()
+	main.app = App.new()
 	root.add_child(main)
 	await create_timer(0.5).timeout
 	main._open_path(ProjectSettings.globalize_path("res://examples/forest_road.hexmap"))
@@ -38,7 +39,7 @@ func _run(out: String) -> void:
 	var ids: PackedStringArray = main.theme_ids()
 	main._on_menu(main.V_THEME_BASE + ids.find("forge"))
 	await create_timer(0.3).timeout
-	assert(main._prefs.theme == "forge", "theme menu sets the theme pref")
+	assert(main.app.theme_name == "forge", "theme menu sets the theme pref")
 	assert(main.theme_menu.is_item_checked(ids.find("forge")), "theme menu shows the choice")
 	await _shot(out.path_join("02b_theme_menu.png"))
 	main._set_theme("slate")

@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Hexmap launcher. Works on macOS and on Linux/WSL.
 #
-#   ./run.sh                          open the editor with a new map
+#   ./run.sh                          open the app on its home screen
 #   ./run.sh examples/forest_road.hexmap
-#                                     open a map
+#                                     open a map in the editor
+#   ./run.sh editor [map]             the editor (a new map, or this one)
+#   ./run.sh table [encounter]        the table: run an encounter
+#   ./run.sh player [address]         the player client
 #   ./run.sh export <map> <target> <out> [options]
 #                                     png | uvtt | foundry | tiled | pdf | bundle | all
 #                                     (opens a small window: exports render on the GPU)
-#   ./run.sh shot <map> <out.png>     screenshot of the editor with a map open
+#   ./run.sh shot <out.png> [map]     screenshot of the window (home, or the editor with a map)
 #   ./run.sh check                    load every script, report parse errors
 #   ./run.sh test                     run the unit tests (headless)
 #   ./run.sh examples                 regenerate examples/*.hexmap
@@ -178,14 +181,14 @@ main() {
 		-h|--help|help) usage; return 0 ;;
 	esac
 	case "$cmd" in
-		app|edit|editor|export|shot|check|test|examples|packs|sheet|godot|install|doctor) shift || true ;;
+		app|edit|godot-editor|editor|table|player|export|shot|check|test|examples|packs|sheet|godot|install|doctor) shift || true ;;
 		*) cmd="app" ;;
 	esac
 
 	find_godot
 	setup_graphics
 	case "$cmd" in
-		app|shot|export|check|test|examples|packs|sheet) refresh_class_cache ;;
+		app|editor|table|player|shot|export|check|test|examples|packs|sheet) refresh_class_cache ;;
 	esac
 
 	case "$cmd" in
@@ -204,12 +207,15 @@ main() {
 		app)
 			exec "$GODOT_BIN" --path "$PROJECT_DIR" ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"} -- "$@"
 			;;
-		edit|editor)
+		editor|table|player)
+			exec "$GODOT_BIN" --path "$PROJECT_DIR" ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"} -- "--$cmd" "$@"
+			;;
+		edit|godot-editor)
 			exec "$GODOT_BIN" --editor --path "$PROJECT_DIR" ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"}
 			;;
 		shot)
-			[[ $# -ge 2 ]] || die "usage: ./run.sh shot <map.hexmap> <out.png>"
-			exec "$GODOT_BIN" --path "$PROJECT_DIR" --resolution 1600x1000 ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"} -- "$1" --shot "$2"
+			[[ $# -ge 1 ]] || die "usage: ./run.sh shot <out.png> [map.hexmap]"
+			exec "$GODOT_BIN" --path "$PROJECT_DIR" --resolution 1600x1000 ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"} -- ${2:+"$2"} --shot "$1"
 			;;
 		export)
 			[[ $# -ge 3 ]] || die "usage: ./run.sh export <map.hexmap> <png|uvtt|foundry|tiled|pdf|bundle|all> <out> [options]"

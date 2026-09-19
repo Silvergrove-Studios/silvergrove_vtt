@@ -1,10 +1,20 @@
 # Hexmap
 
-A hex-grid encounter map editor for tabletop RPGs, built in Godot 4.7. Paint
-terrain by the hex, place props by the pixel, draw walls and doors, put down
-lights, then export to the virtual tabletops people actually use (Universal
-VTT, Foundry VTT, Tiled) or to a print-ready PDF with hexes at a real
-physical size.
+Hex-grid encounter maps for tabletop RPGs, built in Godot 4.7. One
+application, three modes:
+
+- **Editor** — paint terrain by the hex, place props by the pixel, draw
+  walls and doors, put down lights, then export to the virtual tabletops
+  people actually use (Universal VTT, Foundry VTT, Tiled) or to a
+  print-ready PDF with hexes at a real physical size.
+- **Table** — run an encounter on those maps: tokens, doors, lights, fog,
+  initiative. *(In progress.)*
+- **Player** — join a table and see the map from your tokens' eyes, on a
+  laptop, tablet or phone. *(Planned.)*
+
+The Editor and the Table are desktop tools (macOS, Windows). The Player is
+built to run everywhere, so the modules it shares with the others stay free
+of desktop assumptions; see `ARCHITECTURE.md`.
 
 It is a tool for people who make game systems, not a consumer product: the
 map format is plain JSON meant to live in git next to the adventure text,
@@ -21,8 +31,11 @@ in `$GODOT`, on `PATH`, in the usual macOS app locations — and if there
 isn't one, downloads the pinned build to `~/.cache/hexmap/godot`.
 
 ```sh
-./run.sh                                  new map
-./run.sh examples/ruined_chapel.hexmap    open a map
+./run.sh                                  home screen: pick a mode
+./run.sh examples/ruined_chapel.hexmap    open a map in the editor
+./run.sh editor                           the editor with a new map
+./run.sh table                            the table
+./run.sh player                           the player client
 ./run.sh export examples/forest_road.hexmap pdf out/forest.pdf hex_size_in=1 dpi=300
 ./run.sh export examples/forest_road.hexmap all out/forest   # one of everything
 ./run.sh test                             unit tests (headless)
@@ -113,9 +126,12 @@ the files in place and the manifests keep working.
 
 ## Developing
 
-Scripts live under `hexmap/` (`core/` model and geometry, `render/` drawing,
-`io/` file formats and exporters, `editor/` tools and panels), tools under
-`tools/`, tests under `tests/`. `./run.sh test` runs the unit tests headless;
+Scripts live under `hexmap/` (`shell/` app root and home screen, `core/`
+model and geometry, `render/` drawing, `io/` file formats and exporters,
+`editor/` the Editor, `table/` the Table, `player/` the Player, `ui/` theme
+and shared widgets), tools under `tools/`, tests under `tests/`. `./run.sh
+check` parses every script and fails if a portable module (`core/`,
+`render/`, `encounter/`, `net/`, `player/`) uses a desktop-only class. `./run.sh test` runs the unit tests headless;
 `./run.sh export … all` is the end-to-end smoke test for everything that
 renders; `godot --path . -s tools/ui_smoke.gd -- out/ui` screenshots the
 editor in several states.
