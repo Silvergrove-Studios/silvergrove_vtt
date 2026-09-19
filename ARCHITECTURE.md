@@ -23,7 +23,7 @@ table/      the Table: encounter panels and tools               desktop
 player/     the Player: touch-first client                      portable
 encounter/  Encounter, EncounterState, events, Vision, undo,    portable
             TurnSystem
-net/        Session host/client, protocol, asset transfer       portable   (later)
+net/        Session (what a Player talks to), LocalSession      portable
 render/     MapCanvas, MapRenderer, CanvasView                  portable
 core/       HexMap, HexGrid, LayerTree, Lighting, PackLibrary   portable
 io/         exporters and the PDF writer                        desktop
@@ -138,6 +138,19 @@ are untouched.
 mouse, trackpad and two-finger touch; the Editor's `MapView` and the
 Table's `TableView` add their context and hand a tool to it. Tools are
 duck-typed objects (`press`/`drag`/`release`/`move`/`key`/`draw_overlay`).
+
+## The Player and the Session
+
+The Player (`hexmap/player/`) never touches an `EncounterState` directly:
+it talks to a `Session` — the encounter as this player may see it, plus
+`request(event)`, which the authority answers with "" or a reason. Today
+the authority is `LocalSession`: an encounter file on this device, allowed
+requests applied to its own copy, reloaded when the DM saves. Networking
+is another `Session` behind the same interface; the Player UI does not
+change. `PlayerWindow` is the first portable window: join screen, player
+picker, then `CanvasView` with the player's viewpoint, one move tool, a
+bar of the player's tokens, and the turn summary — no docking, dialogs or
+menus, and nothing that needs a hover or a right-click.
 
 ## Turns and game systems
 

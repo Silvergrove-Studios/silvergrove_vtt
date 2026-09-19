@@ -29,8 +29,14 @@
   (discs or pack art, owner rings, carried lights), fog by viewpoint.
 - `CanvasView`: the shared pan/zoom canvas with two-finger touch; the
   editor's `MapView` is built on it.
-- `TurnSystem`: the interface game systems plug into; plugins will be data
-  with a sandboxed expression, not scripts.
+- `TurnSystem`: the interface game systems plug into. Rulesets will be
+  sandboxed Lua plugins that run only on the Table.
+- The Player: pick an encounter on this device and who you are, then the
+  shown scene through your tokens — fog, vision, hidden things absent —
+  with drag-to-move requests answered by the turn mode ("Not your turn")
+  and the view refreshed when the DM saves. Finger-first: no menus, no
+  dialogs, pinch and two-finger pan. `Session` / `LocalSession` are the
+  seam the network version drops into. `tools/player_smoke.gd`.
 - Example maps: doors now sit in a gap in the wall instead of on top of it,
   so opening one opens the room.
 

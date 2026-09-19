@@ -9,8 +9,10 @@ application, three modes:
   print-ready PDF with hexes at a real physical size.
 - **Table** — run an encounter on those maps: tokens, doors, lights, fog,
   turn order, and a look at the scene through each player's eyes.
-- **Player** — join a table and see the map from your tokens' eyes, on a
-  laptop, tablet or phone. *(Planned.)*
+- **Player** — see the map from your tokens' eyes and move them, on a
+  laptop, tablet or phone. Today it opens an encounter on the same device
+  (a second screen for the table, or the DM's preview); joining over the
+  network is next.
 
 The Editor and the Table are desktop tools (macOS, Windows). The Player is
 built to run everywhere, so the modules it shares with the others stay free
@@ -114,6 +116,16 @@ vision reveal it as they move. "See as" shows the scene the way a player
 will get it. Turns are **free**, **DM picks**, or **ordered** by a turn
 system; `docs/encounter-format.md` has the model, and nothing in it edits
 the map.
+
+## Using the player
+
+`./run.sh player examples/chapel_ambush.encounter`, or Player on the home
+screen. Pick who you are; you get the scene the table is showing, through
+your tokens: fog, their vision, nothing the DM has hidden. Drag a token of
+yours to move it — the table's turn mode decides whether that is allowed
+right now, and you are told if not. When the DM saves the encounter, your
+view updates. Everything is sized for a finger: pinch to zoom, two fingers
+to pan, tap a token button to find it.
 
 ## Files
 
