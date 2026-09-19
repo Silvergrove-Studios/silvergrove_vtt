@@ -150,13 +150,19 @@ requests.
 Ordering is where game rules enter, so it is pluggable and Hexmap ships
 only "as listed". `TurnSystem` is the internal interface (`build_order`,
 `next`, `previous`); a system keeps its own state in `turns.data`, which
-Hexmap stores and replicates without reading. **Plugins are data, not
-code**: a game system is a manifest (the token stats it needs, a sandboxed
-ordering expression evaluated with Godot's `Expression` against a
-whitelisted object) loaded by a built-in `TurnSystem` subclass — never a
-script dropped into a folder, which would hand it the engine. Only the
-Table runs a system; players receive the order and its `data.labels` as
-plain data and need nothing installed.
+Hexmap stores and replicates without reading.
+
+Whole rulesets — D&D, Vampire, whatever is being played — will be
+**plugins in sandboxed Lua** (embedded through a GDExtension; the plugin
+sees only the capabilities the host exposes: read state, emit events,
+register stat schemas, sheets, actions and hooks, roll dice — never files,
+network or the engine). Not GDScript, which would hand a plugin
+everything. A plugin runs only on the Table; everything it does lands in
+the encounter as events and data (`ext.<plugin_id>` on tokens and the
+encounter, `turns.data` for a turn system), and its UI is declarative
+schemas, so a Player client renders it without running any of it.
+`TurnSystem` is one thing a ruleset registers. None of this exists yet; it
+is the shape Player mode and networking are built to leave room for.
 
 The JSON conventions both document types share — stable key order, ids,
 merge-with-null-removes — live in `JsonDoc`.
