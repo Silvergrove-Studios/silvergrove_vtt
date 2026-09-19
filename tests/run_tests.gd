@@ -1058,6 +1058,14 @@ func _chapel() -> HexMap:
 	return HexMap.load_file(ProjectSettings.globalize_path("res://examples/ruined_chapel.hexmap"))
 
 
+## Example files may have an autosave sidecar from someone's session; the
+## windows would offer to restore it instead of opening the example.
+func _example(file: String) -> String:
+	var p := ProjectSettings.globalize_path("res://examples").path_join(file)
+	DirAccess.remove_absolute(p + ".autosave")
+	return p
+
+
 ## A small encounter on the chapel: one scene, a party token at the west
 ## door, one goblin. Returns [state, scene_id, party_token_id, goblin_id].
 func _small_encounter() -> Array:
@@ -1818,7 +1826,7 @@ func test_table_window() -> void:
 	for n in LayoutStore.TABLE_PANELS:
 		check(names.has(n), "table layout holds the %s panel: %s" % [n, names])
 	check(win.scene_select.disabled and win.ctx.scene_id == "", "a new encounter has no scene yet")
-	win._open_path(ProjectSettings.globalize_path("res://examples/chapel_ambush.encounter"))
+	win._open_path(_example("chapel_ambush.encounter"))
 	var ctx := win.ctx
 	check(ctx.encounter().name == "Chapel Ambush" and ctx.state.maps.size() == 1, "opens the example and resolves its map")
 	check(win.scene_select.item_count == 2 and win.scene_select.get_item_text(win.scene_select.selected).begins_with("●"), "scene dropdown lists both, active marked")
@@ -2197,28 +2205,31 @@ func test_protocol() -> void:
 
 
 func test_discovery_loopback() -> void:
-	# Best effort: multicast on this machine's loopback. Skipped, not
-	# failed, where the OS or CI runner does not route it.
-	var browser := Discovery.Browser.new()
-	if browser.start() != OK:
-		print("  (skipped: cannot bind the discovery port)")
-		return
+	check(Discovery.is_query(Protocol.encode(Discovery.query())) and not Discovery.is_query("{}") and not Discovery.is_query(Protocol.encode(Protocol.announcement("x", 1, ""))), "queries are told from announcements")
+	var targets := Discovery.shout_targets()
+	check(targets.has(Protocol.DISCOVERY_GROUP) and targets.has("255.255.255.255"), "shouting to the group and the broadcast")
+	for t in targets:
+		check(str(t).is_valid_ip_address(), "target %s is an address" % t)
+	# The ask-and-answer path: a browser asks from an ephemeral socket, the
+	# announcer answers it by unicast. This is what phones rely on.
 	var ann := Discovery.Announcer.new()
-	check(ann.start("Loopback table", 47777) == OK, "announcer starts")
+	check(ann.start("Loopback table", 47777) == OK and ann._listening, "announcer starts and listens for queries")
+	var browser := Discovery.Browser.new()
+	check(browser.start() == OK, "browser starts")
 	var heard := false
+	var answered := 0
 	var t0 := Time.get_ticks_msec()
-	while Time.get_ticks_msec() - t0 < 1500 and not heard:
-		ann.announce()
-		OS.delay_msec(50)
-		browser.poll(0.05)
+	while Time.get_ticks_msec() - t0 < 2000 and not heard:
+		browser.ask()
+		OS.delay_msec(30)
+		answered += ann.answer_queries()
+		OS.delay_msec(30)
+		browser.poll(0.06)
 		for t in browser.list():
 			if str(t.name) == "Loopback table":
 				heard = true
-	if heard:
-		check(int(browser.list()[0].port) == 47777, "the announced port is what the browser lists")
-		print("  discovery over loopback works")
-	else:
-		print("  (skipped: no multicast on loopback here)")
+	check(answered > 0, "the announcer answered %d queries" % answered)
+	check(heard and int(browser.list()[0].port) == 47777, "the browser lists the table from the unicast answer")
 	ann.stop()
 	browser.stop()
 
@@ -2331,7 +2342,7 @@ func test_table_hosts_player_joins() -> void:
 	var table := TableWindow.new()
 	table.app = app
 	root.add_child(table)
-	table._open_path(ProjectSettings.globalize_path("res://examples/chapel_ambush.encounter"))
+	table._open_path(_example("chapel_ambush.encounter"))
 	table.ctx.commands.set_turn_mode("free")
 	table._set_hosting(true)
 	check(table.host != null and table.host.is_running() and table.host_button.button_pressed, "the table hosts")
@@ -2349,12 +2360,18 @@ func test_table_hosts_player_joins() -> void:
 				return true
 			OS.delay_msec(10)
 		return false
-	# Discovery (where loopback multicast works) or the typed address.
-	var found: bool = player._browsing and pump.call(func() -> bool: return player._tables.item_count > 0, 2500)
+	# Discovery, or the typed address. Other tables may be on the network
+	# (someone's real one), so look for ours by name and port.
+	var ours := func() -> int:
+		for i in player._tables.item_count:
+			var t: Dictionary = player._tables.get_item_metadata(i)
+			if int(t.port) == table.host.port and str(t.name) == "Chapel Ambush":
+				return i
+		return -1
+	var found: bool = player._browsing and pump.call(func() -> bool: return ours.call() >= 0, 2500)
 	if found:
-		print("  found the table by discovery: %s" % player._tables.get_item_text(0))
-		check(str(player._tables.get_item_text(0)).begins_with("Chapel Ambush"), "discovered table is named")
-		player._tables.item_selected.emit(0)
+		print("  found the table by discovery: %s" % player._tables.get_item_text(ours.call()))
+		player._tables.item_selected.emit(ours.call())
 	else:
 		print("  (no discovery on loopback here; using the address)")
 		player._address.text = "127.0.0.1:%d" % table.host.port
