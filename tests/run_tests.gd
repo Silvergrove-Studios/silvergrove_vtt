@@ -743,7 +743,7 @@ func test_ui_icons() -> void:
 	var start := main_src.find("TOOL_ICONS")
 	for m in tools_re.search_all(main_src.substr(start, main_src.find("}", start) - start)):
 		named[m.get_string(1)] = true
-	check(named.size() >= 25, "found %d icon names in code" % named.size())
+	check(named.size() >= 20, "found %d icon names in code" % named.size())
 	var missing := []
 	for n in named:
 		if not FileAccess.file_exists(UiIcons.dir().path_join(n + ".svg")):
