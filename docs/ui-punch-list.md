@@ -172,8 +172,8 @@ What the samples showed:
   arrangement is saved to `user://layout.tres` (`LayoutStore`), repaired on
   load if a panel is missing, and reset from the View menu. One upstream bug
   patched locally (see THIRD_PARTY.md).
-- **Theme: ThemeBuilder tokens**, four palettes, chosen from a toolbar
-  dropdown (also View → Theme) and remembered per user. ThemeGen and Themey
+- **Theme: ThemeBuilder tokens**, four palettes, chosen under View → Theme
+  and remembered per user. ThemeGen and Themey
   samples removed.
 - **Icons: Lucide SVGs** loaded directly by `UiIcons`.
 - Tests: every variant builds with the expected variations and styles and

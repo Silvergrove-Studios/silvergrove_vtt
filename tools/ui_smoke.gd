@@ -34,13 +34,13 @@ func _run(out: String) -> void:
 	main.view.camera.position = Vector2(prop.pos[0], prop.pos[1]) * main.view.canvas.ppx
 	await _shot(out.path_join("02_selected_prop.png"))
 
-	# Theme dropdown drives the theme and persists it.
+	# View → Theme drives the theme and persists it.
 	var ids: PackedStringArray = main.theme_ids()
-	main.theme_select.select(ids.find("forge"))
-	main.theme_select.item_selected.emit(ids.find("forge"))
+	main._on_menu(main.V_THEME_BASE + ids.find("forge"))
 	await create_timer(0.3).timeout
-	assert(main._prefs.theme == "forge", "dropdown sets the theme pref")
-	await _shot(out.path_join("02b_theme_dropdown.png"))
+	assert(main._prefs.theme == "forge", "theme menu sets the theme pref")
+	assert(main.theme_menu.is_item_checked(ids.find("forge")), "theme menu shows the choice")
+	await _shot(out.path_join("02b_theme_menu.png"))
 	main._set_theme("slate")
 	# Layout reset writes the layout file.
 	main._reset_layout()

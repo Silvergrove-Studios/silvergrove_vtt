@@ -22,7 +22,6 @@ var _prefs := {"pack_dirs": [], "theme": "slate"}
 var _ui_root: Control
 var dock: DockableContainer
 var _panes: Array = []
-var theme_select: OptionButton
 var _layout_save := Timer.new()
 var theme_menu: PopupMenu
 const TOOL_ICONS := {"select": "mouse-pointer-2", "terrain": "paintbrush", "fill": "paint-bucket", "prop": "trees",
@@ -363,14 +362,6 @@ func _build_toolbar() -> HBoxContainer:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(spacer)
-	theme_select = OptionButton.new()
-	theme_select.tooltip_text = "Theme"
-	for n in theme_ids():
-		theme_select.add_item(str(ThemeBuilder.tokens(n).label))
-	theme_select.select(theme_ids().find(str(_prefs.theme)))
-	theme_select.item_selected.connect(func(i: int) -> void: _set_theme(theme_ids()[i]))
-	bar.add_child(theme_select)
-	bar.add_child(VSeparator.new())
 	var l := Label.new()
 	l.text = "Level"
 	bar.add_child(l)
@@ -411,8 +402,6 @@ func _set_theme(name: String) -> void:
 	for n in theme_ids():
 		theme_menu.set_item_checked(i, n == name)
 		i += 1
-	if theme_select != null:
-		theme_select.select(theme_ids().find(name))
 	_restyle()
 
 

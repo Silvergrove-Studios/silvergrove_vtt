@@ -61,8 +61,8 @@ Picking something in the left palette switches to the matching tool.
   another panel to group the two as tabs, or onto a panel's edge to split.
   The arrangement is remembered per user; View → Reset panel layout restores
   the default (Palette over Layers, canvas, Inspector over View options).
-- **Theme** is the dropdown at the right of the toolbar (also View → Theme):
-  Slate, Forge, Studio or Parchment, remembered per user.
+- **Theme** is under View → Theme: Slate, Forge, Studio or Parchment,
+  remembered per user.
 - **Layers** lists every element on the level, Photoshop style:
   folders, eye and lock toggles, drag to reorder or to move into a folder —
   which never moves anything on the canvas. Top of the list is drawn on
