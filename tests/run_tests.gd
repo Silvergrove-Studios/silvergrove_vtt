@@ -2415,3 +2415,36 @@ func test_table_hosts_player_joins() -> void:
 	table.queue_free()
 	await process_frame
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_net.json"))
+
+
+func test_responsive_layout() -> void:
+	# UI scale: points on a phone, but never fewer than 360 points across.
+	check(App.ui_scale(160, Vector2(1920, 1080)) == 1.0, "desktop density: no scaling")
+	check(near(App.ui_scale(440, Vector2(1080, 2400)), 2.75, 0.01), "a 440 dpi phone scales 2.75× (1080 px → 393 pt)")
+	check(near(App.ui_scale(640, Vector2(720, 1600)), 2.0, 0.01), "a small dense screen is capped so 360 pt fit (720 / 2)")
+	check(App.ui_scale(1000, Vector2(1440, 3200)) == 4.0, "scale is capped at 4")
+	check(App.safe_insets(2.0) == {"left": 0.0, "top": 0.0, "right": 0.0, "bottom": 0.0} or OS.has_feature("mobile"), "no insets on a desktop")
+	# The Player's columns fit a narrow window.
+	var app := App.new("user://test_prefs_resp.json")
+	var win := PlayerWindow.new()
+	win.app = app
+	root.add_child(win)
+	check((win._columns[0] as Control).custom_minimum_size.x > 0, "columns are fitted once built, without waiting for a resize")
+	win.size = Vector2(360, 640)
+	win._fit()
+	for c in win._columns:
+		check((c as Control).custom_minimum_size.x <= 360 - 32, "player column fits a 360 pt window (%d)" % int((c as Control).custom_minimum_size.x))
+	win.size = Vector2(1200, 800)
+	win._fit()
+	check((win._columns[0] as Control).custom_minimum_size.x == 440, "and is 440 when there is room")
+	win._stop_browsing()
+	win.queue_free()
+	var home := HomeScreen.new()
+	home.app = app
+	root.add_child(home)
+	home.size = Vector2(320, 600)
+	home._fit()
+	check(home._column.custom_minimum_size.x <= 320 - 32, "home column fits a 320 pt window")
+	home.queue_free()
+	await process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_resp.json"))

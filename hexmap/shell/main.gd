@@ -24,7 +24,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	if OS.has_feature("mobile"):
 		# Points, not pixels: a 13 px font is unreadable at 3× density.
-		get_window().content_scale_factor = clampf(DisplayServer.screen_get_dpi() / 160.0, 1.0, 4.0)
+		get_window().content_scale_factor = App.ui_scale(DisplayServer.screen_get_dpi(), Vector2(DisplayServer.screen_get_size()))
 	var args := OS.get_cmdline_user_args()
 	var ti := args.find("--theme")
 	if ti >= 0 and ti + 1 < args.size():

@@ -35,6 +35,8 @@ var _status: Label
 var _token_bar: HBoxContainer
 var _pending_path := ""
 var _status_timer := 0.0
+var _columns: Array = []
+var _safe: MarginContainer
 
 
 func _ready() -> void:
@@ -89,16 +91,35 @@ func _build() -> void:
 	var bg := PanelContainer.new()
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	# Keep the UI out of the notch and the gesture bar.
+	_safe = MarginContainer.new()
+	bg.add_child(_safe)
 	_root = VBoxContainer.new()
 	_root.add_theme_constant_override("separation", 0)
-	bg.add_child(_root)
+	_safe.add_child(_root)
 	_join = _build_join()
 	_pick = _build_pick()
 	_play = _build_play()
 	for s in [_join, _pick, _play]:
 		s.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		_root.add_child(s)
+	resized.connect(_fit)
+	_fit()
 	_restyle()
+
+
+## Columns are 440 wide when there is room, the window minus a gutter when
+## there is not; margins follow the safe area.
+func _fit() -> void:
+	var insets := App.safe_insets(get_window().content_scale_factor if is_inside_tree() else 1.0)
+	if _safe != null:
+		_safe.add_theme_constant_override("margin_left", int(insets.left))
+		_safe.add_theme_constant_override("margin_top", int(insets.top))
+		_safe.add_theme_constant_override("margin_right", int(insets.right))
+		_safe.add_theme_constant_override("margin_bottom", int(insets.bottom))
+	var avail: float = size.x - float(insets.left) - float(insets.right) - 32.0
+	for c in _columns:
+		(c as Control).custom_minimum_size.x = minf(440.0, maxf(200.0, avail))
 
 
 func _big(b: Button, text := "", icon := "") -> Button:
@@ -113,7 +134,7 @@ func _big(b: Button, text := "", icon := "") -> Button:
 func _build_join() -> Control:
 	var center := CenterContainer.new()
 	var column := VBoxContainer.new()
-	column.custom_minimum_size.x = 440
+	_columns.append(column)
 	column.add_theme_constant_override("separation", 12)
 	center.add_child(column)
 	var title := Label.new()
@@ -129,7 +150,7 @@ func _build_join() -> Control:
 	_tables_label.theme_type_variation = "DimLabel"
 	column.add_child(_tables_label)
 	_tables = ItemList.new()
-	_tables.custom_minimum_size = Vector2(0, 120)
+	_tables.custom_minimum_size = Vector2(0, 100)
 	_tables.item_selected.connect(func(i: int) -> void:
 		var t: Dictionary = _tables.get_item_metadata(i)
 		_connect_to(str(t.address), int(t.port)))
@@ -152,7 +173,7 @@ func _build_join() -> Control:
 	h2.theme_type_variation = "DimLabel"
 	column.add_child(h2)
 	_files = ItemList.new()
-	_files.custom_minimum_size = Vector2(0, 220)
+	_files.custom_minimum_size = Vector2(0, 160)
 	_files.fixed_icon_size = Vector2i(0, 0)
 	_files.item_selected.connect(func(i: int) -> void: _choose_file(str(_files.get_item_metadata(i))))
 	column.add_child(_files)
@@ -170,7 +191,7 @@ func _build_join() -> Control:
 func _build_pick() -> Control:
 	var center := CenterContainer.new()
 	var column := VBoxContainer.new()
-	column.custom_minimum_size.x = 440
+	_columns.append(column)
 	column.add_theme_constant_override("separation", 12)
 	center.add_child(column)
 	_pick_title = Label.new()
@@ -205,8 +226,14 @@ func _build_play() -> Control:
 	_title.theme_type_variation = "HeaderLabel"
 	_title.clip_text = true
 	top.add_child(_title)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_stretch_ratio = 0.6
 	_token_bar = HBoxContainer.new()
-	top.add_child(_token_bar)
+	scroll.add_child(_token_bar)
+	top.add_child(scroll)
 	var fit := _big(Button.new(), "", "maximize")
 	fit.tooltip_text = "Fit the map"
 	fit.theme_type_variation = "ToolButton"
@@ -277,8 +304,11 @@ func encounter_files() -> Array:
 	for p in app.recent():
 		if str(p).ends_with(".encounter") and not out.has(p):
 			out.append(p)
+	var names := {}
+	for p in out:
+		names[str(p).get_file()] = true
 	for p in App.bundled(".encounter"):
-		if not out.has(p):
+		if not names.has(str(p).get_file()):
 			out.append(p)
 	return out
 

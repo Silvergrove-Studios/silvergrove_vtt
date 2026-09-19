@@ -11,6 +11,7 @@ const MODE_ICONS := {"editor": "pencil", "table": "hexagon", "player": "eye"}
 
 var app: App
 var _recent_box: VBoxContainer
+var _column: VBoxContainer
 
 
 func _ready() -> void:
@@ -28,9 +29,11 @@ func _build() -> void:
 	var center := CenterContainer.new()
 	bg.add_child(center)
 	var column := VBoxContainer.new()
-	column.custom_minimum_size.x = 420
+	_column = column
 	column.add_theme_constant_override("separation", 16)
 	center.add_child(column)
+	resized.connect(_fit)
+	_fit()
 
 	var title := Label.new()
 	title.text = App.NAME
@@ -59,8 +62,11 @@ func _build() -> void:
 		_recent_box = _file_list(column, "Recent", rec)
 	# The examples that ship inside the app, for a fresh install.
 	var examples := []
+	var names := {}
+	for p in rec:
+		names[str(p).get_file()] = true
 	for p in App.bundled(".encounter") + App.bundled(".hexmap"):
-		if not rec.has(p):
+		if not names.has(str(p).get_file()):
 			examples.append(p)
 	if not examples.is_empty():
 		_file_list(column, "Examples", examples)
@@ -86,6 +92,13 @@ func _file_list(column: VBoxContainer, title: String, paths: Array) -> VBoxConta
 		b.pressed.connect(func() -> void: open_mode.emit(mode, str(p)))
 		box.add_child(b)
 	return box
+
+
+## The column is 420 wide when there is room, and the window minus a
+## gutter when there is not (a phone in portrait).
+func _fit() -> void:
+	if _column != null:
+		_column.custom_minimum_size.x = minf(420.0, maxf(200.0, size.x - 32.0))
 
 
 func _restyle() -> void:

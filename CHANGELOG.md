@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The Player fits phones: columns shrink to the screen, the UI scale never
+  leaves fewer than 360 points across, the notch and gesture bar are kept
+  clear, and the token bar scrolls instead of pushing buttons off the edge.
+
 ## 1.1.0 — 2026-09-19
 
 Hexmap grows from a map editor into a table: run encounters on your maps,

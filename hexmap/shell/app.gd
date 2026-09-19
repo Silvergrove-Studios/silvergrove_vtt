@@ -59,6 +59,40 @@ static func mode_blurb(mode: String) -> String:
 	return ""
 
 
+# ------------------------------------------------------------------ screen --
+
+## How much to scale the UI on a phone or tablet: points, not pixels, but
+## never so much that fewer than MIN_LOGICAL_WIDTH points fit across the
+## narrower side — a column that needs 360 must still fit in portrait.
+const MIN_LOGICAL_WIDTH := 360.0
+
+static func ui_scale(dpi: float, screen_px: Vector2) -> float:
+	var f := clampf(dpi / 160.0, 1.0, 4.0)
+	var narrow := minf(screen_px.x, screen_px.y)
+	if narrow > 0.0 and narrow / f < MIN_LOGICAL_WIDTH:
+		f = maxf(1.0, narrow / MIN_LOGICAL_WIDTH)
+	return f
+
+
+## Safe-area insets (notch, rounded corners, gesture bar) in logical
+## points for the given scale; zero on desktops.
+static func safe_insets(scale: float) -> Dictionary:
+	var out := {"left": 0.0, "top": 0.0, "right": 0.0, "bottom": 0.0}
+	if not OS.has_feature("mobile"):
+		return out
+	var screen := DisplayServer.screen_get_size()
+	var safe := DisplayServer.get_display_safe_area()
+	if safe.size == Vector2i.ZERO or screen == Vector2i.ZERO:
+		return out
+	out.left = safe.position.x / scale
+	out.top = safe.position.y / scale
+	out.right = (screen.x - safe.end.x) / scale
+	out.bottom = (screen.y - safe.end.y) / scale
+	for k in out:
+		out[k] = maxf(0.0, float(out[k]))
+	return out
+
+
 # ------------------------------------------------------------------- paths --
 
 ## A document path from the command line or the home screen, made absolute.
