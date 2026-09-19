@@ -35,7 +35,7 @@ var _notes := DrawLayer.new()
 ## Tools draw selection boxes and previews here.
 var overlay := DrawLayer.new()
 
-static var _radial: GradientTexture2D
+var _radial: GradientTexture2D
 
 ## Per-refresh derived state from the layer tree.
 var _order: Dictionary = {}       # ref -> draw index
@@ -44,14 +44,18 @@ var _locked: Dictionary = {}      # ref -> effective lock
 var _segments: Array = []         # light-blocking wall segments (hex units)
 var _poly_cache: Dictionary = {}  # light key -> PackedVector2Array
 var _segments_key := ""
-## Meshes handed to draw_mesh must outlive the frame; these hold them until
-## the layer that drew them redraws.
-var _mesh_keep: Dictionary = {}   # layer instance id -> Array[ArrayMesh]
+## Meshes handed to draw_mesh must stay alive until the renderer has consumed
+## the draw list that references them. Each layer keeps the meshes from its
+## current and previous draw; older ones are released when it draws again.
+var _mesh_keep: Dictionary = {}   # layer instance id -> {"cur": [], "prev": []}
 
 
 class DrawLayer extends Node2D:
 	var fn: Callable
+	var canvas: MapCanvas
 	func _draw() -> void:
+		if canvas != null:
+			canvas._begin_layer_draw(self)
 		if fn.is_valid():
 			fn.call(self)
 
@@ -70,6 +74,7 @@ func _init() -> void:
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_lights.material = add
 	for l in [_terrain, _props, _dark, _lights, _grid, _walls, _notes, overlay]:
+		l.canvas = self
 		add_child(l)
 	if _radial == null:
 		_radial = GradientTexture2D.new()
@@ -267,7 +272,6 @@ func _draw_lights(c: Node2D) -> void:
 		return
 	if _order.is_empty():
 		_rebuild_state()
-	_mesh_keep[c.get_instance_id()] = []
 	for l in level().get("lights", []):
 		if not is_shown("lights", l):
 			continue
@@ -315,13 +319,22 @@ func _draw_fan(c: Node2D, origin: Vector2, radius: float, poly: PackedVector2Arr
 	arrays[Mesh.ARRAY_VERTEX] = f.vertices
 	arrays[Mesh.ARRAY_TEX_UV] = f.uvs
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	if not _mesh_keep.has(c.get_instance_id()):
-		_mesh_keep[c.get_instance_id()] = []
-	var keep: Array = _mesh_keep[c.get_instance_id()]
-	if c == overlay and keep.size() > 8:
-		keep.clear()   # the overlay redraws constantly; keep only the recent ones
-	keep.append(mesh)
+	_begin_layer_draw(c, false)
+	(_mesh_keep[c.get_instance_id()].cur as Array).append(mesh)
 	c.draw_mesh(mesh, _radial, Transform2D.IDENTITY, color)
+
+
+## Called at the start of every layer draw: the meshes of the draw before
+## last are no longer referenced by any draw list and can go.
+func _begin_layer_draw(c: Node2D, rotate := true) -> void:
+	var id := c.get_instance_id()
+	if not _mesh_keep.has(id):
+		_mesh_keep[id] = {"cur": [], "prev": []}
+		return
+	if rotate:
+		var k: Dictionary = _mesh_keep[id]
+		k.prev = k.cur
+		k.cur = []
 
 
 ## Darkness preview: a tinted sheet with lights punched out. Cheap and

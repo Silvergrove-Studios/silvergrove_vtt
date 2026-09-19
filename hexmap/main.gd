@@ -152,6 +152,9 @@ func _build_ui() -> void:
 func _build_menus() -> MenuBar:
 	var bar := MenuBar.new()
 	bar.flat = true
+	# Keep the menus in the window. On macOS Godot would otherwise move them
+	# into the system menu bar, where nobody looks for a tool's File menu.
+	bar.prefer_global_menu = false
 	var file := PopupMenu.new()
 	file.name = "File"
 	_item(file, "New…", M_NEW, KEY_N, true)
@@ -246,6 +249,15 @@ func _check(menu: PopupMenu, label: String, id: int, checked: bool, key := KEY_N
 func _build_toolbar() -> HBoxContainer:
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 2)
+	for entry in [["New", M_NEW, "New map (Ctrl/Cmd+N)"], ["Open", M_OPEN, "Open a map (Ctrl/Cmd+O)"], ["Save", M_SAVE, "Save (Ctrl/Cmd+S)"]]:
+		var fb := Button.new()
+		fb.text = entry[0]
+		fb.tooltip_text = entry[2]
+		fb.flat = true
+		fb.focus_mode = Control.FOCUS_NONE
+		fb.pressed.connect(_on_menu.bind(entry[1]))
+		bar.add_child(fb)
+	bar.add_child(VSeparator.new())
 	var group := ButtonGroup.new()
 	for t in EditorTools.all_tools():
 		var b := Button.new()
@@ -635,6 +647,18 @@ func _request_quit() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_request_quit()
+
+
+## Break the reference cycles (history commands capture the Commands object,
+## tools hold the context) so nothing is reported leaked at exit.
+func _exit_tree() -> void:
+	_autosave.stop()
+	if ctx.history != null:
+		ctx.history.clear()
+	if view != null:
+		view.set_tool(null)
+	ctx.commands = null
+	ctx.canvas = null
 
 
 # ==================================================================== exports ==

@@ -96,7 +96,7 @@ func _init(p_ctx: EditorContext) -> void:
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(hint)
 	ctx.selection_changed.connect(_sync_selection)
-	ctx.level_changed.connect(rebuild)
+	ctx.level_changed.connect(request_rebuild)
 
 
 func _button(text: String, tip: String, fn: Callable) -> Button:
@@ -108,16 +108,29 @@ func _button(text: String, tip: String, fn: Callable) -> Button:
 	return b
 
 
+var _rebuild_pending := false
+
 func bind_map() -> void:
 	ctx.map.changed.connect(func(what: String) -> void:
 		if what in ["tree", "props", "walls", "lights", "notes", "levels"]:
-			rebuild())
+			request_rebuild())
 	rebuild()
+
+
+## Rebuilding a Tree from inside one of its own signals (a checkbox toggle,
+## a rename) is not allowed, and one edit often fires several changes, so
+## rebuilds are coalesced and run after the current frame's input.
+func request_rebuild() -> void:
+	if _rebuild_pending:
+		return
+	_rebuild_pending = true
+	rebuild.call_deferred()
 
 
 # --------------------------------------------------------------------- build --
 
 func rebuild() -> void:
+	_rebuild_pending = false
 	if ctx.map == null:
 		return
 	_syncing = true
@@ -193,7 +206,7 @@ func _items_name(key: String) -> String:
 	return key
 
 
-static var _folder_tex: Texture2D
+var _folder_tex: Texture2D
 func _folder_icon() -> Texture2D:
 	if _folder_tex == null:
 		var img := Image.create(18, 14, false, Image.FORMAT_RGBA8)
@@ -341,8 +354,16 @@ func _new_folder() -> void:
 			parent = anc[-1] if not anc.is_empty() else ""
 			index = LayerTree.locate(ctx.level().tree, keys[0])[1] + 1
 	var f := ctx.commands.tree_add_folder(ctx.level_index, "New folder", parent, index)
-	rebuild.call_deferred()
-	_edit_name.call_deferred(f.id)
+	_after_rebuild(func() -> void: _edit_name(f.id))
+
+
+## Run something once the pending rebuild has happened.
+func _after_rebuild(fn: Callable) -> void:
+	request_rebuild()
+	(func() -> void:
+		if _rebuild_pending:
+			rebuild()
+		fn.call()).call_deferred()
 
 
 func _edit_name(key: String) -> void:
@@ -364,8 +385,7 @@ func _group_selection() -> void:
 	var f := ctx.commands.tree_add_folder(ctx.level_index, "Group", parent, index)
 	ctx.commands.tree_move_many(ctx.level_index, keys, f.id, -1)
 	ctx.history.end_group("Group layers")
-	rebuild.call_deferred()
-	_edit_name.call_deferred(f.id)
+	_after_rebuild(func() -> void: _edit_name(f.id))
 
 
 func _delete_selected() -> void:
