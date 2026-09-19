@@ -14,6 +14,9 @@ var history: History
 var commands: Commands
 var canvas: MapCanvas
 var level_index := 0
+## View zoom (screen px per canvas px), kept current by MapView so tools can
+## size handles in screen pixels.
+var zoom := 1.0
 
 ## [{collection: "props"|"walls"|"lights"|"notes"|"terrain", id | key}]
 var selection: Array = []

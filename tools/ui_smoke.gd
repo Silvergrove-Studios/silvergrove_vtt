@@ -47,8 +47,13 @@ func _run(out: String) -> void:
 	await create_timer(2.5).timeout
 	assert(FileAccess.file_exists(ProjectSettings.globalize_path("user://layout.tres")), "layout persisted")
 
-	# Props palette + prop tool ghost.
-	main.palette.current_tab = 1
+	# Palette search across tabs, then the Props tab and the prop tool ghost.
+	main.palette.search.text = "torch"
+	main.palette.search.text_changed.emit("torch")
+	await _shot(out.path_join("02c_palette_search.png"))
+	main.palette.search.text = ""
+	main.palette.search.text_changed.emit("")
+	main.palette.tabs.current_tab = 1
 	ctx.prop_ref = "woodland:oak_large"
 	main._select_tool("prop")
 	await _shot(out.path_join("03_prop_tool.png"))

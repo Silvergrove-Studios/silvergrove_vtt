@@ -47,6 +47,7 @@ class Tool extends RefCounted:
 	func drag(_p: Vector2, _button: int, _mods: Dictionary) -> void: pass
 	func release(_p: Vector2, _button: int, _mods: Dictionary) -> void: pass
 	func move(_p: Vector2) -> void: ctx.canvas.overlay.queue_redraw()
+	func cursor() -> Control.CursorShape: return Control.CURSOR_CROSS
 	func double_click(_p: Vector2) -> bool: return false
 	func key(_event: InputEventKey) -> bool: return false
 	func draw_overlay(_c: Node2D) -> void: pass
@@ -124,19 +125,120 @@ class Tool extends RefCounted:
 # =============================================================================
 
 class SelectTool extends Tool:
-	var _dragging := false
-	var _drag_start := Vector2.ZERO
+	## What the mouse is doing: "" | move | box | wall_point | rotate | scale | radius
+	var _mode := ""
 	var _last := Vector2.ZERO
-	var _moved_total := Vector2.ZERO
 	var _wall_point := -1
 	var _wall_id := ""
-	var _box := false
 	var _box_start := Vector2.ZERO
 	var _box_end := Vector2.ZERO
+	## Gizmo drag state.
+	var _center := Vector2.ZERO
+	var _start_angle := 0.0
+	var _start_rot := 0.0
+	var _start_dist := 1.0
+	var _start_scale := 1.0
+	var _radius_key := ""
+	## Hover feedback.
+	var _hover: Dictionary = {}
+	var _hover_handle := ""
+
+	## Handle size in hex units for a constant on-screen size.
+	func handle_hex(px := 7.0) -> float:
+		return px / maxf(1e-6, ctx.canvas.ppx * ctx.zoom)
+
+	## Gizmo handles for the single selected prop or light: name -> canvas pos.
+	## Props: four scale corners (tl, tr, br, bl) and "rotate" above the top
+	## edge. Lights: "dim" and "bright" on their rings.
+	func handles() -> Dictionary:
+		var out := {}
+		if ctx.selection.size() != 1:
+			return out
+		var sel: Dictionary = ctx.selection[0]
+		var obj := ctx.selected_object()
+		if obj.is_empty():
+			return out
+		var ppx := ctx.canvas.ppx
+		match sel.collection:
+			"props":
+				var def := ctx.packs.prop(str(obj.get("asset", "")))
+				var r := ctx.canvas.prop_rect(obj, def)
+				var pos := Vector2(obj.pos[0], obj.pos[1])
+				var ang := deg_to_rad(float(obj.get("rot", 0.0)))
+				var rot := func(px_pt: Vector2) -> Vector2:
+					return pos + ((px_pt / ppx) - pos).rotated(ang)
+				out["tl"] = rot.call(r.position)
+				out["tr"] = rot.call(Vector2(r.end.x, r.position.y))
+				out["br"] = rot.call(r.end)
+				out["bl"] = rot.call(Vector2(r.position.x, r.end.y))
+				var top_mid: Vector2 = rot.call(Vector2(r.get_center().x, r.position.y))
+				var center_pt: Vector2 = rot.call(r.get_center())
+				var up: Vector2 = (top_mid - center_pt).normalized() if r.size.y > 0.0 else Vector2.UP
+				out["rotate"] = top_mid + up * handle_hex(28.0)
+			"lights":
+				var pos := Vector2(obj.pos[0], obj.pos[1])
+				var dim := float(obj.get("dim", 0.0))
+				var bright := float(obj.get("bright", 0.0))
+				if dim > 0.0:
+					out["dim"] = pos + Vector2(dim, 0.0)
+				if bright > 0.0:
+					out["bright"] = pos + Vector2(bright, 0.0).rotated(-PI / 4.0)
+		return out
+
+	func handle_at(p: Vector2) -> String:
+		var best := ""
+		var best_d := handle_hex(11.0)
+		for k in handles():
+			var d: float = (handles()[k] as Vector2).distance_to(p)
+			if d < best_d:
+				best_d = d
+				best = k
+		return best
+
+	func cursor() -> Control.CursorShape:
+		match _mode:
+			"move": return Control.CURSOR_MOVE
+			"rotate": return Control.CURSOR_CROSS
+			"scale": return Control.CURSOR_BDIAGSIZE
+			"radius": return Control.CURSOR_HSIZE
+			"box": return Control.CURSOR_CROSS
+		match _hover_handle:
+			"rotate": return Control.CURSOR_POINTING_HAND
+			"tl", "br": return Control.CURSOR_FDIAGSIZE
+			"tr", "bl": return Control.CURSOR_BDIAGSIZE
+			"dim", "bright": return Control.CURSOR_HSIZE
+		if not _hover.is_empty():
+			return Control.CURSOR_MOVE if _hover.collection != "terrain" else Control.CURSOR_ARROW
+		return Control.CURSOR_ARROW
+
+	func move(p: Vector2) -> void:
+		if _mode == "":
+			_hover_handle = handle_at(p)
+			var hits := pick_all(p) if _hover_handle == "" else []
+			_hover = hits[0] if not hits.is_empty() else {}
+		ctx.canvas.overlay.queue_redraw()
 
 	func press(p: Vector2, button: int, mods: Dictionary) -> bool:
 		if button != MOUSE_BUTTON_LEFT:
 			return false
+		# Gizmo handles win over picking.
+		var h := handle_at(p)
+		if h != "":
+			var obj := ctx.selected_object()
+			_center = Vector2(obj.pos[0], obj.pos[1])
+			ctx.history.begin_group()
+			if h == "rotate":
+				_mode = "rotate"
+				_start_angle = (p - _center).angle()
+				_start_rot = float(obj.get("rot", 0.0))
+			elif h in ["dim", "bright"]:
+				_mode = "radius"
+				_radius_key = h
+			else:
+				_mode = "scale"
+				_start_dist = maxf((p - _center).length(), 1e-4)
+				_start_scale = float(obj.get("scale", 1.0))
+			return true
 		var hits := pick_all(p)
 		var hit: Dictionary = hits[0] if not hits.is_empty() else {}
 		# Clicking again on a stack of things cycles down through it.
@@ -151,7 +253,7 @@ class SelectTool extends Tool:
 				ctx.set_selection([{"collection": "terrain", "id": HexMap.cell_key(cell)}])
 			else:
 				ctx.clear_selection()
-			_box = true
+			_mode = "box"
 			_box_start = p
 			_box_end = p
 			return true
@@ -160,7 +262,7 @@ class SelectTool extends Tool:
 			ctx.select_one("walls", hit.id)
 			_wall_id = hit.id
 			_wall_point = hit.point
-			_dragging = true
+			_mode = "wall_point"
 			_last = p
 			return true
 		if mods.shift:
@@ -174,55 +276,84 @@ class SelectTool extends Tool:
 				ctx.set_selection(sel)
 		elif not ctx.is_selected(hit.collection, hit.id):
 			ctx.select_one(hit.collection, hit.id)
-		_dragging = true
-		_drag_start = p
+		_mode = "move"
 		_last = p
-		_moved_total = Vector2.ZERO
-		_wall_point = -1
 		ctx.history.begin_group()
 		return true
 
 	func drag(p: Vector2, _button: int, mods: Dictionary) -> void:
-		if _box:
-			_box_end = p
-			ctx.canvas.overlay.queue_redraw()
-			return
-		if not _dragging:
-			return
-		if _wall_point >= 0:
-			var to := p if mods.shift else grid().snap_to_corner(p)
-			if not ctx.snap_walls:
-				to = p
-			ctx.commands.move_wall_point(ctx.level_index, _wall_id, _wall_point, to)
-			return
-		var delta := p - _last
-		if ctx.snap != EditorContext.Snap.NONE and not mods.shift and ctx.selection.size() == 1:
-			# Snap the object's position, not the mouse delta.
-			var obj := ctx.selected_object()
-			if obj.has("pos"):
-				var pos := Vector2(obj.pos[0], obj.pos[1])
-				var target := ctx.snapped_point(pos + (p - _last))
-				delta = target - pos
-				if delta.length() < 1e-6:
+		match _mode:
+			"box":
+				_box_end = p
+				ctx.canvas.overlay.queue_redraw()
+			"wall_point":
+				var to := p if mods.shift or not ctx.snap_walls else grid().snap_to_corner(p)
+				ctx.commands.move_wall_point(ctx.level_index, _wall_id, _wall_point, to)
+			"rotate":
+				var obj := ctx.selected_object()
+				if obj.is_empty():
 					return
-		_last = p
-		_moved_total += delta
-		ctx.commands.move_objects(ctx.level_index, _movable(), delta, "Move")
+				var rot := _start_rot + rad_to_deg((p - _center).angle() - _start_angle)
+				if mods.shift:
+					rot = roundf(rot / 15.0) * 15.0
+				ctx.commands.update_object(ctx.level_index, ctx.selection[0].collection, obj.id, {"rot": snappedf(fposmod(rot, 360.0), 0.01)}, "Rotate")
+			"scale":
+				var obj := ctx.selected_object()
+				if obj.is_empty():
+					return
+				var sc := _start_scale * (p - _center).length() / _start_dist
+				if mods.shift:
+					sc = roundf(sc * 4.0) / 4.0
+				sc = clampf(sc, 0.05, 50.0)
+				ctx.commands.update_object(ctx.level_index, "props", obj.id, {"scale": snappedf(sc, 0.001)}, "Scale")
+			"radius":
+				var obj := ctx.selected_object()
+				if obj.is_empty():
+					return
+				var r := (p - _center).length()
+				if mods.shift:
+					r = roundf(r * 2.0) / 2.0
+				r = maxf(r, 0.0)
+				var changes := {_radius_key: snappedf(r, 0.01)}
+				# Keep bright inside dim.
+				if _radius_key == "bright" and r > float(obj.get("dim", 0.0)):
+					changes["dim"] = snappedf(r, 0.01)
+				elif _radius_key == "dim" and r < float(obj.get("bright", 0.0)):
+					changes["bright"] = snappedf(r, 0.01)
+				ctx.commands.update_object(ctx.level_index, "lights", obj.id, changes, "Light radius")
+			"move":
+				var delta := p - _last
+				if ctx.snap != EditorContext.Snap.NONE and not mods.shift and ctx.selection.size() == 1:
+					# Snap the object's position, not the mouse delta.
+					var obj := ctx.selected_object()
+					if obj.has("pos"):
+						var pos := Vector2(obj.pos[0], obj.pos[1])
+						var target := ctx.snapped_point(pos + (p - _last))
+						delta = target - pos
+						if delta.length() < 1e-6:
+							return
+				_last = p
+				ctx.commands.move_objects(ctx.level_index, _movable(), delta, "Move")
 
 	func release(_p: Vector2, button: int, _mods: Dictionary) -> void:
 		if button != MOUSE_BUTTON_LEFT:
 			return
-		if _box:
-			_box = false
-			var r := Rect2(_box_start, _box_end - _box_start).abs()
-			if r.size.length() > 0.05:
-				_select_in_box(r)
-			ctx.canvas.overlay.queue_redraw()
-			return
-		if _dragging and _wall_point < 0:
-			ctx.history.end_group("Move")
-		_dragging = false
+		match _mode:
+			"box":
+				var r := Rect2(_box_start, _box_end - _box_start).abs()
+				if r.size.length() > 0.05:
+					_select_in_box(r)
+			"move":
+				ctx.history.end_group("Move")
+			"rotate":
+				ctx.history.end_group("Rotate")
+			"scale":
+				ctx.history.end_group("Scale")
+			"radius":
+				ctx.history.end_group("Light radius")
+		_mode = ""
 		_wall_point = -1
+		ctx.canvas.overlay.queue_redraw()
 
 	func _movable() -> Array:
 		return ctx.selection.filter(func(s): return s.collection != "terrain")
@@ -232,9 +363,11 @@ class SelectTool extends Tool:
 		var sel := []
 		for coll in ["props", "lights", "notes"]:
 			for o in lvl.get(coll, []):
-				if r.has_point(Vector2(o.pos[0], o.pos[1])):
+				if r.has_point(Vector2(o.pos[0], o.pos[1])) and ctx.canvas.is_shown(coll, o) and not ctx.canvas.is_layer_locked(coll, str(o.id)):
 					sel.append({"collection": coll, "id": o.id})
 		for w in lvl.get("walls", []):
+			if not ctx.canvas.is_shown("walls", w) or ctx.canvas.is_layer_locked("walls", str(w.id)):
+				continue
 			var all_in := true
 			for pt in w.get("points", []):
 				if not r.has_point(Vector2(pt[0], pt[1])):
@@ -306,49 +439,88 @@ class SelectTool extends Tool:
 	func draw_overlay(c: Node2D) -> void:
 		var lvl := level()
 		var ppx := ctx.canvas.ppx
+		var sel_col := Color(1, 1, 0.3, 0.9)
+		var hpx := handle_hex() * ppx   # handle half-size in canvas px
+		var line_w := maxf(1.5 / ctx.zoom, 1.0)
+		# Hover outline (before selection so selection draws over it).
+		if _mode == "" and not _hover.is_empty() and not ctx.is_selected(_hover.collection, _hover.get("id", "")):
+			_draw_outline(c, _hover, Color(1, 1, 1, 0.55), line_w)
 		for s in ctx.selection:
-			match s.collection:
-				"terrain":
-					outline_cell(c, HexMap.key_cell(s.id), Color(1, 1, 0.3, 0.9), 3.0)
-				"props":
-					var pr := HexMap.find_in(lvl, "props", s.id)
-					if pr.is_empty():
-						continue
-					var def := ctx.packs.prop(str(pr.get("asset", "")))
-					var r := ctx.canvas.prop_rect(pr, def)
-					var pos := Vector2(pr.pos[0], pr.pos[1]) * ppx
-					c.draw_set_transform(pos, deg_to_rad(float(pr.get("rot", 0.0))), Vector2.ONE)
-					c.draw_rect(Rect2(r.position - pos, r.size), Color(1, 1, 0.3, 0.9), false, 2.0)
-					c.draw_set_transform(Vector2.ZERO)
-					c.draw_circle(pos, 4.0, Color(1, 1, 0.3))
-				"lights":
-					var l := HexMap.find_in(lvl, "lights", s.id)
-					if l.is_empty():
-						continue
-					var pos := Vector2(l.pos[0], l.pos[1]) * ppx
-					c.draw_arc(pos, float(l.get("dim", 0)) * ppx, 0, TAU, 64, Color(1, 1, 0.3, 0.8), 2.0, true)
-					c.draw_arc(pos, float(l.get("bright", 0)) * ppx, 0, TAU, 64, Color(1, 1, 0.3, 0.8), 2.0, true)
-					c.draw_circle(pos, 6.0, Color(1, 1, 0.3))
-				"notes":
-					var n := HexMap.find_in(lvl, "notes", s.id)
-					if n.is_empty():
-						continue
-					c.draw_arc(Vector2(n.pos[0], n.pos[1]) * ppx, 0.16 * ppx, 0, TAU, 32, Color(1, 1, 0.3, 0.9), 2.0, true)
-				"walls":
-					var w := HexMap.find_in(lvl, "walls", s.id)
-					if w.is_empty():
-						continue
-					ctx.canvas.draw_wall(c, w, 1.0, true)
-					for pt in w.get("points", []):
-						c.draw_circle(Vector2(pt[0], pt[1]) * ppx, 6.0, Color(1, 1, 0.3))
-		if _box:
+			if s.collection == "terrain":
+				outline_cell(c, HexMap.key_cell(s.id), sel_col, line_w * 2.0)
+			else:
+				_draw_outline(c, s, sel_col, line_w * 1.4)
+		# Gizmo handles.
+		var hs := handles()
+		if not hs.is_empty():
+			var obj := ctx.selected_object()
+			var pos := Vector2(obj.pos[0], obj.pos[1]) * ppx
+			if hs.has("rotate"):
+				var top := (hs["tl"] as Vector2).lerp(hs["tr"], 0.5) * ppx
+				c.draw_line(top, (hs["rotate"] as Vector2) * ppx, sel_col, line_w, true)
+			for k in hs:
+				var hp: Vector2 = hs[k] * ppx
+				var hot: bool = str(k) == _hover_handle
+				var size := hpx * (1.35 if hot else 1.0)
+				if k == "rotate" or k == "dim" or k == "bright":
+					c.draw_circle(hp, size * 1.1, Color(0, 0, 0, 0.6))
+					c.draw_circle(hp, size * 0.85, Color.WHITE if hot else sel_col)
+				else:
+					c.draw_rect(Rect2(hp - Vector2.ONE * size, Vector2.ONE * size * 2.0), Color(0, 0, 0, 0.6))
+					c.draw_rect(Rect2(hp - Vector2.ONE * size * 0.7, Vector2.ONE * size * 1.4), Color.WHITE if hot else sel_col)
+			c.draw_circle(pos, hpx * 0.6, sel_col)
+		if _mode == "box":
 			var r := Rect2(_box_start * ppx, (_box_end - _box_start) * ppx).abs()
 			c.draw_rect(r, Color(0.4, 0.7, 1.0, 0.15))
-			c.draw_rect(r, Color(0.4, 0.7, 1.0, 0.9), false, 1.5)
-		# Hover
+			c.draw_rect(r, Color(0.4, 0.7, 1.0, 0.9), false, line_w)
+		# Hover cell
 		var hover := grid().world_to_axial(ctx.mouse_hex())
-		if grid().in_bounds(hover):
-			outline_cell(c, hover, Color(1, 1, 1, 0.25), 1.5)
+		if grid().in_bounds(hover) and _hover.is_empty() and _hover_handle == "":
+			outline_cell(c, hover, Color(1, 1, 1, 0.2), line_w)
+
+	## Outline of one element in the overlay.
+	func _draw_outline(c: Node2D, s: Dictionary, color: Color, w: float) -> void:
+		var lvl := level()
+		var ppx := ctx.canvas.ppx
+		match s.collection:
+			"props":
+				var pr := HexMap.find_in(lvl, "props", s.id)
+				if pr.is_empty():
+					return
+				var def := ctx.packs.prop(str(pr.get("asset", "")))
+				var r := ctx.canvas.prop_rect(pr, def)
+				var pos := Vector2(pr.pos[0], pr.pos[1]) * ppx
+				c.draw_set_transform(pos, deg_to_rad(float(pr.get("rot", 0.0))), Vector2.ONE)
+				c.draw_rect(Rect2(r.position - pos, r.size), color, false, w)
+				c.draw_set_transform(Vector2.ZERO)
+			"lights":
+				var l := HexMap.find_in(lvl, "lights", s.id)
+				if l.is_empty():
+					return
+				var pos := Vector2(l.pos[0], l.pos[1]) * ppx
+				for k in ["dim", "bright"]:
+					var rad := float(l.get(k, 0.0)) * ppx
+					if rad > 0.0:
+						c.draw_arc(pos, rad, 0, TAU, 96, color, w, true)
+				c.draw_circle(pos, handle_hex() * ppx * 0.8, color)
+			"notes":
+				var n := HexMap.find_in(lvl, "notes", s.id)
+				if n.is_empty():
+					return
+				c.draw_arc(Vector2(n.pos[0], n.pos[1]) * ppx, 0.16 * ppx, 0, TAU, 32, color, w, true)
+			"walls":
+				var wl := HexMap.find_in(lvl, "walls", s.id)
+				if wl.is_empty():
+					return
+				var pts := PackedVector2Array()
+				for pt in wl.get("points", []):
+					pts.append(Vector2(pt[0], pt[1]) * ppx)
+				if pts.size() >= 2:
+					c.draw_polyline(pts, color, w * 3.0, true)
+				var hot_pt: int = int(s.get("point", -1))
+				for i in pts.size():
+					var grow := 1.6 if i == hot_pt else 1.0
+					c.draw_circle(pts[i], handle_hex() * ppx * 0.9 * grow, color)
 
 
 # =============================================================================

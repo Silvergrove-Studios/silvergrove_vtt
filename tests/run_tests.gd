@@ -843,3 +843,139 @@ func test_dock_pane_drag() -> void:
 	check(stray.drag_data() == null, "a pane outside a dock has no drag data")
 	stray.free()
 	dock.free()
+
+
+func test_select_gizmos() -> void:
+	var ctx := _ctx()
+	ctx.zoom = 1.0
+	var mods := {"shift": false, "ctrl": false, "alt": false}
+	var shift := {"shift": true, "ctrl": false, "alt": false}
+	ctx.prop_ref = "dungeons_and_castles:table"    # 1.4 x 0.8 hex, anchor centre
+	var prop := ctx.new_prop(Vector2(4.0, 4.0))
+	ctx.commands.add_object(0, "props", prop)
+	ctx.select_one("props", prop.id)
+	var sel := EditorTools.make("select", ctx) as EditorTools.SelectTool
+	var hs := sel.handles()
+	check(hs.has("tl") and hs.has("br") and hs.has("rotate"), "prop has corner and rotate handles: %s" % [hs.keys()])
+	check(near(hs["tl"].x, 4.0 - 0.7, 1e-3) and near(hs["tl"].y, 4.0 - 0.4, 1e-3), "top-left corner at the unrotated bounds: %s" % hs["tl"])
+	check(hs["rotate"].y < hs["tl"].y, "rotate handle sits above the top edge")
+	check(sel.handle_at(hs["br"] + Vector2(0.01, 0.01)) == "br", "handle hit within tolerance")
+	check(sel.handle_at(Vector2(4.0, 4.0)) == "", "no handle at the centre")
+	# Scale: drag the bottom-right corner outward, doubling its distance.
+	var br: Vector2 = hs["br"]
+	sel.press(br, MOUSE_BUTTON_LEFT, mods)
+	sel.drag(Vector2(4.0, 4.0) + (br - Vector2(4.0, 4.0)) * 2.0, MOUSE_BUTTON_LEFT, mods)
+	sel.release(br, MOUSE_BUTTON_LEFT, mods)
+	check(near(float(ctx.level().props[0].scale), 2.0, 1e-3), "corner drag doubled the scale: %s" % ctx.level().props[0].scale)
+	check(ctx.level().props[0].pos == [4.0, 4.0], "scaling keeps the anchor put")
+	ctx.history.undo()
+	check(near(float(ctx.level().props[0].get("scale", 1.0)), 1.0), "scale undone in one step")
+	# Rotate: drag the rotate handle a quarter turn clockwise; Shift snaps to 15°.
+	hs = sel.handles()
+	var rh: Vector2 = hs["rotate"]
+	sel.press(rh, MOUSE_BUTTON_LEFT, mods)
+	var a0 := (rh - Vector2(4.0, 4.0)).angle()
+	var target := Vector2(4.0, 4.0) + Vector2(cos(a0 + PI / 2.0 + 0.05), sin(a0 + PI / 2.0 + 0.05)) * (rh - Vector2(4.0, 4.0)).length()
+	sel.drag(target, MOUSE_BUTTON_LEFT, shift)
+	sel.release(target, MOUSE_BUTTON_LEFT, shift)
+	check(near(float(ctx.level().props[0].rot), 90.0, 1e-3), "rotate handle with Shift snapped to 90°: %s" % ctx.level().props[0].rot)
+	hs = sel.handles()
+	check(near(hs["rotate"].x, 4.0 + 0.4 + sel.handle_hex(28.0), 1e-3), "rotated gizmo follows the prop: rotate handle now on the right (%s)" % hs["rotate"])
+	# Hover state drives the cursor.
+	sel.move(Vector2(4.0, 4.0))
+	check(sel.cursor() == Control.CURSOR_MOVE, "hovering the prop body: move cursor")
+	sel.move(hs["rotate"])
+	check(sel.cursor() == Control.CURSOR_POINTING_HAND, "hovering the rotate handle: hand cursor")
+	sel.move(Vector2(0.5, 0.5))
+	check(sel.cursor() == Control.CURSOR_ARROW, "hovering nothing: arrow")
+	check(EditorTools.make("terrain", ctx).cursor() == Control.CURSOR_CROSS, "paint tool uses a crosshair")
+	# Handles scale with zoom: zooming in shrinks them in hex units.
+	ctx.zoom = 4.0
+	check(near(sel.handle_hex(), 7.0 / (256.0 * 4.0)), "handle size is constant on screen")
+	ctx.zoom = 1.0
+	# Light radius handles.
+	ctx.light_preset = {"bright": 1.0, "dim": 2.0, "color": "#ffffff"}
+	var l := ctx.new_light(Vector2(6.0, 6.0))
+	ctx.commands.add_object(0, "lights", l)
+	ctx.select_one("lights", l.id)
+	hs = sel.handles()
+	check(hs.has("dim") and near(hs["dim"].x, 8.0) and hs.has("bright"), "light has ring handles: %s" % [hs])
+	sel.press(hs["dim"], MOUSE_BUTTON_LEFT, mods)
+	sel.drag(Vector2(9.0, 6.0), MOUSE_BUTTON_LEFT, mods)
+	sel.release(Vector2(9.0, 6.0), MOUSE_BUTTON_LEFT, mods)
+	check(near(float(ctx.level().lights[0].dim), 3.0), "dragging the dim ring sets dim = 3: %s" % ctx.level().lights[0].dim)
+	hs = sel.handles()
+	sel.press(hs["bright"], MOUSE_BUTTON_LEFT, mods)
+	sel.drag(Vector2(6.0, 6.0) + Vector2(3.5, 0.0), MOUSE_BUTTON_LEFT, mods)
+	sel.release(Vector2.ZERO, MOUSE_BUTTON_LEFT, mods)
+	check(near(float(ctx.level().lights[0].bright), 3.5) and near(float(ctx.level().lights[0].dim), 3.5), "bright pushed past dim drags dim along")
+	ctx.canvas.free()
+
+
+func test_palette_model() -> void:
+	var lib := PackLibrary.new()
+	lib.reload()
+	var props := lib.all("props")
+	check(PaletteModel.matches(props[0], ""), "empty query matches everything")
+	var torch := PaletteModel.count(props, "torch")
+	check(torch >= 1, "search finds the torch sconce: %d" % torch)
+	check(PaletteModel.count(props, "TORCH") == torch, "search is case-insensitive")
+	check(PaletteModel.count(props, "dungeons tree") == 0 and PaletteModel.count(props, "woodland tree") >= 3, "all words must match (pack + tag): %d" % PaletteModel.count(props, "woodland tree"))
+	check(PaletteModel.count(props, "swamp:mangrove") == 1, "search by ref")
+	var names := {"woodland": "Woodland", "swamp": "Swamp", "dungeons_and_castles": "Dungeons & Castles"}
+	var secs := PaletteModel.sections(props, "", ["woodland:oak"], ["swamp:mangrove", "woodland:oak"], names)
+	check(secs[0].id == "favorites" and secs[0].items.size() == 1 and secs[0].items[0]._ref == "woodland:oak", "favourites first")
+	check(secs[1].id == "recent" and secs[1].items.size() == 1 and secs[1].items[0]._ref == "swamp:mangrove", "recent skips favourites")
+	check(secs.size() == 5 and secs[2].title == "Dungeons & Castles", "one section per pack, named: %s" % [secs.map(func(s): return s.title)])
+	var filtered := PaletteModel.sections(props, "oak", ["woodland:oak"], [], names)
+	check(filtered.size() == 2 and filtered[1].id == "pack:woodland" and filtered[1].items.size() == 2, "filter empties other packs: %s" % [filtered.map(func(s): return "%s:%d" % [s.id, s.items.size()])])
+	var r := PaletteModel.push_recent([], "a")
+	r = PaletteModel.push_recent(r, "b")
+	r = PaletteModel.push_recent(r, "a")
+	check(r == ["a", "b"], "recent is most-recent-first and deduplicated: %s" % [r])
+	for i in 20:
+		r = PaletteModel.push_recent(r, "x%d" % i)
+	check(r.size() == PaletteModel.RECENT_MAX, "recent capped at %d" % PaletteModel.RECENT_MAX)
+	check(PaletteModel.toggle(["a"], "a") == [] and PaletteModel.toggle([], "a") == ["a"], "toggle favourite")
+	var st := PaletteModel.default_state()
+	st.favorites.props = ["woodland:oak"]
+	st.recent.terrain = ["woodland:grass"]
+	st.collapsed["props/pack:swamp"] = true
+	check(PaletteModel.save_state(st, "user://test_palette.json") == OK, "state saves")
+	var back := PaletteModel.load_state("user://test_palette.json")
+	check(back.favorites.props == ["woodland:oak"] and back.recent.terrain == ["woodland:grass"] and back.collapsed["props/pack:swamp"] == true, "state round-trips")
+	var f := FileAccess.open("user://test_palette.json", FileAccess.WRITE)
+	f.store_string("[1,2]")
+	f.close()
+	check(PaletteModel.load_state("user://test_palette.json").favorites.props == [], "garbage file → defaults")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_palette.json"))
+
+
+func test_tool_options() -> void:
+	var ctx := _ctx()
+	var opts := ToolOptions.new(ctx)
+	root.add_child(opts)
+	opts.show_for("prop")
+	check(opts._controls.has("snap") and opts._controls.has("rot") and opts._controls.has("scale") and opts._controls.has("flip"), "prop tool options")
+	(opts._controls.rot as SpinBox).value = 45.0
+	check(near(ctx.prop_rotation, 45.0), "rotation spin writes to the context")
+	ctx.prop_scale = 1.5
+	opts.sync()
+	check(near((opts._controls.scale as SpinBox).value, 1.5), "sync pulls context values back")
+	(opts._controls.snap as OptionButton).item_selected.emit(2)
+	check(ctx.snap == EditorContext.Snap.CORNER, "snap option writes to the context")
+	opts.show_for("terrain")
+	check(opts._controls.has("brush") and opts._controls.has("variant"), "terrain tool options")
+	ctx.terrain_ref = "woodland:grass"
+	opts.sync()
+	check((opts._controls.variant as OptionButton).item_count == 4, "variant list follows the picked terrain (random + 3)")
+	opts.show_for("wall")
+	(opts._controls.type as OptionButton).item_selected.emit(1)
+	check(ctx.wall_preset == "door", "wall type writes to the context: %s" % ctx.wall_preset)
+	opts.show_for("light")
+	(opts._controls.dim as SpinBox).value = 4.5
+	check(ctx.light_preset.dim == 4.5, "light dim writes to the preset")
+	opts.show_for("erase")
+	check(opts._controls.is_empty() and opts.get_child_count() == 1, "erase shows only a hint")
+	opts.free()
+	ctx.canvas.free()

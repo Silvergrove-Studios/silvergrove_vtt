@@ -11,6 +11,7 @@ var view: MapView
 var palette: Palette
 var inspector: Inspector
 var layers: LayersPanel
+var tool_options: ToolOptions
 var tool_buttons: Dictionary = {}
 var level_select: OptionButton
 var status_left: Label
@@ -133,6 +134,11 @@ func _build_ui() -> void:
 
 	root.add_child(_build_menus())
 	root.add_child(_build_toolbar())
+	tool_options = ToolOptions.new(ctx)
+	var opts_panel := PanelContainer.new()
+	opts_panel.theme_type_variation = "DockHeader"
+	opts_panel.add_child(tool_options)
+	root.add_child(opts_panel)
 
 	palette = Palette.new(ctx)
 	palette.name = "Palette"
@@ -430,17 +436,25 @@ func _select_tool(tool_name: String) -> void:
 	view.set_tool(EditorTools.make(tool_name, ctx))
 	if tool_buttons.has(tool_name):
 		(tool_buttons[tool_name] as Button).set_pressed_no_signal(true)
+	if tool_options != null:
+		tool_options.show_for(tool_name)
+	if palette != null:
+		palette.show_tab_for_tool(tool_name)
 	for t in EditorTools.all_tools():
 		if t.name == tool_name:
 			ctx.say(t.hint)
 
 
 func _on_palette_pick(kind: String) -> void:
+	var current := view.tool.tool_name if view.tool != null else ""
 	match kind:
-		"terrain": _select_tool("terrain")
+		"terrain":
+			if current != "fill":
+				_select_tool("terrain")
 		"props": _select_tool("prop")
 		"walls": _select_tool("wall")
 		"lights": _select_tool("light")
+	tool_options.sync()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -449,6 +463,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	var e := event as InputEventKey
 	if view.tool != null and view.tool.key(e):
 		palette.sync()
+		tool_options.sync()
 		view.canvas.overlay.queue_redraw()
 		get_viewport().set_input_as_handled()
 		return

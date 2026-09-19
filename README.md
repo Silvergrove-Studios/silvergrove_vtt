@@ -41,10 +41,17 @@ Tools are on the toolbar and on single keys: **V** select, **B** paint,
 **G** fill, **P** prop, **W** wall, **L** light, **N** note, **E** erase.
 Picking something in the left palette switches to the matching tool.
 
+- **Palette** (left): one search box across every pack and tab; assets
+  grouped under collapsible pack headers with Favourites (right-click a tile
+  to star it) and Recent on top; hover a tile for a full-size preview.
+  Picking switches to the matching tool, and picking a tool shows its tab.
+- **Tool options** sit in the strip under the toolbar and change with the
+  tool: brush size and variant, snapping, rotation/scale/flip for props,
+  wall type, light radii and colour.
 - **Paint** puts the palette terrain on hexes; drag to stroke, right-drag to
   clear, `[` `]` change brush size. Variants are random unless you pick one.
 - **Prop** places the palette prop where you click. Snapping (off / hex
-  centre / hex corner) is in the palette; hold Shift for free placement.
+  centre / hex corner) is in the tool options; hold Shift for free placement.
   **R** rotates 15° (Shift: 1°), **F** flips, `[` `]` scale. Props that carry
   a light (campfires, braziers) place the light too.
 - **Wall** adds a point per click, snapped to hex corners (Shift: free);
@@ -52,9 +59,11 @@ Picking something in the left palette switches to the matching tool.
   the palette is what the wall blocks — wall, door, secret door, window,
   fence, terrain, invisible, ethereal — and the *style* is how it draws.
   Doors finish themselves after two points.
-- **Select** picks whatever is under the cursor; drag to move, Shift-click to
-  add, drag on empty space for a box. Arrow keys nudge by one authored
-  pixel (Shift: ten). The inspector on the right edits every field,
+- **Select** picks whatever is under the cursor (hover shows what you'd
+  get); drag to move, Shift-click to add, drag on empty space for a box.
+  A selected prop shows corner handles to scale and a handle above it to
+  rotate (Shift snaps to 15°); a selected light shows handles on its bright
+  and dim rings. Arrow keys nudge by one authored pixel (Shift: ten). The inspector on the right edits every field,
   including positions in pixels at the map's authoring density
   (`reference_ppx`, default 256 px per hex) for artists who think that way.
 - **Panels dock.** Every panel has a title bar with a grip; drag it onto

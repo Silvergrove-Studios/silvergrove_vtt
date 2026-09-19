@@ -88,6 +88,7 @@ func set_zoom(z: float, around_screen: Vector2 = Vector2(-1, -1)) -> void:
 	camera.zoom = Vector2(z, z)
 	var after := screen_to_world(around_screen)
 	camera.position += before - after
+	ctx.zoom = z
 	_update_texture_density()
 	zoom_changed.emit(z)
 
@@ -106,6 +107,7 @@ func zoom_to_fit() -> void:
 	var z := minf(size.x / (map_px.x * 1.08), size.y / (map_px.y * 1.08))
 	camera.zoom = Vector2(z, z)
 	camera.position = map_px / 2.0
+	ctx.zoom = z
 	_update_texture_density()
 	zoom_changed.emit(z)
 
@@ -171,6 +173,7 @@ func _gui_input(event: InputEvent) -> void:
 			if _pressed_button != 0 and (e.button_mask & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT)) != 0:
 				tool.drag(hex, _pressed_button, _mods(e))
 			tool.move(hex)
+			mouse_default_cursor_shape = tool.cursor()
 	elif event is InputEventPanGesture:
 		var e := event as InputEventPanGesture
 		camera.position += e.delta * 12.0 / zoom()
@@ -194,4 +197,5 @@ func set_tool(t: EditorTools.Tool) -> void:
 	tool = t
 	if tool != null:
 		tool.activate()
+		mouse_default_cursor_shape = tool.cursor()
 	canvas.overlay.queue_redraw()

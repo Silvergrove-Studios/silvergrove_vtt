@@ -182,3 +182,13 @@ What the samples showed:
   layouts round-trip through disk and are repaired when a panel is missing;
   unknown theme ids fall back to Slate. `tools/ui_smoke.gd` drives the
   dropdown and the layout reset in a window.
+
+## Gizmo and palette passes (dev, after 1.0)
+
+Done: selection gizmos (corner scale handles, rotate handle with Shift
+snapping, light radius handles, hover outlines, per-tool and per-handle
+cursors, constant on-screen handle size); palette rework (global search with
+tab counts and auto-jump, pack sections, Favourites and Recent persisted
+per user, 92px tiles, hover preview popup with all variants); tool options
+strip under the toolbar replacing the per-tab controls; palette tab follows
+the active tool. Punch list items 5, 6 and 19 closed.
