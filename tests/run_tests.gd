@@ -6,7 +6,14 @@ var _fails := 0
 var _count := 0
 
 
-func _init() -> void:
+var _ran := false
+
+## Tests run on the first frame, not from _init(): by then the root Window
+## is inside the tree, so Controls added under it get _ready() and paths.
+func _process(_delta: float) -> bool:
+	if _ran:
+		return false
+	_ran = true
 	for m in get_method_list():
 		var n: String = m.name
 		if n.begins_with("test_"):
@@ -14,6 +21,7 @@ func _init() -> void:
 			call(n)
 	print("%d checks, %d failed" % [_count, _fails])
 	quit(1 if _fails > 0 else 0)
+	return true
 
 
 func check(cond: bool, msg: String) -> void:
@@ -777,6 +785,7 @@ func test_layout_store() -> void:
 	back_names.sort()
 	check(back_names == expected, "layout round-trips: %s" % [back_names])
 	check(back.root is DockableLayoutSplit and (back.root as DockableLayoutSplit).percent == 0.2, "split geometry preserved")
+	check((back.root as DockableLayoutSplit).first is DockableLayoutSplit and ((back.root as DockableLayoutSplit).first as DockableLayoutSplit).direction == DockableLayoutSplit.Direction.VERTICAL, "nested vertical split preserved")
 	# A saved layout from an older build lacks a panel: it is added back.
 	var old := DockableLayout.new()
 	var leaf := DockableLayoutPanel.new()
@@ -804,3 +813,33 @@ func test_native_menu_accelerators() -> void:
 		check((k & KEY_MASK_CTRL) != 0 and (k & KEY_CODE_MASK) == KEY_S, "Ctrl+S elsewhere")
 	check(NativeMenuMirror._native_accel(KEY_NONE) == KEY_NONE, "none stays none")
 	check(NativeMenuMirror._native_accel(KEY_G) == KEY_G, "plain key untouched")
+
+
+func test_dock_pane_drag() -> void:
+	# A pane's title bar produces the drag data the DockableContainer accepts
+	# from its own tabs, pointing at the panel that currently holds the pane.
+	var dock := DockableContainer.new()
+	dock.size = Vector2(800, 600)
+	root.add_child(dock)
+	var a := DockPane.new("Palette", Control.new())
+	var b := DockPane.new("Canvas", Control.new())
+	dock.add_child(a)
+	dock.add_child(b)
+	dock.layout = LayoutStore.default_layout()
+	dock.notification(Container.NOTIFICATION_SORT_CHILDREN)
+	check(a.dock() == dock, "pane finds its dock")
+	var data = a.drag_data()
+	check(data is Dictionary and data.get("type") == "tabc_element", "drag data has the tab type: %s" % [data])
+	if data is Dictionary:
+		var panel := root.get_node(data.from_path) as TabContainer
+		check(panel != null, "from_path resolves to a panel")
+		if panel != null:
+			var tab := panel.get_tab_control(int(data.tabc_element))
+			check(tab == a or (tab != null and tab.get("reference_to") == a), "tab index points at this pane")
+		check(dock._can_drop_data(Vector2.ZERO, data), "dock accepts the drag")
+	check(b.drag_data() != null and b.drag_data().from_path != data.from_path, "second pane is in a different panel")
+	var stray := DockPane.new("Loose", Control.new())
+	root.add_child(stray)
+	check(stray.drag_data() == null, "a pane outside a dock has no drag data")
+	stray.free()
+	dock.free()

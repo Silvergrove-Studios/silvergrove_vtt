@@ -11,15 +11,13 @@ static func default_path() -> String:
 	return "user://layout.tres"
 
 
-## Palette + Layers tabbed on the left, canvas centre, Inspector + View
-## options on the right.
+## Left column: Palette over Layers. Centre: canvas. Right column: Inspector
+## over View options. Every pane alone, so only title bars show; grouping
+## panes into tabs is the user's choice.
 static func default_layout() -> DockableLayout:
-	var left := DockableLayoutPanel.new()
-	left.names = PackedStringArray(["Palette", "Layers"])
-	var center := DockableLayoutPanel.new()
-	center.names = PackedStringArray(["Canvas"])
-	var right := DockableLayoutPanel.new()
-	right.names = PackedStringArray(["Inspector", "View options"])
+	var left := _vsplit(_leaf("Palette"), _leaf("Layers"), 0.55)
+	var center := _leaf("Canvas")
+	var right := _vsplit(_leaf("Inspector"), _leaf("View options"), 0.85)
 	var inner := DockableLayoutSplit.new()
 	inner.direction = DockableLayoutSplit.Direction.HORIZONTAL
 	inner.percent = 0.76
@@ -33,6 +31,21 @@ static func default_layout() -> DockableLayout:
 	var layout := DockableLayout.new()
 	layout.root = outer
 	return layout
+
+
+static func _leaf(p_name: String) -> DockableLayoutPanel:
+	var l := DockableLayoutPanel.new()
+	l.names = PackedStringArray([p_name])
+	return l
+
+
+static func _vsplit(a: DockableLayoutNode, b: DockableLayoutNode, percent: float) -> DockableLayoutSplit:
+	var s := DockableLayoutSplit.new()
+	s.direction = DockableLayoutSplit.Direction.VERTICAL
+	s.percent = percent
+	s.first = a
+	s.second = b
+	return s
 
 
 static func save(layout: DockableLayout, path: String = "") -> Error:

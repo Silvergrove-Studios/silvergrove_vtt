@@ -133,6 +133,17 @@ static func build(name: String) -> Theme:
 	th.set_color("font_color", "TooltipLabel", text if t.dark else Color("#f1eadb"))
 	th.set_font_size("font_size", "TooltipLabel", fs - 1)
 
+	# --- Dock panes ----------------------------------------------------------
+	th.set_type_variation("DockHeader", "PanelContainer")
+	var head := box(deep, 0, Color(0, 0, 0, 0), 0, Vector2(sp * 0.75, sp * 0.45))
+	head.border_width_bottom = 1
+	head.border_color = border
+	th.set_stylebox("panel", "DockHeader", head)
+	th.set_type_variation("DockTitle", "Label")
+	th.set_font("font", "DockTitle", medium)
+	th.set_font_size("font_size", "DockTitle", fs)
+	th.set_color("font_color", "DockTitle", text)
+
 	# --- Labels ------------------------------------------------------------
 	th.set_color("font_color", "Label", text)
 	th.set_font("font", "HeaderLabel", semibold)

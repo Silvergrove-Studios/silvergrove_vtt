@@ -9,6 +9,12 @@ signal focus_requested(collection: String, id: String)
 
 var ctx: EditorContext
 var tree: LayerTreeControl
+var _actions: Array = []
+
+
+## Buttons for the pane title bar.
+func header_actions() -> Array:
+	return _actions
 var _syncing := false
 var _items: Dictionary = {}    # key -> TreeItem
 
@@ -53,16 +59,12 @@ func _init(p_ctx: EditorContext) -> void:
 	ctx = p_ctx
 	custom_minimum_size = Vector2(290, 220)
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var head := HBoxContainer.new()
-	var title := Label.new()
-	title.text = "Layers"
-	title.theme_type_variation = "HeaderLabel"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(title)
-	head.add_child(_button("group", "Group the selection into a new folder (Ctrl/Cmd+G)", _group_selection))
-	head.add_child(_button("folder-plus", "New empty folder", func() -> void: _new_folder()))
-	head.add_child(_button("trash", "Delete selected elements; folders are unwrapped", _delete_selected))
-	add_child(head)
+	# The action buttons live in the dock pane's title bar (header_actions()).
+	_actions = [
+		_button("group", "Group the selection into a new folder (Ctrl/Cmd+G)", _group_selection),
+		_button("folder-plus", "New empty folder", func() -> void: _new_folder()),
+		_button("trash", "Delete selected elements; folders are unwrapped", _delete_selected),
+	]
 	tree = LayerTreeControl.new()
 	tree.panel = self
 	tree.columns = 3
@@ -124,9 +126,6 @@ func restyle(t: Dictionary) -> void:
 		"note": UiIcons.get_icon("sticky-note", size, text, t.stroke), "door": UiIcons.get_icon("door-open", size, text, t.stroke),
 	}
 	_folder_tex = null
-	for b in find_children("*", "Button", true, false):
-		if b.has_meta("icon"):
-			(b as Button).icon = UiIcons.get_icon(str(b.get_meta("icon")), t.icon, text, t.stroke)
 	request_rebuild()
 
 

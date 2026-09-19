@@ -57,10 +57,10 @@ Picking something in the left palette switches to the matching tool.
   pixel (Shift: ten). The inspector on the right edits every field,
   including positions in pixels at the map's authoring density
   (`reference_ppx`, default 256 px per hex) for artists who think that way.
-- **Panels dock.** Palette, Layers, Canvas, Inspector and View options are
-  tabs: drag a tab onto another panel to group with it, or to a panel's edge
-  to split. The arrangement is remembered per user; View → Reset panel
-  layout restores the default.
+- **Panels dock.** Every panel has a title bar with a grip; drag it onto
+  another panel to group the two as tabs, or onto a panel's edge to split.
+  The arrangement is remembered per user; View → Reset panel layout restores
+  the default (Palette over Layers, canvas, Inspector over View options).
 - **Theme** is the dropdown at the right of the toolbar (also View → Theme):
   Slate, Forge, Studio or Parchment, remembered per user.
 - **Layers** lists every element on the level, Photoshop style:

@@ -21,6 +21,7 @@ var _autosave := Timer.new()
 var _prefs := {"pack_dirs": [], "theme": "slate"}
 var _ui_root: Control
 var dock: DockableContainer
+var _panes: Array = []
 var theme_select: OptionButton
 var _layout_save := Timer.new()
 var theme_menu: PopupMenu
@@ -185,12 +186,16 @@ func _build_dock_layout() -> Control:
 	dock = DockableContainer.new()
 	dock.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	dock.tab_alignment = TabBar.ALIGNMENT_LEFT
-	dock.hide_single_tab = true
-	for c in [palette, view, layers, inspector]:
-		dock.add_child(c)
-	var opts := _build_view_options()
-	opts.name = "View options"
-	dock.add_child(opts)
+	dock.hide_single_tab = true   # a lone pane's title bar is its handle; groups get tabs too
+	_panes = [
+		DockPane.new("Palette", palette),
+		DockPane.new("Canvas", view),
+		DockPane.new("Layers", layers, layers.header_actions()),
+		DockPane.new("Inspector", inspector),
+		DockPane.new("View options", _build_view_options()),
+	]
+	for p in _panes:
+		dock.add_child(p)
 	dock.layout = LayoutStore.load_or_default()
 	dock.layout.changed.connect(func() -> void: _layout_save.start())
 	return dock
@@ -421,6 +426,9 @@ func _restyle() -> void:
 		if b.has_meta("icon"):
 			(b as Button).icon = UiIcons.get_icon(str(b.get_meta("icon")), icon_size, text, t.stroke)
 	view.set_surround(ThemeBuilder.c(t, "canvas"), ThemeBuilder.c(t, "shadow"))
+	for p in _panes:
+		if is_instance_valid(p):
+			(p as DockPane).restyle(t)
 	layers.restyle(t)
 	palette.restyle(t)
 	inspector.restyle(t)
