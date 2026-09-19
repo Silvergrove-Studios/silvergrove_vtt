@@ -1,3 +1,4 @@
 .godot/
 out/
 .DS_Store
+*.autosave
