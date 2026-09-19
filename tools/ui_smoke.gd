@@ -34,6 +34,19 @@ func _run(out: String) -> void:
 	main.view.camera.position = Vector2(prop.pos[0], prop.pos[1]) * main.view.canvas.ppx
 	await _shot(out.path_join("02_selected_prop.png"))
 
+	# Theme dropdown drives the theme and persists it.
+	var ids: PackedStringArray = main.theme_ids()
+	main.theme_select.select(ids.find("forge"))
+	main.theme_select.item_selected.emit(ids.find("forge"))
+	await create_timer(0.3).timeout
+	assert(main._prefs.theme == "forge", "dropdown sets the theme pref")
+	await _shot(out.path_join("02b_theme_dropdown.png"))
+	main._set_theme("slate")
+	# Layout reset writes the layout file.
+	main._reset_layout()
+	await create_timer(2.5).timeout
+	assert(FileAccess.file_exists(ProjectSettings.globalize_path("user://layout.tres")), "layout persisted")
+
 	# Props palette + prop tool ghost.
 	main.palette.current_tab = 1
 	ctx.prop_ref = "woodland:oak_large"

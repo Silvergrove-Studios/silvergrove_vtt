@@ -684,3 +684,123 @@ func test_tree_commands_and_picking() -> void:
 	var m2 := HexMap.from_json(ctx.map.to_json())
 	check(m2.level(0).props[0].name == "Big rock" and LayerTree.leaves(m2.level(0).tree).size() == 3, "round trip keeps names and leaves")
 	ctx.canvas.free()
+
+
+# ------------------------------------------------------------------------ ui --
+
+## WCAG relative luminance contrast ratio.
+static func _contrast(a: Color, b: Color) -> float:
+	var la := _lum(a)
+	var lb := _lum(b)
+	return (maxf(la, lb) + 0.05) / (minf(la, lb) + 0.05)
+
+
+static func _lum(c: Color) -> float:
+	var f := func(v: float) -> float: return v / 12.92 if v <= 0.03928 else pow((v + 0.055) / 1.055, 2.4)
+	return 0.2126 * f.call(c.r) + 0.7152 * f.call(c.g) + 0.0722 * f.call(c.b)
+
+
+func test_theme_builder() -> void:
+	var required := ["bg", "bg_deep", "canvas", "surface", "surface_hover", "surface_pressed", "border", "border_strong",
+		"text", "text_dim", "text_disabled", "accent", "accent_text", "shadow", "radius", "spacing", "font_size", "icon", "stroke", "label", "dark"]
+	for name in ThemeBuilder.names():
+		var t := ThemeBuilder.tokens(name)
+		for k in required:
+			check(t.has(k), "%s has token %s" % [name, k])
+		var th := ThemeBuilder.build(name)
+		check(th != null and th.default_font != null and th.default_font_size == int(t.font_size), "%s builds with a default font" % name)
+		for variation in ["ToolButton", "AccentButton", "HeaderLabel", "DimLabel", "MonoLabel"]:
+			check(th.get_type_variation_base(variation) != "", "%s defines variation %s" % [name, variation])
+		for kind in ["Button", "OptionButton", "LineEdit", "Tree", "ItemList", "TabContainer", "PopupMenu", "MenuBar", "HSlider", "Window"]:
+			check(th.get_stylebox_list(kind).size() > 0, "%s styles %s" % [name, kind])
+		# Readability: body text and hints against the panel, accent against the panel.
+		var bg := ThemeBuilder.c(t, "bg")
+		check(_contrast(ThemeBuilder.c(t, "text"), bg) >= 7.0, "%s text/bg contrast %.1f ≥ 7" % [name, _contrast(ThemeBuilder.c(t, "text"), bg)])
+		check(_contrast(ThemeBuilder.c(t, "text_dim"), bg) >= 4.5, "%s dim text/bg contrast %.1f ≥ 4.5" % [name, _contrast(ThemeBuilder.c(t, "text_dim"), bg)])
+		check(_contrast(ThemeBuilder.c(t, "text"), ThemeBuilder.c(t, "surface")) >= 4.5, "%s text on buttons" % name)
+		check(_contrast(ThemeBuilder.c(t, "accent"), bg) >= 3.0, "%s accent/bg contrast %.1f ≥ 3" % [name, _contrast(ThemeBuilder.c(t, "accent"), bg)])
+		check(_contrast(ThemeBuilder.c(t, "accent_text"), ThemeBuilder.c(t, "accent")) >= 4.5, "%s accent button text" % name)
+		check(_contrast(ThemeBuilder.c(t, "text"), ThemeBuilder.c(t, "bg_deep")) >= 7.0, "%s text in inputs" % name)
+	check(ThemeBuilder.tokens("nope") == ThemeBuilder.tokens("slate"), "unknown theme falls back to slate")
+	for f in ["Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "JetBrainsMono-Regular.ttf"]:
+		var font := ThemeBuilder.font(f)
+		check(font != null and font != ThemeDB.fallback_font, "font %s loads" % f)
+
+
+func test_ui_icons() -> void:
+	# Every icon named anywhere in the editor code exists and rasterises.
+	var named := {}
+	var re := RegEx.new()
+	re.compile('get_icon\\("([a-z0-9-]+)"|set_meta\\("icon", "([a-z0-9-]+)"\\)|_button\\("([a-z0-9-]+)"')
+	for path in ["res://hexmap/main.gd", "res://hexmap/ui/theme_builder.gd", "res://hexmap/editor/layers_panel.gd", "res://hexmap/editor/palette.gd"]:
+		for m in re.search_all(FileAccess.get_file_as_string(path)):
+			for g in [1, 2, 3]:
+				if m.get_string(g) != "":
+					named[m.get_string(g)] = true
+	var main_src := FileAccess.get_file_as_string("res://hexmap/main.gd")
+	var tools_re := RegEx.new()
+	tools_re.compile('"[a-z]+": "([a-z0-9-]+)"')
+	var start := main_src.find("TOOL_ICONS")
+	for m in tools_re.search_all(main_src.substr(start, main_src.find("}", start) - start)):
+		named[m.get_string(1)] = true
+	check(named.size() >= 25, "found %d icon names in code" % named.size())
+	var missing := []
+	for n in named:
+		if not FileAccess.file_exists(UiIcons.dir().path_join(n + ".svg")):
+			missing.append(n)
+	check(missing.is_empty(), "icons missing on disk: %s" % [missing])
+	var tex := UiIcons.get_icon("eye", 20, Color.RED)
+	check(tex.get_width() == 20 and tex.get_height() == 20, "icon rasterised at requested size")
+	var img := tex.get_image()
+	var red := 0
+	for y in 20:
+		for x in 20:
+			var c := img.get_pixel(x, y)
+			if c.a > 0.5 and c.r > 0.8 and c.g < 0.2:
+				red += 1
+	check(red > 20, "icon takes the requested colour (%d red px)" % red)
+	check(UiIcons.get_icon("eye", 20, Color.RED) == tex, "icon cached")
+	check(UiIcons.get_icon("no-such-icon", 16) != null, "missing icon gives a placeholder")
+
+
+func test_layout_store() -> void:
+	var d := LayoutStore.default_layout()
+	var names := Array(LayoutStore.names(d))
+	names.sort()
+	var expected := LayoutStore.PANELS.duplicate()
+	expected.sort()
+	check(names == expected, "default layout names every panel once: %s" % [names])
+	var path := "user://test_layout.tres"
+	check(LayoutStore.save(d, path) == OK, "layout saves")
+	var back := LayoutStore.load_or_default(path)
+	var back_names := Array(LayoutStore.names(back))
+	back_names.sort()
+	check(back_names == expected, "layout round-trips: %s" % [back_names])
+	check(back.root is DockableLayoutSplit and (back.root as DockableLayoutSplit).percent == 0.2, "split geometry preserved")
+	# A saved layout from an older build lacks a panel: it is added back.
+	var old := DockableLayout.new()
+	var leaf := DockableLayoutPanel.new()
+	leaf.names = PackedStringArray(["Palette", "Canvas"])
+	old.root = leaf
+	var repaired := LayoutStore.repair(old)
+	var rn := Array(LayoutStore.names(repaired))
+	rn.sort()
+	check(rn == expected, "missing panels restored: %s" % [rn])
+	check(LayoutStore.load_or_default("user://does_not_exist.tres").get_names().size() == LayoutStore.PANELS.size(), "no file → default")
+	var f := FileAccess.open("user://broken.tres", FileAccess.WRITE)
+	f.store_string("not a resource")
+	f.close()
+	check(LayoutStore.load_or_default("user://broken.tres").get_names().size() == LayoutStore.PANELS.size(), "unreadable file → default")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://broken.tres"))
+
+
+func test_native_menu_accelerators() -> void:
+	var k := NativeMenuMirror._native_accel(KEY_S | KEY_MASK_CMD_OR_CTRL)
+	check((k & KEY_MASK_CMD_OR_CTRL) == 0, "placeholder mask resolved")
+	if OS.get_name() == "macOS":
+		check((k & KEY_MASK_META) != 0 and (k & KEY_CODE_MASK) == KEY_S, "Cmd+S on macOS")
+	else:
+		check((k & KEY_MASK_CTRL) != 0 and (k & KEY_CODE_MASK) == KEY_S, "Ctrl+S elsewhere")
+	check(NativeMenuMirror._native_accel(KEY_NONE) == KEY_NONE, "none stays none")
+	check(NativeMenuMirror._native_accel(KEY_G) == KEY_G, "plain key untouched")

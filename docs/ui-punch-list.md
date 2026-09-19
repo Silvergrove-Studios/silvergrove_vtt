@@ -165,3 +165,20 @@ What the samples showed:
   candidate.
 - **Dockable container** is the one sample with a behavioural difference,
   and it works with our theme untouched (panels are TabContainers).
+
+## Decision (September 2026)
+
+- **Layout: godot-dockable-container**, adopted as the only layout. The
+  arrangement is saved to `user://layout.tres` (`LayoutStore`), repaired on
+  load if a panel is missing, and reset from the View menu. One upstream bug
+  patched locally (see THIRD_PARTY.md).
+- **Theme: ThemeBuilder tokens**, four palettes, chosen from a toolbar
+  dropdown (also View → Theme) and remembered per user. ThemeGen and Themey
+  samples removed.
+- **Icons: Lucide SVGs** loaded directly by `UiIcons`.
+- Tests: every variant builds with the expected variations and styles and
+  passes WCAG contrast checks (text ≥ 7:1, hints ≥ 4.5:1, accent ≥ 3:1);
+  every icon named in code exists and rasterises in the requested colour;
+  layouts round-trip through disk and are repaired when a panel is missing;
+  unknown theme ids fall back to Slate. `tools/ui_smoke.gd` drives the
+  dropdown and the layout reset in a window.

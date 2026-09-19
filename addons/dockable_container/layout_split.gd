@@ -82,7 +82,10 @@ func get_percent() -> float:
 
 
 func get_names() -> PackedStringArray:
-	var names := _first.get_names()
+	# Hexmap patch: packed arrays are passed by reference in Godot 4, so
+	# appending to the first leaf's array here grew that leaf's own tab list
+	# on every call (and every save). Copy first.
+	var names := _first.get_names().duplicate()
 	names.append_array(_second.get_names())
 	return names
 

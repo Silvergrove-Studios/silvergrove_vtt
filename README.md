@@ -57,7 +57,13 @@ Picking something in the left palette switches to the matching tool.
   pixel (Shift: ten). The inspector on the right edits every field,
   including positions in pixels at the map's authoring density
   (`reference_ppx`, default 256 px per hex) for artists who think that way.
-- **Layers** (right, top) lists every element on the level, Photoshop style:
+- **Panels dock.** Palette, Layers, Canvas, Inspector and View options are
+  tabs: drag a tab onto another panel to group with it, or to a panel's edge
+  to split. The arrangement is remembered per user; View → Reset panel
+  layout restores the default.
+- **Theme** is the dropdown at the right of the toolbar (also View → Theme):
+  Slate, Forge, Studio or Parchment, remembered per user.
+- **Layers** lists every element on the level, Photoshop style:
   folders, eye and lock toggles, drag to reorder or to move into a folder —
   which never moves anything on the canvas. Top of the list is drawn on
   top. Selecting a row selects on the canvas and vice versa; double-click

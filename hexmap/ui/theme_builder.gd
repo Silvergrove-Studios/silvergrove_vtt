@@ -12,7 +12,7 @@ const VARIANTS := {
 		"surface": "#2a2b30", "surface_hover": "#34363c", "surface_pressed": "#3d4048",
 		"border": "#33353b", "border_strong": "#45484f",
 		"text": "#e6e6e9", "text_dim": "#a2a5ad", "text_disabled": "#5d6068",
-		"accent": "#5b9cf6", "accent_text": "#ffffff", "shadow": "#00000099",
+		"accent": "#5b9cf6", "accent_text": "#0b1730", "shadow": "#00000099",
 		"radius": 6, "spacing": 8, "font_size": 13, "icon": 18, "stroke": 1.8,
 	},
 	"forge": {
@@ -38,7 +38,7 @@ const VARIANTS := {
 		"bg": "#f1eadb", "bg_deep": "#e6dcc8", "canvas": "#d8cdb6",
 		"surface": "#faf5ea", "surface_hover": "#ffffff", "surface_pressed": "#e9dfcc",
 		"border": "#d3c6ad", "border_strong": "#b9a98c",
-		"text": "#2b2620", "text_dim": "#6b5f52", "text_disabled": "#ada190",
+		"text": "#2b2620", "text_dim": "#5a4e42", "text_disabled": "#9a8d7c",
 		"accent": "#a33a2f", "accent_text": "#fff7ee", "shadow": "#3a2a1a66",
 		"radius": 5, "spacing": 8, "font_size": 13, "icon": 18, "stroke": 1.8,
 	},

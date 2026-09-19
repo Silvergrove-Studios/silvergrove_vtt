@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d21ikcopg0ovm"
-path="res://.godot/imported/button-hover.svg-3271e5b6f804873fcdae73d23ec391bb.ctex"
+uid="uid://dd78kajntp0gk"
+path="res://.godot/imported/dockable_container.png-ec002bf5adf182f5839435bbe28c6819.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/Themey/themes/clashy/graphics/button-hover.svg"
-dest_files=["res://.godot/imported/button-hover.svg-3271e5b6f804873fcdae73d23ec391bb.ctex"]
+source_file="res://docs/images/frameworks/dockable_container.png"
+dest_files=["res://.godot/imported/dockable_container.png-ec002bf5adf182f5839435bbe28c6819.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false
