@@ -1,11 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-09-19
+
+Hexmap grows from a map editor into a table: run encounters on your maps,
+and let players join from their own devices on the same network.
 
 - Hexmap is now one application with three modes — Editor, Table, Player —
   picked from a home screen or the command line (`./run.sh editor|table|
-  player`, `--editor`/`--table`/`--player`). The editor is unchanged; the
-  Table and Player are placeholders for the encounter work that follows.
+  player`, `--editor`/`--table`/`--player`). The editor is unchanged.
 - Shared state (preferences, packs, theme, recent files) moved out of the
   editor window into `App` so every mode uses the same ones.
 - `./run.sh check` also fails if a portable module uses a desktop-only class.
@@ -37,11 +39,11 @@
   and the view refreshed when the DM saves. Finger-first: no menus, no
   dialogs, pinch and two-finger pan. `Session` / `LocalSession` are the
   seam the network version drops into. `tools/player_smoke.gd`.
-- Networking on the LAN: the Table hosts (WebSocket, JSON), announces
-  itself by multicast and broadcast, hands players the encounter and
-  every event, applies their requests through its own commands, and
-  streams maps and pack art to devices that lack them. The Player lists
-  tables it hears or takes a typed address.
+- Networking on the LAN: the Table hosts (WebSocket, JSON), hands players
+  the encounter and every event, applies their requests through its own
+  commands, and streams maps and pack art to devices that lack them. The
+  Player finds tables by asking the network (the Table answers directly,
+  which gets past phones' multicast filters) or takes a typed address.
 - A release workflow that builds an Android APK and desktop zips and
   publishes them (tags, or a `dev-build` prerelease on demand). Icons and
   fonts are now "keep" imports so exported builds carry them.
