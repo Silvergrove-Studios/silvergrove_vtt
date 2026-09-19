@@ -129,18 +129,13 @@ func to_json() -> String:
 	doc["grid"] = grid.to_dict()
 	for l in levels:
 		LayerTree.ensure(l)
-	return JSON.stringify(_sorted(doc), "  ", false) + "\n"
+	return JsonDoc.stringify(doc)
 
 
 ## Parse a document. Returns null and fills `error` on failure.
 static func from_json(text: String, error: Array = []) -> HexMap:
-	var json := JSON.new()
-	if json.parse(text) != OK:
-		error.append("line %d: %s" % [json.get_error_line(), json.get_error_message()])
-		return null
-	var d = json.data
-	if not (d is Dictionary):
-		error.append("not a JSON object")
+	var d := JsonDoc.parse(text, error)
+	if d.is_empty():
 		return null
 	if d.get("format", "") != FORMAT:
 		error.append("not a %s document (format is '%s')" % [FORMAT, d.get("format", "")])
@@ -212,37 +207,8 @@ static func load_file(p_path: String, error: Array = []) -> HexMap:
 # ---------------------------------------------------------------------- misc --
 
 static func new_id(prefix: String) -> String:
-	return "%s_%08x" % [prefix, randi()]
+	return JsonDoc.new_id(prefix)
 
 
 static func _uuid() -> String:
-	var b := PackedByteArray()
-	b.resize(16)
-	for i in 16:
-		b[i] = randi() & 0xff
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	var h := b.hex_encode()
-	return "%s-%s-%s-%s-%s" % [h.substr(0, 8), h.substr(8, 4), h.substr(12, 4), h.substr(16, 4), h.substr(20, 12)]
-
-
-## Recursively sort dictionary keys so saves are stable and diffs are small.
-## Cell keys ("q,r") sort as strings, which is fine: stable is what matters.
-static func _sorted(v: Variant) -> Variant:
-	if v is Dictionary:
-		var out := {}
-		var keys := (v as Dictionary).keys()
-		keys.sort_custom(func(a, b): return str(a) < str(b))
-		for k in keys:
-			out[k] = _sorted(v[k])
-		return out
-	if v is Array:
-		var out := []
-		for e in v:
-			out.append(_sorted(e))
-		return out
-	# JSON.parse gives every number back as a float; write whole numbers as
-	# ints so a load/save cycle does not turn "v": 1 into "v": 1.0 forever.
-	if v is float and is_finite(v) and v == floorf(v) and absf(v) < 1e15:
-		return int(v)
-	return v
+	return JsonDoc.uuid()

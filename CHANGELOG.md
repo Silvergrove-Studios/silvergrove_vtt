@@ -10,6 +10,16 @@
   editor window into `App` so every mode uses the same ones.
 - `./run.sh check` also fails if a portable module uses a desktop-only class.
 - `./run.sh shot` now takes the output first: `shot out.png [map]`.
+- The `.encounter` document (`docs/encounter-format.md`): scenes over map
+  levels, tokens, an overrides overlay (doors, lights, reveals) that never
+  edits the map, fog as explored cells, initiative, players. `Encounter`,
+  `EncounterState` with its event vocabulary (apply returns the inverse),
+  validation and player permissions, `Vision` (what tokens see through
+  walls and open doors), `EncounterCommands` (undoable table actions).
+  Example `examples/chapel_ambush.encounter`, built through events.
+- Packs may carry a `tokens` collection for token art.
+- Example maps: doors now sit in a gap in the wall instead of on top of it,
+  so opening one opens the room.
 
 ## 1.0.0 — 2026-09-19
 

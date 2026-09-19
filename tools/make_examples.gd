@@ -16,7 +16,9 @@ func _init() -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	_save(_forest_road(), dir.path_join("forest_road.hexmap"))
 	_save(_bog_crossing(), dir.path_join("bog_crossing.hexmap"))
-	_save(_ruined_chapel(), dir.path_join("ruined_chapel.hexmap"))
+	var chapel := _ruined_chapel()
+	_save(chapel, dir.path_join("ruined_chapel.hexmap"))
+	_save_encounter(_chapel_ambush(chapel), dir.path_join("chapel_ambush.encounter"))
 	print("examples written")
 	quit(0)
 
@@ -26,6 +28,14 @@ func _save(m: HexMap, path: String) -> void:
 	m.doc.meta.modified = "2026-09-19T00:00:00"
 	m.doc.meta.author = "Silvergrove Studios"
 	var err := m.save(path)
+	print(path, " ", "ok" if err == OK else error_string(err))
+
+
+func _save_encounter(e: Encounter, path: String) -> void:
+	e.doc.meta.created = "2026-09-19T00:00:00"
+	e.doc.meta.modified = "2026-09-19T00:00:00"
+	e.doc.meta.author = "Silvergrove Studios"
+	var err := e.save(path)
 	print(path, " ", "ok" if err == OK else error_string(err))
 
 
@@ -85,6 +95,46 @@ func _note(lvl: Dictionary, pos: Vector2, title: String, text: String) -> void:
 
 
 ## Boundary of a set of cells as chained polylines along hex edges.
+## Walls around `cells` with a door in one edge: the boundary is cut where
+## the door goes, so opening it really opens the room.
+func _room(lvl: Dictionary, grid: HexGrid, cells: Dictionary, style: String, door: Array, door_preset := "door") -> void:
+	for chain in _cut(_boundary(grid, cells), door[0], door[1]):
+		_wall(lvl, chain, "wall", style)
+	_wall(lvl, door, door_preset)
+
+
+## Remove the segment a-b (either direction) from the chains that hold it,
+## splitting them; a chain that closes on itself is re-opened at the cut.
+func _cut(chains: Array, a: Vector2, b: Vector2) -> Array:
+	var out: Array = []
+	for chain in chains:
+		var pts: Array = chain
+		var at := -1
+		for i in pts.size() - 1:
+			var p: Vector2 = pts[i]
+			var q: Vector2 = pts[i + 1]
+			if (p.distance_to(a) < 0.01 and q.distance_to(b) < 0.01) or (p.distance_to(b) < 0.01 and q.distance_to(a) < 0.01):
+				at = i
+				break
+		if at < 0:
+			out.append(pts)
+			continue
+		var closed: bool = pts.size() > 2 and (pts[0] as Vector2).distance_to(pts[-1]) < 0.01
+		if closed:
+			# Rotate so the cut edge is the last one, then drop it: one open chain.
+			var ring: Array = pts.slice(0, pts.size() - 1)
+			var rotated: Array = ring.slice(at + 1) + ring.slice(0, at + 1)
+			out.append(rotated)
+		else:
+			var first: Array = pts.slice(0, at + 1)
+			var second: Array = pts.slice(at + 1)
+			if first.size() >= 2:
+				out.append(first)
+			if second.size() >= 2:
+				out.append(second)
+	return out
+
+
 func _boundary(grid: HexGrid, cells: Dictionary) -> Array:
 	var edges: Array = []   # [a, b]
 	for key in cells:
@@ -251,9 +301,7 @@ func _bog_crossing() -> HexMap:
 	var hut_cells := {}
 	for c in HexGrid.spiral(g.world_to_axial(hut), 1):
 		hut_cells[HexMap.cell_key(c)] = true
-	for chain in _boundary(g, hut_cells):
-		_wall(lvl, chain, "wall", "swamp:palisade")
-	_wall(lvl, [g.snap_to_corner(hut + Vector2(-1.0, 0.5)), g.snap_to_corner(hut + Vector2(-1.0, -0.5))], "door")
+	_room(lvl, g, hut_cells, "swamp:palisade", [g.snap_to_corner(hut + Vector2(-1.0, 0.5)), g.snap_to_corner(hut + Vector2(-1.0, -0.5))])
 	_note(lvl, hut, "The hut", "Mother Sedge is home. She wants the frog totem back before she talks.")
 	_note(lvl, Vector2(9.5, 9.6), "Sunken boat", "A strongbox in the mud beneath, guarded by a bog lurker.")
 	return m
@@ -289,11 +337,9 @@ func _ruined_chapel() -> HexMap:
 			_cell(m, lvl, c, "dungeons_and_castles:rubble", 2)
 		else:
 			_cell(m, lvl, c, "dungeons_and_castles:flagstone", 3)
-	for chain in _boundary(g, nave):
-		_wall(lvl, chain, "wall", "dungeons_and_castles:stone_wall")
 	# Door at the west end, gap (collapsed wall) on the south side
 	var west := g.cell_center(g.offset_to_axial(5, 7))
-	_wall(lvl, [g.snap_to_corner(west + Vector2(-0.5, -0.3)), g.snap_to_corner(west + Vector2(-0.5, 0.3))], "door")
+	_room(lvl, g, nave, "dungeons_and_castles:stone_wall", [g.snap_to_corner(west + Vector2(-0.5, -0.3)), g.snap_to_corner(west + Vector2(-0.5, 0.3))])
 	var cells: Array = nave.keys()
 	# Pillars down both sides, pews, altar
 	for x in [7, 9, 11, 13]:
@@ -340,8 +386,8 @@ func _ruined_chapel() -> HexMap:
 	for key in room:
 		var c := HexMap.key_cell(key)
 		crypt.terrain[key] = {"t": "dungeons_and_castles:rough_stone" if rng.randf() < 0.7 else "dungeons_and_castles:dirt_floor", "v": rng.randi() % 2, "rot": 0, "z": -2}
-	for chain in _boundary(g, room):
-		_wall(crypt, chain, "wall", "dungeons_and_castles:brick_wall")
+	var secret := [g.snap_to_corner(g.cell_center(g.offset_to_axial(9, 8)) + Vector2(-0.5, -0.3)), g.snap_to_corner(g.cell_center(g.offset_to_axial(9, 8)) + Vector2(-0.5, 0.3))]
+	_room(crypt, g, room, "dungeons_and_castles:brick_wall", secret, "secret")
 	crypt.terrain[HexMap.cell_key(g.offset_to_axial(13, 8))] = {"t": "dungeons_and_castles:stairs", "v": 0, "rot": 0, "z": -2}
 	for x in [10, 12, 14]:
 		for y in [6, 10]:
@@ -349,6 +395,61 @@ func _ruined_chapel() -> HexMap:
 	_prop(crypt, "dungeons_and_castles:altar", g.cell_center(g.offset_to_axial(9, 8)), 90)
 	_prop(crypt, "dungeons_and_castles:torch_sconce", g.cell_center(g.offset_to_axial(11, 8)) + Vector2(0, -1.2))
 	_light(crypt, g.cell_center(g.offset_to_axial(11, 8)) + Vector2(0, -1.2), 1.0, 2.0, "#ffa040", "torch")
-	_wall(crypt, [g.snap_to_corner(g.cell_center(g.offset_to_axial(9, 8)) + Vector2(-0.5, -0.3)), g.snap_to_corner(g.cell_center(g.offset_to_axial(9, 8)) + Vector2(-0.5, 0.3))], "secret")
 	_note(crypt, g.cell_center(g.offset_to_axial(9, 8)) + Vector2(-1.0, 0), "Secret door", "Leads to a collapsed tunnel heading west.")
 	return m
+
+
+# --------------------------------------------------------------- encounter --
+
+## An encounter on the chapel, built the way the Table will: through events
+## on an EncounterState, so this is also the model's smoke test.
+func _chapel_ambush(m: HexMap) -> Encounter:
+	var e := Encounter.create("Chapel Ambush")
+	e.doc.meta.description = "The party enters the chapel at dusk; goblins wait in the dark, their chief in the crypt."
+	var st := EncounterState.new(e)
+	st.attach_map(m)
+	var g := m.grid
+	var ana := Encounter.new_player("Ana", "#4f9cf6")
+	var ben := Encounter.new_player("Ben", "#5bc86a")
+	st.apply({"t": "player.add", "player": ana})
+	st.apply({"t": "player.add", "player": ben})
+
+	var ground := Encounter.new_scene(m, "ground", "Chapel at dusk", "ruined_chapel.hexmap")
+	st.apply({"t": "scene.add", "scene": ground})
+	var sid: String = ground.id
+	var door := m.level_by_id("ground")
+	# The party at the west door, one goblin per pillar, hidden until seen.
+	var party := [
+		Encounter.new_token("Ana's fighter", g.cell_center(g.offset_to_axial(3, 7)), {"label": "AF", "color": ana.color, "owner": ana.id, "light": {"bright": 1.5, "dim": 3.0, "color": "#ffa040"}}),
+		Encounter.new_token("Ben's ranger", g.cell_center(g.offset_to_axial(3, 8)), {"label": "BR", "color": ben.color, "owner": ben.id, "vision": {"radius": 9}}),
+	]
+	for t in party:
+		st.apply({"t": "token.add", "scene": sid, "token": t})
+	var n := 1
+	for x in [9, 13]:
+		for y in [5, 10]:
+			st.apply({"t": "token.add", "scene": sid, "token": Encounter.new_token("Goblin", g.cell_center(g.offset_to_axial(x, y)) + Vector2(0.6, 0),
+				{"label": "G%d" % n, "color": "#8a9a3a", "hidden": true, "vision": {"radius": 6}})})
+			n += 1
+	# Braziers are out; only the altar candles burn. Fog on; the party has
+	# seen the courtyard from the road.
+	for l in door.lights:
+		if str(l.color) == "#ff9040":
+			st.apply({"t": "element.set", "scene": sid, "ref": LayerTree.ref("lights", l.id), "changes": {"on": false}})
+	st.apply({"t": "fog.set", "scene": sid, "enabled": true})
+	var cmds := EncounterCommands.new(st, History.new())
+	cmds.explore_from(sid, party)
+	cmds.history.clear()   # the undo closures hold the state; drop the cycle
+
+	var crypt := Encounter.new_scene(m, "crypt", "The crypt", "ruined_chapel.hexmap")
+	st.apply({"t": "scene.add", "scene": crypt})
+	st.apply({"t": "token.add", "scene": crypt.id, "token": Encounter.new_token("Goblin chief", g.cell_center(g.offset_to_axial(11, 8)),
+		{"label": "GC", "color": "#a0402a", "size": 1, "vision": {"radius": 6}, "tags": ["boss"]})})
+	st.apply({"t": "fog.set", "scene": crypt.id, "enabled": true})
+	st.apply({"t": "scene.activate", "id": sid})
+	var order := []
+	for t in st.tokens(sid):
+		order.append(t.id)
+	st.apply({"t": "initiative.set", "changes": {"order": order, "round": 1, "turn": 0, "running": false}})
+	e.doc.notes.append({"id": JsonDoc.new_id("n"), "title": "If the party lights the braziers", "text": "The goblins bolt for the trapdoor; the chief bars it from below."})
+	return e

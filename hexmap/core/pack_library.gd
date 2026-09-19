@@ -78,7 +78,7 @@ func _load_pack(dir: String) -> void:
 		warnings.append("%s: duplicate pack id '%s' (already loaded from %s)" % [dir, id, packs[id]["_dir"]])
 		return
 	m["_dir"] = dir
-	for k in ["terrains", "props", "walls", "lights"]:
+	for k in ["terrains", "props", "walls", "lights", "tokens"]:
 		if not m.has(k):
 			m[k] = []
 	packs[id] = m
@@ -103,7 +103,7 @@ static func split_ref(ref: String) -> PackedStringArray:
 
 
 ## The manifest entry for an asset ref in the given collection
-## ("terrains", "props", "walls", "lights"), or {} if unknown.
+## ("terrains", "props", "walls", "lights", "tokens"), or {} if unknown.
 func asset(collection: String, ref: String) -> Dictionary:
 	var parts := split_ref(ref)
 	if parts.is_empty():
@@ -119,6 +119,7 @@ func terrain(ref: String) -> Dictionary: return asset("terrains", ref)
 func prop(ref: String) -> Dictionary: return asset("props", ref)
 func wall_style(ref: String) -> Dictionary: return asset("walls", ref)
 func light_preset(ref: String) -> Dictionary: return asset("lights", ref)
+func token_art(ref: String) -> Dictionary: return asset("tokens", ref)
 
 
 ## All assets of a collection across packs, each with "_ref" and "_pack" set.
@@ -162,6 +163,16 @@ func prop_texture(ref: String, ppx: float) -> Texture2D:
 		return placeholder(Color.MAGENTA)
 	var size: Array = p.get("size", [1, 1])
 	return _texture(split_ref(ref)[0], file, float(size[0]) * ppx, ref)
+
+
+## Texture for a token's art, sized to fill `size` hexes at `ppx`; null when
+## the ref is unknown so the caller draws its plain disc instead.
+func token_texture(ref: String, ppx: float, size := 1.0) -> Texture2D:
+	var t := token_art(ref)
+	var file := str(t.get("texture", ""))
+	if file == "":
+		return null
+	return _texture(split_ref(ref)[0], file, size * ppx, ref)
 
 
 func wall_texture(ref: String, ppx: float) -> Texture2D:

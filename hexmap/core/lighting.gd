@@ -7,15 +7,16 @@ extends RefCounted
 ## VTTs do their own lighting from the exported walls; this exists so what
 ## you see while editing is honest about where a torch reaches.
 
-## Segments from a level's walls that block light: [{a, b, one_way}] where
-## one_way is 0 both / 1 left / 2 right (right-hand rule walking a -> b).
-static func blocking_segments(level: Dictionary, visible: Dictionary = {}) -> Array:
+## Segments from a level's walls that block `what` ("light" for lights,
+## "sight" for vision): [{a, b, one_way}] where one_way is 0 both / 1 left /
+## 2 right (right-hand rule walking a -> b). Open doors never block.
+static func blocking_segments(level: Dictionary, visible: Dictionary = {}, what := "light") -> Array:
 	var out: Array = []
 	for w in level.get("walls", []):
 		if not visible.is_empty() and not visible.get(LayerTree.ref("walls", str(w.get("id", ""))), true):
 			continue
 		var blocks: Dictionary = w.get("blocks", {})
-		if not bool(blocks.get("light", true)):
+		if not bool(blocks.get(what, true)):
 			continue
 		if str(w.get("door", "none")) != "none" and str(w.get("state", "closed")) == "open":
 			continue

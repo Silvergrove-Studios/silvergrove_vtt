@@ -45,7 +45,7 @@ isn't one, downloads the pinned build to `~/.cache/hexmap/godot`.
 
 Three example maps are in `examples/`: a woodland road with a camp
 (pointy-top hexes), a bog crossing to a witch's hut (flat-top hexes), and a
-ruined chapel with a crypt level. Three example packs are in `packs/`, with
+ruined chapel with a crypt level — plus an encounter on the chapel. Three example packs are in `packs/`, with
 generated placeholder art.
 
 ## Using the editor
@@ -107,6 +107,8 @@ Space+drag or middle-drag pans, the wheel zooms, Ctrl/Cmd+0 fits.
 ## Files
 
 - `name.hexmap` — the map, JSON. See `docs/map-format.md`.
+- `name.encounter` — an encounter over one or more maps: tokens, doors,
+  lights, fog, initiative. See `docs/encounter-format.md`.
 - `packs/<id>/pack.json` — a content pack. See `docs/pack-format.md`.
 - Exports and how each target is mapped: `docs/exports.md`.
 - Why these formats: `docs/research-formats.md`.

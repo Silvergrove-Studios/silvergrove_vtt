@@ -3022,6 +3022,22 @@
           "points": [
             [
               5.5,
+              6.3509
+            ],
+            [
+              5,
+              6.0622
+            ],
+            [
+              5,
+              5.4848
+            ],
+            [
+              5.5,
+              5.1962
+            ],
+            [
+              5.5,
               4.6188
             ],
             [
@@ -3323,26 +3339,6 @@
             [
               5.5,
               6.9282
-            ],
-            [
-              5.5,
-              6.3509
-            ],
-            [
-              5,
-              6.0622
-            ],
-            [
-              5,
-              5.4848
-            ],
-            [
-              5.5,
-              5.1962
-            ],
-            [
-              5.5,
-              4.6188
             ]
           ],
           "sight_mode": "normal",
@@ -3618,7 +3614,7 @@
           "dim": 2,
           "direction": 0,
           "hidden": false,
-          "id": "l_67e64ab1",
+          "id": "l_e3a0bf12",
           "intensity": 1,
           "pos": [
             11.5,
@@ -3647,7 +3643,7 @@
           "flip": true,
           "height": 0.5,
           "hidden": false,
-          "id": "p_5aaab580",
+          "id": "p_56d6b854",
           "pos": [
             10.5,
             5.774
@@ -3661,7 +3657,7 @@
           "flip": false,
           "height": 0.5,
           "hidden": false,
-          "id": "p_56d6b854",
+          "id": "p_798d7ba8",
           "pos": [
             10.5,
             9.238
@@ -3675,7 +3671,7 @@
           "flip": false,
           "height": 0.5,
           "hidden": false,
-          "id": "p_798d7ba8",
+          "id": "p_4a9d3b0e",
           "pos": [
             12.5,
             5.774
@@ -3689,7 +3685,7 @@
           "flip": true,
           "height": 0.5,
           "hidden": false,
-          "id": "p_4a9d3b0e",
+          "id": "p_e7724871",
           "pos": [
             12.5,
             9.238
@@ -3703,7 +3699,7 @@
           "flip": false,
           "height": 0.5,
           "hidden": false,
-          "id": "p_e7724871",
+          "id": "p_c535a612",
           "pos": [
             14.5,
             5.774
@@ -3717,7 +3713,7 @@
           "flip": false,
           "height": 0.5,
           "hidden": false,
-          "id": "p_c535a612",
+          "id": "p_4769f4d7",
           "pos": [
             14.5,
             9.238
@@ -3731,7 +3727,7 @@
           "flip": false,
           "height": 0.5,
           "hidden": false,
-          "id": "p_4769f4d7",
+          "id": "p_96d183ec",
           "pos": [
             9.5,
             7.506
@@ -3745,7 +3741,7 @@
           "flip": false,
           "height": 0.5,
           "hidden": false,
-          "id": "p_96d183ec",
+          "id": "p_67e64ab1",
           "pos": [
             11.5,
             6.306
@@ -3979,9 +3975,6 @@
         {
           "children": [
             {
-              "ref": "props:p_5aaab580"
-            },
-            {
               "ref": "props:p_56d6b854"
             },
             {
@@ -4001,6 +3994,9 @@
             },
             {
               "ref": "props:p_96d183ec"
+            },
+            {
+              "ref": "props:p_67e64ab1"
             }
           ],
           "id": "f_props",
@@ -4023,7 +4019,7 @@
               "ref": "walls:w_41833ea6"
             },
             {
-              "ref": "walls:w_e3a0bf12"
+              "ref": "walls:w_5aaab580"
             }
           ],
           "id": "f_walls",
@@ -4035,7 +4031,7 @@
         {
           "children": [
             {
-              "ref": "lights:l_67e64ab1"
+              "ref": "lights:l_e3a0bf12"
             }
           ],
           "id": "f_lights",
@@ -4071,6 +4067,14 @@
           "one_way": null,
           "points": [
             [
+              9,
+              7.2169
+            ],
+            [
+              9.5,
+              6.9282
+            ],
+            [
               9.5,
               6.3509
             ],
@@ -4245,18 +4249,6 @@
             [
               9,
               7.7942
-            ],
-            [
-              9,
-              7.2169
-            ],
-            [
-              9.5,
-              6.9282
-            ],
-            [
-              9.5,
-              6.3509
             ]
           ],
           "sight_mode": "normal",
@@ -4276,7 +4268,7 @@
           },
           "door": "secret",
           "hidden": false,
-          "id": "w_e3a0bf12",
+          "id": "w_5aaab580",
           "one_way": null,
           "points": [
             [

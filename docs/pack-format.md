@@ -27,7 +27,8 @@ so it is the right choice for anything that must print sharp.
   "terrains": [ … ],
   "props": [ … ],
   "walls": [ … ],
-  "lights": [ … ]
+  "lights": [ … ],
+  "tokens": [ … ]
 }
 ```
 
@@ -91,6 +92,17 @@ along the wall; without it the wall is a coloured line of `width` hex units.
 { "id": "torch", "name": "Torch", "bright": 1.5, "dim": 3.0,
   "color": "#ffa040", "intensity": 1.0, "animation": "torch" }
 ```
+
+### Token art
+
+```json
+{ "id": "goblin", "name": "Goblin", "texture": "tokens/goblin.png", "tags": ["humanoid", "small"] }
+```
+
+Art for an encounter token (`docs/encounter-format.md`). The image is drawn
+as a disc the size of the token, so it should be square with the subject
+centred; the table clips it round. A pack with only tokens is fine — a
+bestiary can be its own repository.
 
 ## Placeholder art
 

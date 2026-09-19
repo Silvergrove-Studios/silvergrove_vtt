@@ -21,7 +21,7 @@ shell/      App (prefs, packs, theme), home screen, mode switch
 editor/     the Editor: panels, tools, Commands + History       desktop
 table/      the Table: encounter panels and tools               desktop
 player/     the Player: touch-first client                      portable
-encounter/  Encounter document, EncounterState, events          portable   (next)
+encounter/  Encounter, EncounterState, events, Vision, undo     portable
 net/        Session host/client, protocol, asset transfer       portable   (later)
 render/     MapCanvas, MapRenderer                              portable
 core/       HexMap, HexGrid, LayerTree, Lighting, PackLibrary   portable
@@ -115,14 +115,25 @@ opened, a light put out, a prop revealed, fog lifted, tokens — is an
 encounters, and re-exporting a map never loses a session.
 
 Every change to an encounter is a **serializable event**
-(`{"t": "token.move", "id": "t_1", "to": [4, 2]}`) applied to an
-`EncounterState`. The same event log gives undo (inverse events), autosave
-(the log), replication (send it to players), replay, and headless tests. The
-Table is authoritative: players send *requests* for what they own, the
-Table validates, applies and rebroadcasts. `MapCanvas` takes the state as an
-optional input and a *viewpoint* — the GM sees everything; a player sees
-what `Lighting.visibility_polygon` says their tokens can, with fog for the
-rest. Editor and exports pass no state and are untouched.
+(`{"t": "token.set", "scene": "s_1", "id": "t_1", "changes": {"pos": [4, 2]}}`)
+applied by `EncounterState.apply()`, which returns the inverse event. The
+same event gives undo (`EncounterCommands` commits event and inverse to
+`History`), autosave (the document is the state the log produced),
+replication (hosts broadcast what `applied` announces), replay, and headless
+tests. `validate()` says whether an event is well-formed against the current
+state; `allowed()` whether a player may send it — a player may only move a
+token they own. The Table is authoritative: players send events as
+*requests*, the Table validates, applies and rebroadcasts.
+
+`Vision` computes what tokens see from the *effective* level (overrides
+merged, so an open door does not block) with `Lighting.visibility_polygon`
+against sight-blocking walls; fog is the set of cells a player's tokens have
+seen. `MapCanvas` will take the state as an optional input and a
+*viewpoint* — the GM sees everything; a player sees what their tokens can,
+fog for the rest. Editor and exports pass no state and are untouched.
+
+The JSON conventions both document types share — stable key order, ids,
+merge-with-null-removes — live in `JsonDoc`.
 
 Networking, when it comes, is the Table hosting directly (LAN or a forwarded
 port; join by code or QR) over `WebSocketPeer` with JSON messages — the one

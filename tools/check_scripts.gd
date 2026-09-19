@@ -36,12 +36,19 @@ func _check_portable() -> int:
 				var line := lines[i]
 				var code := line.get_slice("#", 0) if not line.strip_edges().begins_with("##") else ""
 				for token in DESKTOP_ONLY:
-					if code.contains(token):
+					if _mentions(code, token):
 						print("FAIL %s:%d uses %s, which the Player cannot rely on" % [path, i + 1, token])
 						bad += 1
 	if bad == 0:
 		print("ok   portable modules stay portable")
 	return bad
+
+
+## Whole-word match, so EncounterCommands is not Commands.
+static func _mentions(code: String, token: String) -> bool:
+	var re := RegEx.new()
+	re.compile("(^|[^A-Za-z0-9_])" + token.replace(".", "\\.") + "($|[^A-Za-z0-9_])")
+	return re.search(code) != null
 
 
 func _scripts(dir: String) -> PackedStringArray:
