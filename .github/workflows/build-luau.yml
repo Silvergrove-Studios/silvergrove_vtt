@@ -58,14 +58,16 @@ jobs:
         run: |
           cd src
           cmake --preset ${{ matrix.preset }} -DBUILD_TESTING=OFF
-          cmake --build build --target gdluau -j
+          cmake --build build --target gdluau --config Release -j 4
+          find build -maxdepth 3 -type f \( -name "*.dll" -o -name "*.so" -o -name "*.dylib" \) -not -path "*/_deps/*"
       - name: Collect
         shell: bash
         run: |
           mkdir -p out
-          f=$(find src -name "${{ matrix.out }}" -not -path "*/_deps/*" | head -1)
+          f=$(find src/build -type f -name "${{ matrix.out }}" -not -path "*/_deps/*" | head -1)
+          if [ -z "$f" ]; then f=$(find src/build -type f \( -name "*gdluau*.dll" -o -name "*gdluau*.so" -o -name "*gdluau*.dylib" \) -not -path "*/_deps/*" -not -name "*tests*" | head -1); fi
           echo "built: $f"
-          cp "$f" out/
+          cp "$f" "out/${{ matrix.out }}"
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
