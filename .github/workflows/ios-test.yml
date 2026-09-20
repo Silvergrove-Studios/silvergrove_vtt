@@ -64,8 +64,10 @@ jobs:
           sed -i '' -E '/^[[:space:]]*\$(pbx_embeded_frameworks|additional_pbx_[a-z_]+)[[:space:]]*$/d' "$f"
           ! grep -nE '^[[:space:]]*\$[a-z_]+[[:space:]]*$' "$f"
           plutil -lint "$f"
-          plutil -lint out/ios/Hexmap-Info.plist
-          grep -n '\$[a-z_]' out/ios/Hexmap-Info.plist || true
+          plist="$(find out/ios -name '*Info.plist' -not -path '*/build/*' | head -n 1)"
+          echo "plist: $plist"
+          plutil -lint "$plist"
+          grep -n '\$[a-z_]' "$plist" || true
       - name: Build for the simulator
         run: |
           set -e
@@ -88,4 +90,3 @@ jobs:
             out/ios_export.log
             out/xcodebuild.log
             out/ios/Hexmap.xcodeproj/project.pbxproj
-            out/ios/Hexmap-Info.plist
