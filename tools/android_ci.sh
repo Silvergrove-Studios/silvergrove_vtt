@@ -9,7 +9,10 @@ apk="${1:?apk}"; out="${2:?out}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p "$out"
 
+set +e
 "$here/tools/android_selftest.sh" "$apk" "$out"
+suite_code=$?
+set -e
 
 echo "hosting a table on this machine for the emulator to join"
 rm -f "$here"/examples/*.autosave
@@ -29,4 +32,5 @@ code=$?
 set -e
 kill $table_pid 2>/dev/null || true
 grep -E "discovery|joined|left" "$out/table.log" | tail -n 5 || true
-exit $code
+echo "suite failed checks: $suite_code; join failed checks: $code"
+exit $(( suite_code > code ? suite_code : code ))

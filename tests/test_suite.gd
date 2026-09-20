@@ -2423,7 +2423,9 @@ func test_table_hosts_player_joins() -> void:
 	var found: bool = player._browsing and pump.call(func() -> bool: return ours.call() >= 0, 2500)
 	if found:
 		say.call("  found the table by discovery: %s" % player._tables.get_item_text(ours.call()))
-		player._tables.item_selected.emit(ours.call())
+		player._tables.item_selected.emit(ours.call())   # a tap fills the address…
+		check(player._address.text.ends_with(":%d" % table.host.port), "…with the table's address")
+		player._join_address()                            # …and Join connects
 	else:
 		say.call("  (no discovery on loopback here; using the address)")
 		player._address.text = "127.0.0.1:%d" % table.host.port
