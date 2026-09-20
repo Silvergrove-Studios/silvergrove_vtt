@@ -12,7 +12,7 @@
 #                                     (opens a small window: exports render on the GPU)
 #   ./run.sh shot <out.png> [map]     screenshot of the window (home, or the editor with a map)
 #   ./run.sh check                    load every script, report parse errors
-#   ./run.sh test                     run the unit tests (headless)
+#   ./run.sh test [filter]            run the unit tests (headless); filter by name
 #   ./run.sh examples                 regenerate examples/*.hexmap
 #   ./run.sh packs                    regenerate the placeholder art and manifests
 #   ./run.sh sheet <pack> <out.png>   contact sheet of a pack's assets
@@ -225,7 +225,7 @@ main() {
 			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tools/check_scripts.gd
 			;;
 		test)
-			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tests/run_tests.gd
+			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tests/run_tests.gd ${1:+-- "$1"}
 			;;
 		examples)
 			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tools/make_examples.gd

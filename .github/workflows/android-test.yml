@@ -1,0 +1,91 @@
+# Runs the unit suite inside a real Android runtime: builds an x86_64 debug
+# APK, boots an emulator, and drives the app's self-test mode over adb
+# (tools/android_selftest.sh). The log, the on-device screenshots and
+# logcat come back as artifacts.
+name: android-test
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays, so drift shows up without anyone pushing
+
+env:
+  GODOT_VERSION: 4.7.1-stable
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hexmap/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-templates-linux-x86_64
+      - run: ./run.sh install
+      - name: Install export templates
+        run: |
+          set -e
+          dest="$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-stable/.stable}"
+          if [ ! -f "$dest/android_debug.apk" ]; then
+            curl -fL --retry 3 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_export_templates.tpz"
+            mkdir -p "$dest"
+            unzip -q /tmp/templates.tpz -d /tmp/templates
+            mv /tmp/templates/templates/* "$dest/"
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK pieces Godot needs
+        run: |
+          set -e
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "build-tools;35.0.0" "platforms;android-35" "cmdline-tools;latest" >/dev/null
+      - name: Debug keystore and Godot settings
+        run: |
+          set -e
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            -keystore "$HOME/debug.keystore" -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" -validity 9999
+          godot="$(./run.sh doctor | awk '/^godot/ {print $2}')"
+          "$godot" --headless --editor --quit --path . >/dev/null 2>&1 || true
+          f="$(ls "$HOME/.config/godot/"editor_settings-*.tres | head -n 1)"
+          cat >> "$f" <<SETTINGS
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/debug_keystore = "$HOME/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          SETTINGS
+      - run: ./run.sh check
+      - name: Export the x86_64 APK
+        run: |
+          set -e
+          godot="$(./run.sh doctor | awk '/^godot/ {print $2}')"
+          mkdir -p out
+          "$godot" --headless --path . --export-debug "Android Emulator" out/Hexmap-x86_64.apk 2>&1 | tee out/apk.log
+          ! grep -q "^ERROR" out/apk.log
+          ls -la out/Hexmap-x86_64.apk
+      - name: Self-test on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: tools/android_selftest.sh out/Hexmap-x86_64.apk out/android
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-selftest
+          path: out/android/

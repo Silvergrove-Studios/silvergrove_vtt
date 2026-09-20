@@ -86,5 +86,14 @@ static func merge(target: Dictionary, changes: Dictionary) -> Dictionary:
 	return before
 
 
+## ISO 8601, UTC, "2026-09-19T18:04:00": what the format docs show.
 static func now() -> String:
-	return Time.get_datetime_string_from_system(true, true)
+	return Time.get_datetime_string_from_system(true, false)
+
+
+## A document's text with its "modified" stamps blanked, for comparing two
+## documents that should be the same apart from when they were touched.
+static func sans_modified(text: String) -> String:
+	var re := RegEx.new()
+	re.compile('"modified": "[^"]*"')
+	return re.sub(text, '"modified": ""', true)

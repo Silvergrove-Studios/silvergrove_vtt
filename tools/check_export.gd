@@ -35,10 +35,12 @@ func _init() -> void:
 		else:
 			print("FAIL missing from the pack: ", p)
 			bad += 1
-	# The pack must not carry what should stay out (the placeholder packs
-	# are streamed, the tests are not shipped).
-	for p in ["res://packs/woodland/pack.json", "res://tests/run_tests.gd"]:
-		if FileAccess.file_exists(p) or ResourceLoader.exists(p):
-			print("FAIL should not be in the pack: ", p)
-			bad += 1
+	# The suite ships so a build can self-test; the placeholder packs do
+	# not (they stream from a Table).
+	if not ResourceLoader.exists("res://tests/test_suite.gd"):
+		print("FAIL the test suite is missing from the pack")
+		bad += 1
+	if FileAccess.file_exists("res://packs/woodland/pack.json"):
+		print("FAIL the packs should not be in the pack")
+		bad += 1
 	quit(1 if bad > 0 else 0)

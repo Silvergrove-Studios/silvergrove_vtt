@@ -223,6 +223,7 @@ func _upgrade(_from_version: int) -> void:
 			s["fog"] = {}
 		if not s["fog"].has("explored"):
 			s["fog"]["explored"] = []
+		(s["fog"]["explored"] as Array).sort()
 		if not s["fog"].has("enabled"):
 			s["fog"]["enabled"] = false
 		for t in s["tokens"]:

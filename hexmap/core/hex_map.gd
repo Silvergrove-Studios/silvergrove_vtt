@@ -23,7 +23,7 @@ var dirty: bool = false
 static func create(p_name: String, p_grid: HexGrid) -> HexMap:
 	var m := HexMap.new()
 	m.grid = p_grid
-	var now := Time.get_datetime_string_from_system(true, true)
+	var now := JsonDoc.now()
 	m.doc = {
 		"format": FORMAT,
 		"version": VERSION,
@@ -117,7 +117,7 @@ func note_pack(pack_id: String, pack_version: String) -> void:
 ## "props", "walls", "lights", "notes", "grid", "style", "levels", "name").
 func touch(what: String = "") -> void:
 	dirty = true
-	doc.get("meta", {})["modified"] = Time.get_datetime_string_from_system(true, true)
+	doc.get("meta", {})["modified"] = JsonDoc.now()
 	changed.emit(what)
 
 

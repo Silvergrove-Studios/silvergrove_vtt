@@ -446,6 +446,9 @@ func apply(ev: Dictionary) -> Dictionary:
 					have[k] = true
 					fog.explored.append(k)
 					added.append(k)
+			# Explored is a set; keep it sorted so the same set is always the
+			# same document, whatever order it was revealed or undone in.
+			(fog.explored as Array).sort()
 			inv = {"t": "fog.hide", "scene": scene_id, "cells": added}
 			what = "fog"
 		"fog.hide":

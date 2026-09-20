@@ -14,6 +14,7 @@ extends Control
 ##   --theme <name>           theme for this run, not persisted
 ##   --ui-scale <factor>      UI size for this run, not persisted
 ##   --shot <out.png>         screenshot and quit
+##   --selftest               run the unit suite in this build and quit
 
 var app := App.new()
 var window: Control
@@ -39,6 +40,12 @@ func _ready() -> void:
 	var ti := args.find("--theme")
 	if ti >= 0 and ti + 1 < args.size():
 		app.set_theme(args[ti + 1], false)
+	if SelfTest.requested(args):
+		OS.low_processor_usage_mode = false
+		var st := SelfTest.new()
+		st.app = app
+		add_child(st)
+		return
 	var want := _mode_from_args(args)
 	open_mode(want[0], want[1])
 	var shot := args.find("--shot")
