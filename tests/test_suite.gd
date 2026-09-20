@@ -2194,7 +2194,7 @@ func test_player_window() -> void:
 	check(win.view.canvas.tokens_in_view().size() == 2 and not win.view.canvas.show_hidden, "party visible, goblins not")
 	check(win._token_bar.get_child_count() == 1 and (win._token_bar.get_child(0) as Button).text == "BR", "one token button, his ranger")
 	check(win._turn.text == "Waiting to begin" and win._title.text.contains("Chapel at dusk"), "bars filled")
-	check(app.recent().has(path), "noted as recent")
+	check(app.recent().any(func(r) -> bool: return str(r).ends_with("chapel_ambush.encounter")), "noted as recent (wherever resolve_path found it): %s" % [app.recent()])
 	# The DM switches the shown scene: the player follows.
 	var st: EncounterState = win.session.state
 	var crypt := str(st.encounter.scenes[1].id)

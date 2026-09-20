@@ -1,0 +1,75 @@
+# The suite on the real desktops: the headless run on macOS, Windows and
+# Linux, then each OS's own exported build launched with --selftest — the
+# binary a user downloads, rendering on that OS. Manual (macOS minutes are
+# dear) plus weekly.
+name: desktop-test
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 6 * * 1'
+
+env:
+  GODOT_VERSION: 4.7.1-stable
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            templates: ~/Library/Application Support/Godot/export_templates
+          - os: windows-latest
+            templates: ~/AppData/Roaming/Godot/export_templates
+          - os: ubuntu-latest
+            templates: ~/.local/share/godot/export_templates
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hexmap/godot
+            ${{ matrix.templates }}
+          key: godot-${{ env.GODOT_VERSION }}-desktop-${{ matrix.os }}
+      - name: Install Godot
+        run: ./run.sh install
+      - name: Install export templates
+        run: |
+          set -e
+          dest="${{ matrix.templates }}/${GODOT_VERSION/-stable/.stable}"
+          dest="${dest/#\~/$HOME}"
+          if [ ! -f "$dest/version.txt" ]; then
+            curl -fL --retry 3 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_export_templates.tpz"
+            mkdir -p "$dest"
+            unzip -q /tmp/templates.tpz -d /tmp/templates
+            mv /tmp/templates/templates/* "$dest/"
+            rm -rf /tmp/templates /tmp/templates.tpz
+            # Keep this OS's templates only; the rest is a gigabyte.
+            find "$dest" -maxdepth 1 -type f ! -name 'macos.zip' ! -name 'windows_*' ! -name 'linux_*' ! -name 'version.txt' -delete
+          fi
+          ls "$dest"
+      - name: Mesa software GL for the windowed run
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri >/dev/null
+      - name: Script check
+        run: ./run.sh check
+      - name: Unit tests, headless
+        run: ./run.sh test
+      - name: Self-test in the exported build
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s "-screen 0 1280x800x24" tools/desktop_selftest.sh out/desktop-selftest
+          else
+            tools/desktop_selftest.sh out/desktop-selftest
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-selftest-${{ matrix.os }}
+          path: out/desktop-selftest/

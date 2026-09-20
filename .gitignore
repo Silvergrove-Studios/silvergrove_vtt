@@ -1,4 +1,5 @@
 .godot/
 out/
+!out/.gdignore
 .DS_Store
 *.autosave

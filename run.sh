@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hexmap launcher. Works on macOS and on Linux/WSL.
+# Hexmap launcher. Works on macOS, Linux/WSL and Git Bash on Windows.
 #
 #   ./run.sh                          open the app on its home screen
 #   ./run.sh examples/forest_road.hexmap
@@ -21,6 +21,7 @@
 #
 # Finds Godot in $GODOT, on PATH, in the usual macOS app locations, or — failing
 # all that — downloads the pinned build to ~/.cache/hexmap/godot and uses that.
+# Works from Git Bash on Windows too (the console build, so output shows).
 # Rebuilds Godot's script class cache (.godot/, gitignored) when a clone or pull
 # has left it missing or stale, so `class_name` lookups don't fail to parse.
 #
@@ -57,6 +58,7 @@ godot_asset() {
 				aarch64|arm64) printf 'Godot_v%s_linux.arm64.zip\n' "$GODOT_VERSION" ;;
 				*) die "no pinned Godot build for $(uname -m); install Godot $GODOT_VERSION yourself and set \$GODOT" ;;
 			esac ;;
+		MINGW*|MSYS*|CYGWIN*) printf 'Godot_v%s_win64.exe.zip\n' "$GODOT_VERSION" ;;   # Git Bash on Windows
 		*) die "unsupported platform $(uname -s); set \$GODOT to a Godot binary" ;;
 	esac
 }
@@ -69,6 +71,8 @@ godot_cached_binary() {
 				x86_64|amd64) printf '%s/Godot_v%s_linux.x86_64\n' "$CACHE_DIR" "$GODOT_VERSION" ;;
 				*) printf '%s/Godot_v%s_linux.arm64\n' "$CACHE_DIR" "$GODOT_VERSION" ;;
 			esac ;;
+		# The console build: it writes to stdout, which scripts and CI need.
+		MINGW*|MSYS*|CYGWIN*) printf '%s/Godot_v%s_win64_console.exe\n' "$CACHE_DIR" "$GODOT_VERSION" ;;
 	esac
 }
 
