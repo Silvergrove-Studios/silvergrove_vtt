@@ -6,6 +6,7 @@ extends RefCounted
 ## make one without a window.
 
 signal theme_changed(name: String)
+signal ui_scale_changed(scale: float)
 
 const NAME := "Hexmap"
 const PREFS_PATH := "user://prefs.json"
@@ -14,7 +15,7 @@ const RECENT_MAX := 10
 ## Modes, in the order the home screen lists them.
 const MODES := ["editor", "table", "player"]
 
-var prefs := {"pack_dirs": [], "theme": "slate", "recent": []}
+var prefs := {"pack_dirs": [], "theme": "slate", "recent": [], "ui_scale": 1.0}
 var packs := PackLibrary.new()
 ## Where preferences live; tests point this somewhere harmless.
 var prefs_path := PREFS_PATH
@@ -61,12 +62,63 @@ static func mode_blurb(mode: String) -> String:
 
 # ------------------------------------------------------------------ screen --
 
+## The user's UI size, on top of whatever the screen's density needs:
+## 1.0 is the designed size, 1.3 is "a bit bigger", 2.0 is very large.
+const UI_SCALES := [0.75, 0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0]
+
+var ui_scale: float:
+	get: return clampf(float(prefs.get("ui_scale", 1.0)), UI_SCALES[0], UI_SCALES[-1])
+
+
+func set_ui_scale(scale: float, persist := true) -> void:
+	prefs.ui_scale = clampf(scale, UI_SCALES[0], UI_SCALES[-1])
+	if persist:
+		save_prefs()
+	ui_scale_changed.emit(ui_scale)
+
+
+## The next step up or down from the current scale.
+func step_ui_scale(up: bool) -> void:
+	var cur := ui_scale
+	var best: float = cur
+	if up:
+		for s in UI_SCALES:
+			if s > cur + 0.001:
+				best = s
+				break
+	else:
+		for i in range(UI_SCALES.size() - 1, -1, -1):
+			if UI_SCALES[i] < cur - 0.001:
+				best = UI_SCALES[i]
+				break
+	set_ui_scale(best)
+
+
+static func scale_label(scale: float) -> String:
+	return "%d%%" % roundi(scale * 100.0)
+
+
+## What the whole window is scaled by: the screen's density (phones, and
+## desktops whose OS scales everything but the app) times the user's
+## choice.
+static func window_scale(user_scale: float) -> float:
+	return base_scale() * user_scale
+
+
+## The screen's own factor: density on phones; on desktops the OS scaling
+## (2 on a Retina Mac, 1.5 on many Windows laptops), because Godot lays
+## controls out in device pixels and would draw everything half size.
+static func base_scale() -> float:
+	if OS.has_feature("mobile"):
+		return density_scale(DisplayServer.screen_get_dpi(), Vector2(DisplayServer.screen_get_size()))
+	return clampf(DisplayServer.screen_get_scale(), 1.0, 3.0)
+
 ## How much to scale the UI on a phone or tablet: points, not pixels, but
 ## never so much that fewer than MIN_LOGICAL_WIDTH points fit across the
 ## narrower side — a column that needs 360 must still fit in portrait.
 const MIN_LOGICAL_WIDTH := 360.0
 
-static func ui_scale(dpi: float, screen_px: Vector2) -> float:
+static func density_scale(dpi: float, screen_px: Vector2) -> float:
 	var f := clampf(dpi / 160.0, 1.0, 4.0)
 	var narrow := minf(screen_px.x, screen_px.y)
 	if narrow > 0.0 and narrow / f < MIN_LOGICAL_WIDTH:
@@ -187,6 +239,8 @@ func load_prefs() -> void:
 			prefs[k] = json.data[k]
 	if not ThemeBuilder.VARIANTS.has(str(prefs.theme)):
 		prefs.theme = "slate"
+	if not (prefs.get("ui_scale") is float or prefs.get("ui_scale") is int):
+		prefs.ui_scale = 1.0
 
 
 func save_prefs() -> void:

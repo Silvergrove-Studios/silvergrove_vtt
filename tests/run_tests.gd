@@ -2419,10 +2419,10 @@ func test_table_hosts_player_joins() -> void:
 
 func test_responsive_layout() -> void:
 	# UI scale: points on a phone, but never fewer than 360 points across.
-	check(App.ui_scale(160, Vector2(1920, 1080)) == 1.0, "desktop density: no scaling")
-	check(near(App.ui_scale(440, Vector2(1080, 2400)), 2.75, 0.01), "a 440 dpi phone scales 2.75× (1080 px → 393 pt)")
-	check(near(App.ui_scale(640, Vector2(720, 1600)), 2.0, 0.01), "a small dense screen is capped so 360 pt fit (720 / 2)")
-	check(App.ui_scale(1000, Vector2(1440, 3200)) == 4.0, "scale is capped at 4")
+	check(App.density_scale(160, Vector2(1920, 1080)) == 1.0, "desktop density: no scaling")
+	check(near(App.density_scale(440, Vector2(1080, 2400)), 2.75, 0.01), "a 440 dpi phone scales 2.75× (1080 px → 393 pt)")
+	check(near(App.density_scale(640, Vector2(720, 1600)), 2.0, 0.01), "a small dense screen is capped so 360 pt fit (720 / 2)")
+	check(App.density_scale(1000, Vector2(1440, 3200)) == 4.0, "scale is capped at 4")
 	check(App.safe_insets(2.0) == {"left": 0.0, "top": 0.0, "right": 0.0, "bottom": 0.0} or OS.has_feature("mobile"), "no insets on a desktop")
 	# The Player's columns fit a narrow window.
 	var app := App.new("user://test_prefs_resp.json")
@@ -2448,3 +2448,52 @@ func test_responsive_layout() -> void:
 	home.queue_free()
 	await process_frame
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_resp.json"))
+
+
+func test_ui_scale_pref() -> void:
+	var path := "user://test_prefs_scale.json"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var app := App.new(path)
+	check(app.ui_scale == 1.0, "default UI scale is 1")
+	var got := []
+	app.ui_scale_changed.connect(func(s: float) -> void: got.append(s))
+	app.step_ui_scale(true)
+	check(is_equal_approx(app.ui_scale, 1.15) and got == [1.15], "step up goes to the next size")
+	app.step_ui_scale(false)
+	app.step_ui_scale(false)
+	check(is_equal_approx(app.ui_scale, 0.85), "step down twice")
+	app.set_ui_scale(9.0)
+	check(app.ui_scale == 2.0, "clamped to the largest")
+	app.set_ui_scale(0.1)
+	check(app.ui_scale == 0.75, "clamped to the smallest")
+	for i in 10:
+		app.step_ui_scale(true)
+	check(app.ui_scale == 2.0, "stepping past the end stays at the end")
+	app.set_ui_scale(1.3)
+	check(App.new(path).ui_scale == 1.3, "persists")
+	check(App.scale_label(1.3) == "130%" and App.scale_label(0.85) == "85%", "labels")
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_string('{"ui_scale": "big"}')
+	f.close()
+	check(App.new(path).ui_scale == 1.0, "garbage falls back to 1")
+	check(App.window_scale(1.5) >= 1.5, "the window scale multiplies the user's choice in")
+	# The windows' View menus reflect it.
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var idx := App.UI_SCALES.find(1.3)
+	check(win.scale_menu.is_item_checked(idx), "the table's UI size menu shows the current size")
+	win._on_menu(win.V_SCALE_BASE + App.UI_SCALES.find(1.0))
+	check(app.ui_scale == 1.0 and win.scale_menu.is_item_checked(App.UI_SCALES.find(1.0)) and not win.scale_menu.is_item_checked(idx), "picking a size applies it and moves the check")
+	win._on_menu(win.V_SCALE_UP)
+	check(is_equal_approx(app.ui_scale, 1.15), "View → Bigger")
+	win.queue_free()
+	var home := HomeScreen.new()
+	home.app = app
+	root.add_child(home)
+	check((home.find_child("ScaleValue", true, false) as Label).text == "115%", "the home screen shows it")
+	app.step_ui_scale(true)
+	check((home.find_child("ScaleValue", true, false) as Label).text == "130%", "and follows changes")
+	home.queue_free()
+	await process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

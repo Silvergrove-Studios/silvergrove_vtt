@@ -5,6 +5,12 @@
 - The Player fits phones: columns shrink to the screen, the UI scale never
   leaves fewer than 360 points across, the notch and gesture bar are kept
   clear, and the token bar scrolls instead of pushing buttons off the edge.
+- UI size: the app now scales with the screen (2× on a Retina Mac, the OS
+  scaling on Windows — it was drawn in device pixels, half size) and the
+  window opens at its designed size in points. On top of that, a UI size
+  preference from 75% to 200%: View → UI size (Ctrl/Cmd+= and −) in the
+  editor and table, −/+ on the home screen, A−/A+ in the Player. The map
+  canvas renders at the screen's real pixels whatever the scale.
 
 ## 1.1.0 — 2026-09-19
 

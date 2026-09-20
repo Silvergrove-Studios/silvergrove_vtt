@@ -177,9 +177,23 @@ func _build_join() -> Control:
 	_files.fixed_icon_size = Vector2i(0, 0)
 	_files.item_selected.connect(func(i: int) -> void: _choose_file(str(_files.get_item_metadata(i))))
 	column.add_child(_files)
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 8)
 	var home := _big(Button.new(), "Home")
+	home.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	home.pressed.connect(func() -> void: go_home.emit())
-	column.add_child(home)
+	row2.add_child(home)
+	var smaller := _big(Button.new(), "A−")
+	smaller.tooltip_text = "Smaller text and buttons"
+	smaller.custom_minimum_size.x = BAR_HEIGHT * 1.2
+	smaller.pressed.connect(func() -> void: app.step_ui_scale(false))
+	row2.add_child(smaller)
+	var bigger := _big(Button.new(), "A+")
+	bigger.tooltip_text = "Bigger text and buttons"
+	bigger.custom_minimum_size.x = BAR_HEIGHT * 1.2
+	bigger.pressed.connect(func() -> void: app.step_ui_scale(true))
+	row2.add_child(bigger)
+	column.add_child(row2)
 	var status := Label.new()
 	status.name = "JoinStatus"
 	status.theme_type_variation = "DimLabel"

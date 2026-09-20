@@ -10,6 +10,8 @@ signal go_home
 
 const AUTOSAVE_SECONDS := 60.0
 const V_THEME_BASE := 1000
+const V_SCALE_BASE := 1100
+var scale_menu: PopupMenu
 const V_PLAYER_BASE := 2000
 
 var app: App
@@ -43,7 +45,7 @@ var _token_form: PropertyForm
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE,
-	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK,
+	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
 	T_FREE, T_DM, T_ORDERED, T_START, T_NEXT, T_PREV, T_END,
 	H_SHORTCUTS, H_ABOUT }
@@ -55,6 +57,7 @@ func _ready() -> void:
 	ctx.app = app
 	theme = app.build_theme()
 	app.theme_changed.connect(_on_theme_changed)
+	app.ui_scale_changed.connect(_on_ui_scale)
 	_set_encounter(Encounter.create("Untitled encounter"))
 	_build_ui()
 	_restyle()
@@ -243,6 +246,19 @@ func _build_menus() -> MenuBar:
 	_item(view_menu, "Zoom 100%", V_100, KEY_1, true)
 	view_menu.add_separator()
 	_item(view_menu, "Reset panel layout", V_DOCK)
+	scale_menu = PopupMenu.new()
+	scale_menu.name = "UI size"
+	var si := 0
+	for sc in App.UI_SCALES:
+		scale_menu.add_radio_check_item(App.scale_label(sc), V_SCALE_BASE + si)
+		scale_menu.set_item_checked(si, is_equal_approx(float(sc), app.ui_scale))
+		si += 1
+	scale_menu.add_separator()
+	_item(scale_menu, "Bigger", V_SCALE_UP, KEY_EQUAL, true)
+	_item(scale_menu, "Smaller", V_SCALE_DOWN, KEY_MINUS, true)
+	scale_menu.id_pressed.connect(_on_menu)
+	view_menu.add_child(scale_menu)
+	view_menu.add_submenu_node_item("UI size", scale_menu)
 	theme_menu = PopupMenu.new()
 	theme_menu.name = "Theme"
 	var ti := 0
@@ -467,6 +483,14 @@ func _set_viewpoint(pid: String) -> void:
 
 # ====================================================================== theme ==
 
+func _on_ui_scale(s: float) -> void:
+	if scale_menu == null:
+		return
+	for i in App.UI_SCALES.size():
+		scale_menu.set_item_checked(i, is_equal_approx(float(App.UI_SCALES[i]), s))
+	ctx.say("UI size %s" % App.scale_label(s))
+
+
 func _on_theme_changed(name: String) -> void:
 	theme = app.build_theme()
 	var i := 0
@@ -571,6 +595,9 @@ func _on_menu(id: int) -> void:
 	if id >= V_THEME_BASE and id < V_THEME_BASE + ThemeBuilder.names().size():
 		app.set_theme(ThemeBuilder.names()[id - V_THEME_BASE])
 		return
+	if id >= V_SCALE_BASE and id < V_SCALE_BASE + App.UI_SCALES.size():
+		app.set_ui_scale(float(App.UI_SCALES[id - V_SCALE_BASE]))
+		return
 	if id >= V_PLAYER_BASE and id < V_PLAYER_BASE + viewpoint_select.item_count:
 		_set_viewpoint(str(viewpoint_select.get_item_metadata(id - V_PLAYER_BASE)))
 		return
@@ -617,6 +644,8 @@ func _on_menu(id: int) -> void:
 		V_FIT: view.zoom_to_fit()
 		V_100: view.set_zoom(1.0)
 		V_DOCK: _reset_layout()
+		V_SCALE_UP: app.step_ui_scale(true)
+		V_SCALE_DOWN: app.step_ui_scale(false)
 		S_SHOW:
 			if sid != "":
 				ctx.commands.activate_scene(sid)
@@ -867,6 +896,8 @@ func _exit_tree() -> void:
 	_native_menus.free_menus()
 	if app != null and app.theme_changed.is_connected(_on_theme_changed):
 		app.theme_changed.disconnect(_on_theme_changed)
+	if app != null and app.ui_scale_changed.is_connected(_on_ui_scale):
+		app.ui_scale_changed.disconnect(_on_ui_scale)
 	ctx.history.clear()
 	if view != null:
 		view.set_tool(null)

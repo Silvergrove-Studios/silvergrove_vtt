@@ -1,10 +1,14 @@
 class_name CanvasView
-extends SubViewportContainer
+extends Control
 ## A MapCanvas under a Camera2D with pan and zoom: mouse wheel, middle
 ## drag, trackpad gestures, and two-finger touch. Everything else goes to
 ## the `handler` (a tool) in hex-unit coordinates: press/drag/release/move/
 ## double_click/key/draw_overlay/cursor, all optional. Shared by the Editor,
 ## the Table and the Player, so nothing here assumes a keyboard or a mouse.
+##
+## It owns its SubViewport rather than being a SubViewportContainer so the
+## map renders at the screen's real pixels under a scaled window (Retina,
+## a phone, a big UI size) while its 2D space stays in logical points.
 
 signal cursor_moved(hex: Vector2)
 signal zoom_changed(zoom: float)
@@ -27,14 +31,17 @@ var _pinch_center := Vector2.ZERO
 
 
 func _init() -> void:
-	stretch = true
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	focus_mode = Control.FOCUS_CLICK
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	clip_contents = true
+	# The texture is drawn 1:1 with the screen; nothing to smooth.
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	viewport = SubViewport.new()
 	viewport.handle_input_locally = false
 	viewport.disable_3d = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(viewport)
 	# Surround colour behind the map, fixed to the viewport (not the camera).
@@ -59,7 +66,45 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	_fit_viewport()
 	zoom_to_fit.call_deferred()
+
+
+## Render at the screen's pixels, lay out in logical points: the viewport
+## is `size` × the window's content scale, and its 2D space is overridden
+## back to `size` so the camera, the tools and input all keep their units.
+func _fit_viewport() -> void:
+	var factor := 1.0
+	if is_inside_tree():
+		factor = get_window().content_scale_factor
+	var logical := Vector2i(size.round())
+	if logical.x < 1 or logical.y < 1:
+		return
+	var want := Vector2i((size * factor).round())
+	if viewport.size != want:
+		viewport.size = want
+	if viewport.size_2d_override != logical:
+		viewport.size_2d_override = logical
+	viewport.size_2d_override_stretch = true
+	queue_redraw()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_fit_viewport()
+
+
+## The window's scale can change under us (the user picks a UI size).
+func _process(_delta: float) -> void:
+	if not is_inside_tree():
+		return
+	var want := Vector2i((size * get_window().content_scale_factor).round())
+	if want.x >= 1 and want.y >= 1 and viewport.size != want:
+		_fit_viewport()
+
+
+func _draw() -> void:
+	draw_texture_rect(viewport.get_texture(), Rect2(Vector2.ZERO, size), false)
 
 
 func set_surround(color: Color, shadow: Color) -> void:

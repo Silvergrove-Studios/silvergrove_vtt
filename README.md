@@ -140,6 +140,14 @@ your wifi. `tools/check_export.gd` mounts an exported pack and checks the
 files the app reads itself (icons, fonts) made it in — they are marked
 "keep" so Godot ships them raw.
 
+## UI size
+
+Text too small? View → UI size in the editor and the table (Ctrl/Cmd+=
+and Ctrl/Cmd+− step it), the −/+ on the home screen, or A−/A+ on the
+Player's join screen. It is remembered. The app already scales with the
+screen's own factor (Retina, Windows display scaling, phone density);
+this sits on top of that.
+
 ## Files
 
 - `name.hexmap` — the map, JSON. See `docs/map-format.md`.

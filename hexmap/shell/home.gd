@@ -57,6 +57,7 @@ func _build() -> void:
 		b.pressed.connect(func() -> void: open_mode.emit(m, ""))
 		column.add_child(b)
 
+	column.add_child(_scale_row())
 	var rec := app.recent()
 	if not rec.is_empty():
 		_recent_box = _file_list(column, "Recent", rec)
@@ -70,6 +71,37 @@ func _build() -> void:
 			examples.append(p)
 	if not examples.is_empty():
 		_file_list(column, "Examples", examples)
+
+
+## "UI size  −  100%  +": the same preference every mode's View menu has.
+func _scale_row() -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var l := Label.new()
+	l.text = "UI size"
+	l.theme_type_variation = "DimLabel"
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	var minus := Button.new()
+	minus.text = "−"
+	minus.custom_minimum_size = Vector2(44, 40)
+	minus.pressed.connect(func() -> void: app.step_ui_scale(false))
+	row.add_child(minus)
+	var value := Label.new()
+	value.name = "ScaleValue"
+	value.text = App.scale_label(app.ui_scale)
+	value.custom_minimum_size.x = 48
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(value)
+	var plus := Button.new()
+	plus.text = "+"
+	plus.custom_minimum_size = Vector2(44, 40)
+	plus.pressed.connect(func() -> void: app.step_ui_scale(true))
+	row.add_child(plus)
+	app.ui_scale_changed.connect(func(s: float) -> void:
+		if is_instance_valid(value):
+			value.text = App.scale_label(s))
+	return row
 
 
 func _file_list(column: VBoxContainer, title: String, paths: Array) -> VBoxContainer:
