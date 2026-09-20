@@ -33,7 +33,9 @@ print(picks[-1][2] if picks else "")
 echo "simulator: $(xcrun simctl list devices | grep "$udid")"
 xcrun simctl boot "$udid" 2>/dev/null || true
 xcrun simctl bootstatus "$udid" -b
+# An x86_64 build on an Apple-silicon host runs under Rosetta in the simulator.
 xcrun simctl install "$udid" "$app"
+lipo -info "$app/Hexmap" 2>/dev/null || true
 
 container="$(xcrun simctl get_app_container "$udid" "$bundle" data)"
 docs="$container/Documents"

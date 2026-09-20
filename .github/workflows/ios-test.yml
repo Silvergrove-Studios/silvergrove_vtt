@@ -72,9 +72,11 @@ jobs:
         run: |
           set -e
           cd out/ios
+          # Godot's simulator library is x86_64 only; an Apple-silicon simulator
+          # runs an x86_64 app under Rosetta, so build for that.
           xcodebuild -project Hexmap.xcodeproj -target Hexmap -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            SYMROOT="$PWD/build" \
+            ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO SYMROOT="$PWD/build" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
             build 2>&1 | tee ../xcodebuild.log | grep -E "error:|warning: .*(sign|team)|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" ../xcodebuild.log
