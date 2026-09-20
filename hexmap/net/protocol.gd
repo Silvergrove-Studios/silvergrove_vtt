@@ -63,8 +63,10 @@ static func error(why: String) -> Dictionary:
 
 
 ## The announcement a Table multicasts: enough to list it and connect.
-static func announcement(p_name: String, port: int, host_name: String) -> Dictionary:
-	return {"hexmap": VERSION, "name": p_name, "port": port, "host": host_name}
+## `addresses` are all of the table's IPv4 addresses: the packet's source
+## is whichever the sender's kernel chose, not always the one that works.
+static func announcement(p_name: String, port: int, host_name: String, addresses: PackedStringArray = []) -> Dictionary:
+	return {"hexmap": VERSION, "name": p_name, "port": port, "host": host_name, "addresses": Array(addresses)}
 
 
 static func parse_announcement(text: String) -> Dictionary:

@@ -250,6 +250,15 @@ each OS's own build natively and launches it with `--selftest`
 the binaries users download, on the OSes they run. All by hand; Android
 and desktop also weekly. `ci.yml` on every push is Linux, headless.
 
+**The join test** is the one that crosses a real network: `join_remote`
+in the suite connects a `NetSession` to a Table that is actually running
+somewhere, takes the welcome, maps and packs, joins, plays a move and
+sees it echo. `./run.sh jointest host:port` runs it from this machine;
+`tools/android_join_test.sh <apk> <host:port|--usb> <out>` runs it on a
+phone (USB, via `adb reverse`, or over the wifi) or an emulator; the
+`android-test` workflow hosts a Table on the runner and has the emulator
+join it at `10.0.2.2`. Same script on the desk and in CI.
+
 `tools/ui_smoke.gd`, `table_smoke.gd` and `player_smoke.gd` drive the
 three modes and screenshot them; `tools/export_cli.gd … all` is the
 rendering smoke test; `tools/check_export.gd` checks an exported pack.

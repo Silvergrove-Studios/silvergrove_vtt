@@ -73,6 +73,8 @@ jobs:
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           SETTINGS
+      - name: Mesa software GL, to host a Table on this runner
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri >/dev/null
       - run: ./run.sh check
       - name: Export the x86_64 APK
         run: |
@@ -91,7 +93,7 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -partition-size 2048 -no-snapshot
           disable-animations: true
-          script: tools/android_selftest.sh out/Hexmap-x86_64.apk out/android
+          script: tools/android_ci.sh out/Hexmap-x86_64.apk out/android
       - uses: actions/upload-artifact@v4
         if: always()
         with:

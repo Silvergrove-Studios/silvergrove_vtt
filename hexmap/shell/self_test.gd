@@ -11,6 +11,8 @@ extends Control
 const LOG_PATH := "user://selftest.txt"
 const DONE_PATH := "user://selftest.done"
 const MARKER_PATH := "user://selftest"
+## Holding "host:port": join that table instead of running the suite.
+const JOIN_PATH := "user://selftest_join"
 
 var app: App
 var _log: FileAccess
@@ -19,7 +21,17 @@ var _lines := 0
 
 
 static func requested(args: PackedStringArray) -> bool:
-	return args.has("--selftest") or FileAccess.file_exists(MARKER_PATH)
+	return args.has("--selftest") or args.has("--selftest-join") or FileAccess.file_exists(MARKER_PATH) or FileAccess.file_exists(JOIN_PATH)
+
+
+## The table to join, from `--selftest-join host:port` or the marker file.
+static func join_target(args: PackedStringArray) -> String:
+	var i := args.find("--selftest-join")
+	if i >= 0 and i + 1 < args.size():
+		return args[i + 1]
+	if FileAccess.file_exists(JOIN_PATH):
+		return FileAccess.get_file_as_string(JOIN_PATH).strip_edges()
+	return ""
 
 
 func _ready() -> void:
@@ -60,7 +72,14 @@ func _run() -> void:
 	var suite := TestSuite.new(get_tree())
 	suite.say = _say
 	var t0 := Time.get_ticks_msec()
-	await suite.run_all()
+	var target := SelfTest.join_target(OS.get_cmdline_user_args())
+	if target != "":
+		var hp := Protocol.parse_address(target)
+		_say("joining the table at %s:%d (this device: %s)" % [str(hp[0]), int(hp[1]), ", ".join(App.local_ipv4())])
+		suite.join_remote(str(hp[0]), int(hp[1]))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(JOIN_PATH))
+	else:
+		await suite.run_all()
 	_say("took %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
 	for s in suite.skipped:
 		_say("skipped: " + s)
@@ -72,7 +91,8 @@ func _run() -> void:
 		done.store_string(str(suite.fails))
 		done.close()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(MARKER_PATH))
-	if OS.get_cmdline_user_args().has("--selftest"):
+	var args := OS.get_cmdline_user_args()
+	if args.has("--selftest") or args.has("--selftest-join"):
 		get_tree().quit(1 if suite.fails > 0 else 0)
 
 

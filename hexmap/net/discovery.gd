@@ -107,7 +107,7 @@ class Announcer extends RefCounted:
 		var host := OS.get_environment("HOSTNAME")
 		if host == "":
 			host = OS.get_environment("COMPUTERNAME")
-		return Protocol.encode(Protocol.announcement(name, port, host))
+		return Protocol.encode(Protocol.announcement(name, port, host, App.local_ipv4()))
 
 	func poll(delta: float) -> void:
 		if not _ok:
@@ -248,10 +248,18 @@ class Browser extends RefCounted:
 			known.append(address)
 
 	## Record an announcement from `from`. Returns whether the list changed.
+	## A table with several addresses replies from whichever its kernel
+	## picks; the one we asked (a known address) is the one that reaches it.
 	func heard(a: Dictionary, from: String) -> bool:
-		var key := "%s:%d" % [from, int(a.port)]
+		var address := from
+		var all: Array = a.get("addresses", [])
+		for k in known:
+			if all.has(str(k)):
+				address = str(k)
+				break
+		var key := "%s:%d" % [address, int(a.port)]
 		var fresh := not tables.has(key) or str(tables[key].name) != str(a.name)
-		tables[key] = {"name": str(a.name), "host": str(a.get("host", "")), "address": from, "port": int(a.port), "seen": _clock}
+		tables[key] = {"name": str(a.name), "host": str(a.get("host", "")), "address": address, "port": int(a.port), "addresses": all, "seen": _clock}
 		return fresh
 
 	func list() -> Array:

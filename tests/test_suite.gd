@@ -2762,3 +2762,64 @@ func test_player_join_flow() -> void:
 	win.queue_free()
 	await tree.process_frame
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_join.json"))
+
+
+# ------------------------------------------------------------- remote join --
+
+## Join a Table that is really running somewhere — on the host beside an
+## emulator, on a laptop across the wifi from a phone on USB — and play a
+## move. Not a test_* (there is no table in the unit run); the self-test
+## runs it when user://selftest_join names an address, and
+## tools/android_join_test.sh drives that.
+func join_remote(address: String, port: int, timeout_s := 20.0) -> void:
+	var packs := PackLibrary.new()
+	packs.reload()
+	var s := NetSession.new(address, port, packs, "join test")
+	var told := []
+	s.status.connect(func(t: String) -> void: told.append(t))
+	var closed := []
+	s.closed.connect(func(r: String) -> void: closed.append(r))
+	check(s.connect_to_host() == OK, "connect_to_host(%s:%d)" % [address, port])
+	var pump := func(done: Callable, why: String) -> bool:
+		var t0 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < timeout_s * 1000.0:
+			s.poll()
+			if done.call():
+				return true
+			if not closed.is_empty():
+				say.call("  closed while waiting for %s: %s" % [why, closed])
+				return false
+			OS.delay_msec(20)
+		say.call("  timed out waiting for %s (told: %s)" % [why, told])
+		return false
+	check(pump.call(func() -> bool: return s.state != null, "the welcome"), "welcomed by the table at %s:%d" % [address, port])
+	if s.state == null:
+		return
+	say.call("  table: '%s', %d scenes, %d players, turns %s" % [s.state.encounter.name, s.state.encounter.scenes.size(), s.state.encounter.players.size(), s.state.encounter.turns.get("mode", "?")])
+	check(pump.call(func() -> bool: return s.maps_ready(), "the maps"), "maps streamed")
+	check(pump.call(func() -> bool: return s.assets_pending() == 0, "pack files"), "pack files streamed (or already here)")
+	check(s.state.map_for(s.scene_id()) != null, "the shown scene has its map")
+	if s.state.encounter.players.is_empty():
+		check(false, "the table has no players to join as")
+		s.leave()
+		return
+	var pid := str(s.state.encounter.players[0].id)
+	s.join(pid)
+	check(pump.call(func() -> bool: return s.joined, "the join"), "joined as %s" % s.player_name())
+	var mine := s.my_tokens()
+	say.call("  %d tokens of mine on the scene; %s" % [mine.size(), s.turn_summary()])
+	if not mine.is_empty():
+		var tk: Dictionary = mine[0]
+		var from := Vision.token_pos(tk)
+		var g := s.state.map_for(s.scene_id()).grid
+		var to := g.cell_center(g.world_to_axial(from) + Vector2i(1, 0))
+		var why := s.request({"t": "token.set", "scene": s.scene_id(), "id": str(tk.id), "changes": {"pos": [to.x, to.y]}})
+		if why == "":
+			check(pump.call(func() -> bool: return Vision.token_pos(s.state.token(s.scene_id(), str(tk.id))) == to, "the move to echo back"), "a move went to the table and came back")
+			# And back again, to leave the table as it was.
+			s.request({"t": "token.set", "scene": s.scene_id(), "id": str(tk.id), "changes": {"pos": [from.x, from.y]}})
+			pump.call(func() -> bool: return Vision.token_pos(s.state.token(s.scene_id(), str(tk.id))) == from, "the move back")
+		else:
+			say.call("  move refused locally (%s) — fine, the table's turn mode says so" % why)
+			check(true, "refusal reason given")
+	s.leave()

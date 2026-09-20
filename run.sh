@@ -14,6 +14,7 @@
 #   ./run.sh shot <out.png> [map]     screenshot of the window (home, or the editor with a map)
 #   ./run.sh check                    load every script, report parse errors
 #   ./run.sh test [filter]            run the unit tests (headless); filter by name
+#   ./run.sh jointest <host:port>     join a running table as a player and play a move
 #   ./run.sh examples                 regenerate examples/*.hexmap
 #   ./run.sh packs                    regenerate the placeholder art and manifests
 #   ./run.sh sheet <pack> <out.png>   contact sheet of a pack's assets
@@ -186,14 +187,14 @@ main() {
 		-h|--help|help) usage; return 0 ;;
 	esac
 	case "$cmd" in
-		app|edit|godot-editor|editor|table|player|export|shot|check|test|examples|packs|sheet|godot|install|doctor) shift || true ;;
+		app|edit|godot-editor|editor|table|player|export|shot|check|test|jointest|examples|packs|sheet|godot|install|doctor) shift || true ;;
 		*) cmd="app" ;;
 	esac
 
 	find_godot
 	setup_graphics
 	case "$cmd" in
-		app|editor|table|player|shot|export|check|test|examples|packs|sheet) refresh_class_cache ;;
+		app|editor|table|player|shot|export|check|test|jointest|examples|packs|sheet) refresh_class_cache ;;
 	esac
 
 	case "$cmd" in
@@ -231,6 +232,10 @@ main() {
 			;;
 		test)
 			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tests/run_tests.gd ${1:+-- "$1"}
+			;;
+		jointest)
+			[[ $# -ge 1 ]] || die "usage: ./run.sh jointest <host:port>"
+			exec "$GODOT_BIN" --path "$PROJECT_DIR" --resolution 800x600 ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"} -- --selftest-join "$1"
 			;;
 		examples)
 			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tools/make_examples.gd
