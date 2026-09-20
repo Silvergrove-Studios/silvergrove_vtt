@@ -49,7 +49,7 @@ static func build_stamp() -> String:
 		return "%s · local" % version()
 	var parts := [version()]
 	if b.has("run"):
-		parts.append("dev.%s" % str(b.run))
+		parts.append("dev.%d" % int(b.run))
 	if b.has("commit"):
 		parts.append(str(b.commit).left(7))
 	if b.has("built"):
