@@ -1,0 +1,65 @@
+# Runs the unit suite inside an iOS simulator: exports the Xcode project,
+# builds it for the simulator with signing off, boots an iPhone, and drives
+# the app's self-test mode (tools/ios_selftest.sh). macOS minutes cost ten
+# times Linux ones, so this runs only by hand.
+name: ios-test
+on:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: 4.7.1-stable
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/hexmap/godot
+            ~/Library/Application Support/Godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-templates-macos
+      - run: ./run.sh install
+      - name: Install export templates
+        run: |
+          set -e
+          dest="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION/-stable/.stable}"
+          if [ ! -f "$dest/ios.zip" ]; then
+            curl -fL --retry 3 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_export_templates.tpz"
+            mkdir -p "$dest"
+            unzip -q /tmp/templates.tpz -d /tmp/templates
+            mv /tmp/templates/templates/* "$dest/"
+            rm -rf /tmp/templates /tmp/templates.tpz
+          fi
+          ls "$dest" | grep -i ios
+      - run: ./run.sh check
+      - name: Export the Xcode project
+        run: |
+          set -e
+          godot="$(./run.sh doctor | awk '/^godot/ {print $2}')"
+          mkdir -p out/ios
+          "$godot" --headless --path . --export-debug iOS out/ios/Hexmap.xcodeproj 2>&1 | tee out/ios_export.log
+          ! grep -q "^ERROR" out/ios_export.log
+          ls out/ios
+      - name: Build for the simulator
+        run: |
+          set -e
+          cd out/ios
+          xcodebuild -project Hexmap.xcodeproj -target Hexmap -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            build 2>&1 | tail -n 40
+          ls build/Build/Products/Debug-iphonesimulator/
+      - name: Self-test on the simulator
+        run: tools/ios_selftest.sh out/ios/build/Build/Products/Debug-iphonesimulator/Hexmap.app out/ios-selftest
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-selftest
+          path: |
+            out/ios-selftest/
+            out/ios_export.log
