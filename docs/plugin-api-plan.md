@@ -535,18 +535,20 @@ the conformance suite fails a plugin whose manifest declares no tests.
 
 ---
 
-## 7. Open decisions to take at Phase 0
+## 7. Decisions taken at Phase 0 (2026-09-20)
 
-1. Runtime: Luau vs Lua 5.4 (spike decides).
-2. Whether `derive` may read the compendium (leaning no: derive reads the
-   actor and resolved references the kernel pre-fetched; keeps it pure and
-   fast).
-3. Prompt deadlines: host-enforced default, GM override always; whether a
-   plugin may set "no default" (blocking) — leaning no.
-4. Whether the Player keeps a local copy of the whole encounter (today) or
-   only views (lighter, stricter audience) — leaning views plus the scene,
-   which also makes the Display role trivial.
-5. Campaign file location and how encounters reference it (path vs id).
+1. **Runtime: Luau** (`docs/lua-runtime.md`). The spike ran both; Lua 5.4
+   remains the fallback behind `LuaVm`.
+2. **`derive` does not read the compendium.** It reads the actor and the
+   references the kernel resolved beforehand; pure and fast.
+3. **Prompts always have a default and a deadline**; the GM can override
+   at any time. A plugin cannot block a session on a Player.
+4. **Players receive views plus the scene**, not the whole encounter.
+   Stricter audience, lighter phones, and the Display role is just a
+   Player with the "all" audience and no controls. The v1 Player keeps
+   the whole document until Phase 4 replaces it.
+5. **An encounter references its campaign by id and relative path**
+   (`campaign: {id, path}`), the same way scenes reference maps.
 
 ---
 

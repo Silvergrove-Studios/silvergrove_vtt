@@ -180,3 +180,75 @@ the same shape as a map bundle.
   log produced. The table autosaves it.
 - Current vision. Computed from tokens and walls whenever it is drawn.
 - Rules of any kind.
+
+## Version 2 (draft)
+
+What the plugin API adds (`docs/plugin-api-plan.md`, Phase 1). Version 1
+files keep loading: `_upgrade()` fills the new blocks empty. Nothing
+below puts rules in the map or numbers on tokens; it puts them in
+**actors**, **effects** and **state**, and points at them.
+
+```json
+{
+  "format": "silvergrove.encounter", "version": 2,
+  "campaign": { "id": "c_9b1e…", "path": "../reach.campaign" },
+  "actors": { "a_gob1": { …actor, kind "npc"… } },
+  "effects": { "e_01": { "id": "e_01", "on": "t_7f", "plugin": "sample.ordered", "key": "shaken", "value": 2,
+                          "source": { "actor": "a_hero", "roll": 41 },
+                          "duration": { "kind": "turn_end", "of": "t_7f", "turns": 1 },
+                          "changes": [ { "path": "defence", "mode": "add", "value": -2 } ],
+                          "stack": "highest", "audience": "all" } },
+  "resources": { "t_7f": { "sample.ordered": { "hp": { "kind": "pool", "current": 5, "max": 9 } } } },
+  "tracks": [ { "id": "k_1", "name": "Reinforcements", "kind": "countdown", "value": 3, "start": 4,
+                "advance": "per_roll_failure", "audience": "gm", "on_zero": "The gate opens." } ],
+  "state": { "ext": { "sample.ordered": { "gm_pool": 4 } } },
+  "prompts": { "p_9": { "id": "p_9", "to": ["pl_a1"], "form": { … }, "deadline": 30, "default": {}, "hook": "damage:41" } },
+  "log": [ { "seq": 41, "t": "roll", "kind": "attack", "spec": "1d20+3", "faces": { "d20": 15 }, "total": 18,
+             "outcome": "success", "actor": "a_hero", "audience": "all", "seed": [1234, 17] } ],
+  "checkpoints": [ { "id": "before_fight", "seq": 40, "when": "…" } ],
+  "turns": { "mode": "ordered", "strategy": "ordered", "plugin": "sample.ordered",
+             "order": ["t_7f", "t_02"], "turn": 0, "round": 1, "running": true,
+             "focus": null, "counters": { "t_7f": { "actions": 2, "reactions": 1 } }, "history": [], "data": {} },
+  …scenes, players (v1) or none (campaign), notes, meta, ext…
+}
+```
+
+- **Tokens** gain `actor` (an actor id in the encounter or the campaign).
+  A token without an actor is what it is today.
+- **actors**: encounter-local instances (see `docs/campaign-format.md`
+  for the record). A PC's actor stays in the campaign; the encounter may
+  hold an overlay on it.
+- **effects**: records keyed by id, attached to a token (`on`) or an
+  actor. `value` is optional and numeric (rendered as a badge); `changes`
+  are applied by the kernel to the plugin's derived numbers by path with
+  `mode` add | multiply | override | upgrade; `duration.kind` is one of
+  `rounds`, `turn_start`, `turn_end` (relative to `of`), `until_check`,
+  `linked`, `until_cleared`, `scene`, `rest`, `long_rest`, `session`,
+  `time` (with `until` on the clock); `stack` is `stack` | `highest` |
+  `none`. Plugins register hook handlers by `key`; the record itself is
+  rules-free.
+- **resources**: pools `{kind: "pool", current, max, recharge}` and slot
+  tracks `{kind: "track", max, marked, extra, crossed}` per entity per
+  plugin. Changed only by `resource.set`.
+- **tracks**: progress tracks (countdowns, clocks, subsystems) with an
+  audience and an advance rule the kernel drives from roll-outcome and
+  rest hooks.
+- **state.ext**: encounter-scoped plugin state (a GM resource pool, a
+  shared adversary pool). Changed by `ext.set` with `scope: "encounter"`.
+- **prompts**: open questions to Players, kept so a reconnecting client
+  gets them again. `hook` names the suspended hook the answer resumes.
+- **log**: the events with a sequence number, a `reason` and an
+  `audience`; `roll` events are informational and carry the seed and
+  index they were drawn from, so a replay reads rather than re-rolls.
+- **checkpoints**: named sequence numbers the GM can restore to.
+- **turns** gains `strategy` (`ordered` | `focus`), `plugin`, `focus`
+  (the holder in focus mode: a token id, an actor id or `"gm"`),
+  `counters` (per-participant budgets the strategy maintains) and
+  `history`. `mode` keeps its three values: it says who may move tokens;
+  `strategy` says how turns are shaped.
+
+Events added: `ext.set`, `actor.*`, `effect.apply/set/remove`,
+`resource.set`, `track.*`, `roll`, `prompt.open/answer/close`,
+`focus.set`, `clock.set`, `log.note`, `checkpoint.mark/restore`. Every
+event may carry `reason` (`{by, hook, roll}`) and `audience`; `seq` is
+assigned by the log.
