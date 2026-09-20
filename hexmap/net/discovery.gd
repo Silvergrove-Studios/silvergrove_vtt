@@ -40,6 +40,18 @@ static func shout_targets() -> Array:
 	return out
 
 
+## Names of the interfaces that have an IPv4 address: the only ones an
+## IPv4 multicast group can be joined on (a VPN tunnel or awdl cannot).
+static func ipv4_interfaces() -> PackedStringArray:
+	var out := PackedStringArray()
+	for iface in IP.get_local_interfaces():
+		for a in iface.get("addresses", []):
+			if str(a).is_valid_ip_address() and not str(a).contains(":"):
+				out.append(str(iface.get("name", "")))
+				break
+	return out
+
+
 ## Send one text to every shout target through `udp`.
 static func shout(udp: PacketPeerUDP, text: String) -> void:
 	var bytes := text.to_utf8_buffer()
@@ -68,8 +80,8 @@ class Announcer extends RefCounted:
 		listen_error = _listen.bind(Protocol.DISCOVERY_PORT, "0.0.0.0")
 		_listening = listen_error == OK
 		if _listening:
-			for iface in IP.get_local_interfaces():
-				_listen.join_multicast_group(Protocol.DISCOVERY_GROUP, str(iface.get("name", "")))
+			for iface in Discovery.ipv4_interfaces():
+				_listen.join_multicast_group(Protocol.DISCOVERY_GROUP, iface)
 		_ok = true
 		return OK
 
@@ -140,13 +152,8 @@ class Browser extends RefCounted:
 		_udp.set_broadcast_enabled(true)
 		_passive = _udp.bind(Protocol.DISCOVERY_PORT, "0.0.0.0") == OK
 		if _passive:
-			for iface in IP.get_local_interfaces():
-				var v4 := false
-				for a in iface.get("addresses", []):
-					if str(a).is_valid_ip_address() and not str(a).contains(":"):
-						v4 = true
-				if v4:
-					_udp.join_multicast_group(Protocol.DISCOVERY_GROUP, str(iface.get("name", "")))
+			for iface in Discovery.ipv4_interfaces():
+				_udp.join_multicast_group(Protocol.DISCOVERY_GROUP, iface)
 		_ok = true
 		return OK
 

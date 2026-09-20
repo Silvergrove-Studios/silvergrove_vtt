@@ -9,7 +9,7 @@ extends Control
 ##   <file>.hexmap            open the editor on a map
 ##   <file>.encounter         open the table on an encounter
 ##   --editor [map]           the editor
-##   --table [encounter]      the table
+##   --table [encounter]      the table; add --host to host it at once
 ##   --player [address]       the player client
 ##   --theme <name>           theme for this run, not persisted
 ##   --ui-scale <factor>      UI size for this run, not persisted

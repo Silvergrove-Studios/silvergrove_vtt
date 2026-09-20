@@ -82,9 +82,12 @@ func _process(delta: float) -> void:
 		host.poll(delta)
 
 
-## An encounter path from the command line or the home screen.
+## An encounter path from the command line or the home screen. `--host` on
+## the command line starts hosting at once (`./run.sh table x.encounter --host`).
 func open_argument(path: String) -> void:
 	_open_path(App.resolve_path(path))
+	if OS.get_cmdline_user_args().has("--host"):
+		_set_hosting(true)
 
 
 func prepare_shot() -> void:
@@ -692,6 +695,7 @@ func _set_hosting(on: bool) -> void:
 			on = false
 		else:
 			ctx.say("Hosting '%s' at %s — players on this network can find it" % [ctx.encounter().name, host_address()])
+			print("hosting '%s' at %s" % [ctx.encounter().name, host_address()])
 	elif not on and host != null:
 		host.stop()
 		host = null
