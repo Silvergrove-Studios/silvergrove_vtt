@@ -70,8 +70,13 @@ class Announcer extends RefCounted:
 	## subnets carry us the way they carry printers and speakers.
 	var mdns := Mdns.Responder.new()
 	var _shout := PacketPeerUDP.new()
-	## Bound on the discovery port to hear queries and answer them.
+	## Bound on the discovery port to hear queries and answer them: one on
+	## every address (0.0.0.0), for broadcast and multicast, and one per
+	## IPv4 address for unicast, so a reply leaves from the address the
+	## query was sent to — a multi-homed host would otherwise answer from
+	## whichever address its kernel prefers, which the asker may not reach.
 	var _listen := PacketPeerUDP.new()
+	var _per_address: Array = []
 	var _since := 10.0
 	var _ok := false
 	var _listening := false
@@ -87,6 +92,12 @@ class Announcer extends RefCounted:
 		if _listening:
 			for iface in Discovery.ipv4_interfaces():
 				_listen.join_multicast_group(Protocol.DISCOVERY_GROUP, iface)
+			for addr in App.local_ipv4():
+				var s := PacketPeerUDP.new()
+				if s.bind(Protocol.DISCOVERY_PORT, addr) == OK:
+					_per_address.append(s)
+				else:
+					s.close()
 		mdns.start(p_name, p_port)
 		mdns.answered.connect(func(ip: String) -> void: answered.emit(ip))
 		_ok = true
@@ -95,6 +106,9 @@ class Announcer extends RefCounted:
 	func stop() -> void:
 		_shout.close()
 		_listen.close()
+		for s in _per_address:
+			(s as PacketPeerUDP).close()
+		_per_address.clear()
 		mdns.stop()
 		_ok = false
 		_listening = false
@@ -122,22 +136,25 @@ class Announcer extends RefCounted:
 	func announce() -> void:
 		Discovery.shout(_shout, announcement_text())
 
-	## Reply to anyone asking, straight to where they asked from.
+	## Reply to anyone asking, straight to where they asked from, and from
+	## the socket the query arrived on: a firewall between subnets only lets
+	## back what matches the query's address and port, and the per-address
+	## socket answers with the address the asker used.
 	func answer_queries() -> int:
 		if not _listening:
 			return 0
 		var n := 0
-		while _listen.get_available_packet_count() > 0:
-			var pkt := _listen.get_packet()
-			if not Discovery.is_query(pkt.get_string_from_utf8()):
-				continue
-			# Reply from the socket the query arrived on: a firewall between
-			# subnets only lets back what matches the query's address and port.
-			var ip := _listen.get_packet_ip()
-			if _listen.set_dest_address(ip, _listen.get_packet_port()) == OK:
-				_listen.put_packet(announcement_text().to_utf8_buffer())
-				n += 1
-				answered.emit(ip)
+		for sock in [_listen] + _per_address:
+			var udp: PacketPeerUDP = sock
+			while udp.get_available_packet_count() > 0:
+				var pkt := udp.get_packet()
+				if not Discovery.is_query(pkt.get_string_from_utf8()):
+					continue
+				var ip := udp.get_packet_ip()
+				if udp.set_dest_address(ip, udp.get_packet_port()) == OK:
+					udp.put_packet(announcement_text().to_utf8_buffer())
+					n += 1
+					answered.emit(ip)
 		return n
 
 
