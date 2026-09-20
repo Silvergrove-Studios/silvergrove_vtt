@@ -27,7 +27,11 @@ adb shell "run-as $pkg sh -c 'mkdir -p files/packs files/examples && cp -r /data
 adb shell run-as "$pkg" ls files
 
 adb logcat -c || true
-adb shell monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 >/dev/null
+# Not `monkey`: it injects a random input event after launching, and a
+# stray Back would end the run. Resolve the launcher activity and start it.
+activity="$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$pkg" | tail -n 1 | tr -d '\r')"
+echo "launching $activity"
+adb shell am start -W -n "$activity" >/dev/null
 
 echo "waiting for the self-test to finish…"
 for i in $(seq 1 90); do
