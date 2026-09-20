@@ -186,4 +186,5 @@ Add tests as you add features: `tests/test_suite.gd` is a flat file of
 `test_*` functions with `check(cond, message)`; `./run.sh test <name>`
 runs the ones matching. The same suite runs inside any build with
 `--selftest` (results in `user://selftest.txt`), which is what the
-`android-test` workflow does on an emulator — see `ARCHITECTURE.md`.
+`android-test` and `ios-test` workflows do on an emulator and a simulator
+— see `ARCHITECTURE.md`.

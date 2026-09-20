@@ -238,8 +238,12 @@ writes `user://selftest.txt`, on-device screenshots and `selftest.done`;
 that is how an exported app, a phone or an emulator is tested. The
 `android-test` workflow builds an x86_64 APK, boots an emulator, pushes the
 packs, the marker and the examples with `tools/android_selftest.sh`, and
-pulls the results. The iOS simulator is the same self-test through
-`xcrun simctl`, on a macOS runner, when we get to it.
+pulls the results. The `ios-test` workflow does the same on an iPhone
+simulator: exports the Xcode project, builds it for the simulator with
+signing off (x86_64 — Godot's simulator library has no arm64 slice, and
+an Apple-silicon simulator runs it under Rosetta), and drives the
+self-test through `xcrun simctl` (`tools/ios_selftest.sh`; `user://` on
+iOS is the app's Documents folder). Both run by hand; Android also weekly.
 
 `tools/ui_smoke.gd`, `table_smoke.gd` and `player_smoke.gd` drive the
 three modes and screenshot them; `tools/export_cli.gd … all` is the

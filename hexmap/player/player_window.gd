@@ -131,12 +131,24 @@ func _big(b: Button, text := "", icon := "") -> Button:
 	return b
 
 
-func _build_join() -> Control:
+## A centred column that scrolls when the screen is shorter than it (a
+## phone held sideways).
+func _scrolling_column(column: VBoxContainer) -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center.add_child(column)
+	scroll.add_child(center)
+	return scroll
+
+
+func _build_join() -> Control:
 	var column := VBoxContainer.new()
 	_columns.append(column)
 	column.add_theme_constant_override("separation", 12)
-	center.add_child(column)
+	var center := _scrolling_column(column)
 	var title := Label.new()
 	title.text = "Player"
 	title.theme_type_variation = "HeaderLabel"
@@ -203,11 +215,10 @@ func _build_join() -> Control:
 
 
 func _build_pick() -> Control:
-	var center := CenterContainer.new()
 	var column := VBoxContainer.new()
 	_columns.append(column)
 	column.add_theme_constant_override("separation", 12)
-	center.add_child(column)
+	var center := _scrolling_column(column)
 	_pick_title = Label.new()
 	_pick_title.theme_type_variation = "HeaderLabel"
 	column.add_child(_pick_title)
