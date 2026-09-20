@@ -1,38 +1,31 @@
 class_name EncounterCommands
 extends RefCounted
 ## The Table's undoable actions over an EncounterState. `run()` applies an
-## event and commits it with its inverse to a History, so one gesture is one
-## undo step; the named methods are the events the Table's tools send, with
-## the bookkeeping (fog after a move, turn order stepping) done here so
-## every caller gets it right. Nothing here needs a window: the Player's
-## client will reuse it for its own local moves once networking arrives.
+## event and records it in the EventLog, so one gesture is one undo step;
+## the named methods are the events the Table's tools send, with the
+## bookkeeping (fog after a move, turn order stepping) done here so every
+## caller gets it right. Nothing here needs a window: the Player's client
+## will reuse it for its own local moves once networking arrives.
 
 var state: EncounterState
-var history: History
+var history: EventLog
 
 
-func _init(p_state: EncounterState, p_history: History) -> void:
+func _init(p_state: EncounterState, p_history: EventLog) -> void:
 	state = p_state
 	history = p_history
+	if history.state == null:
+		history.state = state
 
 
 ## Validate, apply and record. Returns "" or why the event was refused.
-## History.commit runs the redo closure at once; that first run's inverse is
-## the one undo keeps, since undo and redo always alternate on this state.
-func run(ev: Dictionary, label := "") -> String:
-	var why := state.validate(ev)
-	if why != "":
-		return why
-	var redo: Dictionary = JsonDoc.deep(ev)
-	var box := {"inv": {}}
-	history.commit(label if label != "" else str(ev.t),
-		func() -> void:
-			var inv := state.apply(redo)
-			if (box.inv as Dictionary).is_empty():
-				box.inv = inv,
-		func() -> void:
-			state.apply(box.inv))
-	return ""
+func run(ev: Dictionary, label := "", reason: Dictionary = {}) -> String:
+	return history.record(ev, label, reason)
+
+
+## Several events as one undo step (all or nothing).
+func run_all(events: Array, label: String, reason: Dictionary = {}) -> String:
+	return history.record_all(events, label, reason)
 
 
 func begin_group() -> void:

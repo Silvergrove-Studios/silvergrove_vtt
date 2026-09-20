@@ -49,6 +49,8 @@ func end_group(label: String) -> void:
 
 
 func can_undo() -> bool: return not _undo.is_empty()
+## How many undo steps are stacked (to undo back to a known depth).
+func undo_depth() -> int: return _undo.size()
 func can_redo() -> bool: return not _redo.is_empty()
 func undo_label() -> String: return _undo.back().label if can_undo() else ""
 func redo_label() -> String: return _redo.back().label if can_redo() else ""

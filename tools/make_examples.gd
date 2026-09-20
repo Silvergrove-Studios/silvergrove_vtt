@@ -437,7 +437,7 @@ func _chapel_ambush(m: HexMap) -> Encounter:
 		if str(l.color) == "#ff9040":
 			st.apply({"t": "element.set", "scene": sid, "ref": LayerTree.ref("lights", l.id), "changes": {"on": false}})
 	st.apply({"t": "fog.set", "scene": sid, "enabled": true})
-	var cmds := EncounterCommands.new(st, History.new())
+	var cmds := EncounterCommands.new(st, EventLog.new(st))
 	cmds.explore_from(sid, party)
 	cmds.history.clear()   # the undo closures hold the state; drop the cycle
 

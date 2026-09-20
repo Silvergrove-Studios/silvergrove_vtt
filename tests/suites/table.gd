@@ -409,7 +409,7 @@ func test_turn_system_plugin() -> void:
 	var parts := _small_encounter()
 	var st: EncounterState = parts[0]
 	var sid: String = parts[1]
-	var c := EncounterCommands.new(st, History.new())
+	var c := EncounterCommands.new(st, EventLog.new(st))
 	c.start_turns(sid, "roll")
 	var turns := st.encounter.turns
 	check(turns.system == "roll" and turns.order.size() == 2 and turns.data.has("rolls"), "the plugin ordered the tokens and kept its rolls")
@@ -422,7 +422,7 @@ func test_turn_system_plugin() -> void:
 	var back := Encounter.from_json(text)
 	check(back.turns.system == "roll" and back.turns.data.rolls.size() == 2, "the plugin's state survives without the plugin")
 	var st2 := EncounterState.new(back)
-	check(EncounterCommands.new(st2, History.new()).next_turn() == "" and back.turns.turn == 0 and back.turns.round == 2, "without the plugin, the list system steps the stored order")
+	check(EncounterCommands.new(st2, EventLog.new(st2)).next_turn() == "" and back.turns.turn == 0 and back.turns.round == 2, "without the plugin, the list system steps the stored order")
 	check(TurnSystem.get_system("roll").label(back.turns, parts[3]) == "20", "labels are data, so a client without the plugin still shows them")
 	c.history.clear()
 

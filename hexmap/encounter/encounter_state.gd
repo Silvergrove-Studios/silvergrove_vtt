@@ -18,7 +18,15 @@ signal applied(event: Dictionary, inverse: Dictionary)
 const EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
 	"token.add", "token.remove", "token.set", "element.set",
 	"fog.set", "fog.reveal", "fog.hide", "turns.set",
-	"player.add", "player.remove", "player.set"]
+	"player.add", "player.remove", "player.set",
+	# version 2: the rules families (docs/encounter-format.md, "Version 2")
+	"actor.add", "actor.remove", "actor.set", "actor.overlay.push", "actor.overlay.pop",
+	"effect.apply", "effect.set", "effect.remove", "resource.set", "ext.set",
+	"log.add", "log.remove"]
+## Where an `ext.set` may point.
+const EXT_SCOPES := ["encounter", "scene", "token"]
+## What a reference to a thing that carries effects or resources looks like.
+const REF_KINDS := ["token", "actor", "encounter"]
 ## What a player may change on a token they own.
 const PLAYER_TOKEN_FIELDS := ["pos", "rot", "elevation"]
 ## Which overlay fields make sense on which collections; `effective()`
@@ -263,7 +271,142 @@ func validate(ev: Dictionary) -> String:
 				return e
 			if ev.changes.has("id"):
 				return "player.set cannot change 'id'"
+		"actor.add":
+			if not (ev.get("actor") is Dictionary) or str(ev.actor.get("id", "")) == "":
+				return "actor.add needs an actor with an id"
+			if encounter.actors.has(str(ev.actor.id)):
+				return "actor '%s' already exists" % str(ev.actor.id)
+		"actor.remove":
+			return _need_actor(ev)
+		"actor.set":
+			var e := _need_actor(ev)
+			if e != "":
+				return e
+			e = _need_dict(ev, "changes")
+			if e != "":
+				return e
+			for k in ev.changes:
+				var key := str(k)
+				if key == "id" or key == "derived" or key.begins_with("derived.") or key == "overlays" or key.begins_with("overlays."):
+					return "actor.set cannot change '%s'" % key
+		"actor.overlay.push":
+			var e := _need_actor(ev)
+			if e != "":
+				return e
+			if not (ev.get("overlay") is Dictionary) or str(ev.overlay.get("id", "")) == "":
+				return "actor.overlay.push needs an overlay with an id"
+			for o in encounter.actor(str(ev.id)).get("overlays", []):
+				if str(o.get("id", "")) == str(ev.overlay.id):
+					return "overlay '%s' is already on actor '%s'" % [str(ev.overlay.id), str(ev.id)]
+		"actor.overlay.pop":
+			var e := _need_actor(ev)
+			if e != "":
+				return e
+			if _overlay_index(str(ev.id), str(ev.get("overlay_id", ""))) < 0:
+				return "no overlay '%s' on actor '%s'" % [str(ev.get("overlay_id", "")), str(ev.id)]
+		"effect.apply":
+			if not (ev.get("effect") is Dictionary) or str(ev.effect.get("id", "")) == "":
+				return "effect.apply needs an effect with an id"
+			if encounter.effects.has(str(ev.effect.id)):
+				return "effect '%s' already exists" % str(ev.effect.id)
+			var e := _need_ref(str(ev.effect.get("on", "")), "effect.apply: 'on'")
+			if e != "":
+				return e
+			if str(ev.effect.get("key", "")) == "":
+				return "effect.apply needs a 'key'"
+		"effect.set":
+			if not encounter.effects.has(str(ev.get("id", ""))):
+				return "no effect '%s'" % str(ev.get("id", ""))
+			var e := _need_dict(ev, "changes")
+			if e != "":
+				return e
+			if ev.changes.has("id"):
+				return "effect.set cannot change 'id'"
+		"effect.remove":
+			if not encounter.effects.has(str(ev.get("id", ""))):
+				return "no effect '%s'" % str(ev.get("id", ""))
+		"resource.set":
+			var e := _need_ref(str(ev.get("ref", "")), "resource.set: 'ref'")
+			if e != "":
+				return e
+			if str(ev.get("plugin", "")) == "" or str(ev.get("name", "")) == "":
+				return "resource.set needs 'plugin' and 'name'"
+			if ev.has("record") and ev.record != null and not (ev.record is Dictionary):
+				return "resource.set: 'record' must be an object or null"
+		"ext.set":
+			var scope := str(ev.get("scope", ""))
+			if not EXT_SCOPES.has(scope):
+				return "ext.set: scope must be one of %s" % [EXT_SCOPES]
+			if str(ev.get("plugin", "")) == "":
+				return "ext.set needs 'plugin'"
+			var e := _need_dict(ev, "changes")
+			if e != "":
+				return e
+			if scope == "scene":
+				return _need_scene(ev, "id")
+			if scope == "token":
+				var sc := _need_scene(ev, "scene")
+				return sc if sc != "" else _need_token(ev)
+		"log.add":
+			if not (ev.get("entry") is Dictionary) or str(ev.entry.get("id", "")) == "" or str(ev.entry.get("kind", "")) == "":
+				return "log.add needs an entry with an id and a kind"
+			if _log_index(str(ev.entry.id)) >= 0:
+				return "log entry '%s' already exists" % str(ev.entry.id)
+		"log.remove":
+			if _log_index(str(ev.get("id", ""))) < 0:
+				return "no log entry '%s'" % str(ev.get("id", ""))
 	return ""
+
+
+func _need_actor(ev: Dictionary) -> String:
+	return "" if encounter.actors.has(str(ev.get("id", ""))) else "no actor '%s'" % str(ev.get("id", ""))
+
+
+## A ref is "token:<id>" (in any scene), "actor:<id>" or "encounter".
+func _need_ref(ref: String, what: String) -> String:
+	if ref == "encounter":
+		return ""
+	var parts := ref.split(":", true, 1)
+	if parts.size() != 2 or not REF_KINDS.has(parts[0]) or parts[1] == "":
+		return "%s must be 'token:<id>', 'actor:<id>' or 'encounter'" % what
+	if parts[0] == "token" and find_token(parts[1]).is_empty():
+		return "%s: no token '%s'" % [what, parts[1]]
+	if parts[0] == "actor" and not encounter.actors.has(parts[1]):
+		return "%s: no actor '%s'" % [what, parts[1]]
+	return ""
+
+
+## A token by id in whichever scene holds it ({} when none does).
+func find_token(id: String) -> Dictionary:
+	for sc in encounter.scenes:
+		var tk := Encounter.token_in(sc, id)
+		if not tk.is_empty():
+			return tk
+	return {}
+
+
+## The scene id holding a token, or "".
+func scene_of_token(id: String) -> String:
+	for sc in encounter.scenes:
+		if not Encounter.token_in(sc, id).is_empty():
+			return str(sc.id)
+	return ""
+
+
+func _overlay_index(actor_id: String, overlay_id: String) -> int:
+	var ovs: Array = encounter.actor(actor_id).get("overlays", [])
+	for i in ovs.size():
+		if str(ovs[i].get("id", "")) == overlay_id:
+			return i
+	return -1
+
+
+func _log_index(id: String) -> int:
+	var lg: Array = encounter.log
+	for i in lg.size():
+		if str(lg[i].get("id", "")) == id:
+			return i
+	return -1
 
 
 func _need_dict(ev: Dictionary, key: String) -> String:
@@ -482,6 +625,109 @@ func apply(ev: Dictionary) -> Dictionary:
 		"player.set":
 			inv = {"t": t, "id": str(ev.id), "changes": JsonDoc.merge(encounter.player(str(ev.id)), ev.changes)}
 			what = "players"
+		"actor.add":
+			var a: Dictionary = JsonDoc.deep(ev.actor)
+			Encounter.fill_actor(a)
+			doc.actors[str(a.id)] = a
+			inv = {"t": "actor.remove", "id": str(a.id)}
+			what = "actors"
+		"actor.remove":
+			var gone: Dictionary = doc.actors[str(ev.id)]
+			doc.actors.erase(str(ev.id))
+			inv = {"t": "actor.add", "actor": JsonDoc.deep(gone)}
+			what = "actors"
+		"actor.set":
+			inv = {"t": t, "id": str(ev.id), "changes": JsonDoc.merge_paths(encounter.actor(str(ev.id)), ev.changes)}
+			what = "actors"
+		"actor.overlay.push":
+			var ovs: Array = encounter.actor(str(ev.id)).overlays
+			var idx := clampi(int(ev.get("index", ovs.size())), 0, ovs.size())
+			ovs.insert(idx, JsonDoc.deep(ev.overlay))
+			inv = {"t": "actor.overlay.pop", "id": str(ev.id), "overlay_id": str(ev.overlay.id)}
+			what = "actors"
+		"actor.overlay.pop":
+			var ovs: Array = encounter.actor(str(ev.id)).overlays
+			var idx := _overlay_index(str(ev.id), str(ev.overlay_id))
+			var gone: Dictionary = ovs[idx]
+			ovs.remove_at(idx)
+			inv = {"t": "actor.overlay.push", "id": str(ev.id), "overlay": JsonDoc.deep(gone), "index": idx}
+			what = "actors"
+		"effect.apply":
+			var fx: Dictionary = JsonDoc.deep(ev.effect)
+			doc.effects[str(fx.id)] = fx
+			inv = {"t": "effect.remove", "id": str(fx.id)}
+			what = "effects"
+		"effect.set":
+			inv = {"t": t, "id": str(ev.id), "changes": JsonDoc.merge_paths(encounter.effect(str(ev.id)), ev.changes)}
+			what = "effects"
+		"effect.remove":
+			var gone: Dictionary = doc.effects[str(ev.id)]
+			doc.effects.erase(str(ev.id))
+			inv = {"t": "effect.apply", "effect": JsonDoc.deep(gone)}
+			what = "effects"
+		"resource.set":
+			var ref := str(ev.ref)
+			var plugin := str(ev.plugin)
+			var name := str(ev.name)
+			var res: Dictionary = doc.resources
+			var before: Variant = res.get(ref, {}).get(plugin, {}).get(name)
+			var record: Variant = ev.get("record")
+			if record == null:
+				if res.has(ref) and res[ref].has(plugin):
+					res[ref][plugin].erase(name)
+					if res[ref][plugin].is_empty():
+						res[ref].erase(plugin)
+					if res[ref].is_empty():
+						res.erase(ref)
+			else:
+				if not res.has(ref):
+					res[ref] = {}
+				if not res[ref].has(plugin):
+					res[ref][plugin] = {}
+				res[ref][plugin][name] = JsonDoc.deep(record)
+			inv = {"t": t, "ref": ref, "plugin": plugin, "name": name, "record": JsonDoc.deep(before) if before != null else null}
+			what = "resources"
+		"ext.set":
+			var holder: Dictionary
+			match str(ev.scope):
+				"encounter": holder = doc.state.ext
+				"scene":
+					var sc := encounter.scene(str(ev.id))
+					if not sc.has("ext"):
+						sc.ext = {}
+					holder = sc.ext
+				"token":
+					var tk := token(scene_id, str(ev.id))
+					if not tk.has("ext"):
+						tk.ext = {}
+					holder = tk.ext
+			if not holder.has(str(ev.plugin)):
+				holder[str(ev.plugin)] = {}
+			inv = JsonDoc.deep(ev)
+			inv.changes = JsonDoc.merge_paths(holder[str(ev.plugin)], ev.changes)
+			if holder[str(ev.plugin)].is_empty():
+				holder.erase(str(ev.plugin))
+			what = "ext"
+		"log.add":
+			var entry: Dictionary = JsonDoc.deep(ev.entry)
+			var lg: Array = doc.log
+			var idx := clampi(int(ev.get("index", lg.size())), 0, lg.size())
+			lg.insert(idx, entry)
+			inv = {"t": "log.remove", "id": str(entry.id)}
+			# A roll entry says where in the dice stream it was drawn: the
+			# stream moves past it, and back again when it is removed.
+			if entry.kind == "roll" and entry.has("draw"):
+				inv.rng_index = int(doc.rng.index)
+				doc.rng.index = int(entry.draw.index) + int(entry.draw.count)
+			what = "log"
+		"log.remove":
+			var idx := _log_index(str(ev.id))
+			var gone: Dictionary = doc.log[idx]
+			(doc.log as Array).remove_at(idx)
+			inv = {"t": "log.add", "entry": JsonDoc.deep(gone), "index": idx}
+			if ev.has("rng_index"):
+				doc.rng.index = int(ev.rng_index)
+			what = "log"
 	if t == "scene.add" and bool(ev.get("activate", false)):
 		doc.active_scene = str(ev.scene.id)
 	encounter.touch(what, scene_id)

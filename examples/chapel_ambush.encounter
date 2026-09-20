@@ -1,8 +1,11 @@
 {
-  "active_scene": "s_393eb25a",
+  "active_scene": "s_b10e8ea8",
+  "actors": {},
+  "effects": {},
   "ext": {},
   "format": "silvergrove.encounter",
   "id": "a3ef7ad6-e8d3-4f40-86e6-06113470c6f1",
+  "log": [],
   "meta": {
     "author": "Silvergrove Studios",
     "created": "2026-09-19T00:00:00",
@@ -12,7 +15,7 @@
   "name": "Chapel Ambush",
   "notes": [
     {
-      "id": "n_169515de",
+      "id": "n_ae002b68",
       "text": "The goblins bolt for the trapdoor; the chief bars it from below.",
       "title": "If the party lights the braziers"
     }
@@ -20,15 +23,20 @@
   "players": [
     {
       "color": "#4f9cf6",
-      "id": "pl_1961aa4c",
+      "id": "pl_fe0170c1",
       "name": "Ana"
     },
     {
       "color": "#5bc86a",
-      "id": "pl_fe0170c1",
+      "id": "pl_393eb25a",
       "name": "Ben"
     }
   ],
+  "resources": {},
+  "rng": {
+    "index": 0,
+    "seed": 425830988
+  },
   "scenes": [
     {
       "fog": {
@@ -124,7 +132,7 @@
           "5,0"
         ]
       },
-      "id": "s_393eb25a",
+      "id": "s_b10e8ea8",
       "level": "ground",
       "map": "d74c4e99-3a49-4a88-8599-4d7798fe24fa",
       "map_path": "ruined_chapel.hexmap",
@@ -149,7 +157,7 @@
           "color": "#4f9cf6",
           "elevation": 0,
           "hidden": false,
-          "id": "t_b10e8ea8",
+          "id": "t_bdb237f2",
           "label": "AF",
           "light": {
             "bright": 1.5,
@@ -157,7 +165,7 @@
             "dim": 3
           },
           "name": "Ana's fighter",
-          "owner": "pl_1961aa4c",
+          "owner": "pl_fe0170c1",
           "pos": [
             4,
             6.63952827453613
@@ -174,10 +182,10 @@
           "color": "#5bc86a",
           "elevation": 0,
           "hidden": false,
-          "id": "t_bdb237f2",
+          "id": "t_01365979",
           "label": "BR",
           "name": "Ben's ranger",
-          "owner": "pl_fe0170c1",
+          "owner": "pl_393eb25a",
           "pos": [
             3.5,
             7.50555372238159
@@ -194,7 +202,7 @@
           "color": "#8a9a3a",
           "elevation": 0,
           "hidden": true,
-          "id": "t_fa48f390",
+          "id": "t_2c932f84",
           "label": "G1",
           "name": "Goblin",
           "pos": [
@@ -213,7 +221,7 @@
           "color": "#8a9a3a",
           "elevation": 0,
           "hidden": true,
-          "id": "t_23c5de64",
+          "id": "t_33894168",
           "label": "G2",
           "name": "Goblin",
           "pos": [
@@ -232,7 +240,7 @@
           "color": "#8a9a3a",
           "elevation": 0,
           "hidden": true,
-          "id": "t_9f6bc772",
+          "id": "t_e23e7c17",
           "label": "G3",
           "name": "Goblin",
           "pos": [
@@ -251,7 +259,7 @@
           "color": "#8a9a3a",
           "elevation": 0,
           "hidden": true,
-          "id": "t_c0850280",
+          "id": "t_a166e022",
           "label": "G4",
           "name": "Goblin",
           "pos": [
@@ -272,7 +280,7 @@
         "enabled": true,
         "explored": []
       },
-      "id": "s_bcc61432",
+      "id": "s_d69f0342",
       "level": "crypt",
       "map": "d74c4e99-3a49-4a88-8599-4d7798fe24fa",
       "map_path": "ruined_chapel.hexmap",
@@ -284,7 +292,7 @@
           "color": "#a0402a",
           "elevation": 0,
           "hidden": false,
-          "id": "t_d69f0342",
+          "id": "t_8dbe63bc",
           "label": "GC",
           "name": "Goblin chief",
           "pos": [
@@ -303,22 +311,25 @@
       ]
     }
   ],
+  "state": {
+    "ext": {}
+  },
   "turns": {
     "active": [],
     "data": {},
     "mode": "ordered",
     "order": [
-      "t_b10e8ea8",
       "t_bdb237f2",
-      "t_fa48f390",
-      "t_23c5de64",
-      "t_9f6bc772",
-      "t_c0850280"
+      "t_01365979",
+      "t_2c932f84",
+      "t_33894168",
+      "t_e23e7c17",
+      "t_a166e022"
     ],
     "round": 1,
     "running": false,
     "system": "list",
     "turn": 0
   },
-  "version": 1
+  "version": 2
 }

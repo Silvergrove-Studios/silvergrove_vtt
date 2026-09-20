@@ -85,7 +85,7 @@ func test_host_and_net_session() -> void:
 	var e := Encounter.load_file(example("chapel_ambush.encounter"))
 	var st := EncounterState.new(e)
 	st.resolve_maps()
-	var history := History.new()
+	var history := EventLog.new(st)
 	var cmds := EncounterCommands.new(st, history)
 	var host := HostSession.new(st, packs)
 	var applied := []

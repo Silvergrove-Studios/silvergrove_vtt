@@ -323,7 +323,7 @@ func test_encounter_commands() -> void:
 	var sid: String = parts[1]
 	var hero: String = parts[2]
 	var gob: String = parts[3]
-	var h := History.new()
+	var h := EventLog.new(st)
 	var c := EncounterCommands.new(st, h)
 	var m := st.map_for(sid)
 	var g := m.grid

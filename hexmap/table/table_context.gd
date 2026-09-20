@@ -12,7 +12,7 @@ signal status(text: String)
 
 var app: App
 var state: EncounterState
-var history := History.new()
+var history := EventLog.new()
 var commands: EncounterCommands
 var canvas: MapCanvas
 ## View zoom (screen px per canvas px), kept current by TableView.
@@ -42,6 +42,7 @@ func set_encounter(e: Encounter) -> void:
 	state = EncounterState.new(e)
 	state.encounter.changed.connect(_on_changed)
 	history.clear()
+	history.state = state
 	commands = EncounterCommands.new(state, history)
 	selection = []
 	scene_id = e.active_scene_id

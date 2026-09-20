@@ -8,7 +8,7 @@ extends RefCounted
 signal changed(what: String, scene_id: String)
 
 const FORMAT := "silvergrove.encounter"
-const VERSION := 1
+const VERSION := 2
 ## mode: free (anyone moves any visible token) | dm (the DM picks who may
 ## move: `active`) | ordered (a turn system orders them: `order`, `turn`,
 ## `round`; `system` names it, `data` is its own state).
@@ -34,6 +34,12 @@ static func create(p_name: String) -> Encounter:
 		"turns": DEFAULT_TURNS.duplicate(true),
 		"players": [],
 		"notes": [],
+		"actors": {},
+		"effects": {},
+		"resources": {},
+		"state": {"ext": {}},
+		"log": [],
+		"rng": {"seed": int(randi()) & 0x7fffffff, "index": 0},
 		"meta": {"author": "", "description": "", "created": now, "modified": now},
 		"ext": {},
 	}
@@ -93,6 +99,18 @@ var players: Array:
 var turns: Dictionary:
 	get: return doc.get("turns", {})
 
+## Actors by id: anything with a sheet (docs/campaign-format.md).
+var actors: Dictionary:
+	get: return doc.actors
+## Effect records by id (docs/encounter-format.md, version 2).
+var effects: Dictionary:
+	get: return doc.effects
+## "<ref>" -> plugin id -> name -> pool or track.
+var resources: Dictionary:
+	get: return doc.resources
+## Informational entries (rolls, notes) in order.
+var log: Array:
+	get: return doc.log
 var active_scene_id: String:
 	get: return str(doc.get("active_scene", ""))
 
@@ -132,6 +150,14 @@ static func token_index(p_scene: Dictionary, id: String) -> int:
 		if str(arr[i].get("id", "")) == id:
 			return i
 	return -1
+
+
+func actor(id: String) -> Dictionary:
+	return doc.actors.get(id, {})
+
+
+func effect(id: String) -> Dictionary:
+	return doc.effects.get(id, {})
 
 
 func player(id: String) -> Dictionary:
@@ -194,13 +220,20 @@ static func from_json(text: String, error: Array = []) -> Encounter:
 
 
 func _upgrade(_from_version: int) -> void:
-	# Nothing to upgrade yet. Fill in anything a hand-written file omitted.
-	for k in ["scenes", "players", "notes"]:
+	# Version 1 had no rules blocks: version 2 adds actors, effects,
+	# resources, plugin state, the informational log and the dice stream,
+	# all empty here. Then fill in anything a hand-written file omitted.
+	for k in ["scenes", "players", "notes", "log"]:
 		if not doc.has(k):
 			doc[k] = []
-	for k in ["meta", "ext"]:
+	for k in ["meta", "ext", "actors", "effects", "resources", "state"]:
 		if not doc.has(k):
 			doc[k] = {}
+	if not doc["state"].has("ext"):
+		doc["state"]["ext"] = {}
+	if not (doc.get("rng") is Dictionary):
+		doc["rng"] = {"seed": int(randi()) & 0x7fffffff, "index": 0}
+	doc["version"] = VERSION
 	if doc.has("initiative") and not doc.has("turns"):
 		# Pre-release files had a D&D-shaped "initiative" block.
 		doc["turns"] = doc["initiative"]
@@ -228,10 +261,25 @@ func _upgrade(_from_version: int) -> void:
 			s["fog"]["enabled"] = false
 		for t in s["tokens"]:
 			fill_token(t)
+	for id in doc["actors"]:
+		fill_actor(doc["actors"][id])
 	if not doc.has("active_scene"):
 		doc["active_scene"] = str(doc["scenes"][0].get("id", "")) if not (doc["scenes"] as Array).is_empty() else ""
 	if not doc.has("id"):
 		doc["id"] = JsonDoc.uuid()
+
+
+## Give a hand-written or partial actor every field it is expected to have.
+static func fill_actor(a: Dictionary) -> void:
+	if not a.has("kind"):
+		a["kind"] = "custom"
+	if not a.has("name"):
+		a["name"] = ""
+	for k in ["ext", "derived", "token", "audience"]:
+		if not (a.get(k) is Dictionary):
+			a[k] = {}
+	if not (a.get("overlays") is Array):
+		a["overlays"] = []
 
 
 ## Give a hand-written or partial token every field it is expected to have.

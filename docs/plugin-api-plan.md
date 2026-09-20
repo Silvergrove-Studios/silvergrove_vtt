@@ -323,13 +323,25 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 
 ## 4. The phases
 
+| phase | status | delivered |
+|---|---|---|
+| 0 Decisions and spikes | done | Luau runtime + `LuaVm`, `JsonSchema`, `Expr`, suite split, format drafts, decisions |
+| 1 Kernel core | done | v2 document and events, `EventLog`, `TypedNumber`, `HookBus`, `Dice`, `Effects`, `Resources`, `RulesKernel`, fixture ruleset, fuzz |
+| 2 Runtime and plugin host | next | `PluginHost`, manifests, `hm.*` bindings, `hm.test`, `sample.ordered` in Lua |
+| 3 Turns, shared state, clock, prompts | | `TurnStrategy` (ordered + focus), tracks, prompts, pending rolls, `sample.focus` |
+| 4 Declarative UI, intents, protocol v2 | | views renderer, Player/Display clients, audience filtering |
+| 5 Compendium, packs, editors | | indexed packs, homebrew editors, `sample.degrees` |
+| 6 Map queries | | distance/bands, templates, LoS/cover, zones, hex state |
+| 7 Campaign, growth, hardening | | `.campaign`, checkpoints UI, recap, prep triggers, bulk ops |
+| 8 Real rulesets | | in their own repositories, licensing decided then |
+
 Each phase ends with: its tests green in CI on all four platforms where
 applicable; the reference plugins updated; the format docs updated; a dev
 build. Phases are ordered so that every one delivers something a DM can
 use, and so that the focus-holder shape and the phone are proven early —
 those are where a D&D-shaped design would silently creep in.
 
-### Phase 0 — Decisions and spikes
+### Phase 0 — Decisions and spikes — **done 2026-09-20**
 
 Deliverables:
 - **Lua runtime spike.** Evaluate `gilzoide/lua-gdextension` (Lua 5.4,
@@ -355,21 +367,48 @@ Deliverables:
 
 Exit: spike scripts pass in CI; formats reviewed.
 
-### Phase 1 — Kernel core
+### Phase 1 — Kernel core — **done 2026-09-20**
 
-`HookBus`, `EventLog` (absorbing `History`), event families (`ext.set`,
-`actor.*`, `effect.*`, `resource.*`, `roll`), `TypedNumber`, `Derivation`,
-`Effects`, `Dice`, `Resources`. All GDScript, all exercised by tests that
-register GDScript handlers on the bus (no Lua yet).
+What was built, where, and what proves it (`tests/suites/rules_kernel.gd`,
+175 checks, plus the existing suites on the new log):
 
-Concrete changes: `EncounterState` event dispatch by family; `.encounter`
-v2 `_upgrade()`; `EncounterCommands.run_hook()`; `Encounter` gains
-`actors`, `effects`, `resources`, `log`.
+| piece | file | what it does | proven by |
+|---|---|---|---|
+| Document v2 | `encounter/encounter.gd`, `encounter_state.gd` | `actors`, `effects`, `resources`, `state.ext`, `log`, `rng`; twelve new events with validators and inverses; v1 files upgrade | `test_encounter_v2_events`: refusals, apply/inverse round trip byte for byte, mirror equality, v1 upgrade |
+| Path changes | `core/json_doc.gd` | `at_path`, `set_at_path` (prunes emptied parents), `merge_paths` — dotted-path change sets with exact inverses | same |
+| `EventLog` | `rules/event_log.gd` | a `History` that records events with seq/reason/audience, append-only (undo/redo/restore append compensating entries), batches all-or-nothing, checkpoints, `since()`, `replay()` | `test_event_log`: refusal, batch rollback, undo/redo entries, checkpoint restore as one step, replay reproduces |
+| `EncounterCommands` on the log | `encounter/encounter_commands.gd`, `table/table_context.gd` | the Table's commands record through the log; `run_all` for batches | existing encounter/table/net suites unchanged |
+| `TypedNumber` | `rules/typed_number.gd` | `{total, parts}` with stack / best / override policies per part type | `test_typed_numbers` |
+| `HookBus` | `rules/hook_bus.gd` | ordered handlers, modify/veto, `Wait` to pause and `resume()`, failing handlers skipped and reported | `test_hook_bus` |
+| `Dice` | `rules/dice.gd` | pure `face(seed, index, sides)` (splitmix64), expression grammar (kh/kl/dh/dl/rN/!/minN), named groups, typed parts under a policy, typed-in faces, `Pending` with contributions | `test_dice`: determinism, uniformity, every suffix, groups, typed-in, pending |
+| `Effects` | `rules/effects.gd` | stacking on apply, `on()`, `remove()` with links, `expire()` per trigger kind, `apply_changes()` on typed and plain numbers | `test_effects` |
+| `Resources` | `rules/resources.gd` | pools and slot tracks: spend/gain/mark/clear/cross/refill as `resource.set` events | `test_resources` |
+| `RulesKernel` | `rules/kernel.gd` | rulesets registered with `derive`/`fields`/`policy`; `commit()` = batch + targeted re-derivation; `roll()` through `before_roll`/`after_roll` into the log and the dice stream; `actor_view()` with overlays, effects on linked tokens, resources | `test_kernel_end_to_end`, `test_kernel_derive_budget` (200 actors < 50 ms), `test_rules_fuzz` |
+| Fixture ruleset | `tests/fixtures/sample_rules.gd` | `SampleRules`: derive, hooks, a `strike` action | the same tests |
 
-Exit: a GDScript fixture ruleset (tests only) can create an actor, derive
-a defence, apply an effect that changes a roll, roll with a seed, mark a
-resource, undo it all, replay the log from empty and reach the same
-document byte for byte.
+Exit criterion met: the fixture creates actors, derives a typed defence,
+an effect on a linked token lowers it with a named part, an overlay
+changes derived numbers and reverts, a roll picks up the attack and
+shaken parts through the hooks and is classified, a strike spends the
+target's pool, expiry restores the defence; the log alone replays onto a
+fresh state to the same bytes; undoing every step restores the start; the
+fuzz drives 500 random batches with replay, undo-all and never-stale
+derived holding.
+
+Decisions taken while building:
+- `derived` is not an event. It is recomputed after commits (only for the
+  actors touched), after undo/redo/restore (everyone), and on replay.
+- The document log holds only informational entries (rolls, notes); the
+  EventLog is the full record and is not saved in the document yet
+  (Phase 4 sends `since()` to reconnecting clients; saving it beside the
+  encounter comes with checkpoints in Phase 7).
+- A roll is a `log.add` whose entry carries its `draw`; applying it moves
+  the dice stream, removing it moves it back, so the stream is part of
+  the document and inverses are exact.
+- `set_at_path(null)` prunes emptied parents so forward + inverse leaves
+  the document byte-identical.
+- Closures on the undo stack and the log's `changed` subscriber hold the
+  log/kernel weakly (no leaked instances at exit; the test run checks).
 
 ### Phase 2 — Runtime and plugin host
 

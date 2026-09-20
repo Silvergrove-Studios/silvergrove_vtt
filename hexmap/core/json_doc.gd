@@ -86,6 +86,66 @@ static func merge(target: Dictionary, changes: Dictionary) -> Dictionary:
 	return before
 
 
+## The value at a dotted path ("ext.rules.stats.agi"), or `default` when
+## any step is missing. Array steps are integer indices.
+static func at_path(target: Variant, path: String, default: Variant = null) -> Variant:
+	var v: Variant = target
+	for part in path.split("."):
+		if v is Dictionary and (v as Dictionary).has(part):
+			v = v[part]
+		elif v is Array and part.is_valid_int() and int(part) >= 0 and int(part) < (v as Array).size():
+			v = v[int(part)]
+		else:
+			return default
+	return v
+
+
+## Set (or, with null, remove) the value at a dotted path, creating
+## intermediate dictionaries on the way in and pruning ones left empty on
+## the way out, so setting then removing leaves the document as it was.
+## Returns the previous value (null if none).
+static func set_at_path(target: Dictionary, path: String, value: Variant) -> Variant:
+	var parts := path.split(".")
+	var chain: Array = [target]
+	var d: Dictionary = target
+	for i in parts.size() - 1:
+		var k := parts[i]
+		if not (d.get(k) is Dictionary):
+			if value == null:
+				return null
+			d[k] = {}
+		d = d[k]
+		chain.append(d)
+	var last := parts[parts.size() - 1]
+	var before: Variant = deep(d[last]) if d.has(last) else null
+	if value == null:
+		d.erase(last)
+		for i in range(chain.size() - 1, 0, -1):
+			if (chain[i] as Dictionary).is_empty():
+				(chain[i - 1] as Dictionary).erase(parts[i - 1])
+			else:
+				break
+	else:
+		d[last] = deep(value)
+	return before
+
+
+## merge() for change sets whose keys may be dotted paths: "a.b.c": 1
+## sets deep inside; a null removes. Returns the inverse change set with
+## the same keys.
+static func merge_paths(target: Dictionary, changes: Dictionary) -> Dictionary:
+	var before := {}
+	for k in changes:
+		var key := str(k)
+		before[key] = set_at_path(target, key, changes[k]) if key.contains(".") else (deep(target[key]) if target.has(key) else null)
+		if not key.contains("."):
+			if changes[k] == null:
+				target.erase(key)
+			else:
+				target[key] = deep(changes[k])
+	return before
+
+
 ## ISO 8601, UTC, "2026-09-19T18:04:00": what the format docs show.
 static func now() -> String:
 	return Time.get_datetime_string_from_system(true, false)
