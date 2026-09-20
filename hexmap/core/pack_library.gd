@@ -24,7 +24,11 @@ var _extra_dirs: PackedStringArray = []
 
 func search_dirs() -> PackedStringArray:
 	var dirs := PackedStringArray()
-	dirs.append(ProjectSettings.globalize_path("res://packs"))
+	# The project's own packs/ — only when running from the project: in a
+	# build res:// is the pack and globalize_path gives a bare "packs",
+	# which would be the folder beside the executable counted twice.
+	if not OS.has_feature("template"):
+		dirs.append(ProjectSettings.globalize_path("res://packs"))
 	dirs.append(ProjectSettings.globalize_path("user://packs"))
 	# Builds ship packs beside the executable; on macOS that is inside the
 	# bundle's Resources, or next to the .app itself.
