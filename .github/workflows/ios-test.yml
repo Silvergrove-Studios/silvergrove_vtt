@@ -52,6 +52,8 @@ jobs:
           grep -n "objectVersion\|compatibilityVersion" out/ios/Hexmap.xcodeproj/project.pbxproj | head
           ls out/ios/Hexmap.xcodeproj
           xcodebuild -list -project out/ios/Hexmap.xcodeproj 2>&1 | head -n 20 || true
+          plutil -lint out/ios/Hexmap.xcodeproj/project.pbxproj || true
+          grep -n '\$' out/ios/Hexmap.xcodeproj/project.pbxproj | head -n 20 || true
       - name: Build for the simulator
         run: |
           set -e
@@ -73,3 +75,5 @@ jobs:
             out/ios-selftest/
             out/ios_export.log
             out/xcodebuild.log
+            out/ios/Hexmap.xcodeproj/project.pbxproj
+            out/ios/Hexmap-Info.plist
