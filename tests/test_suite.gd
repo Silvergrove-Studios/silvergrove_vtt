@@ -2180,7 +2180,7 @@ func test_player_window() -> void:
 	var win := PlayerWindow.new()
 	win.app = app
 	root.add_child(win)
-	check(win.screen == "join" and win._files.item_count >= 1, "starts on the join screen with the example listed")
+	check(win.screen == "join" and win._known.item_count == 0 and win._diag.text.begins_with("This device:"), "starts on the join screen: no tables joined yet, diagnostics shown")
 	win._join_address()
 	check((win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Type the address"), "joining an empty address asks for one")
 	win._choose_file("/nowhere/x.encounter")
@@ -2664,3 +2664,73 @@ func _random_event(rng: RandomNumberGenerator, st: EncounterState) -> Dictionary
 		13:
 			return {"t": "encounter.set", "changes": {"name": "Fuzz %d" % rng.randi_range(1, 9), "notes": [] if rng.randf() < 0.5 else [{"id": "n", "title": "t", "text": ""}]}}
 	return {}
+
+
+func test_mdns() -> void:
+	# Names, with and without compression pointers.
+	var n := Mdns.encode_name("_hexmap._tcp.local")
+	check(n[0] == 7 and n[n.size() - 1] == 0 and n.size() == 1 + 7 + 1 + 4 + 1 + 5 + 1, "name encoding")
+	check(Mdns.read_name(n, 0)[0] == "_hexmap._tcp.local" and Mdns.read_name(n, 0)[1] == n.size(), "name decoding")
+	var packed := Mdns.encode_name("local") + PackedByteArray([5, 116, 97, 98, 108, 101, 0xC0, 0])   # "table" + pointer to offset 0 ("local")
+	check(Mdns.read_name(packed, 7)[0] == "table.local" and Mdns.read_name(packed, 7)[1] == packed.size(), "compression pointer followed, position after the pointer")
+	# A query parses as a query for the service.
+	var q := Mdns.parse(Mdns.query())
+	check(q.query and q.questions.size() == 1 and q.questions[0].name == Mdns.SERVICE and q.questions[0].type == Mdns.TYPE_PTR, "query round trip")
+	# A response carries PTR, SRV, TXT and A records that tables_in() reassembles.
+	var r := Mdns.parse(Mdns.response("Chapel Ambush", 47777, "macbook", PackedStringArray(["10.5.91.189", "192.168.1.5"]), {"extra": "x"}))
+	check(not r.query and r.records.size() == 5, "response has PTR, SRV, TXT and two A records (%d)" % r.records.size())
+	var tables := Mdns.tables_in(r)
+	check(tables.size() == 1 and tables[0].name == "Chapel Ambush" and tables[0].port == 47777 and tables[0].host == "macbook.local", "tables_in: %s" % [tables])
+	check(tables[0].addresses == PackedStringArray(["10.5.91.189", "192.168.1.5"]), "addresses gathered from A records")
+	check(Mdns.tables_in(Mdns.parse(Mdns.response("Dots. In. Name", 1, "h", PackedStringArray())))[0].name == "Dots. In. Name", "dots in an instance name survive")
+	check(Mdns.parse(PackedByteArray([1, 2, 3])).is_empty() and Mdns.tables_in(Mdns.parse(Mdns.query())).is_empty(), "junk and queries yield no tables")
+	# Truncated data does not crash.
+	var full := Mdns.response("T", 1, "h", PackedStringArray(["1.2.3.4"]))
+	for cut in [13, 20, 40, full.size() - 3]:
+		var part := Mdns.parse(full.slice(0, cut))
+		check(part is Dictionary, "truncated at %d parses without error" % cut)
+	# Responder and browser over loopback, if the mDNS port can be shared
+	# with the OS's own responder here.
+	var resp := Mdns.Responder.new()
+	resp.start("Loopback mdns", 47777)
+	var br := Mdns.Browser.new()
+	br.start()
+	if not resp.listening():
+		skip("cannot bind the mDNS port beside the system responder here")
+		resp.stop()
+		br.stop()
+		return
+	var got := []
+	br.found.connect(func(p_name: String, address: String, port: int) -> void: got.append([p_name, address, port]))
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 2500 and got.is_empty():
+		br.ask()
+		OS.delay_msec(40)
+		resp.poll(0.04)
+		OS.delay_msec(40)
+		br.poll(0.04)
+	if got.is_empty():
+		skip("no mDNS traffic over loopback here (asked %d)" % br.asked)
+	else:
+		check(got[0][0] == "Loopback mdns" and got[0][2] == 47777, "the browser found the responder: %s" % [got[0]])
+	resp.stop()
+	br.stop()
+
+
+func test_remembered_tables() -> void:
+	var path := "user://test_prefs_tables.json"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	var app := App.new(path)
+	check(app.tables().is_empty(), "none at first")
+	app.note_table("10.5.91.189", 47777, "Chapel")
+	app.note_table("192.168.1.9", 47777, "Other")
+	app.note_table("10.5.91.189", 47777, "Chapel again")
+	var t := app.tables()
+	check(t.size() == 2 and t[0].name == "Chapel again" and t[1].name == "Other", "newest first, same address:port replaces")
+	check(App.new(path).tables().size() == 2, "persists")
+	var b := Discovery.Browser.new()
+	b.remember("10.5.91.189")
+	b.remember("10.5.91.189")
+	b.remember("")
+	check(b.known == PackedStringArray(["10.5.91.189"]), "known addresses deduplicated, blanks ignored")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

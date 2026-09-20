@@ -22,9 +22,11 @@ var _join: Control
 var _pick: Control
 var _play: Control
 var _address: LineEdit
-var _files: ItemList
 var _tables: ItemList
 var _tables_label: Label
+var _known: ItemList
+var _diag: Label
+var _diag_timer := 0.0
 var browser := Discovery.Browser.new()
 var _browsing := false
 var _players: ItemList
@@ -181,14 +183,19 @@ func _build_join() -> Control:
 	row.add_child(join)
 	column.add_child(row)
 	var h2 := Label.new()
-	h2.text = "Or open an encounter on this device"
+	h2.text = "Tables you have joined before"
 	h2.theme_type_variation = "DimLabel"
 	column.add_child(h2)
-	_files = ItemList.new()
-	_files.custom_minimum_size = Vector2(0, 160)
-	_files.fixed_icon_size = Vector2i(0, 0)
-	_files.item_selected.connect(func(i: int) -> void: _choose_file(str(_files.get_item_metadata(i))))
-	column.add_child(_files)
+	_known = ItemList.new()
+	_known.custom_minimum_size = Vector2(0, 100)
+	_known.item_selected.connect(func(i: int) -> void:
+		var t: Dictionary = _known.get_item_metadata(i)
+		_connect_to(str(t.address), int(t.port)))
+	column.add_child(_known)
+	_diag = Label.new()
+	_diag.theme_type_variation = "DimLabel"
+	_diag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_diag)
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 8)
 	var home := _big(Button.new(), "Home")
@@ -290,7 +297,7 @@ func show_screen(name: String) -> void:
 	_pick.visible = name == "pick"
 	_play.visible = name == "play"
 	if name == "join":
-		_refresh_files()
+		_refresh_known()
 		_start_browsing()
 	else:
 		_stop_browsing()
@@ -303,7 +310,10 @@ func _start_browsing() -> void:
 	_browsing = browser.start() == OK
 	if not _browsing:
 		_tables_label.text = "Cannot listen for tables here; type the address the DM sees."
+	for t in app.tables():
+		browser.remember(str(t.get("address", "")))
 	_refresh_tables()
+	_refresh_diag()
 
 
 func _stop_browsing() -> void:
@@ -323,27 +333,20 @@ func _refresh_tables() -> void:
 
 # ====================================================================== join ==
 
-## Encounters this device knows: recent ones and the examples.
-func encounter_files() -> Array:
-	var out := []
-	for p in app.recent():
-		if str(p).ends_with(".encounter") and not out.has(p):
-			out.append(p)
-	var names := {}
-	for p in out:
-		names[str(p).get_file()] = true
-	for p in App.bundled(".encounter"):
-		if not names.has(str(p).get_file()):
-			out.append(p)
-	return out
+func _refresh_known() -> void:
+	_known.clear()
+	for t in app.tables():
+		var i := _known.add_item("%s  —  %s:%d" % [str(t.get("name", "")), str(t.get("address", "")), int(t.get("port", 0))])
+		_known.set_item_metadata(i, t)
 
 
-func _refresh_files() -> void:
-	_files.clear()
-	for p in encounter_files():
-		var i := _files.add_item(str(p).get_file().get_basename().capitalize())
-		_files.set_item_metadata(i, p)
-		_files.set_item_tooltip(i, p)
+## Where this device is and what discovery has done, so a player and a
+## DM on the phone together can tell a subnet problem from a dead table.
+func _refresh_diag() -> void:
+	if _diag == null:
+		return
+	var ips := App.local_ipv4()
+	_diag.text = "This device: %s · %s" % [", ".join(ips) if not ips.is_empty() else "no network", browser.summary()]
 
 
 func _join_address() -> void:
@@ -352,6 +355,7 @@ func _join_address() -> void:
 		_join_status("Type the address the DM's table shows, or pick a table above.")
 		return
 	var hp := Protocol.parse_address(text)
+	browser.remember(str(hp[0]))
 	_connect_to(str(hp[0]), int(hp[1]))
 
 
@@ -382,6 +386,7 @@ func _connect_to(address: String, port: int) -> void:
 			return
 		show_screen("pick"))
 	s.joined_as.connect(func(_pid: String) -> void:
+		app.note_table(address, port, s.state.encounter.name)
 		_bind(s)
 		show_screen("play"))
 	s.closed.connect(func(reason: String) -> void:
@@ -531,6 +536,10 @@ func _say(text: String) -> void:
 func _process(delta: float) -> void:
 	if _browsing:
 		browser.poll(delta)
+		_diag_timer += delta
+		if _diag_timer > 1.0:
+			_diag_timer = 0.0
+			_refresh_diag()
 	if session == null:
 		return
 	if session is LocalSession:

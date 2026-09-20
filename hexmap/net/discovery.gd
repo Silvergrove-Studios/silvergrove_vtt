@@ -61,9 +61,14 @@ static func shout(udp: PacketPeerUDP, text: String) -> void:
 
 
 class Announcer extends RefCounted:
+	## A query (ours or mDNS) was answered, with the asker's address.
+	signal answered(ip: String)
 	var name := ""
 	var port := Protocol.DEFAULT_PORT
 	var every := 1.0
+	## Also a Bonjour service, so routers that reflect mDNS between their
+	## subnets carry us the way they carry printers and speakers.
+	var mdns := Mdns.Responder.new()
 	var _shout := PacketPeerUDP.new()
 	## Bound on the discovery port to hear queries and answer them.
 	var _listen := PacketPeerUDP.new()
@@ -82,14 +87,21 @@ class Announcer extends RefCounted:
 		if _listening:
 			for iface in Discovery.ipv4_interfaces():
 				_listen.join_multicast_group(Protocol.DISCOVERY_GROUP, iface)
+		mdns.start(p_name, p_port)
+		mdns.answered.connect(func(ip: String) -> void: answered.emit(ip))
 		_ok = true
 		return OK
 
 	func stop() -> void:
 		_shout.close()
 		_listen.close()
+		mdns.stop()
 		_ok = false
 		_listening = false
+
+	## What is working, for the status bar.
+	func summary() -> String:
+		return "mDNS %s, direct queries %s" % ["on" if mdns.listening() else "announce only", "on" if _listening else "off"]
 
 	func announcement_text() -> String:
 		var host := OS.get_environment("HOSTNAME")
@@ -105,6 +117,7 @@ class Announcer extends RefCounted:
 			_since = 0.0
 			announce()
 		answer_queries()
+		mdns.poll(delta)
 
 	func announce() -> void:
 		Discovery.shout(_shout, announcement_text())
@@ -119,9 +132,11 @@ class Announcer extends RefCounted:
 			if not Discovery.is_query(pkt.get_string_from_utf8()):
 				continue
 			var reply := PacketPeerUDP.new()
-			if reply.set_dest_address(_listen.get_packet_ip(), _listen.get_packet_port()) == OK:
+			var ip := _listen.get_packet_ip()
+			if reply.set_dest_address(ip, _listen.get_packet_port()) == OK:
 				reply.put_packet(announcement_text().to_utf8_buffer())
 				n += 1
+				answered.emit(ip)
 			reply.close()
 		return n
 
@@ -132,9 +147,18 @@ class Browser extends RefCounted:
 	## key "host:port" -> {name, host, port, address, seen}
 	var tables: Dictionary = {}
 	## Forget a table not heard from for this long.
-	var expire := 4.0
+	var expire := 6.0
 	## How often to ask.
 	var every := 1.0
+	## Addresses to ask directly (by unicast) as well as shouting: tables
+	## joined before, and anything the player types. Reaches a table on
+	## another subnet when nothing multicast does.
+	var known: PackedStringArray = []
+	## Bonjour browsing, for routers that reflect mDNS between subnets.
+	var mdns := Mdns.Browser.new()
+	## Counters for a diagnostics line.
+	var asked := 0
+	var heard_answers := 0
 	## Bound on the discovery port for announcements (may fail when a Table
 	## on this same machine holds it; querying still works).
 	var _udp := PacketPeerUDP.new()
@@ -154,14 +178,23 @@ class Browser extends RefCounted:
 		if _passive:
 			for iface in Discovery.ipv4_interfaces():
 				_udp.join_multicast_group(Protocol.DISCOVERY_GROUP, iface)
+		mdns.start()
+		mdns.found.connect(func(p_name: String, address: String, port: int) -> void:
+			heard_answers += 1
+			if heard({"name": p_name, "port": port}, address):
+				updated.emit())
 		_ok = true
 		return OK
 
 	func stop() -> void:
 		_udp.close()
 		_ask.close()
+		mdns.stop()
 		_ok = false
 		_passive = false
+
+	func summary() -> String:
+		return "asked %d, heard %d, mDNS %s" % [asked, heard_answers, "on" if mdns.listening() else "query only"]
 
 	func poll(delta: float) -> void:
 		if not _ok:
@@ -171,6 +204,7 @@ class Browser extends RefCounted:
 		if _since >= every:
 			_since = 0.0
 			ask()
+		mdns.poll(delta)
 		var changed := false
 		for sock in [_udp, _ask]:
 			while (sock as PacketPeerUDP).get_available_packet_count() > 0:
@@ -179,6 +213,7 @@ class Browser extends RefCounted:
 				var a := Protocol.parse_announcement(pkt.get_string_from_utf8())
 				if a.is_empty():
 					continue
+				heard_answers += 1
 				changed = heard(a, from) or changed
 		var gone := []
 		for k in tables:
@@ -190,9 +225,27 @@ class Browser extends RefCounted:
 		if changed:
 			updated.emit()
 
-	## Ask every table on the network to answer us directly.
+	## Ask every table on the network to answer us directly, and the known
+	## addresses one by one.
 	func ask() -> void:
-		Discovery.shout(_ask, Protocol.encode(Discovery.query()))
+		var text := Protocol.encode(Discovery.query())
+		Discovery.shout(_ask, text)
+		for addr in known:
+			probe(str(addr), text)
+		asked += 1
+
+	## Ask one address directly (unicast).
+	func probe(address: String, text := "") -> void:
+		if address == "":
+			return
+		if text == "":
+			text = Protocol.encode(Discovery.query())
+		if _ask.set_dest_address(address, Protocol.DISCOVERY_PORT) == OK:
+			_ask.put_packet(text.to_utf8_buffer())
+
+	func remember(address: String) -> void:
+		if address != "" and not known.has(address):
+			known.append(address)
 
 	## Record an announcement from `from`. Returns whether the list changed.
 	func heard(a: Dictionary, from: String) -> bool:

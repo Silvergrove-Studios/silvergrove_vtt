@@ -5,7 +5,7 @@
 #   ./run.sh examples/forest_road.hexmap
 #                                     open a map in the editor
 #   ./run.sh editor [map]             the editor (a new map, or this one)
-#   ./run.sh table [encounter] [--host]
+#   ./run.sh table [encounter] [--host] [--turns free|dm|ordered]
 #                                     the table: run an encounter (--host: on the LAN at once)
 #   ./run.sh player [address]         the player client
 #   ./run.sh export <map> <target> <out> [options]

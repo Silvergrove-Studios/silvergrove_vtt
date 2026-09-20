@@ -18,7 +18,6 @@ func _run(out: String) -> void:
 	root.add_child(main)
 	await create_timer(0.4).timeout
 	await _shot(out.path_join("01_join.png"))
-	assert(main._files.item_count >= 1, "the example encounter is offered")
 	main._choose_file(ProjectSettings.globalize_path("res://examples/chapel_ambush.encounter"))
 	await _shot(out.path_join("02_pick_player.png"))
 	assert(main.screen == "pick" and main._players.item_count == 2, "two players to pick from")

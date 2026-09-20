@@ -15,7 +15,7 @@ const RECENT_MAX := 10
 ## Modes, in the order the home screen lists them.
 const MODES := ["editor", "table", "player"]
 
-var prefs := {"pack_dirs": [], "theme": "slate", "recent": [], "ui_scale": 1.0}
+var prefs := {"pack_dirs": [], "theme": "slate", "recent": [], "ui_scale": 1.0, "tables": []}
 var packs := PackLibrary.new()
 ## Where preferences live; tests point this somewhere harmless.
 var prefs_path := PREFS_PATH
@@ -215,6 +215,33 @@ func recent() -> Array:
 	for p in prefs.get("recent", []):
 		if FileAccess.file_exists(str(p)) or DirAccess.dir_exists_absolute(str(p)):
 			out.append(str(p))
+	return out
+
+
+## Tables this device has joined: [{address, port, name}], newest first.
+## The Player asks them directly, which reaches a table on another subnet
+## when nothing else does.
+func note_table(address: String, port: int, p_name: String) -> void:
+	var t: Array = tables()
+	t = t.filter(func(x) -> bool: return not (str(x.get("address", "")) == address and int(x.get("port", 0)) == port))
+	t.push_front({"address": address, "port": port, "name": p_name})
+	if t.size() > RECENT_MAX:
+		t.resize(RECENT_MAX)
+	prefs.tables = t
+	save_prefs()
+
+
+func tables() -> Array:
+	return prefs.get("tables", []) if prefs.get("tables") is Array else []
+
+
+## This device's own IPv4 addresses.
+static func local_ipv4() -> PackedStringArray:
+	var out := PackedStringArray()
+	for a in IP.get_local_addresses():
+		var s := str(a)
+		if s.is_valid_ip_address() and not s.contains(":") and not s.begins_with("127."):
+			out.append(s)
 	return out
 
 

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Tables are Bonjour services (`_hexmap._tcp`): the Table registers with
+  the OS's mDNS responder (or answers itself where it can bind the port)
+  and the Player browses for it, so routers that reflect mDNS between
+  their subnets — the ones that let you find speakers and printers across
+  them — find tables too. The Player also remembers tables it has joined
+  and asks them directly, and shows its own address and what discovery
+  has done. `./run.sh table x.encounter --host --turns free` hosts from
+  the command line. The Player no longer offers to open encounter files:
+  a player joins a table.
 - Linux and Windows builds no longer load every pack twice (res://packs
   and the folder beside the executable were the same directory).
 - The Player fits phones: columns shrink to the screen and scroll when it

@@ -18,6 +18,7 @@ var app: App
 var ctx := TableContext.new()
 var host: HostSession
 var host_button: Button
+var bonjour := Bonjour.new()
 var view: TableView
 var scenes: ScenesPanel
 var tokens: TokensPanel
@@ -82,11 +83,16 @@ func _process(delta: float) -> void:
 		host.poll(delta)
 
 
-## An encounter path from the command line or the home screen. `--host` on
-## the command line starts hosting at once (`./run.sh table x.encounter --host`).
+## An encounter path from the command line or the home screen. On the
+## command line, `--host` starts hosting at once and `--turns free|dm|ordered`
+## sets the turn mode (`./run.sh table x.encounter --host --turns free`).
 func open_argument(path: String) -> void:
 	_open_path(App.resolve_path(path))
-	if OS.get_cmdline_user_args().has("--host"):
+	var args := OS.get_cmdline_user_args()
+	var ti := args.find("--turns")
+	if ti >= 0 and ti + 1 < args.size() and Encounter.TURN_MODES.has(args[ti + 1]):
+		ctx.commands.set_turn_mode(args[ti + 1])
+	if args.has("--host"):
 		_set_hosting(true)
 
 
@@ -686,6 +692,9 @@ func _set_hosting(on: bool) -> void:
 		host = HostSession.new(ctx.state, app.packs)
 		host.apply_request = _apply_player_request
 		host.log.connect(ctx.say)
+		host.announcer.answered.connect(func(ip: String) -> void:
+			ctx.say("Answered a player looking for tables at %s" % ip)
+			print("discovery: answered %s" % ip))
 		host.client_joined.connect(func(_p: String) -> void: _refresh_online())
 		host.client_left.connect(func(_p: String) -> void: _refresh_online())
 		var err := host.start()
@@ -694,11 +703,19 @@ func _set_hosting(on: bool) -> void:
 			host = null
 			on = false
 		else:
-			ctx.say("Hosting '%s' at %s — players on this network can find it" % [ctx.encounter().name, host_address()])
-			print("hosting '%s' at %s" % [ctx.encounter().name, host_address()])
+			# The OS's mDNS responder owns port 5353 on macOS and Linux; register
+			# with it so Bonjour queries — reflected across subnets — get answered.
+			if not host.announcer.mdns.listening() and bonjour.available():
+				bonjour.register(ctx.encounter().name, host.port)
+			var how := host.announcer.summary()
+			if bonjour.registered():
+				how = "Bonjour via %s, %s" % [bonjour.tool, how]
+			ctx.say("Hosting '%s' at %s (%s)" % [ctx.encounter().name, host_address(), how])
+			print("hosting '%s' at %s (%s)" % [ctx.encounter().name, host_address(), how])
 	elif not on and host != null:
 		host.stop()
 		host = null
+		bonjour.unregister()
 		_refresh_online()
 	host_button.set_pressed_no_signal(host != null)
 	var net := _menu("Network")
@@ -895,6 +912,7 @@ func _exit_tree() -> void:
 	if host != null:
 		host.stop()
 		host = null
+	bonjour.unregister()
 	if dock != null and is_instance_valid(dock):
 		LayoutStore.save(dock.layout, LayoutStore.table_path())
 	_native_menus.free_menus()
