@@ -1,16 +1,27 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-09-20
 
-- Tables are Bonjour services (`_hexmap._tcp`): the Table registers with
-  the OS's mDNS responder (or answers itself where it can bind the port)
-  and the Player browses for it, so routers that reflect mDNS between
-  their subnets — the ones that let you find speakers and printers across
-  them — find tables too. The Player also remembers tables it has joined
-  and asks them directly, and shows its own address and what discovery
-  has done. `./run.sh table x.encounter --host --turns free` hosts from
-  the command line. The Player no longer offers to open encounter files:
-  a player joins a table.
+Players find tables by themselves, across subnets, the way phones find
+speakers; every build is tested on real desktops, an emulator and a
+simulator; and it all fits on a phone.
+
+- Discovery that works on a real home network: tables are Bonjour
+  services (`_hexmap._tcp`) — the Table registers with the OS's mDNS
+  responder — and on Android the Player asks the system's own service
+  discovery (a small `NsdManager` plugin), which hears what routers
+  reflect between subnets where an app's socket cannot. A table heard at
+  several addresses is one entry whose addresses are ranked by evidence
+  (answered a direct query, known, chosen before, packet source) and
+  tried in turn on Join. Remembered tables are asked directly; the join
+  screen shows its own address and a diagnostics line. The Player no
+  longer opens encounter files: a player joins a table.
+- One debug signing key for all Android builds, so they update in place;
+  a build stamp (version, run, commit, time) on the home and join screens.
+- `./run.sh table x.encounter --host --turns free` hosts from the command
+  line; `./run.sh jointest host:port` joins a running table and plays a
+  move; `tools/android_join_test.sh` does the same from a phone or an
+  emulator (`tools/android_emulator.sh` gives one on a Mac).
 - Linux and Windows builds no longer load every pack twice (res://packs
   and the folder beside the executable were the same directory).
 - The Player fits phones: columns shrink to the screen and scroll when it
