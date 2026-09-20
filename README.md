@@ -182,5 +182,8 @@ check` parses every script and fails if a portable module (`core/`,
 renders; `godot --path . -s tools/ui_smoke.gd -- out/ui` screenshots the
 editor in several states.
 
-Add tests as you add features: `tests/run_tests.gd` is a flat file of
-`test_*` functions with `check(cond, message)`.
+Add tests as you add features: `tests/test_suite.gd` is a flat file of
+`test_*` functions with `check(cond, message)`; `./run.sh test <name>`
+runs the ones matching. The same suite runs inside any build with
+`--selftest` (results in `user://selftest.txt`), which is what the
+`android-test` workflow does on an emulator — see `ARCHITECTURE.md`.

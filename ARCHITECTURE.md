@@ -222,10 +222,26 @@ gitignored and rebuilt by `run.sh` when stale.
 
 ## Testing
 
-`tests/run_tests.gd`: geometry round trips for all four grid variants,
-document serialisation stability, history grouping, PDF structure (xref
-offsets, filters, encodings), each exporter's output fields, PDF page
-layout, SVG overlay, pack loading and texture rasterisation, commands with
-undo/redo, and every tool driven with synthetic events. `tools/export_cli.gd
-… all` is the rendering smoke test; `tools/ui_smoke.gd` screenshots the UI.
+`tests/test_suite.gd` is the suite: geometry round trips for all four grid
+variants, document serialisation, history grouping, PDF structure, each
+exporter, packs, commands with undo/redo, every editor and table tool
+driven with synthetic events, the encounter model (every event and its
+inverse, validation, permissions by turn mode, vision through doors), the
+windows built headless, touch on the canvas, the network host and clients
+over loopback, and a fuzz test that applies hundreds of random valid
+events, replicates them to a second state and undoes them all.
+
+It runs three ways. `./run.sh test [filter]` drives it headless
+(`tests/run_tests.gd`). **Self-test mode** runs the same suite inside a
+build — `Hexmap -- --selftest`, or a `user://selftest` marker file — and
+writes `user://selftest.txt`, on-device screenshots and `selftest.done`;
+that is how an exported app, a phone or an emulator is tested. The
+`android-test` workflow builds an x86_64 APK, boots an emulator, pushes the
+packs, the marker and the examples with `tools/android_selftest.sh`, and
+pulls the results. The iOS simulator is the same self-test through
+`xcrun simctl`, on a macOS runner, when we get to it.
+
+`tools/ui_smoke.gd`, `table_smoke.gd` and `player_smoke.gd` drive the
+three modes and screenshot them; `tools/export_cli.gd … all` is the
+rendering smoke test; `tools/check_export.gd` checks an exported pack.
 PDFs are checked externally with Ghostscript (`gs -sDEVICE=nullpage`).
