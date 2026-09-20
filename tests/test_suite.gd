@@ -30,7 +30,7 @@ func _init(p_tree: SceneTree) -> void:
 ## The suites, in the order they run. Each is a TestCase subclass under
 ## tests/suites/ whose test_* methods are the tests. An explicit list, not
 ## a directory scan: exported builds do not list res:// reliably.
-const SUITES := ["hex_grid", "document", "json_schema", "pdf", "exporters", "packs_tools", "layers_lighting",
+const SUITES := ["hex_grid", "document", "json_schema", "expr", "pdf", "exporters", "packs_tools", "layers_lighting",
 	"ui", "shell", "encounter", "table", "player", "net", "fuzz", "rules_lua"]
 
 
