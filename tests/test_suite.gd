@@ -59,11 +59,13 @@ func near(a: float, b: float, eps := 1e-6) -> bool:
 ## The example maps and encounters: inside the project, or pushed to
 ## user://examples on a device where res:// is a compiled pack.
 static func examples_dir() -> String:
-	var local := ProjectSettings.globalize_path("res://examples")
-	if FileAccess.file_exists(local.path_join("ruined_chapel.hexmap")):
-		return local   # the project on disk: the editor, ./run.sh test
+	if not OS.has_feature("template"):
+		var local := ProjectSettings.globalize_path("res://examples")
+		if FileAccess.file_exists(local.path_join("ruined_chapel.hexmap")):
+			return local   # the project on disk: the editor, ./run.sh test
+	# In a build, res:// is the pack; globalize_path gives nothing usable.
 	if FileAccess.file_exists("res://examples/ruined_chapel.hexmap"):
-		return "res://examples"   # inside a build's pack
+		return "res://examples"
 	return ProjectSettings.globalize_path("user://examples")   # pushed to a device
 
 
@@ -2259,7 +2261,11 @@ func test_discovery_loopback() -> void:
 	# The ask-and-answer path: a browser asks from an ephemeral socket, the
 	# announcer answers it by unicast. This is what phones rely on.
 	var ann := Discovery.Announcer.new()
-	check(ann.start("Loopback table", 47777) == OK and ann._listening, "announcer starts and listens for queries")
+	check(ann.start("Loopback table", 47777) == OK, "announcer starts")
+	if not ann._listening:
+		skip("announcer cannot bind the discovery port here (%s)" % error_string(ann.listen_error))
+		ann.stop()
+		return
 	var browser := Discovery.Browser.new()
 	check(browser.start() == OK, "browser starts")
 	var heard := false

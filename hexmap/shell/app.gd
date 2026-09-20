@@ -158,8 +158,11 @@ static func resolve_path(arg: String) -> String:
 	var cwd := OS.get_environment("PWD")
 	if cwd != "":
 		candidates.append(cwd.path_join(arg))
-	candidates.append(ProjectSettings.globalize_path("res://").path_join(arg))
+	# Inside a build res:// is the pack and globalize_path gives nothing
+	# usable, so the pack path comes before the project path.
 	candidates.append("res://".path_join(arg))
+	if not OS.has_feature("template"):
+		candidates.append(ProjectSettings.globalize_path("res://").path_join(arg))
 	for c in candidates:
 		if FileAccess.file_exists(c) or DirAccess.dir_exists_absolute(c):
 			return c

@@ -27,7 +27,9 @@ static func is_query(text: String) -> bool:
 ## directed broadcast of every IPv4 network this machine is on (assumed
 ## /24, which home and small-office wifi almost always is).
 static func shout_targets() -> Array:
-	var out := [Protocol.DISCOVERY_GROUP, "255.255.255.255"]
+	# 127.0.0.1 too: Linux and Android do not loop a broadcast back to the
+	# sender, and a Table and a Player on one device should still meet.
+	var out := [Protocol.DISCOVERY_GROUP, "255.255.255.255", "127.0.0.1"]
 	for a in IP.get_local_addresses():
 		var s := str(a)
 		if s.is_valid_ip_address() and not s.contains(":") and not s.begins_with("127."):
@@ -56,13 +58,15 @@ class Announcer extends RefCounted:
 	var _since := 10.0
 	var _ok := false
 	var _listening := false
+	var listen_error: Error = OK
 
 	func start(p_name: String, p_port: int) -> Error:
 		name = p_name
 		port = p_port
 		_shout.set_broadcast_enabled(true)
 		_listen.set_broadcast_enabled(true)
-		_listening = _listen.bind(Protocol.DISCOVERY_PORT, "0.0.0.0") == OK
+		listen_error = _listen.bind(Protocol.DISCOVERY_PORT, "0.0.0.0")
+		_listening = listen_error == OK
 		if _listening:
 			for iface in IP.get_local_interfaces():
 				_listen.join_multicast_group(Protocol.DISCOVERY_GROUP, str(iface.get("name", "")))
