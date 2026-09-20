@@ -44,6 +44,14 @@ jobs:
           "$godot" --headless --path . --export-debug iOS out/ios/Hexmap.xcodeproj 2>&1 | tee out/ios_export.log
           ! grep -q "^ERROR" out/ios_export.log
           ls out/ios
+      - name: What Xcode and what project
+        run: |
+          xcodebuild -version
+          ls /Applications | grep -i xcode || true
+          head -n 12 out/ios/Hexmap.xcodeproj/project.pbxproj
+          grep -n "objectVersion\|compatibilityVersion" out/ios/Hexmap.xcodeproj/project.pbxproj | head
+          ls out/ios/Hexmap.xcodeproj
+          xcodebuild -list -project out/ios/Hexmap.xcodeproj 2>&1 | head -n 20 || true
       - name: Build for the simulator
         run: |
           set -e
