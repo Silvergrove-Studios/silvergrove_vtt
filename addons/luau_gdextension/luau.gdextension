@@ -1,0 +1,18 @@
+; Luau GDExtension 0.6.1 (fernforestgames/luau-gdextension, MIT), release
+; binaries only; the debug entries point at the same files. The Table's
+; plugin runtime — Player and Display builds do without it (the mobile
+; export presets exclude this directory), see docs/lua-runtime.md.
+[configuration]
+
+entry_symbol = "gdluau_entrypoint"
+compatibility_minimum = "4.5"
+reloadable = true
+
+[libraries]
+
+macos.debug = "bin/libgdluau.darwin.arm64.dylib"
+macos.release = "bin/libgdluau.darwin.arm64.dylib"
+windows.debug.x86_64 = "bin/gdluau.windows.amd64.dll"
+windows.release.x86_64 = "bin/gdluau.windows.amd64.dll"
+linux.debug.x86_64 = "bin/libgdluau.linux.x86_64.so"
+linux.release.x86_64 = "bin/libgdluau.linux.x86_64.so"

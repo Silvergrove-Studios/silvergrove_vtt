@@ -7,7 +7,7 @@ extends SceneTree
 ## tablets included): no docking panels, no file dialogs, no menu bars, no
 ## editor state. The Editor and the Table are desktop-only and may use all of
 ## it.
-const PORTABLE_DIRS := ["res://hexmap/core", "res://hexmap/render", "res://hexmap/encounter", "res://hexmap/net", "res://hexmap/player"]
+const PORTABLE_DIRS := ["res://hexmap/core", "res://hexmap/render", "res://hexmap/encounter", "res://hexmap/net", "res://hexmap/player", "res://hexmap/rules"]
 const DESKTOP_ONLY := ["DockableContainer", "DockPane", "LayoutStore", "FileDialog", "NativeMenuMirror", "NativeMenu", "MenuBar", "PopupMenu",
 	"EditorContext", "EditorWindow", "TableWindow", "Commands", "OS.execute", "OS.shell_open", "DisplayServer.global_menu"]
 
