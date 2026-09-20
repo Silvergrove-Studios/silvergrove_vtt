@@ -50,12 +50,13 @@ jobs:
           cd out/ios
           xcodebuild -project Hexmap.xcodeproj -target Hexmap -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build \
+            SYMROOT="$PWD/build" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
-            build 2>&1 | tail -n 40
-          ls build/Build/Products/Debug-iphonesimulator/
+            build 2>&1 | tee ../xcodebuild.log | grep -E "error:|warning: .*(sign|team)|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" ../xcodebuild.log
+          ls build/Debug-iphonesimulator/
       - name: Self-test on the simulator
-        run: tools/ios_selftest.sh out/ios/build/Build/Products/Debug-iphonesimulator/Hexmap.app out/ios-selftest
+        run: tools/ios_selftest.sh out/ios/build/Debug-iphonesimulator/Hexmap.app out/ios-selftest
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -63,3 +64,4 @@ jobs:
           path: |
             out/ios-selftest/
             out/ios_export.log
+            out/xcodebuild.log
