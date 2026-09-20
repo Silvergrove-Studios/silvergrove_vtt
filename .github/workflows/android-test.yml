@@ -75,6 +75,10 @@ jobs:
           SETTINGS
       - name: Mesa software GL, to host a Table on this runner
         run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb mesa-utils libgl1-mesa-dri >/dev/null
+      - name: Stamp the build
+        run: |
+          printf '{"commit": "%s", "built": "%s", "run": %s, "ref": "%s"}\n' "$GITHUB_SHA" "$(date -u +'%Y-%m-%d %H:%M UTC')" "$GITHUB_RUN_NUMBER" "$GITHUB_REF_NAME" > build_info.json
+          cat build_info.json
       - run: ./run.sh check
       - name: Export the x86_64 APK
         run: |

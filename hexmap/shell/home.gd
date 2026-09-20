@@ -41,7 +41,7 @@ func _build() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
 	var sub := Label.new()
-	sub.text = "version %s" % App.version()
+	sub.text = App.build_stamp()
 	sub.theme_type_variation = "DimLabel"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(sub)

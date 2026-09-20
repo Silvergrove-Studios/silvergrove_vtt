@@ -32,6 +32,31 @@ static func version() -> String:
 	return str(ProjectSettings.get_setting("application/config/version", "dev"))
 
 
+## What a CI build wrote about itself (res://build_info.json: commit, when,
+## run number), or {} for a run from the project.
+static func build_info() -> Dictionary:
+	if not FileAccess.file_exists("res://build_info.json"):
+		return {}
+	var d = JSON.parse_string(FileAccess.get_file_as_string("res://build_info.json"))
+	return d if d is Dictionary else {}
+
+
+## "1.1.0 · dev.42 · a1b2c3d · 2026-09-20 19:12 UTC", or "1.1.0 · local":
+## enough to tell which build is on the screen.
+static func build_stamp() -> String:
+	var b := build_info()
+	if b.is_empty():
+		return "%s · local" % version()
+	var parts := [version()]
+	if b.has("run"):
+		parts.append("dev.%s" % str(b.run))
+	if b.has("commit"):
+		parts.append(str(b.commit).left(7))
+	if b.has("built"):
+		parts.append(str(b.built))
+	return " · ".join(PackedStringArray(parts))
+
+
 ## Which modes this build can run. The editor and the table need a desktop:
 ## docking panels, file dialogs, a keyboard. The player runs everywhere.
 static func available_modes() -> PackedStringArray:

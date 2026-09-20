@@ -155,6 +155,10 @@ func _build_join() -> Control:
 	title.text = "Player"
 	title.theme_type_variation = "HeaderLabel"
 	column.add_child(title)
+	var stamp := Label.new()
+	stamp.text = App.build_stamp()
+	stamp.theme_type_variation = "DimLabel"
+	column.add_child(stamp)
 	var h := Label.new()
 	h.text = "Join a table"
 	h.theme_type_variation = "DimLabel"
@@ -168,8 +172,8 @@ func _build_join() -> Control:
 	# A tap picks (fills the address, Join connects); a double tap connects.
 	_tables.item_selected.connect(func(i: int) -> void: _pick_table(_tables.get_item_metadata(i)))
 	_tables.item_activated.connect(func(i: int) -> void:
-		var t: Dictionary = _tables.get_item_metadata(i)
-		_connect_to(str(t.address), int(t.port)))
+		_pick_table(_tables.get_item_metadata(i))
+		_join_address())
 	column.add_child(_tables)
 	browser.updated.connect(_refresh_tables)
 	var row := HBoxContainer.new()
@@ -203,8 +207,8 @@ func _build_join() -> Control:
 	_known.custom_minimum_size = Vector2(0, 100)
 	_known.item_selected.connect(func(i: int) -> void: _pick_table(_known.get_item_metadata(i)))
 	_known.item_activated.connect(func(i: int) -> void:
-		var t: Dictionary = _known.get_item_metadata(i)
-		_connect_to(str(t.address), int(t.port)))
+		_pick_table(_known.get_item_metadata(i))
+		_join_address())
 	column.add_child(_known)
 	_diag = Label.new()
 	_diag.theme_type_variation = "DimLabel"
@@ -339,8 +343,10 @@ func _stop_browsing() -> void:
 func _refresh_tables() -> void:
 	_tables.clear()
 	for t in browser.list():
-		var i := _tables.add_item("%s  —  %s:%d" % [str(t.name), str(t.address), int(t.port)])
+		var extra: int = (t.get("addresses", []) as Array).size() - 1
+		var i := _tables.add_item("%s  —  %s:%d%s" % [str(t.name), str(t.address), int(t.port), ("  (+%d)" % extra) if extra > 0 else ""])
 		_tables.set_item_metadata(i, t)
+		_tables.set_item_tooltip(i, "heard via %s; addresses: %s" % [str(t.get("via", "")), ", ".join(PackedStringArray(t.get("addresses", [])))])
 	if _browsing:
 		_tables_label.text = "Tables on this network" if _tables.item_count > 0 else "Listening for tables on this network…"
 
@@ -363,9 +369,16 @@ func _refresh_diag() -> void:
 	_diag.text = "This device: %s · %s" % [", ".join(ips) if not ips.is_empty() else "no network", browser.summary()]
 
 
-## A table from either list: put its address in the box so Join takes it.
+## A table from either list: put its address in the box so Join takes it;
+## the other addresses it was heard at are kept as fallbacks for Join.
+var _alternatives: Array = []
+
 func _pick_table(t: Dictionary) -> void:
 	_address.text = "%s:%d" % [str(t.get("address", "")), int(t.get("port", Protocol.DEFAULT_PORT))]
+	_alternatives = []
+	for a in t.get("addresses", []):
+		if str(a) != str(t.get("address", "")):
+			_alternatives.append(str(a))
 	_join_status("%s — tap Join" % str(t.get("name", "")))
 
 
@@ -376,11 +389,14 @@ func _join_address() -> void:
 		return
 	var hp := Protocol.parse_address(text)
 	browser.remember(str(hp[0]))
-	_connect_to(str(hp[0]), int(hp[1]))
+	var alts := _alternatives.duplicate()
+	_alternatives = []
+	_connect_to(str(hp[0]), int(hp[1]), alts)
 
 
-## Connect to a table; the welcome brings the players to pick from.
-func _connect_to(address: String, port: int) -> void:
+## Connect to a table; the welcome brings the players to pick from. A table
+## heard at several addresses is tried at each in turn until one answers.
+func _connect_to(address: String, port: int, alternatives: Array = []) -> void:
 	if session != null:
 		session.leave()
 		session = null
@@ -390,7 +406,7 @@ func _connect_to(address: String, port: int) -> void:
 		_join_status("Could not connect to %s:%d: %s" % [address, port, error_string(err)])
 		return
 	session = s
-	_join_status("Connecting to %s:%d…" % [address, port])
+	_join_status("Connecting to %s:%d…" % [address, port] + (" (then %d more to try)" % alternatives.size() if not alternatives.is_empty() else ""))
 	s.connected.connect(func() -> void:
 		_pending_path = ""
 		_pick_title.text = s.state.encounter.name
@@ -410,9 +426,18 @@ func _connect_to(address: String, port: int) -> void:
 		_bind(s)
 		show_screen("play"))
 	s.closed.connect(func(reason: String) -> void:
-		if session == s:
-			_leave()
-			_join_status(reason))
+		if session != s:
+			return
+		if s.state == null and not alternatives.is_empty():
+			# Never welcomed: this address does not reach it; try the next.
+			var rest := alternatives.duplicate()
+			var next := str(rest.pop_front())
+			session = null
+			_join_status("%s at %s; trying %s" % [reason, address, next])
+			_connect_to(next, port, rest)
+			return
+		_leave()
+		_join_status(reason))
 	s.status.connect(func(t: String) -> void:
 		if screen != "play":
 			_join_status(t))

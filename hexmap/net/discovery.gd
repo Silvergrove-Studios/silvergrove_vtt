@@ -161,8 +161,13 @@ class Announcer extends RefCounted:
 class Browser extends RefCounted:
 	## Something changed in `tables`.
 	signal updated
-	## key "host:port" -> {name, host, port, address, seen}
+	## key "name|port" -> {name, host, port, address, addresses, seen, via}.
+	## `address` is the best guess; `addresses` every one heard, best first.
 	var tables: Dictionary = {}
+	## Addresses that answered a direct query: proven reachable from here.
+	var confirmed: Dictionary = {}
+	## The last thing heard, for a diagnostics line.
+	var last_heard := ""
 	## Forget a table not heard from for this long.
 	var expire := 6.0
 	## How often to ask.
@@ -196,9 +201,13 @@ class Browser extends RefCounted:
 			for iface in Discovery.ipv4_interfaces():
 				_udp.join_multicast_group(Protocol.DISCOVERY_GROUP, iface)
 		mdns.start()
-		mdns.found.connect(func(p_name: String, address: String, port: int) -> void:
+		mdns.found.connect(func(p_name: String, address: String, port: int, addresses: PackedStringArray) -> void:
 			heard_answers += 1
-			if heard({"name": p_name, "port": port}, address):
+			# Every address the record names is worth a direct query: the one
+			# that answers is the one this device can reach.
+			for a in addresses:
+				remember(str(a))
+			if heard({"name": p_name, "port": port, "addresses": Array(addresses)}, address, "mdns"):
 				updated.emit())
 		_ok = true
 		return OK
@@ -211,7 +220,7 @@ class Browser extends RefCounted:
 		_passive = false
 
 	func summary() -> String:
-		return "asked %d, heard %d, mDNS %s" % [asked, heard_answers, "on" if mdns.listening() else "query only"]
+		return "asked %d, heard %d, mDNS %s%s" % [asked, heard_answers, "on" if mdns.listening() else "query only", ("; last: " + last_heard) if last_heard != "" else ""]
 
 	func poll(delta: float) -> void:
 		if not _ok:
@@ -231,7 +240,9 @@ class Browser extends RefCounted:
 				if a.is_empty():
 					continue
 				heard_answers += 1
-				changed = heard(a, from) or changed
+				if sock == _ask and known.has(from):
+					confirmed[from] = true   # it answered a direct query
+				changed = heard(a, from, "direct" if sock == _ask else "announce") or changed
 		var gone := []
 		for k in tables:
 			if _clock - float(tables[k].seen) > expire:
@@ -264,20 +275,45 @@ class Browser extends RefCounted:
 		if address != "" and not known.has(address):
 			known.append(address)
 
-	## Record an announcement from `from`. Returns whether the list changed.
-	## A table with several addresses replies from whichever its kernel
-	## picks; the one we asked (a known address) is the one that reaches it.
-	func heard(a: Dictionary, from: String) -> bool:
-		var address := from
-		var all: Array = a.get("addresses", [])
-		for k in known:
-			if all.has(str(k)):
-				address = str(k)
-				break
-		var key := "%s:%d" % [address, int(a.port)]
-		var fresh := not tables.has(key) or str(tables[key].name) != str(a.name)
-		tables[key] = {"name": str(a.name), "host": str(a.get("host", "")), "address": address, "port": int(a.port), "addresses": all, "seen": _clock}
+	## Record an announcement from `from`, heard `via` "direct" (an answer
+	## to our unicast query), "announce" (broadcast/multicast) or "mdns".
+	## Returns whether the list changed. A table with several addresses
+	## answers from whichever its kernel picks, so the address to connect
+	## to is chosen by evidence: one that answered a direct query, then one
+	## we already knew, then the packet's source, then the rest.
+	func heard(a: Dictionary, from: String, via := "announce") -> bool:
+		var all: Array = []
+		for x in a.get("addresses", []):
+			if str(x) != "" and not all.has(str(x)):
+				all.append(str(x))
+		if from != "" and not all.has(from):
+			all.append(from)
+		var key := "%s|%d" % [str(a.name), int(a.port)]
+		var prev: Dictionary = tables.get(key, {})
+		for x in prev.get("addresses", []):
+			if not all.has(str(x)):
+				all.append(str(x))
+		var previous := str(prev.get("address", ""))
+		all.sort_custom(func(x: String, y: String) -> bool: return _rank(x, from, previous) < _rank(y, from, previous))
+		var entry := {"name": str(a.name), "host": str(a.get("host", "")), "port": int(a.port), "address": all[0] if not all.is_empty() else from,
+			"addresses": all, "seen": _clock, "via": via}
+		last_heard = "%s via %s from %s → %s" % [str(a.name), via, from, entry.address]
+		var fresh := prev.is_empty() or str(prev.address) != str(entry.address)
+		tables[key] = entry
 		return fresh
+
+	## Lower is better; the address chosen last time stays unless better
+	## evidence arrives, so a list entry does not flap between sources.
+	func _rank(x: String, from: String, previous: String) -> int:
+		if confirmed.has(x):
+			return 0
+		if known.has(x):
+			return 1
+		if x == previous:
+			return 2
+		if x == from:
+			return 3
+		return 4
 
 	func list() -> Array:
 		var out := tables.values()

@@ -682,7 +682,7 @@ func _on_menu(id: int) -> void:
 		T_END: ctx.commands.stop_turns()
 		H_SHORTCUTS: _shortcuts_dialog()
 		H_ABOUT:
-			_info("%s %s — Table\n\nRun encounters on your maps.\nSilvergrove Studios.\nGodot %s" % [App.NAME, App.version(), Engine.get_version_info().string])
+			_info("%s %s — Table\n\nRun encounters on your maps.\nSilvergrove Studios.\nGodot %s" % [App.NAME, App.build_stamp(), Engine.get_version_info().string])
 
 
 # =================================================================== hosting ==

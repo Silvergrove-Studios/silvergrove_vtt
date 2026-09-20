@@ -2248,8 +2248,21 @@ func test_protocol() -> void:
 	var updates := []
 	b.updated.connect(func() -> void: updates.append(1))
 	check(b.heard({"name": "A", "port": 1}, "10.0.0.1") and not b.heard({"name": "A", "port": 1}, "10.0.0.1"), "heard: new then repeat")
-	check(b.heard({"name": "A", "port": 1}, "10.0.0.2") and b.list().size() == 2, "same name, other host: another table")
-	check(b.heard({"name": "B", "port": 1}, "10.0.0.1") and b.list()[0].name == "A" and b.list()[1].name == "B", "renamed; list sorted by name")
+	check(not b.heard({"name": "A", "port": 1}, "10.0.0.2") and b.list().size() == 1 and b.list()[0].addresses == ["10.0.0.1", "10.0.0.2"], "same name and port from another address: the same table, heard at two addresses")
+	check(b.heard({"name": "B", "port": 1}, "10.0.0.1") and b.list()[0].name == "A" and b.list()[1].name == "B", "another name is another table; list sorted by name")
+	# Which address to connect to: one that answered a direct query, then a
+	# known one, then the packet's source, then the rest.
+	var m := Discovery.Browser.new()
+	var multi := {"name": "M", "port": 7, "addresses": ["192.168.18.1", "10.5.91.189", "10.211.55.2"]}
+	m.heard(multi, "192.168.18.1", "mdns")
+	check(m.list()[0].address == "192.168.18.1" and m.list()[0].via == "mdns", "with no better evidence, the source address")
+	m.remember("10.5.91.189")
+	m.heard(multi, "192.168.18.1", "mdns")
+	check(m.list()[0].address == "10.5.91.189", "a known address beats the source")
+	m.confirmed["10.211.55.2"] = true
+	m.heard(multi, "192.168.18.1", "mdns")
+	check(m.list()[0].address == "10.211.55.2" and m.list()[0].addresses[0] == "10.211.55.2", "one that answered a direct query beats everything")
+	check(m.last_heard.begins_with("M via mdns from 192.168.18.1"), "the diagnostics remember what was heard: %s" % m.last_heard)
 
 
 func test_discovery_loopback() -> void:
@@ -2759,6 +2772,21 @@ func test_player_join_flow() -> void:
 	win._join_address()
 	check(win.session is NetSession and (win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Connecting"), "Join starts a session and says so")
 	check(win.browser.known.has("127.0.0.1"), "the typed address is asked directly from now on")
+	# A table heard at several addresses: Join tries the first, then the rest.
+	win._leave()
+	win.browser.tables.clear()
+	win.browser.heard({"name": "Multi", "port": 1, "addresses": ["127.0.0.1", "127.0.0.2"]}, "127.0.0.1")
+	win._refresh_tables()
+	win._tables.item_selected.emit(0)
+	check(win._address.text == "127.0.0.1:1" and win._alternatives == ["127.0.0.2"], "the pick keeps the other addresses as fallbacks")
+	win._join_address()
+	var first := win.session
+	check(first is NetSession and first.address == "127.0.0.1", "tries the first address")
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 6000 and win.session == first:
+		win._process(0.05)
+		OS.delay_msec(20)
+	check(win.session != first and win.session != null and (win.session as NetSession).address == "127.0.0.2", "when it cannot reach it, moves on to the next address (%s)" % [(win._join.find_child("JoinStatus", true, false) as Label).text])
 	win._leave()
 	win._stop_browsing()
 	win.queue_free()

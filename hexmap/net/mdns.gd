@@ -316,8 +316,9 @@ class Responder extends RefCounted:
 
 ## The Player's side: ask for the service, collect answers.
 class Browser extends RefCounted:
-	## A table was heard: (name, address, port).
-	signal found(p_name: String, address: String, port: int)
+	## A table was heard: (name, address the answer came from, port, every
+	## address its A records name).
+	signal found(p_name: String, address: String, port: int, addresses: PackedStringArray)
 	var every := 2.0
 	var asked := 0
 	var heard := 0
@@ -370,4 +371,4 @@ class Browser extends RefCounted:
 					var addr := from
 					if addr == "" and not (t.addresses as PackedStringArray).is_empty():
 						addr = str(t.addresses[0])
-					found.emit(str(t.name), addr, int(t.port))
+					found.emit(str(t.name), addr, int(t.port), t.addresses)

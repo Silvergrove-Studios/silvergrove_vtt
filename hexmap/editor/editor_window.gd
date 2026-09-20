@@ -659,7 +659,7 @@ func _on_menu(id: int) -> void:
 				_refresh_levels()
 		H_SHORTCUTS: _shortcuts_dialog()
 		H_ABOUT:
-			_info("%s %s\n\nHex-grid encounter maps: editor, table and player.\nSilvergrove Studios.\nGodot %s" % [App.NAME, App.version(), Engine.get_version_info().string])
+			_info("%s %s\n\nHex-grid encounter maps: editor, table and player.\nSilvergrove Studios.\nGodot %s" % [App.NAME, App.build_stamp(), Engine.get_version_info().string])
 
 
 # ================================================================ file actions ==

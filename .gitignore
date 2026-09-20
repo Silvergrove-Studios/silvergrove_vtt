@@ -3,3 +3,4 @@ out/
 !out/.gdignore
 .DS_Store
 *.autosave
+build_info.json

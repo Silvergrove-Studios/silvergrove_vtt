@@ -64,7 +64,7 @@ func _say(line: String) -> void:
 
 
 func _run() -> void:
-	_say("Hexmap self-test %s on %s (%s), Godot %s, scale %.2f, screen %s" % [App.version(), OS.get_name(), OS.get_model_name(), Engine.get_version_info().string, get_window().content_scale_factor, DisplayServer.screen_get_size()])
+	_say("Hexmap self-test %s on %s (%s), Godot %s, scale %.2f, screen %s" % [App.build_stamp(), OS.get_name(), OS.get_model_name(), Engine.get_version_info().string, get_window().content_scale_factor, DisplayServer.screen_get_size()])
 	_say("user dir: " + OS.get_user_data_dir())
 	# Screenshots first: the frames the tests need are cheap now.
 	await _shot("selftest_home.png", HomeScreen)
