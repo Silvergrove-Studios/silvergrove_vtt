@@ -257,7 +257,12 @@ sees it echo. `./run.sh jointest host:port` runs it from this machine;
 `tools/android_join_test.sh <apk> <host:port|--usb> <out>` runs it on a
 phone (USB, via `adb reverse`, or over the wifi) or an emulator; the
 `android-test` workflow hosts a Table on the runner and has the emulator
-join it at `10.0.2.2`. Same script on the desk and in CI.
+join it at `10.0.2.2`. Same script on the desk and in CI:
+`tools/android_emulator.sh setup|start|stop` gives a headless emulator on
+a Mac (Homebrew JDK and command-line tools, no sudo), and then
+`tools/android_join_test.sh out/Hexmap.apk 10.0.2.2:47777 out/join`
+joins a Table running on the same machine. A phone on USB takes `--usb`
+(adb reverse) or the laptop's wifi address.
 
 `tools/ui_smoke.gd`, `table_smoke.gd` and `player_smoke.gd` drive the
 three modes and screenshot them; `tools/export_cli.gd … all` is the

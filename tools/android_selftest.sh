@@ -50,7 +50,7 @@ for attempt in 1 2 3; do
 	echo "the app did not start its self-test; relaunching"
 done
 
-echo "waiting for the self-test to finish…"
+echo "waiting for the self-test to finish..."
 for i in $(seq 1 90); do
 	if adb shell "run-as $pkg test -f files/selftest.done" 2>/dev/null; then
 		break

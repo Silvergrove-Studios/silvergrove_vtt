@@ -47,7 +47,7 @@ touch "$docs/selftest"
 ls "$docs"
 
 xcrun simctl launch "$udid" "$bundle"
-echo "waiting for the self-test to finish…"
+echo "waiting for the self-test to finish..."
 for i in $(seq 1 90); do
 	[ -f "$docs/selftest.done" ] && break
 	sleep 5

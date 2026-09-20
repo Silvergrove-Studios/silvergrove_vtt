@@ -25,13 +25,13 @@ if [ "$target" = "--usb" ]; then
 	adb reverse tcp:47777 tcp:47777
 	target="127.0.0.1:47777"
 fi
-adb shell "run-as $pkg sh -c 'rm -f files/selftest.done files/selftest.txt files/selftest && printf %s \"$target\" > files/selftest_join'"
+adb shell "run-as $pkg sh -c 'mkdir -p files && rm -f files/selftest.done files/selftest.txt files/selftest && printf %s \"$target\" > files/selftest_join'"
 activity="$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$pkg" | tail -n 1 | tr -d '\r')"
 adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
 adb logcat -c || true
 adb shell am start -W -n "$activity" >/dev/null
 
-echo "waiting for the device to join $target…"
+echo "waiting for the device to join $target..."
 for i in $(seq 1 24); do
 	adb shell "run-as $pkg test -f files/selftest.done" 2>/dev/null && break
 	sleep 5
