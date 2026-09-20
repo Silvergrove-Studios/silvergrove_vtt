@@ -30,8 +30,25 @@ adb logcat -c || true
 # Not `monkey`: it injects a random input event after launching, and a
 # stray Back would end the run. Resolve the launcher activity and start it.
 activity="$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$pkg" | tail -n 1 | tr -d '\r')"
-echo "launching $activity"
-adb shell am start -W -n "$activity" >/dev/null
+
+# A freshly booted emulator can be busy enough that Android recreates the
+# activity moments after launch, which Godot does not survive; if the log
+# has not started within a minute, relaunch, up to three tries.
+for attempt in 1 2 3; do
+	echo "launching $activity (attempt $attempt)"
+	adb shell am force-stop "$pkg" >/dev/null 2>&1 || true
+	adb shell "run-as $pkg sh -c 'rm -f files/selftest.done files/selftest.txt; touch files/selftest'"
+	adb shell am start -W -n "$activity" >/dev/null
+	started=""
+	for i in $(seq 1 12); do
+		sleep 5
+		if adb shell "run-as $pkg grep -q 'Hexmap self-test' files/selftest.txt" 2>/dev/null; then
+			started=yes; break
+		fi
+	done
+	[ -n "$started" ] && break
+	echo "the app did not start its self-test; relaunching"
+done
 
 echo "waiting for the self-test to finish…"
 for i in $(seq 1 90); do
