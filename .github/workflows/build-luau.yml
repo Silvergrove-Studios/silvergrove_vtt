@@ -16,6 +16,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-14
@@ -29,6 +30,9 @@ jobs:
             out: gdluau.windows.amd64.dll
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Keep line endings as committed (the patch is LF)
+        shell: bash
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
         with:
           repository: fernforestgames/luau-gdextension
@@ -42,7 +46,7 @@ jobs:
         shell: bash
         run: |
           cd src
-          git apply ../hexmap/addons/luau_gdextension/build/godot-cpp-10.patch
+          git apply --ignore-whitespace ../hexmap/addons/luau_gdextension/build/godot-cpp-10.patch
           grep -n "GIT_TAG\|GODOTCPP_API_VERSION" CMakeLists.txt
       - name: Ninja
         if: runner.os != 'Windows'
