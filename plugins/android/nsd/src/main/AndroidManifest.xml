@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <application>
+        <!-- Godot 4.2+ finds v2 plugins through this meta-data. -->
+        <meta-data
+            android:name="org.godotengine.plugin.v2.HexmapNsd"
+            android:value="com.silvergrove.hexmap.nsd.HexmapNsdPlugin" />
+    </application>
+</manifest>

@@ -1,0 +1,28 @@
+// The Hexmap NSD plugin: Android's own service discovery, for finding a
+// Table across subnets the way the system finds speakers and printers.
+// Builds an AAR that the export plugin in addons/hexmap_nsd adds to the
+// Gradle-based Android export.
+plugins {
+    id 'com.android.library' version '8.5.2'
+}
+
+android {
+    namespace 'com.silvergrove.hexmap.nsd'
+    compileSdk 34
+    defaultConfig {
+        minSdk 21
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly 'org.godotengine:godot:4.7.1.stable'
+}
