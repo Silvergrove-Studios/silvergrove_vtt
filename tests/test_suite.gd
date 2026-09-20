@@ -2734,3 +2734,31 @@ func test_remembered_tables() -> void:
 	b.remember("")
 	check(b.known == PackedStringArray(["10.5.91.189"]), "known addresses deduplicated, blanks ignored")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func test_player_join_flow() -> void:
+	var app := App.new("user://test_prefs_join.json")
+	var win := PlayerWindow.new()
+	win.app = app
+	root.add_child(win)
+	# Picking a listed table fills the address; Join uses it.
+	win.browser.heard({"name": "Chapel", "port": 47777}, "10.5.91.189")
+	win._refresh_tables()
+	check(win._tables.item_count == 1, "a heard table is listed")
+	win._tables.item_selected.emit(0)
+	check(win._address.text == "10.5.91.189:47777" and win.session == null, "a tap fills the address and does not connect yet")
+	check((win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Chapel"), "status says which table")
+	app.note_table("192.168.1.9", 5000, "Other")
+	win._refresh_known()
+	win._known.item_selected.emit(0)
+	check(win._address.text == "192.168.1.9:5000", "a remembered table fills the address too")
+	# Join with an address connects (to nothing here, but a session exists).
+	win._address.text = "127.0.0.1:1"
+	win._join_address()
+	check(win.session is NetSession and (win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Connecting"), "Join starts a session and says so")
+	check(win.browser.known.has("127.0.0.1"), "the typed address is asked directly from now on")
+	win._leave()
+	win._stop_browsing()
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_join.json"))

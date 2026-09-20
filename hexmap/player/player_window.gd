@@ -165,18 +165,31 @@ func _build_join() -> Control:
 	column.add_child(_tables_label)
 	_tables = ItemList.new()
 	_tables.custom_minimum_size = Vector2(0, 100)
-	_tables.item_selected.connect(func(i: int) -> void:
+	# A tap picks (fills the address, Join connects); a double tap connects.
+	_tables.item_selected.connect(func(i: int) -> void: _pick_table(_tables.get_item_metadata(i)))
+	_tables.item_activated.connect(func(i: int) -> void:
 		var t: Dictionary = _tables.get_item_metadata(i)
 		_connect_to(str(t.address), int(t.port)))
 	column.add_child(_tables)
 	browser.updated.connect(_refresh_tables)
 	var row := HBoxContainer.new()
 	_address = LineEdit.new()
-	_address.placeholder_text = "Table address or code"
+	_address.placeholder_text = "Table address"
 	_address.custom_minimum_size = Vector2(0, BAR_HEIGHT)
 	_address.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_address.text_submitted.connect(func(_t: String) -> void: _join_address())
 	row.add_child(_address)
+	# Godot's text field has no touch paste; the clipboard is one tap away.
+	var paste := _big(Button.new(), "Paste")
+	paste.tooltip_text = "Paste an address from the clipboard"
+	paste.pressed.connect(func() -> void:
+		var t := DisplayServer.clipboard_get().strip_edges()
+		if t != "":
+			_address.text = t
+			_join_status("Pasted %s — tap Join" % t)
+		else:
+			_join_status("The clipboard is empty"))
+	row.add_child(paste)
 	var join := _big(Button.new(), "Join")
 	join.theme_type_variation = "AccentButton"
 	join.pressed.connect(_join_address)
@@ -188,7 +201,8 @@ func _build_join() -> Control:
 	column.add_child(h2)
 	_known = ItemList.new()
 	_known.custom_minimum_size = Vector2(0, 100)
-	_known.item_selected.connect(func(i: int) -> void:
+	_known.item_selected.connect(func(i: int) -> void: _pick_table(_known.get_item_metadata(i)))
+	_known.item_activated.connect(func(i: int) -> void:
 		var t: Dictionary = _known.get_item_metadata(i)
 		_connect_to(str(t.address), int(t.port)))
 	column.add_child(_known)
@@ -347,6 +361,12 @@ func _refresh_diag() -> void:
 		return
 	var ips := App.local_ipv4()
 	_diag.text = "This device: %s · %s" % [", ".join(ips) if not ips.is_empty() else "no network", browser.summary()]
+
+
+## A table from either list: put its address in the box so Join takes it.
+func _pick_table(t: Dictionary) -> void:
+	_address.text = "%s:%d" % [str(t.get("address", "")), int(t.get("port", Protocol.DEFAULT_PORT))]
+	_join_status("%s — tap Join" % str(t.get("name", "")))
 
 
 func _join_address() -> void:
