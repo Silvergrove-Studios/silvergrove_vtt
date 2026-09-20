@@ -54,6 +54,18 @@ jobs:
           xcodebuild -list -project out/ios/Hexmap.xcodeproj 2>&1 | head -n 20 || true
           plutil -lint out/ios/Hexmap.xcodeproj/project.pbxproj || true
           grep -n '\$' out/ios/Hexmap.xcodeproj/project.pbxproj | head -n 20 || true
+      - name: Fill the plugin placeholders the export leaves behind
+        # A project-only export keeps $additional_pbx_* / $pbx_embeded_frameworks
+        # (the hooks for iOS plugins, of which we have none) as literal lines,
+        # which Xcode cannot parse. Each is alone on a list line: drop them.
+        run: |
+          set -e
+          f=out/ios/Hexmap.xcodeproj/project.pbxproj
+          sed -i '' -E '/^[[:space:]]*\$(pbx_embeded_frameworks|additional_pbx_[a-z_]+)[[:space:]]*$/d' "$f"
+          ! grep -nE '^[[:space:]]*\$[a-z_]+[[:space:]]*$' "$f"
+          plutil -lint "$f"
+          plutil -lint out/ios/Hexmap-Info.plist
+          grep -n '\$[a-z_]' out/ios/Hexmap-Info.plist || true
       - name: Build for the simulator
         run: |
           set -e
