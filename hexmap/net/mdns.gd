@@ -309,11 +309,8 @@ class Responder extends RefCounted:
 			# Multicast the answer (reflectors carry it; other browsers hear
 			# it) and unicast it to the asker (legacy queriers on other ports).
 			_send.put_packet(message())
-			if from_port != Mdns.PORT:
-				var direct := PacketPeerUDP.new()
-				if direct.set_dest_address(ip, from_port) == OK:
-					direct.put_packet(message())
-				direct.close()
+			if from_port != Mdns.PORT and udp.set_dest_address(ip, from_port) == OK:
+				udp.put_packet(message())   # from the port they asked, for firewalls
 			answered.emit(ip)
 
 

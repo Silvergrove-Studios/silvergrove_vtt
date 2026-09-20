@@ -131,13 +131,13 @@ class Announcer extends RefCounted:
 			var pkt := _listen.get_packet()
 			if not Discovery.is_query(pkt.get_string_from_utf8()):
 				continue
-			var reply := PacketPeerUDP.new()
+			# Reply from the socket the query arrived on: a firewall between
+			# subnets only lets back what matches the query's address and port.
 			var ip := _listen.get_packet_ip()
-			if reply.set_dest_address(ip, _listen.get_packet_port()) == OK:
-				reply.put_packet(announcement_text().to_utf8_buffer())
+			if _listen.set_dest_address(ip, _listen.get_packet_port()) == OK:
+				_listen.put_packet(announcement_text().to_utf8_buffer())
 				n += 1
 				answered.emit(ip)
-			reply.close()
 		return n
 
 
