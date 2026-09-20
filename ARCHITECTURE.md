@@ -243,7 +243,12 @@ simulator: exports the Xcode project, builds it for the simulator with
 signing off (x86_64 — Godot's simulator library has no arm64 slice, and
 an Apple-silicon simulator runs it under Rosetta), and drives the
 self-test through `xcrun simctl` (`tools/ios_selftest.sh`; `user://` on
-iOS is the app's Documents folder). Both run by hand; Android also weekly.
+iOS is the app's Documents folder). The `desktop-test` workflow runs the
+headless suite on real macOS, Windows and Linux runners, then exports
+each OS's own build natively and launches it with `--selftest`
+(`tools/desktop_selftest.sh`: xvfb + Mesa on Linux, ANGLE on Windows) —
+the binaries users download, on the OSes they run. All by hand; Android
+and desktop also weekly. `ci.yml` on every push is Linux, headless.
 
 `tools/ui_smoke.gd`, `table_smoke.gd` and `player_smoke.gd` drive the
 three modes and screenshot them; `tools/export_cli.gd … all` is the

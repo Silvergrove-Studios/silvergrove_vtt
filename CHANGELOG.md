@@ -2,12 +2,15 @@
 
 ## Unreleased
 
+- Linux and Windows builds no longer load every pack twice (res://packs
+  and the folder beside the executable were the same directory).
 - The Player fits phones: columns shrink to the screen and scroll when it
   is shorter than they are, the UI scale never
   leaves fewer than 360 points across, the notch and gesture bar are kept
   clear, and the token bar scrolls instead of pushing buttons off the edge.
-- Testing: the suite runs inside builds (self-test mode), on an Android
-  emulator and an iPhone simulator in CI, and includes an event-log fuzz test — which found that
+- Testing: the suite runs inside builds (self-test mode), on real macOS,
+  Windows and Linux runners (headless and in each OS's exported build), on
+  an Android emulator and an iPhone simulator in CI, and includes an event-log fuzz test — which found that
   undoing a fog change reordered the explored cells; they are now kept
   sorted so identical sets are identical documents.
 - UI size: the app now scales with the screen (2× on a Retina Mac, the OS
