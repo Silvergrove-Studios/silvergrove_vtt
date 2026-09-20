@@ -25,6 +25,9 @@ var hooks := HookBus.new()
 ## id -> {derive: Callable(view) -> Dictionary, fields: {name: expr},
 ##        policy: {type: stack|best|override}, order, depends_on_state}
 var rulesets: Dictionary = {}
+## [{owner, fn: Callable(actor) -> "" | why}] consulted before an actor is
+## added or changed: plugins' schemas, mostly.
+var validators: Array = []
 var _order := 0
 
 
@@ -61,6 +64,18 @@ func unregister_ruleset(id: String) -> void:
 	rederive_all()
 
 
+## The stacking policy rolls total their parts under: every registered
+## ruleset's, merged in order (a later one overrides a type).
+func policy() -> Dictionary:
+	var out := {}
+	var ids := rulesets.keys()
+	ids.sort_custom(func(x, y) -> bool: return ruleset_order(x) < ruleset_order(y))
+	for rid in ids:
+		for t in rulesets[rid].get("policy", {}):
+			out[t] = rulesets[rid].policy[t]
+	return out
+
+
 func ruleset_order(id: String) -> int:
 	return int(rulesets.get(id, {}).get("order", 0))
 
@@ -72,6 +87,9 @@ func ruleset_order(id: String) -> int:
 func commit(events: Array, label: String, reason: Dictionary = {}, audience := EventLog.AUDIENCE_ALL) -> String:
 	if events.is_empty():
 		return ""
+	var why_v := _validate_actors(events)
+	if why_v != "":
+		return why_v
 	var touched := {}
 	var everyone := [false]
 	_collect(events, touched, everyone)   # effects about to be removed are still here
@@ -88,6 +106,32 @@ func commit(events: Array, label: String, reason: Dictionary = {}, audience := E
 		ids.sort()
 		for id in ids:
 			rederive(str(id))
+	return ""
+
+
+## Run the validators over the actors a batch adds or changes (as they
+## will be after the change). "" or the first complaint.
+func _validate_actors(events: Array) -> String:
+	if validators.is_empty():
+		return ""
+	for ev in events:
+		var actor := {}
+		match str(ev.get("t", "")):
+			"actor.add":
+				actor = JsonDoc.deep(ev.get("actor", {}))
+				Encounter.fill_actor(actor)
+			"actor.set":
+				var cur := state.encounter.actor(str(ev.get("id", "")))
+				if cur.is_empty() or not (ev.get("changes") is Dictionary):
+					continue
+				actor = JsonDoc.deep(cur)
+				JsonDoc.merge_paths(actor, ev.changes)
+			_:
+				continue
+		for v in validators:
+			var why: String = (v.fn as Callable).call(actor)
+			if why != "":
+				return why
 	return ""
 
 
@@ -123,6 +167,8 @@ func roll(spec: Variant, ctx: Dictionary = {}, label := "Roll", reason: Dictiona
 		last_veto = str(before.veto)
 		return {}
 	s = before.spec
+	if not s.has("policy"):
+		s.policy = policy()
 	var rng: Dictionary = state.encounter.doc.rng
 	var result := Dice.roll(s, int(rng.seed), int(rng.index))
 	if not result.ok:

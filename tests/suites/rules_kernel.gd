@@ -179,7 +179,7 @@ func test_effects() -> void:
 	st.apply({"t": "effect.apply", "effect": {"id": "e_scene", "on": "actor:a_hero", "plugin": "sample", "key": "blessed", "duration": {"kind": "scene"}}})
 	st.apply({"t": "effect.apply", "effect": {"id": "e_rest", "on": "actor:a_hero", "plugin": "sample", "key": "tired", "duration": {"kind": "rest"}}})
 	var tick := Effects.expire(st, {"kind": "turn_end", "of": "t_h"})
-	check(tick.size() == 1 and tick[0].t == "effect.set" and tick[0].changes["duration.turns"] == 1, "a counted duration ticks down: %s" % [tick])
+	check(tick.size() == 1 and tick[0].t == "effect.set" and tick[0].changes["duration/turns"] == 1, "a counted duration ticks down: %s" % [tick])
 	for ev in tick:
 		st.apply(ev)
 	tick = Effects.expire(st, {"kind": "turn_end", "of": "t_h"})
@@ -188,7 +188,7 @@ func test_effects() -> void:
 		removed.append(ev.id)
 	check(removed.has("e_1") and removed.has("e_link"), "at zero it ends, and takes what is linked to it: %s" % [removed])
 	check(Effects.expire(st, {"kind": "turn_end", "of": "t_other"}).is_empty(), "another token's turn end changes nothing")
-	check(Effects.expire(st, {"kind": "round"})[0].changes["duration.rounds"] == 1, "rounds tick")
+	check(Effects.expire(st, {"kind": "round"})[0].changes["duration/rounds"] == 1, "rounds tick")
 	check(Effects.expire(st, {"kind": "scene"})[0].id == "e_scene", "scene end")
 	check(Effects.expire(st, {"kind": "rest"}).size() == 1 and Effects.expire(st, {"kind": "long_rest"}).size() == 1, "rests")
 	check(Effects.remove(st, "e_1").size() == 2 and Effects.remove(st, "nope").is_empty(), "remove cascades through links")
@@ -254,17 +254,17 @@ func test_encounter_v2_events() -> void:
 	for label in bad:
 		check(st.validate(bad[label]) != "", label + " is refused")
 	_hero(st)
-	check(st.validate({"t": "actor.set", "id": "a_hero", "changes": {"derived.sample.x": 1}}) != "", "derived is not settable by event")
+	check(st.validate({"t": "actor.set", "id": "a_hero", "changes": {"derived/sample/x": 1}}) != "", "derived is not settable by event")
 	check(st.validate({"t": "actor.add", "actor": {"id": "a_hero"}}) != "", "no duplicate actors")
 	# apply / inverse round trips
 	var start := JsonDoc.sans_modified(st.encounter.to_json())
 	var events := [
-		{"t": "actor.set", "id": "a_hero", "changes": {"ext.sample.stats.agi": 5, "name": "Ana", "ext.sample.stats.wit": null}},
+		{"t": "actor.set", "id": "a_hero", "changes": {"ext/sample/stats/agi": 5, "name": "Ana", "ext/sample/stats/wit": null}},
 		{"t": "actor.overlay.push", "id": "a_hero", "overlay": {"id": "o_bear", "patch": {"sample": {"stats": {"str": 4}}}}},
 		{"t": "effect.apply", "effect": {"id": "e_1", "on": "actor:a_hero", "plugin": "sample", "key": "shaken", "value": 2}},
-		{"t": "effect.set", "id": "e_1", "changes": {"value": 3, "duration.kind": "scene"}},
+		{"t": "effect.set", "id": "e_1", "changes": {"value": 3, "duration/kind": "scene"}},
 		{"t": "resource.set", "ref": "actor:a_hero", "plugin": "sample", "name": "hp", "record": Resources.pool(3, 9)},
-		{"t": "ext.set", "scope": "encounter", "plugin": "sample", "changes": {"gm_pool": 4, "notes.a": "x"}},
+		{"t": "ext.set", "scope": "encounter", "plugin": "sample", "changes": {"gm_pool": 4, "notes/a": "x"}},
 		{"t": "log.add", "entry": {"id": "l_1", "kind": "note", "text": "hello"}},
 		{"t": "log.add", "entry": {"id": "l_2", "kind": "roll", "draw": {"seed": 424242, "index": 0, "count": 3}}},
 	]
@@ -275,7 +275,7 @@ func test_encounter_v2_events() -> void:
 		check(not inv.is_empty(), "%s applies" % ev.t)
 		inverses.append(inv)
 	var a := st.encounter.actor("a_hero")
-	check(a.ext.sample.stats.agi == 5 and a.name == "Ana" and not a.ext.sample.stats.has("wit"), "dotted paths set deep and null removes")
+	check(a.ext.sample.stats.agi == 5 and a.name == "Ana" and not a.ext.sample.stats.has("wit"), "slash paths set deep and null removes")
 	check(a.overlays.size() == 1 and st.encounter.effect("e_1").value == 3 and st.encounter.effect("e_1").duration.kind == "scene", "overlay pushed, effect changed by path")
 	check(st.encounter.doc.state.ext.sample.gm_pool == 4 and st.encounter.doc.state.ext.sample.notes.a == "x", "encounter-scoped plugin state")
 	check(st.encounter.log.size() == 2 and st.encounter.doc.rng.index == 3, "the log grew and a roll entry moved the dice stream")
@@ -291,8 +291,8 @@ func test_encounter_v2_events() -> void:
 	check(v1.doc.version == 2 and v1.actors.is_empty() and v1.doc.has("rng") and v1.log.is_empty(), "a version-1 file loads as version 2 with empty rules blocks")
 	# path helpers
 	var d := {"a": {"b": 1}}
-	check(JsonDoc.at_path(d, "a.b") == 1 and JsonDoc.at_path(d, "a.c", 7) == 7 and JsonDoc.at_path({"l": [1, 2]}, "l.1") == 2, "get_path")
-	check(JsonDoc.set_at_path(d, "a.c.d", 5) == null and d.a.c.d == 5 and JsonDoc.set_at_path(d, "a.b", null) == 1 and not d.a.has("b"), "set_path creates and removes")
+	check(JsonDoc.at_path(d, "a/b") == 1 and JsonDoc.at_path(d, "a/c", 7) == 7 and JsonDoc.at_path({"l": [1, 2]}, "l/1") == 2, "at_path")
+	check(JsonDoc.set_at_path(d, "a/c/d", 5) == null and d.a.c.d == 5 and JsonDoc.set_at_path(d, "a/b", null) == 1 and not d.a.has("b"), "set_at_path creates and removes")
 
 
 # ------------------------------------------------------------ event log --
@@ -414,7 +414,7 @@ func test_kernel_derive_budget() -> void:
 	say.call("  200 actors with an effect each derived in %d ms" % ms)
 	check(ms < (50 if not OS.has_feature("mobile") else 400), "deriving 200 actors stays within budget (%d ms)" % ms)
 	t0 = Time.get_ticks_msec()
-	k.commit([{"t": "actor.set", "id": "a_7", "changes": {"ext.sample.stats.agi": 9}}], "One")
+	k.commit([{"t": "actor.set", "id": "a_7", "changes": {"ext/sample/stats/agi": 9}}], "One")
 	ms = Time.get_ticks_msec() - t0
 	check(ms < 20 and st.encounter.actor("a_7").derived.sample.defence.total == 18, "a single change derives one actor (%d ms)" % ms)
 
@@ -481,8 +481,8 @@ func _random_rules_events(rng: RandomNumberGenerator, st: EncounterState) -> Arr
 	var fx_ids := st.encounter.effects.keys()
 	fx_ids.sort()
 	match rng.randi_range(0, 11):
-		0: return [{"t": "actor.set", "id": a, "changes": {"ext.sample.stats.agi": rng.randi_range(-2, 6)}}]
-		1: return [{"t": "actor.set", "id": a, "changes": {"ext.sample.level": rng.randi_range(1, 10), "name": "N%d" % rng.randi_range(0, 99)}}]
+		0: return [{"t": "actor.set", "id": a, "changes": {"ext/sample/stats/agi": rng.randi_range(-2, 6)}}]
+		1: return [{"t": "actor.set", "id": a, "changes": {"ext/sample/level": rng.randi_range(1, 10), "name": "N%d" % rng.randi_range(0, 99)}}]
 		2:
 			var ovs: Array = st.encounter.actor(a).overlays
 			if ovs.is_empty():

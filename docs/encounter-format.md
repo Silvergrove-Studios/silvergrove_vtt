@@ -246,11 +246,11 @@ Events added in version 2 (all invertible, all through `apply()`):
 |---|---|---|
 | `actor.add` | `actor` | `actor.remove` |
 | `actor.remove` | `id` | `actor.add` |
-| `actor.set` | `id`, `changes` — keys may be dotted paths (`ext.sample.stats.agi`); `null` removes and prunes emptied parents; `id`, `derived` and `overlays` are not settable | `actor.set` |
+| `actor.set` | `id`, `changes` — keys may be paths (`ext/sample/stats/agi`; slash-separated, since plugin ids contain dots); `null` removes and prunes emptied parents; `id`, `derived` and `overlays` are not settable | `actor.set` |
 | `actor.overlay.push` | `id`, `overlay` [, `index`] | `actor.overlay.pop` |
 | `actor.overlay.pop` | `id`, `overlay_id` | `actor.overlay.push` at the old index |
 | `effect.apply` | `effect` (with `id`, `on`, `key`) | `effect.remove` |
-| `effect.set` | `id`, `changes` (dotted paths allowed) | `effect.set` |
+| `effect.set` | `id`, `changes` (paths allowed) | `effect.set` |
 | `effect.remove` | `id` | `effect.apply` |
 | `resource.set` | `ref`, `plugin`, `name`, `record` (or `null` to remove) | `resource.set` with the old record |
 | `ext.set` | `scope` (`encounter` \| `scene` \| `token`), `id` / `scene`+`id`, `plugin`, `changes` | `ext.set` |

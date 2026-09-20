@@ -86,11 +86,15 @@ static func merge(target: Dictionary, changes: Dictionary) -> Dictionary:
 	return before
 
 
-## The value at a dotted path ("ext.rules.stats.agi"), or `default` when
-## any step is missing. Array steps are integer indices.
+## Paths are JSON-pointer style, "ext/rules/stats/agi": keys may contain
+## dots (plugin ids do), never slashes. Array steps are integer indices.
+const PATH_SEP := "/"
+
+
+## The value at a path, or `default` when any step is missing.
 static func at_path(target: Variant, path: String, default: Variant = null) -> Variant:
 	var v: Variant = target
-	for part in path.split("."):
+	for part in path.split(PATH_SEP):
 		if v is Dictionary and (v as Dictionary).has(part):
 			v = v[part]
 		elif v is Array and part.is_valid_int() and int(part) >= 0 and int(part) < (v as Array).size():
@@ -100,12 +104,12 @@ static func at_path(target: Variant, path: String, default: Variant = null) -> V
 	return v
 
 
-## Set (or, with null, remove) the value at a dotted path, creating
+## Set (or, with null, remove) the value at a path, creating
 ## intermediate dictionaries on the way in and pruning ones left empty on
 ## the way out, so setting then removing leaves the document as it was.
 ## Returns the previous value (null if none).
 static func set_at_path(target: Dictionary, path: String, value: Variant) -> Variant:
-	var parts := path.split(".")
+	var parts := path.split(PATH_SEP)
 	var chain: Array = [target]
 	var d: Dictionary = target
 	for i in parts.size() - 1:
@@ -130,15 +134,15 @@ static func set_at_path(target: Dictionary, path: String, value: Variant) -> Var
 	return before
 
 
-## merge() for change sets whose keys may be dotted paths: "a.b.c": 1
-## sets deep inside; a null removes. Returns the inverse change set with
-## the same keys.
+## merge() for change sets whose keys may be paths: "a/b/c": 1 sets deep
+## inside; a null removes. Returns the inverse change set with the same
+## keys.
 static func merge_paths(target: Dictionary, changes: Dictionary) -> Dictionary:
 	var before := {}
 	for k in changes:
 		var key := str(k)
-		before[key] = set_at_path(target, key, changes[k]) if key.contains(".") else (deep(target[key]) if target.has(key) else null)
-		if not key.contains("."):
+		before[key] = set_at_path(target, key, changes[k]) if key.contains(PATH_SEP) else (deep(target[key]) if target.has(key) else null)
+		if not key.contains(PATH_SEP):
 			if changes[k] == null:
 				target.erase(key)
 			else:

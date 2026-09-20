@@ -103,14 +103,14 @@ static func expire(state: EncounterState, trigger: Dictionary) -> Array:
 					if left <= 0:
 						out.append_array(remove(state, str(id)))
 					else:
-						out.append({"t": "effect.set", "id": str(id), "changes": {"duration.turns": left}})
+						out.append({"t": "effect.set", "id": str(id), "changes": {"duration/turns": left}})
 			"round":
 				if dk == "rounds":
 					var left := int(d.get("rounds", 1)) - 1
 					if left <= 0:
 						out.append_array(remove(state, str(id)))
 					else:
-						out.append({"t": "effect.set", "id": str(id), "changes": {"duration.rounds": left}})
+						out.append({"t": "effect.set", "id": str(id), "changes": {"duration/rounds": left}})
 			"scene", "rest", "session":
 				if dk == kind or (kind == "rest" and dk == "long_rest" and bool(trigger.get("long", false))):
 					out.append_array(remove(state, str(id)))

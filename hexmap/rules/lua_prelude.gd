@@ -1,0 +1,227 @@
+class_name LuaPrelude
+extends RefCounted
+## The `hexmap` library every plugin sees, in Lua, loaded into each VM
+## before the plugin's own chunks. It keeps the plugin's registrations
+## (hooks, derive, actions, tests) on the Lua side and calls the host
+## through `__host`, a table of callables the PluginHost exposes before
+## the VM is sealed. The entry points the host calls back (`__derive`,
+## `__run_hook`, `__run_action`, …) are globals defined here.
+##
+## Kept as a GDScript constant so it ships inside every build without a
+## resource import. docs/plugin-authoring.md documents the API.
+
+const SOURCE := """
+local host = __host
+__host = nil
+
+local hm = {}
+hm.id = host.id
+hm.version = host.version
+
+local handlers = {}
+local derive_fn = nil
+local actions = {}
+local tests = {}
+
+-- A host call that failed hands back { __error = message }; raise it here,
+-- on the Lua side, where an error is safe.
+local function call(fn, ...)
+	local r = fn(...)
+	if type(r) == "table" and r.__error then
+		error(r.__error, 2)
+	end
+	return r
+end
+
+-- ---------------------------------------------------------- registration --
+
+function hm.on(hook, fn)
+	if type(hook) ~= "string" or type(fn) ~= "function" then
+		error("hm.on(hook, function)", 2)
+	end
+	handlers[hook] = handlers[hook] or {}
+	table.insert(handlers[hook], fn)
+	host.hook_registered(hook)
+end
+
+function hm.derive(fn)
+	if type(fn) ~= "function" then error("hm.derive(function)", 2) end
+	derive_fn = fn
+end
+
+hm.schema = {}
+function hm.schema.define(kind, schema)
+	call(host.schema_define, kind, schema)
+end
+
+hm.actions = {}
+function hm.actions.register(name, spec)
+	if type(name) ~= "string" or type(spec) ~= "table" or type(spec.run) ~= "function" then
+		error("hm.actions.register(name, {run = function, ...})", 2)
+	end
+	actions[name] = spec
+	local public = {}
+	for k, v in pairs(spec) do
+		if k ~= "run" then public[k] = v end
+	end
+	host.action_registered(name, public)
+end
+
+function hm.test(name, fn)
+	table.insert(tests, { name = name, fn = fn })
+end
+
+-- ------------------------------------------------------------- helpers --
+
+-- A typed number: { total, parts = { {label, type, value, source}, ... } }.
+-- Summed plainly here; the kernel re-totals under the ruleset's policy.
+function hm.num(parts)
+	local total = 0
+	for _, p in ipairs(parts) do
+		total = total + (p.value or 0)
+	end
+	return { total = total, parts = parts }
+end
+
+function hm.value(n)
+	if type(n) == "table" then return n.total or 0 end
+	return tonumber(n) or 0
+end
+
+-- The only way to wait: yield a request to the host, resume with the answer.
+function hm.prompt(to, form, opts)
+	return coroutine.yield({ kind = "prompt", to = to, form = form, opts = opts or {} })
+end
+
+-- ---------------------------------------------------------------- state --
+
+function hm.actor(id) return call(host.actor, id) end
+function hm.actors() return call(host.actors) end
+function hm.derived(id) return call(host.derived, id) end
+function hm.token(id) return call(host.token, id) end
+function hm.tokens(actor_id) return call(host.tokens, actor_id) end
+
+hm.state = {}
+function hm.state.get(scope, id) return call(host.state_get, scope, id or "") end
+function hm.state.set(scope, id, changes)
+	return { t = "ext.set", scope = scope, id = id, plugin = hm.id, changes = changes }
+end
+
+function hm.commit(events, label, reason)
+	if type(events) ~= "table" then error("hm.commit(events, label)", 2) end
+	if events.t then events = { events } end
+	return call(host.commit, events, label or "", reason or {})
+end
+
+function hm.log(text, audience)
+	return call(host.note, tostring(text), audience or "all")
+end
+
+hm.settings = {}
+function hm.settings.get(key, default)
+	local v = call(host.setting, key)
+	if v == nil then return default end
+	return v
+end
+
+-- ----------------------------------------------------------------- dice --
+
+hm.dice = {}
+function hm.dice.roll(spec, ctx, label)
+	if type(spec) == "string" then spec = { expr = spec } end
+	return call(host.roll, spec, ctx or {}, label or "Roll")
+end
+function hm.dice.parse(expr) return call(host.dice_parse, expr) end
+
+-- -------------------------------------------------------------- effects --
+
+hm.effects = {}
+function hm.effects.apply(effect)
+	effect.plugin = effect.plugin or hm.id
+	return call(host.effects_apply, effect)
+end
+function hm.effects.remove(id) return call(host.effects_remove, id) end
+function hm.effects.on(ref, key) return call(host.effects_on, ref, key or "") end
+function hm.effects.has(ref, key) return #call(host.effects_on, ref, key or "") > 0 end
+function hm.effects.expire(trigger) return call(host.effects_expire, trigger) end
+function hm.effects.set(id, changes) return { t = "effect.set", id = id, changes = changes } end
+
+-- ------------------------------------------------------------ resources --
+
+hm.resources = {}
+function hm.resources.get(ref, name) return call(host.resource_get, ref, name) end
+function hm.resources.pool(current, max, recharge)
+	return { kind = "pool", current = current, max = max, recharge = recharge or "manual" }
+end
+function hm.resources.track(max, marked, extra, crossed, recharge)
+	return { kind = "track", max = max, marked = marked or 0, extra = extra or 0, crossed = crossed or {}, recharge = recharge or "manual" }
+end
+function hm.resources.set(ref, name, record)
+	return { t = "resource.set", ref = ref, plugin = hm.id, name = name, record = record }
+end
+function hm.resources.spend(ref, name, amount) return call(host.resource_op, "spend", ref, name, amount, false) end
+function hm.resources.gain(ref, name, amount, overflow) return call(host.resource_op, "gain", ref, name, amount, overflow == true) end
+function hm.resources.mark(ref, name, n) return call(host.resource_op, "mark", ref, name, n or 1, false) end
+function hm.resources.clear(ref, name, n) return call(host.resource_op, "clear", ref, name, n or 1, false) end
+function hm.resources.cross(ref, name, slot, crossed)
+	if crossed == nil then crossed = true end
+	return call(host.resource_op, "cross", ref, name, slot, crossed)
+end
+function hm.resources.refill(kind) return call(host.resource_refill, kind) end
+
+-- ------------------------------------------------ entry points for the host --
+
+function __derive(view)
+	if derive_fn == nil then return {} end
+	local out = derive_fn(view)
+	if type(out) ~= "table" then return {} end
+	return out
+end
+
+function __run_hook(hook, payload)
+	local list = handlers[hook]
+	if list == nil then return payload end
+	for _, fn in ipairs(list) do
+		local r = fn(payload)
+		if type(r) == "table" then payload = r end
+		if payload.veto ~= nil and payload.veto ~= false and payload.veto ~= "" then break end
+	end
+	return payload
+end
+
+function __run_action(name, ctx)
+	local a = actions[name]
+	if a == nil then error("no action '" .. tostring(name) .. "'") end
+	return a.run(ctx or {})
+end
+
+function __tests()
+	local names = {}
+	for i, t in ipairs(tests) do names[i] = t.name end
+	return names
+end
+
+function __run_test(index, helpers)
+	local t = tests[index]
+	if t == nil then error("no test " .. tostring(index)) end
+	local h = {}
+	function h.ok(cond, msg) host.test_check(cond and true or false, msg or "ok") end
+	function h.eq(a, b, msg)
+		local same = a == b
+		if type(a) == "number" and type(b) == "number" then same = math.abs(a - b) < 1e-9 end
+		host.test_check(same, (msg or "eq") .. " (" .. tostring(a) .. " vs " .. tostring(b) .. ")")
+	end
+	function h.actor(data) return call(host.test_actor, data) end
+	function h.roll_with_faces(faces, spec, ctx, label)
+		if type(spec) == "string" then spec = { expr = spec } end
+		spec.faces = faces
+		return call(host.roll, spec, ctx or {}, label or "Test roll")
+	end
+	function h.commit(events, label) return hm.commit(events, label or "test") end
+	function h.dispatch(action, ctx, answers) return call(host.test_dispatch, action, ctx or {}, answers or {}) end
+	for k, v in pairs(helpers or {}) do h[k] = v end
+	return t.fn(h)
+end
+
+hexmap = hm
+"""

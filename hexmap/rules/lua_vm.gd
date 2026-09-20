@@ -113,6 +113,9 @@ func call_function(fn_name: String, args: Array = []) -> Call:
 		c.error = "no runtime"
 		return c
 	var th: Object = _state.new_thread()
+	# Nothing in Lua refers to the new thread once it leaves the stack; a
+	# registry reference keeps the collector off it until the call is done.
+	c._ref = _state.ref(-1)
 	_state.pop(1)
 	if _sealed:
 		th.sandbox_thread()
@@ -121,6 +124,7 @@ func call_function(fn_name: String, args: Array = []) -> Call:
 		th.set_top(0)
 		c.status = Call.ERROR
 		c.error = "no function '%s'" % fn_name
+		c._release()
 		return c
 	c._thread = th
 	c._arm()
@@ -162,6 +166,7 @@ class Call:
 	var steps := 0
 	var _thread: Object
 	var _cut := false
+	var _ref := -1
 
 	func _arm() -> void:
 		_thread.interrupt.connect(_on_interrupt)
@@ -214,3 +219,6 @@ class Call:
 			if _thread.interrupt.is_connected(_on_interrupt):
 				_thread.interrupt.disconnect(_on_interrupt)
 			_thread = null
+		if _ref >= 0 and vm != null and vm._state != null:
+			vm._state.unref(_ref)
+			_ref = -1

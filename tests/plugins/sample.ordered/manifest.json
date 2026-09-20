@@ -1,0 +1,17 @@
+{
+  "id": "sample.ordered",
+  "version": "0.1.0",
+  "api": 1,
+  "name": "Sample: ordered",
+  "description": "An original, deliberately small ruleset with initiative, a d20 with three outcomes, conditions and hit points. Not a game anyone plays: the reference plugin that proves the API.",
+  "license": "CC0-1.0",
+  "attribution": "Sample rules by Silvergrove Studios, CC0.",
+  "files": ["main.lua", "tests.lua"],
+  "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice"],
+  "policy": {"status": "best", "circumstance": "best"},
+  "settings": {
+    "schema": {"type": "object", "properties": {"critical_on": {"type": "integer", "minimum": 1, "maximum": 20}, "armour_reduces": {"type": "integer"}}},
+    "defaults": {"critical_on": 20, "armour_reduces": 2}
+  },
+  "tests": true
+}

@@ -15,6 +15,7 @@
 #   ./run.sh check                    load every script, report parse errors
 #   ./run.sh test [filter]            run the unit tests (headless); filter by name
 #   ./run.sh jointest <host:port>     join a running table as a player and play a move
+#   ./run.sh plugintest <dir>         run a plugin's own tests (tests/plugins/sample.ordered)
 #   ./run.sh examples                 regenerate examples/*.hexmap
 #   ./run.sh packs                    regenerate the placeholder art and manifests
 #   ./run.sh sheet <pack> <out.png>   contact sheet of a pack's assets
@@ -187,14 +188,14 @@ main() {
 		-h|--help|help) usage; return 0 ;;
 	esac
 	case "$cmd" in
-		app|edit|godot-editor|editor|table|player|export|shot|check|test|jointest|examples|packs|sheet|godot|install|doctor) shift || true ;;
+		app|edit|godot-editor|editor|table|player|export|shot|check|test|jointest|plugintest|examples|packs|sheet|godot|install|doctor) shift || true ;;
 		*) cmd="app" ;;
 	esac
 
 	find_godot
 	setup_graphics
 	case "$cmd" in
-		app|editor|table|player|shot|export|check|test|jointest|examples|packs|sheet) refresh_class_cache ;;
+		app|editor|table|player|shot|export|check|test|jointest|plugintest|examples|packs|sheet) refresh_class_cache ;;
 	esac
 
 	case "$cmd" in
@@ -232,6 +233,10 @@ main() {
 			;;
 		test)
 			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tests/run_tests.gd ${1:+-- "$1"}
+			;;
+		plugintest)
+			[[ $# -ge 1 ]] || die "usage: ./run.sh plugintest <plugin dir>"
+			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tools/plugin_test.gd -- "$@"
 			;;
 		jointest)
 			[[ $# -ge 1 ]] || die "usage: ./run.sh jointest <host:port>"

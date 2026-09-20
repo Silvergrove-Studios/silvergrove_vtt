@@ -327,8 +327,8 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 |---|---|---|
 | 0 Decisions and spikes | done | Luau runtime + `LuaVm`, `JsonSchema`, `Expr`, suite split, format drafts, decisions |
 | 1 Kernel core | done | v2 document and events, `EventLog`, `TypedNumber`, `HookBus`, `Dice`, `Effects`, `Resources`, `RulesKernel`, fixture ruleset, fuzz |
-| 2 Runtime and plugin host | next | `PluginHost`, manifests, `hm.*` bindings, `hm.test`, `sample.ordered` in Lua |
-| 3 Turns, shared state, clock, prompts | | `TurnStrategy` (ordered + focus), tracks, prompts, pending rolls, `sample.focus` |
+| 2 Runtime and plugin host | done | `PluginHost`, manifests, `hm.*` API, prompts as yields, actions, `hm.test`, `sample.ordered` in Lua, `plugintest` |
+| 3 Turns, shared state, clock, prompts | next | `TurnStrategy` (ordered + focus), tracks, prompts, pending rolls, `sample.focus` |
 | 4 Declarative UI, intents, protocol v2 | | views renderer, Player/Display clients, audience filtering |
 | 5 Compendium, packs, editors | | indexed packs, homebrew editors, `sample.degrees` |
 | 6 Map queries | | distance/bands, templates, LoS/cover, zones, hex state |
@@ -375,7 +375,7 @@ What was built, where, and what proves it (`tests/suites/rules_kernel.gd`,
 | piece | file | what it does | proven by |
 |---|---|---|---|
 | Document v2 | `encounter/encounter.gd`, `encounter_state.gd` | `actors`, `effects`, `resources`, `state.ext`, `log`, `rng`; twelve new events with validators and inverses; v1 files upgrade | `test_encounter_v2_events`: refusals, apply/inverse round trip byte for byte, mirror equality, v1 upgrade |
-| Path changes | `core/json_doc.gd` | `at_path`, `set_at_path` (prunes emptied parents), `merge_paths` — dotted-path change sets with exact inverses | same |
+| Path changes | `core/json_doc.gd` | `at_path`, `set_at_path` (prunes emptied parents), `merge_paths` — slash-path change sets with exact inverses | same |
 | `EventLog` | `rules/event_log.gd` | a `History` that records events with seq/reason/audience, append-only (undo/redo/restore append compensating entries), batches all-or-nothing, checkpoints, `since()`, `replay()` | `test_event_log`: refusal, batch rollback, undo/redo entries, checkpoint restore as one step, replay reproduces |
 | `EncounterCommands` on the log | `encounter/encounter_commands.gd`, `table/table_context.gd` | the Table's commands record through the log; `run_all` for batches | existing encounter/table/net suites unchanged |
 | `TypedNumber` | `rules/typed_number.gd` | `{total, parts}` with stack / best / override policies per part type | `test_typed_numbers` |
@@ -405,28 +405,44 @@ Decisions taken while building:
 - A roll is a `log.add` whose entry carries its `draw`; applying it moves
   the dice stream, removing it moves it back, so the stream is part of
   the document and inverses are exact.
-- `set_at_path(null)` prunes emptied parents so forward + inverse leaves
+- `set_at_path(null)` prunes emptied parents; paths are slash-separated because plugin ids contain dots so forward + inverse leaves
   the document byte-identical.
 - Closures on the undo stack and the log's `changed` subscriber hold the
   log/kernel weakly (no leaked instances at exit; the test run checks).
 
-### Phase 2 — Runtime and plugin host
+### Phase 2 — Runtime and plugin host — **done 2026-09-20**
 
-`PluginHost`: manifest parsing, capability grants, one VM per plugin,
-the `hm.*` bindings for everything Phase 1 built, budgets, error
-isolation (a plugin error fails the hook, never the Table), the
-`hm.test` harness and a `--plugin-test <dir>` CLI mode, plugin discovery
-(`user://plugins`, `res://plugins`, beside the campaign).
+| piece | file | what it does | proven by |
+|---|---|---|---|
+| `LuaPrelude` | `rules/lua_prelude.gd` | the `hexmap` library in Lua: registrations kept Lua-side (hooks, derive, actions, tests), host calls through a table of callables, `hm.prompt` = `coroutine.yield`, errors from the host re-raised in Lua | every plugin test |
+| `PluginHost` | `rules/plugin_host.gd` | manifest schema and validation, dependencies, one `LuaVm` per plugin, capabilities, load → seal → register with the kernel; `_derive`, one `HookBus` handler per (plugin, hook) that turns a yield into a `Wait`; `dispatch()` → `PluginCall` (ok / pending / error, `resume()`); `run_tests()` on scratch kernels; `discover()`/`load_dir()`; a `Bridge` object holding the host weakly so the VM's callables never keep it alive; normalisation of empty Lua tables | `tests/suites/rules_plugins.gd` (61 checks) |
+| Kernel validators | `rules/kernel.gd` | `hm.schema.define("actor", …)` becomes a validator run on every `actor.add`/`actor.set` before the batch applies; `policy()` merges rulesets' stacking policies for rolls | same |
+| Slash paths | `core/json_doc.gd` | change keys are `a/b/c` (plugin ids contain dots) | kernel + plugin suites |
+| `sample.ordered` | `tests/plugins/sample.ordered/` (manifest, `main.lua`, `tests.lua`) | the reference ruleset in Lua: schema, derive with typed numbers, conditions as data, `before_roll`/`after_roll`, actions `strike` (prompts the target's owner), `condition`, `rest`, `setup`; 7 tests of its own | `./run.sh plugintest`, the conformance test in the suite (also inside the app's self-test) |
+| `plugintest` | `tools/plugin_test.gd`, `run.sh` | load a plugin dir into a scratch kernel and run its tests; exit code | CI |
+| Authoring reference | `docs/plugin-authoring.md` | the API as a plugin writer sees it | — |
 
-First reference plugin: **`sample.ordered`** — an original, deliberately
-small ruleset: six stats, a defence, initiative, a d20 with a simple
-outcome, three conditions, hit points as a pool. Its tests are the
-conformance suite's first fixture.
+Exit criterion met: `sample.ordered` runs the Phase 1 scenario from Lua
+(derive, effects on derived numbers, rolls through hooks, a strike that
+prompts and spends); a plugin that tries `io`, loops forever, recurses
+without end, edits the API table, commits an invalid event, yields
+without the capability or errors in `derive`/a hook is contained with a
+readable error against its id while the kernel and the other plugin
+carry on; the plugin's own tests run in CI and in the self-test.
 
-Exit: `sample.ordered` runs the Phase 1 scenario end to end from Lua; a
-plugin that tries `io.open`, infinite loops, allocates without bound, or
-throws inside a hook is contained with a readable error in the Table log;
-the plugin's own tests run in CI and in the app's self-test.
+Decisions taken while building:
+- Plugin registrations live on the Lua side; the host calls fixed entry
+  points (`__derive`, `__run_hook`, `__run_action`, `__run_test`), so a
+  hook handler that prompts is just a Lua coroutine yielding.
+- A thread taken off the main stack must be pinned in the registry
+  (`ref`) or the collector may take it before it runs.
+- Host callables must return at once and take exactly the arguments the
+  prelude passes; failures come back as `{__error}` and are raised in
+  Lua, never from GDScript into the VM.
+- The fixture plugin lives under `tests/plugins/`, exported only so the
+  on-device self-test can load it; the app ships no ruleset.
+- Every roll totals its parts under the merged policy of the loaded
+  rulesets unless the spec names one.
 
 ### Phase 3 — Turns, shared state, clock, prompts
 

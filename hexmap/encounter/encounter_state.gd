@@ -287,7 +287,7 @@ func validate(ev: Dictionary) -> String:
 				return e
 			for k in ev.changes:
 				var key := str(k)
-				if key == "id" or key == "derived" or key.begins_with("derived.") or key == "overlays" or key.begins_with("overlays."):
+				if key == "id" or key == "derived" or key.begins_with("derived/") or key == "overlays" or key.begins_with("overlays/"):
 					return "actor.set cannot change '%s'" % key
 		"actor.overlay.push":
 			var e := _need_actor(ev)

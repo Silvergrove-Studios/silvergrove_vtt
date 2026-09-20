@@ -7,7 +7,17 @@ the tests are `tests/suites/rules_lua.gd`.
 ## Decision: Luau, via `luau-gdextension`
 
 Vendored in `addons/luau_gdextension/` (release binaries for macOS arm64,
-Windows x86_64, Linux x86_64; MIT; version in `VERSION`). Chosen over
+Windows x86_64, Linux x86_64; MIT; version in `VERSION`). **Built by us**,
+not taken from the upstream release: the 0.6.1 release binaries are built
+against godot-cpp 4.5 and, while they load in the 4.7.1 editor binary,
+they crash a 4.7.1 *release template* during class registration
+(`LuaDebug::_bind_methods` → malloc abort; the "Class 'Object' doesn't
+exist" line at load is the same defect). Building the same source against
+godot-cpp 10.0.0 with `GODOTCPP_API_VERSION=4.7` fixes it. The
+`build-luau` workflow does that for all three platforms
+(`workflow_dispatch`; commit the artifacts under `bin/`), and
+`addons/luau_gdextension/VERSION` records what the binaries were built
+from. Chosen over
 `gilzoide/lua-gdextension` (Lua 5.4/LuaJIT, all platforms) after running
 the same scenarios on both (Phase 0 spike, 2026-09-20):
 
