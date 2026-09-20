@@ -26,7 +26,7 @@ window/handheld/orientation=4
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/dockable_container/plugin.cfg")
+enabled=PackedStringArray("res://addons/dockable_container/plugin.cfg", "res://addons/hexmap_nsd/plugin.cfg")
 
 [gui]
 

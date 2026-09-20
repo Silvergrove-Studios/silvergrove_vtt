@@ -4,3 +4,6 @@ out/
 .DS_Store
 *.autosave
 build_info.json
+android/
+plugins/android/nsd/build/
+plugins/android/nsd/.gradle/

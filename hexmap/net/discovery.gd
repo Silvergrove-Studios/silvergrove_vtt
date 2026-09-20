@@ -178,6 +178,11 @@ class Browser extends RefCounted:
 	var known: PackedStringArray = []
 	## Bonjour browsing, for routers that reflect mDNS between subnets.
 	var mdns := Mdns.Browser.new()
+	## The platform's own service discovery when there is a plugin for it
+	## (Android: the HexmapNsd singleton over NsdManager). Its daemon owns
+	## the mDNS port and hears what routers reflect; our socket cannot.
+	var nsd: Object
+	var nsd_state := ""
 	## Counters for a diagnostics line.
 	var asked := 0
 	var heard_answers := 0
@@ -201,6 +206,12 @@ class Browser extends RefCounted:
 			for iface in Discovery.ipv4_interfaces():
 				_udp.join_multicast_group(Protocol.DISCOVERY_GROUP, iface)
 		mdns.start()
+		if Engine.has_singleton("HexmapNsd"):
+			nsd = Engine.get_singleton("HexmapNsd")
+			nsd.service_found.connect(_on_nsd_found)
+			nsd.discovery_state.connect(func(t: String) -> void: nsd_state = t)
+			nsd.startDiscovery(Mdns.SERVICE.trim_suffix(".local"))
+			nsd_state = "NSD starting"
 		mdns.found.connect(func(p_name: String, address: String, port: int, addresses: PackedStringArray) -> void:
 			heard_answers += 1
 			# Every address the record names is worth a direct query: the one
@@ -216,11 +227,29 @@ class Browser extends RefCounted:
 		_udp.close()
 		_ask.close()
 		mdns.stop()
+		if nsd != null:
+			nsd.stopDiscovery()
+			if nsd.service_found.is_connected(_on_nsd_found):
+				nsd.service_found.disconnect(_on_nsd_found)
+			nsd = null
 		_ok = false
 		_passive = false
 
+	## The system resolved a service: every address it names is worth a
+	## direct query, and the entry goes in the list at once.
+	func _on_nsd_found(p_name: String, host: String, port: int, addresses: PackedStringArray) -> void:
+		heard_answers += 1
+		for a in addresses:
+			remember(str(a))
+		remember(host)
+		if heard({"name": p_name, "port": port, "addresses": Array(addresses)}, host, "nsd"):
+			updated.emit()
+
 	func summary() -> String:
-		return "asked %d, heard %d, mDNS %s%s" % [asked, heard_answers, "on" if mdns.listening() else "query only", ("; last: " + last_heard) if last_heard != "" else ""]
+		var how := "on" if mdns.listening() else "query only"
+		if nsd != null:
+			how += ", " + (nsd_state if nsd_state != "" else "NSD")
+		return "asked %d, heard %d, mDNS %s%s" % [asked, heard_answers, how, ("; last: " + last_heard) if last_heard != "" else ""]
 
 	func poll(delta: float) -> void:
 		if not _ok:

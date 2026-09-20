@@ -366,7 +366,10 @@ func _refresh_diag() -> void:
 	if _diag == null:
 		return
 	var ips := App.local_ipv4()
-	_diag.text = "This device: %s · %s" % [", ".join(ips) if not ips.is_empty() else "no network", browser.summary()]
+	var text := "This device: %s · %s" % [", ".join(ips) if not ips.is_empty() else "no network", browser.summary()]
+	if text != _diag.text:
+		_diag.text = text
+		print("discovery: " + text)   # logcat / stdout, for a device one cannot read
 
 
 ## A table from either list: put its address in the box so Join takes it;

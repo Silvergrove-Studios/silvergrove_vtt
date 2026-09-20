@@ -47,7 +47,7 @@ jobs:
         run: |
           set -e
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "build-tools;35.0.0" "platforms;android-35" "cmdline-tools;latest" >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "build-tools;35.0.0" "build-tools;34.0.0" "platforms;android-35" "platforms;android-34" "cmdline-tools;latest" >/dev/null
       - name: Debug keystore
         run: |
           # One persistent debug key (tools/keys/), so every build updates the last.
@@ -74,6 +74,8 @@ jobs:
           case "$GITHUB_REF" in refs/tags/v*) ;; *) v="$(grep -o 'config/version="[^"]*"' project.godot | cut -d'"' -f2)-dev.${GITHUB_RUN_NUMBER}" ;; esac
           sed -i "s/^version\/name=.*/version\/name=\"$v\"/; s/^version\/code=.*/version\/code=${GITHUB_RUN_NUMBER}/" export_presets.cfg
           grep -E '^version/' export_presets.cfg
+      - name: Android build template and the NSD plugin (Gradle export)
+        run: tools/android_build_setup.sh "$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-stable/.stable}"
       - name: Stamp the build
         run: |
           printf '{"commit": "%s", "built": "%s", "run": %s, "ref": "%s"}\n' "$GITHUB_SHA" "$(date -u +'%Y-%m-%d %H:%M UTC')" "$GITHUB_RUN_NUMBER" "$GITHUB_REF_NAME" > build_info.json
