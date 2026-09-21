@@ -720,6 +720,11 @@ func _render_pane() -> void:
 					_pane_box.add_child(b)
 		"table":
 			_pane_render(_table_schema(v), v)
+			# a plugin's status view binds to its own data (me, role, actors as a
+			# list, state…), not to the raw projection
+			for stv in v.get("status", []):
+				_pane_text(str(stv.get("plugin", "")), "header")
+				_pane_render(stv.get("schema", {}), stv.get("data", {}))
 
 
 func _pane_text(text: String, style := "") -> void:
@@ -803,8 +808,6 @@ func _table_schema(v: Dictionary) -> Dictionary:
 				{"type": "text", "text": "%s (%s)" % [str(r.get("label", "A roll")), str(r.get("by", ""))]},
 				{"type": "button", "label": "Help (1d6)", "intent": {"kind": "contribute", "roll": str(r.get("id", "")), "name": "help_" + session.player_id, "expr": "1d6"}}]})
 		children.append({"type": "section", "title": "Open rolls", "children": items})
-	for st in v.get("status", []):
-		children.append({"type": "section", "title": str(st.get("plugin", "")), "children": [st.get("schema", {})]})
 	if not (v.get("tracks", []) as Array).is_empty():
 		var items := []
 		for i in (v.tracks as Array).size():

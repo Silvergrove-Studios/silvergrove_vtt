@@ -340,9 +340,10 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			var p := plugins.plugin(plugin)
 			if p == null or not p.actions.has(action):
 				return "no action %s/%s" % [plugin, action]
-			if not gm and ctx.has("actor") and not _owns_actor(pid, str(ctx.actor)):
+			# a pointer that resolved to nothing (a sheetless view's "$/actor/id") is no claim
+			if not gm and ctx.get("actor") != null and str(ctx.actor) != "" and not _owns_actor(pid, str(ctx.actor)):
 				return "that is not your character"
-			if not gm and ctx.has("token") and not _owns_token(pid, str(ctx.token)):
+			if not gm and ctx.get("token") != null and str(ctx.token) != "" and not _owns_token(pid, str(ctx.token)):
 				return "that is not your token"
 			# a target picked on the map must be one this viewer may pick
 			var kind := str(p.actions[action].get("target", ""))

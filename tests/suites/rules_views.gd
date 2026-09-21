@@ -174,6 +174,11 @@ func test_wire_views_intents_and_roles() -> void:
 	player.session.status.connect(func(t: String) -> void: told.append(t))
 	player.session.intent({"kind": "action", "plugin": "sample.focus", "action": "act", "ctx": {"actor": "a_ben"}})
 	check(pump.call(func() -> bool: return told.any(func(t: String) -> bool: return t.contains("not your character")), 2000), "acting with someone else's character is refused: %s" % [told])
+	# a pointer that resolved to nothing is no claim on a character: an intent
+	# from a sheetless view (a "new character" wizard) is dispatched, not refused
+	told.clear()
+	player.session.intent({"kind": "action", "plugin": "sample.focus", "action": "sign", "ctx": {"actor": null}})
+	check(pump.call(func() -> bool: return str(st.encounter.doc.state.ext.get("sample.focus", {}).get("last_sender", "")) == ana_id), "an intent with a null actor pointer goes through")
 	# the host stamps who sent an intent; a claim on the wire is overwritten
 	player.session.intent({"kind": "action", "plugin": "sample.focus", "action": "sign", "ctx": {"player": ben_id, "gm": true}})
 	check(pump.call(func() -> bool: return str(st.encounter.doc.state.ext.get("sample.focus", {}).get("last_sender", "")) == ana_id), "the action saw Ana as the sender, not what her client claimed")
@@ -231,6 +236,7 @@ func test_wire_views_intents_and_roles() -> void:
 	check(pump.call(func() -> bool: return player.session.view.prompts.size() == 1), "Ana's is still open")
 	player.set_pane("table")
 	await tree.process_frame
+	check(_find_label(player._pane_box, "GM pool:") != null, "the plugin's status view renders on the phone over its own data (@state)")
 	_button(player._pane_box, "Answer").pressed.emit()
 	check(pump.call(func() -> bool: return volley.status == PluginHost.PluginCall.OK), "Ana's answer (the default: no dodge) finished the volley: %s" % volley.error)
 	check(volley.value.dodged == ["a_ben2"] and volley.value.shaken == ["a_ana"], "Ben dodged, Ana is shaken: %s" % [volley.value])
@@ -335,6 +341,16 @@ func _button(root: Node, text: String) -> Button:
 		var b := _button(c, text)
 		if b != null:
 			return b
+	return null
+
+
+func _find_label(root: Node, text: String) -> Label:
+	if root is Label and str((root as Label).text).begins_with(text):
+		return root
+	for c in root.get_children():
+		var l := _find_label(c, text)
+		if l != null:
+			return l
 	return null
 
 
