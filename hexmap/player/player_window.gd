@@ -789,6 +789,11 @@ func _table_schema(v: Dictionary) -> Dictionary:
 	var turns: Dictionary = v.get("turns", {})
 	var focus_shape := str(turns.get("strategy", "ordered")) == "focus" and bool(turns.get("running", false))
 	children.append({"type": "text", "text": session.turn_summary() if not focus_shape else "Focus: " + _holder_name(str(turns.get("focus", ""))), "style": "header"})
+	# the campaign's clock: where in the day the party is
+	var clock: Dictionary = v.get("clock", {})
+	if not clock.is_empty():
+		var minute := int(clock.get("minute", 0))
+		children.append({"type": "text", "text": "Day %d, %02d:%02d%s" % [int(clock.get("day", 1)), minute / 60, minute % 60, ("  ·  session %d" % int(clock.session)) if int(clock.get("session", 0)) > 0 else ""], "style": "dim"})
 	if focus_shape and not display_mode:
 		var acts := []
 		for tk in session.my_tokens():

@@ -491,6 +491,10 @@ func test_campaign_first() -> void:
 	var r := ctx.end_session("# recap")
 	check(not r.has("error") and ctx.campaign.sessions[0].recap == "# recap" and ctx.campaign.journal.size() == 2 and ctx.campaign.journal[1].session == 1, "ended: the recap and the journal (the handout once, the ruling stamped), saved: %s" % [ctx.campaign.journal.map(func(j: Dictionary) -> String: return str(j.kind))])
 	check(win.campaign_panel._campaign.text.contains("between sessions (1 played)"), "the pane says so: %s" % win.campaign_panel._campaign.text)
+	check(win.campaign_panel._hosting.text.begins_with("Not hosting") and win.campaign_panel._clock.text.begins_with("Day 1"), "the Session pane shows hosting and the clock")
+	win._set_hosting(true)
+	check(win.campaign_panel._hosting.text.contains("Address") and win.campaign_panel._hosting.text.contains("Co-GM code"), "hosting: the address and the code, for the phones: %s" % win.campaign_panel._hosting.text.replace("\n", " | "))
+	win._set_hosting(false)
 	# autosave writes the campaign beside its file
 	ctx.kernel.commit([{"t": "actor.set", "id": "a_h", "changes": {"name": "Hero the Bold"}}], "Rename")
 	win._autosave_now()

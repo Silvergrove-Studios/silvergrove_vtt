@@ -1,14 +1,21 @@
 class_name CampaignPanel
 extends VBoxContainer
-## The session's frame around the fight: the campaign this encounter
-## belongs to (start a session from it, bank the session back, the
-## recap), the checkpoints the table can go back to, the prep triggers
-## on this scene (fire one by hand), and the journal — rulings, handouts
-## and notes from this session and every one before, searchable.
+## The Session pane: the campaign and where it stands, Start and End
+## session, hosting (the address and the co-GM code large enough to read
+## across a table, who is connected), the in-game clock, the checkpoints
+## the table can go back to, the prep triggers on this scene (fire one
+## by hand), and the journal — rulings, handouts and notes from this
+## session and every one before, searchable.
 
 var ctx: TableContext
 var _campaign: Label
 var _campaign_buttons: HBoxContainer
+var _hosting: Label
+var _host_button: Button
+var _clock: Label
+## Set by the window: hosting on/off, and what to show about it.
+var on_host: Callable
+var host_info: Callable
 var _checkpoints: VBoxContainer
 var _checkpoint_name: LineEdit
 var _triggers: VBoxContainer
@@ -44,6 +51,28 @@ func _init(p_ctx: TableContext) -> void:
 		if on_campaign_action.is_valid():
 			on_campaign_action.call("recap"))
 	box.add_child(_campaign_buttons)
+	# hosting
+	_header(box, "Players' phones")
+	_hosting = Label.new()
+	_hosting.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hosting.theme_type_variation = "MonoLabel"
+	box.add_child(_hosting)
+	_host_button = Button.new()
+	_host_button.text = "Start hosting"
+	_host_button.tooltip_text = "Let players join from their phones on this network"
+	_host_button.pressed.connect(func() -> void:
+		if on_host.is_valid():
+			on_host.call())
+	box.add_child(_host_button)
+	# the clock
+	_header(box, "Clock")
+	_clock = Label.new()
+	box.add_child(_clock)
+	var crow := HBoxContainer.new()
+	for pair in [["+10 min", 10], ["+1 hour", 60], ["+8 hours", 480], ["+1 day", 1440]]:
+		var mins: int = pair[1]
+		_button(crow, pair[0], "Advance the in-game clock (rests, dawn recharges and timed effects follow)", func() -> void: _say(ctx.kernel.clock.advance(mins), "Time passes"))
+	box.add_child(crow)
 	# checkpoints
 	_header(box, "Checkpoints")
 	var row := HBoxContainer.new()
@@ -108,6 +137,14 @@ func refresh() -> void:
 		_campaign.text = "No campaign open (File › Open campaign…)."
 	for b in _campaign_buttons.get_children():
 		(b as Button).disabled = ctx.campaign == null
+	var info: Dictionary = host_info.call() if host_info.is_valid() else {}
+	if bool(info.get("hosting", false)):
+		_hosting.text = "Address  %s\nCo-GM code  %s\nConnected: %s" % [str(info.get("address", "")), str(info.get("code", "")), ", ".join(PackedStringArray(info.get("connected", []))) if not (info.get("connected", []) as Array).is_empty() else "nobody yet"]
+		_host_button.text = "Stop hosting"
+	else:
+		_hosting.text = "Not hosting. Players cannot join until you are."
+		_host_button.text = "Start hosting"
+	_clock.text = "Day %d, %02d:%02d" % [int(e.clock.get("day", 1)), int(e.clock.get("minute", 0)) / 60, int(e.clock.get("minute", 0)) % 60]
 	# checkpoints
 	_clear(_checkpoints)
 	if e.checkpoints.is_empty():

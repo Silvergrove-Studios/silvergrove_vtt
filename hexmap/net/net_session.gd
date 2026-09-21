@@ -164,6 +164,10 @@ func _handle(msg: Dictionary) -> void:
 				var why := state.validate(msg.ev)
 				if why == "":
 					state.apply(msg.ev)
+					# a scene over a map this device has not seen (a fight launched
+					# mid-session): ask for the map as the encounter's arrival would
+					if str(msg.ev.get("t", "")) == "scene.add" or str(msg.ev.get("t", "")) == "scene.set":
+						_want_missing_maps()
 				else:
 					push_warning("event from the table rejected: " + why)
 		"refused":
@@ -212,13 +216,18 @@ func _receive_encounter(doc: Dictionary) -> void:
 	state.encounter.changed.connect(_relay)
 	for id in old_maps:
 		state.attach_map(old_maps[id])
-	for id in e.map_ids():
-		if not state.maps.has(id):
-			_maps_wanted[id] = true
-			_send({"t": "need", "kind": "map", "id": id})
+	_want_missing_maps()
 	_send({"t": "need", "kind": "packs"})
 	connected.emit()
 	changed.emit("", "")
+
+
+## Ask the table for every map a scene names that this device lacks.
+func _want_missing_maps() -> void:
+	for id in state.encounter.map_ids():
+		if not state.maps.has(id) and not _maps_wanted.has(id):
+			_maps_wanted[id] = true
+			_send({"t": "need", "kind": "map", "id": id})
 
 
 func _relay(what: String, p_scene: String) -> void:

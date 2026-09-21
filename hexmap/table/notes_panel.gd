@@ -209,7 +209,8 @@ func save() -> String:
 ## The players get it now: a handout entry in the log, under the note's
 ## own id (the journal keeps it once, when the session ends).
 func hand_out() -> String:
-	var id := save() if selected == "" or not bool(entry(selected).get("live", false)) else selected
+	# an unsaved note is saved first; a selected one goes out as it stands
+	var id := selected if selected != "" else save()
 	var en := entry(id)
 	if en.is_empty():
 		return "nothing to hand out"

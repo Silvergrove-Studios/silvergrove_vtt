@@ -130,6 +130,15 @@ func test_host_and_net_session() -> void:
 	history.undo()
 	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) != Vector2(1.5, 1.5)), "the DM's undo reaches the client")
 	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(st.encounter.doc))), "still the same after undo")
+	# a scene over a map the client has never seen, added mid-session: the map is fetched
+	var road := HexMap.load_file("res://examples/forest_road.hexmap")
+	st.attach_map(road)
+	var road_scene := Encounter.new_scene(road, str(road.levels[0].get("id", "ground")), "The road", "res://examples/forest_road.hexmap")
+	check(cmds.add_scene(road_scene, true) == "", "the table adds a scene over the forest road")
+	check(_pump(host, [client], func() -> bool: return client.maps_ready() and client.state.maps.has(str(road.doc.id))), "the client asked for the new map and got it (%d maps)" % client.state.maps.size())
+	check(client.scene_id() == str(road_scene.id) and client.state.map_for(client.scene_id()) != null, "and shows the road")
+	cmds.activate_scene(sid)
+	check(_pump(host, [client], func() -> bool: return client.scene_id() == sid), "back to the chapel")
 	# A second client, as Ben, sees Ana's next move.
 	var client2 := NetSession.new("127.0.0.1", host.port, cpacks, "second")
 	client2.cache_dir = cache

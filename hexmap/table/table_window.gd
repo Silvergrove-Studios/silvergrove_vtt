@@ -192,6 +192,14 @@ func _build_ui() -> void:
 	campaign_panel.on_campaign_action = func(kind: String) -> void:
 		if kind == "recap":
 			_recap_dialog()
+	campaign_panel.on_host = func() -> void: _set_hosting(host == null)
+	campaign_panel.host_info = func() -> Dictionary:
+		if host == null:
+			return {"hosting": false}
+		var names := []
+		for pid in players.online:
+			names.append(str(ctx.encounter().player(str(pid)).get("name", pid)))
+		return {"hosting": true, "address": host_address(), "code": host.cogm_code, "connected": names}
 	party = RosterPanel.new(ctx, true)
 	npcs = RosterPanel.new(ctx, false)
 	notes = NotesPanel.new(ctx)
@@ -239,7 +247,7 @@ func _build_dock_layout() -> Control:
 		DockPane.new("Rules", rules),
 		DockPane.new("Compendium", compendium),
 		DockPane.new("Players", players, players.header_actions()),
-		DockPane.new("Campaign", campaign_panel),
+		DockPane.new("Session", campaign_panel),
 		DockPane.new("Party", party, party.header_actions()),
 		DockPane.new("NPCs", npcs, npcs.header_actions()),
 		DockPane.new("Notes", notes),
@@ -899,6 +907,7 @@ func _refresh_online() -> void:
 		for p in host.connected_players():
 			players.online[p] = true
 	players.refresh()
+	campaign_panel.refresh()
 
 
 # ================================================================== campaign ==
