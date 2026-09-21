@@ -281,6 +281,11 @@ hm.actions.register("strike", {
 		if out.down then
 			hm.commit(condition("prone", "actor:" .. ctx.target), "Down")
 		end
+		-- the ruleset's own hook: house rules layer here
+		local after = hm.hooks.run("after_damage", { actor = ctx.actor, target = ctx.target, amount = amount, outcome = out.outcome, roll = dmg.id })
+		if after.veto then error("after_damage: " .. tostring(after.veto)) end
+		if #after.events > 0 then hm.commit(after.events, "After damage") end
+		out.after = after.note
 		return out
 	end,
 })

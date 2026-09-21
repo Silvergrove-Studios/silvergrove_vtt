@@ -25,6 +25,16 @@ hm.on("before_roll", function(p)
 	return p
 end)
 
+-- The base ruleset's own hook: a hard hit (6 or more) also shakes the
+-- target. hm.hooks.run in sample.ordered's strike is where this lands.
+hm.on("sample.ordered.after_damage", function(p)
+	if p.amount >= 6 then
+		table.insert(p.events, { t = "log.add", entry = { id = "n_hard_" .. tostring(p.roll), kind = "note", text = "a hard hit", audience = "all" } })
+		p.note = "hard hit"
+	end
+	return p
+end)
+
 -- A fumble costs the attacker their footing: a ruling worth writing down.
 hm.actions.register("fumble", {
 	label = "Resolve a fumble", target = "actor",

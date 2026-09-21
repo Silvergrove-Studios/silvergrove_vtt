@@ -199,6 +199,63 @@ func test_plugin_ordering_between_plugins() -> void:
 	check(k.hooks.run("x", {}).payload.trail == "B", "unloading one leaves the other's handlers")
 
 
+func test_plugin_defined_hooks() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var k := _kernel()
+	var host := PluginHost.new(k)
+	# a base ruleset runs its own hook; a layered plugin handles it, a
+	# third vetoes it; a plugin may only run hooks under its own name
+	_load(host, """
+local hm = hexmap
+hm.actions.register("hit", { label = "Hit", run = function(ctx)
+	local p = hm.hooks.run("after_damage", { amount = ctx.amount })
+	if p.veto then return { vetoed = p.veto } end
+	if #p.events > 0 then hm.commit(p.events, "After") end
+	return { note = p.note, events = #p.events }
+end })
+hm.on("t.base.after_damage", function(p) p.note = (p.note or "") .. "self;" return p end)
+""", {"id": "t.base", "version": "1", "api": 1, "name": "base", "capabilities": ["actions", "log"]})
+	_load(host, """
+local hm = hexmap
+hm.on("t.base.after_damage", function(p)
+	p.note = (p.note or "") .. "house;"
+	if p.amount >= 6 then table.insert(p.events, { t = "log.add", entry = { id = "n_hard", kind = "note", text = "hard", audience = "all" } }) end
+	return p
+end)
+hm.actions.register("sneak", { label = "Sneak", run = function(ctx) return hm.hooks.run("after_damage", {}) end })
+""", {"id": "t.house", "version": "1", "api": 1, "name": "house", "depends": ["t.base"], "capabilities": ["actions"]})
+	var r := host.dispatch("t.base", "hit", {"amount": 3})
+	check(r.status == PluginHost.PluginCall.OK and r.value.note == "self;house;" and r.value.events == 0, "the base's own handler runs first, then the layered plugin's: %s" % [r.value])
+	r = host.dispatch("t.base", "hit", {"amount": 7})
+	check(r.value.events == 1 and k.state.encounter.log.size() == 1 and k.state.encounter.log[0].text == "hard", "events a handler adds are the caller's to commit, and were")
+	r = host.dispatch("t.house", "sneak", {})
+	check(r.status == PluginHost.PluginCall.OK and not (r.value as Dictionary).has("note"), "another plugin running 'after_damage' runs t.house.after_damage, which nobody handles: %s" % [r.value])
+	k.hooks.on("t.base.after_damage", func(p: Dictionary) -> Dictionary:
+		if p.amount > 10:
+			p.veto = "too much"
+		return p, "test")
+	r = host.dispatch("t.base", "hit", {"amount": 11})
+	check(r.status == PluginHost.PluginCall.OK and r.value.vetoed == "too much", "a veto comes back to the caller")
+	k.hooks.off("test")
+	# a handler that prompts inside a plugin-defined hook is refused (synchronous)
+	_load(host, """
+local hm = hexmap
+hm.on("t.base.after_damage", function(p) hm.prompt("pl_1", { title = "x" }) return p end)
+""", {"id": "t.asks", "version": "1", "api": 1, "name": "asks", "depends": ["t.base"], "capabilities": ["prompts"]})
+	r = host.dispatch("t.base", "hit", {"amount": 1})
+	check(r.value.has("vetoed") and str(r.value.vetoed).contains("paused"), "a handler that prompts is a veto, reported to the caller: %s" % [r.value])
+	# an override on a plugin-defined hook works like any other
+	host.unload("t.asks")
+	_load(host, """
+local hm = hexmap
+hm.on("t.base.after_damage", function(p) p.note = (p.note or "") .. "only me" return p end)
+""", {"id": "t.over", "version": "1", "api": 1, "name": "over", "depends": ["t.base", "t.house"], "overrides": {"t.house": ["t.base.after_damage"]}, "capabilities": []})
+	r = host.dispatch("t.base", "hit", {"amount": 3})
+	check(r.value.note == "self;only me", "the overriding plugin replaced the house handler for the base's hook: %s" % [r.value.note])
+
+
 func test_sample_plugin_conformance() -> void:
 	if not PluginHost.available():
 		skip("no Lua runtime in this build")

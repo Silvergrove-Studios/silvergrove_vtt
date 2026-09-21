@@ -140,6 +140,27 @@ prompt; they append events to `payload.events` and the kernel commits
 them with the step — the whole step is one undo entry, and a veto or a
 refused event undoes all of it.
 
+**A ruleset's own hooks.** Besides the kernel's, a plugin can publish
+hook points of its own, so a house-rules plugin layered over it has
+somewhere to stand inside the base's pipelines:
+
+```lua
+-- in the base ruleset's strike action, after the damage landed:
+local p = hm.hooks.run("after_damage", { actor = ctx.actor, target = ctx.target, amount = amount })
+if p.veto then error("after_damage: " .. p.veto) end
+if #p.events > 0 then hm.commit(p.events, "After damage") end
+-- in the layered plugin:
+hm.on("sample.ordered.after_damage", function(p) if p.amount >= 6 then p.note = "hard hit" end return p end)
+```
+
+`hm.hooks.run(name, payload)` runs `<this plugin>.<name>` through every
+loaded plugin's handlers in load order (the plugin's own included),
+honouring `overrides`, and returns the payload with `veto` set if a
+handler refused and `events` holding what they added — the caller
+commits those, so a base ruleset decides where in its own step they
+land. These hooks are synchronous: a handler that prompts is a veto.
+Use `hm.prompt_open` there instead.
+
 ```lua
 hm.actions.register("strike", { label = "Strike", cost = { actions = 1 }, target = "actor",
   run = function(ctx) … return { … } end })

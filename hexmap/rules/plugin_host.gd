@@ -580,7 +580,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "test_answer", "test_prompts", "test_tick"]:
+			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -599,6 +599,19 @@ class Bridge:
 	func _k() -> RulesKernel:
 		var h := _h()
 		return h.kernel if h != null else null
+
+	## Run this plugin's own hook "<id>.<name>" through every plugin's
+	## handlers, synchronously; the payload comes back with `veto` and
+	## `events`. The caller's wall-clock budget is not reset by the run.
+	func hooks_run(name: String, payload: Variant) -> Dictionary:
+		var h := _h()
+		var started := h._call_started_ms
+		var p: Dictionary = PluginHost._as_dict(payload).duplicate()
+		if not (p.get("events") is Array):
+			p.events = []
+		var out := _k().hooks.run_sync(plugin_id + "." + str(name), p)
+		h._call_started_ms = started
+		return out
 
 	func hook_registered(hook: String) -> void:
 		var p := _p()
@@ -1122,7 +1135,10 @@ class Bridge:
 		return true
 
 	func test_dispatch(action: String, ctx: Variant, answers: Variant) -> Variant:
-		var pc := _h().dispatch(plugin_id, str(action), PluginHost._as_dict(ctx))
+		return test_dispatch_of(plugin_id, action, ctx, answers)
+
+	func test_dispatch_of(plugin: String, action: String, ctx: Variant, answers: Variant) -> Variant:
+		var pc := _h().dispatch(str(plugin), str(action), PluginHost._as_dict(ctx))
 		var list: Array = answers if answers is Array else []
 		var i := 0
 		while pc.status == PluginCall.PENDING and i < list.size():

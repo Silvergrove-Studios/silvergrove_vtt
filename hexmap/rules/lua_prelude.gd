@@ -76,6 +76,17 @@ function hm.on(hook, fn)
 	host.hook_registered(hook)
 end
 
+-- A ruleset's own hooks: hm.hooks.run("after_damage", p) runs every
+-- loaded plugin's handlers for "<this plugin>.after_damage" (a layered
+-- plugin says hm.on("base.after_damage", …)) and returns the payload —
+-- with p.veto set if one refused, and p.events for what they added, which
+-- the caller commits. Synchronous: a handler may not prompt.
+hm.hooks = {}
+function hm.hooks.run(name, payload)
+	if type(name) ~= "string" or name == "" then error("hm.hooks.run(name, payload)", 2) end
+	return call(host.hooks_run, name, payload or {})
+end
+
 function hm.derive(fn)
 	if type(fn) ~= "function" then error("hm.derive(function)", 2) end
 	derive_fn = fn
@@ -453,6 +464,8 @@ function __run_test(index, helpers)
 	end
 	function h.commit(events, label) return hm.commit(events, label or "test") end
 	function h.dispatch(action, ctx, answers) return call(host.test_dispatch, action, ctx or {}, answers or {}) end
+	-- an action of another loaded plugin (a dependency), for layered plugins' tests
+	function h.dispatch_of(plugin, action, ctx, answers) return call(host.test_dispatch_of, plugin, action, ctx or {}, answers or {}) end
 	-- answer an open prompt as a player ("" for the GM); the open prompts
 	function h.answer(prompt, answer, who) return call(host.test_answer, prompt, answer, who or "") end
 	function h.prompts() return call(host.test_prompts) end
