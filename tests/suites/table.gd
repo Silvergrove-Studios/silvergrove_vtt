@@ -454,11 +454,23 @@ func test_campaign_first() -> void:
 		mp._search_compendium()
 		check(mp._results.item_count >= 1, "the compendium offers goblins")
 		check(mp.add_creature(enc, mp._results.get_item_metadata(0), 2, "9,8", true) == "" and ctx.campaign.encounter_entry(enc).creatures.size() == 1, "two goblins at 9,8, hidden, in the recipe")
+	# the party is somewhere first (with no scene at all, the first scene made is the active one)
+	check(mp.show_map(mid) == "" and ctx.encounter().active_scene_id != "", "the chapel shown as the party's scene")
 	var scenes_before := ctx.encounter().scenes.size()
 	var actors_before := ctx.encounter().actors.size()
-	check(mp.launch(enc) == "", "launched")
+	# staged: the fight is built where only the Table looks; the players' scene stays
+	var players_scene := ctx.encounter().active_scene_id
+	check(mp.launch(enc, false) == "", "staged")
 	var live: Dictionary = ctx.campaign.encounter_entry(enc).get("live", {})
-	check(ctx.encounter().scenes.size() == scenes_before + 1 and ctx.encounter().active_scene_id == str(live.get("scene", "")) and ctx.scene_id == str(live.scene), "a scene over the chapel is shown")
+	check(ctx.encounter().scenes.size() == scenes_before + 1 and ctx.encounter().active_scene_id == players_scene and ctx.scene_id == str(live.get("scene", "")) and bool(live.get("staged", false)),
+		"the Table looks at the staged scene; the players' active scene is unchanged")
+	mp._show_encounter()
+	check(not mp._go.disabled and mp._launch.disabled and mp._stage.disabled, "Go is offered, Launch and Stage are not")
+	check(mp.launch(enc) != "", "it cannot be launched twice")
+	check(mp.go(enc) == "" and ctx.encounter().active_scene_id == str(live.scene) and ctx.scene_id == str(live.scene) and not bool(ctx.campaign.encounter_entry(enc).live.get("staged", true)), "Go: the players are brought to the fight")
+	check(mp.go(enc) != "", "and not twice")
+	mp._show_encounter()
+	check(mp._go.disabled and not mp._return.disabled, "now only Return")
 	if rules:
 		check((live.actors as Array).size() == 2 and ctx.encounter().actors.size() == actors_before + 2, "two goblin actors were made")
 		var placed := 0

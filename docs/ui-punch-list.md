@@ -62,7 +62,12 @@ polish.
    the ruleset's sheet renderer. Places and the party marker draw as
    tokens (a ◆ and a ★ label): they want a glyph and a hover card of
    their own; the Maps pane wants thumbnails; the picker wants the
-   campaign's name and party on each card.
+   campaign's name and party on each card. A staged fight is unseen on
+   the phones' screens, but its scene and its hidden tokens still travel
+   in the encounter document a player's device holds (`Protocol.
+   client_document` strips GM regions and unrevealed cells, not hidden
+   tokens or inactive scenes): a curious player with a debugger could
+   read them. Strip hidden tokens and non-active scenes for players.
 
 ### P1 — look
 1. **One theme.** ThemeGen-style tokens: neutral dark palette (canvas

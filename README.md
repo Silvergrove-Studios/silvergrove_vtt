@@ -116,8 +116,10 @@ Pick Table on the home screen and start a campaign (or
 plugin draws it, editable by the DM between sessions; **Notes** holds
 what you write ahead and hands it to the players' phones when the moment
 comes; **Maps** is the library — maps drawn in the Editor, never changed
-here — with prepared fights (creatures, counts, cells) to *Launch* and
-*Return* from, and places on a regional map that lead to them;
+here — with prepared fights (creatures found by name, type and CR, with
+counts and cells) to *Launch*, or to *Stage* out of the players' sight
+and *Go* when it is arranged, and *Return* from, and places on a
+regional map that lead to them;
 **Session** starts and ends the session, hosts for the phones and keeps
 the clock. On a scene, place tokens with the Token tool, click doors to
 open them and lights to put them out, brush fog away as the party

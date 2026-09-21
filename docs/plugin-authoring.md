@@ -240,8 +240,14 @@ them), which is what the `picker` widget draws on. An action registered with
 `target = "entry"` (and optionally `collection = "creatures"`) shows as
 a button on an open entry in the Table's Compendium panel and is
 dispatched with `ctx.entry`, `ctx.collection` and `ctx.scene` — the way
-a creature becomes an actor on the map. Actors you make from entries
-should carry `packs = hm.comp.versions()`.
+a creature becomes an actor on the map. The Table's encounter builder
+(the Maps pane) searches that collection through the same action: give
+it `fields = {"cr", "type"}` to show beside each name (and sort by the
+first), `facets = {"type", "cr"}` for the filters it offers (a dropdown
+of the values, or a range when they are all numbers), and
+`query = {filter = {...}}` for a filter that always applies (the
+campaign's rules version). Actors you make from entries should carry
+`packs = hm.comp.versions()`.
 
 ### Views: what players see
 

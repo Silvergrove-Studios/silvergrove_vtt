@@ -6,9 +6,13 @@ extends VBoxContainer
 ## a recipe for a scene over a map: creatures from the compendium with a
 ## count, a cell and whether they start hidden, and the DM's notes.
 ## *Launch* makes the scene, places the creatures through the ruleset's
-## entry action and shows it; *Return* takes the creatures out again,
-## leaves the party as the fight left them, and goes back to the scene
-## before. Old scenes can also be shown from here. On a regional map,
+## entry action and shows it; *Stage* does the same but leaves the players
+## where they are, so the DM can arrange the fight unseen and *Go* when it
+## is ready; *Return* takes the creatures out again, leaves the party as
+## the fight left them, and goes back to the scene before. The creature
+## search filters on the facets the ruleset's entry action names
+## (`facets = {"type", "cr"}`: a value list, or a range for numbers) and
+## shows its `fields`. Old scenes can also be shown from here. On a regional map,
 ## *places* are markers (tokens tagged `place`, hidden until revealed)
 ## that link to a prepared encounter, another map or a note, and the
 ## party marker (a token tagged `party`) says where the party is.
@@ -22,7 +26,11 @@ var _creatures: VBoxContainer
 var _enc_notes: TextEdit
 var _search: LineEdit
 var _results: ItemList
+var _filters: HFlowContainer
+var _filter_widgets := {}   # collection -> {field: Control}
 var _launch: Button
+var _stage: Button
+var _go: Button
 var _return: Button
 var _places: VBoxContainer
 var _places_box: VBoxContainer
@@ -82,7 +90,9 @@ func _init(p_ctx: TableContext) -> void:
 	box.add_child(_encs)
 	var erow := HBoxContainer.new()
 	_button(erow, "New…", "A prepared encounter over the selected map", _new_encounter_dialog)
-	_launch = _button(erow, "Launch", "Make the scene, place the creatures, show it", func() -> void: ctx.say(launch(selected_enc)))
+	_launch = _button(erow, "Launch", "Make the scene, place the creatures, show it to the players", func() -> void: ctx.say(launch(selected_enc)))
+	_stage = _button(erow, "Stage", "Make the scene and place the creatures here, unseen: the players stay where they are until Go", func() -> void: ctx.say(launch(selected_enc, false)))
+	_go = _button(erow, "Go", "Show the staged fight to the players", func() -> void: ctx.say(go(selected_enc)))
 	_return = _button(erow, "Return", "The fight is over: take its creatures out and go back to the scene before", func() -> void: ctx.say(return_from(selected_enc)))
 	_button(erow, "Delete", "Forget this prepared encounter", func() -> void:
 		if ctx.campaign != null:
@@ -100,6 +110,8 @@ func _init(p_ctx: TableContext) -> void:
 	_search.placeholder_text = "Add a creature from the compendium…"
 	_search.text_changed.connect(func(_t: String) -> void: _search_compendium())
 	box.add_child(_search)
+	_filters = HFlowContainer.new()
+	box.add_child(_filters)
 	_results = ItemList.new()
 	_results.custom_minimum_size = Vector2(0, 70)
 	_results.item_activated.connect(func(i: int) -> void: add_creature(selected_enc, _results.get_item_metadata(i)))
@@ -204,8 +216,12 @@ func _show_encounter() -> void:
 	var e := ctx.campaign.encounter_entry(selected_enc) if ctx.campaign != null else {}
 	var live: bool = not e.is_empty() and e.has("live") and not (e.live as Dictionary).is_empty()
 	_launch.disabled = e.is_empty() or live
+	_stage.disabled = e.is_empty() or live
+	_go.disabled = not live or str((e.live as Dictionary).get("scene", "")) == ctx.encounter().active_scene_id
 	_return.disabled = not live
 	_search.editable = not e.is_empty()
+	if not e.is_empty() and _filter_widgets.is_empty():
+		_build_filters()
 	_enc_notes.editable = not e.is_empty()
 	if e.is_empty():
 		_enc_notes.text = ""
@@ -387,6 +403,10 @@ func go_to_place(pid: String) -> String:
 	match str(pl.get("kind", "")):
 		"encounter":
 			selected_enc = str(pl.get("target", ""))
+			# a fight staged ahead: Go brings the players to it
+			var e := ctx.campaign.encounter_entry(selected_enc)
+			if e.has("live") and bool((e.live as Dictionary).get("staged", false)):
+				return go(selected_enc)
 			return launch(selected_enc)
 		"map":
 			return show_map(str(pl.get("target", "")))
@@ -532,21 +552,114 @@ func _entry_actions() -> Dictionary:
 		for name in p.actions:
 			var spec: Dictionary = p.actions[name]
 			if str(spec.get("target", "")) == "entry" and spec.has("collection"):
-				out[str(spec.collection)] = {"plugin": str(pid), "action": str(name), "label": str(spec.get("label", name))}
+				out[str(spec.collection)] = {"plugin": str(pid), "action": str(name), "label": str(spec.get("label", name)),
+					"fields": PluginHost._as_list(spec.get("fields", [])), "facets": PluginHost._as_list(spec.get("facets", [])),
+					"filter": PluginHost._as_dict(spec.get("query", {})).get("filter", {})}
+	return out
+
+
+## The filters the rulesets' entry actions ask for: one control per facet
+## field — a dropdown of the collection's values, or a min/max pair when
+## every value is a number.
+func _build_filters() -> void:
+	for c in _filters.get_children():
+		_filters.remove_child(c)
+		c.queue_free()
+	_filter_widgets = {}
+	if ctx.kernel == null:
+		return
+	var acts := _entry_actions()
+	for coll in acts:
+		var facets: Array = acts[coll].get("facets", [])
+		if facets.is_empty():
+			continue
+		var page: Dictionary = ctx.kernel.comp.query_for(coll, {"per_page": 1, "facets": facets, "filter": acts[coll].get("filter", {})}, true)
+		var widgets := {}
+		for field in facets:
+			var counts: Dictionary = page.get("facets", {}).get(field, {})
+			var values := counts.keys()
+			var numeric := not values.is_empty() and values.all(func(v: Variant) -> bool: return str(v).is_valid_float())
+			if numeric:
+				var lo := SpinBox.new()
+				var hi := SpinBox.new()
+				var nums := values.map(func(v: Variant) -> float: return float(str(v)))
+				nums.sort()
+				for sb in [lo, hi]:
+					sb.min_value = nums[0]
+					sb.max_value = nums[-1]
+					sb.step = 0.125 if nums.any(func(n: float) -> bool: return n != floor(n)) else 1.0
+					sb.custom_minimum_size = Vector2(72, 0)
+					sb.value_changed.connect(func(_v: float) -> void: _search_compendium())
+				lo.value = nums[0]
+				hi.value = nums[-1]
+				lo.tooltip_text = "%s from" % str(field)
+				hi.tooltip_text = "%s up to" % str(field)
+				var l := Label.new()
+				l.text = str(field)
+				l.theme_type_variation = "DimLabel"
+				_filters.add_child(l)
+				_filters.add_child(lo)
+				_filters.add_child(hi)
+				widgets[field] = [lo, hi]
+			else:
+				var ob := OptionButton.new()
+				ob.add_item("any %s" % str(field))
+				ob.set_item_metadata(0, "")
+				values.sort()
+				for v in values:
+					var i := ob.item_count
+					ob.add_item("%s (%d)" % [str(v), int(counts[v])])
+					ob.set_item_metadata(i, str(v))
+				ob.item_selected.connect(func(_i: int) -> void: _search_compendium())
+				_filters.add_child(ob)
+				widgets[field] = ob
+		_filter_widgets[coll] = widgets
+
+
+## The filter a collection's controls express, for a query.
+func _filter_for(coll: String) -> Dictionary:
+	var out := {}
+	for field in _filter_widgets.get(coll, {}):
+		var w: Variant = _filter_widgets[coll][field]
+		if w is Array:
+			var lo: SpinBox = w[0]
+			var hi: SpinBox = w[1]
+			if lo.value > lo.min_value or hi.value < hi.max_value:
+				out[field] = {"min": lo.value, "max": hi.value}
+		elif w is OptionButton and w.selected > 0:
+			out[field] = str(w.get_item_metadata(w.selected))
 	return out
 
 
 func _search_compendium() -> void:
 	var q := _search.text.strip_edges()
 	_results.clear()
-	_results.visible = q != ""
-	if q == "" or ctx.kernel == null:
+	var acts := _entry_actions()
+	var filtered := acts.keys().any(func(coll: String) -> bool: return not _filter_for(coll).is_empty())
+	_results.visible = q != "" or filtered
+	if not _results.visible or ctx.kernel == null:
 		return
-	for coll in _entry_actions():
-		var page: Dictionary = ctx.kernel.comp.query_for(coll, {"text": q, "per_page": 12, "fields": ["name"]}, true)
+	for coll in acts:
+		var fields: Array = acts[coll].get("fields", [])
+		var filter: Dictionary = _filter_for(coll)
+		# the action's own filter (the ruleset's rules version, say) underneath the DM's
+		for k in acts[coll].get("filter", {}):
+			if not filter.has(k):
+				filter[k] = acts[coll].filter[k]
+		var opts := {"text": q, "per_page": 24, "fields": ["name"] + fields, "filter": filter}
+		if not fields.is_empty():
+			opts.sort = str(fields[0])
+		var page: Dictionary = ctx.kernel.comp.query_for(coll, opts, true)
 		for e in page.get("entries", []):
-			var i := _results.add_item("%s  (%s)" % [str(e.get("name", e.get("id", ""))), coll])
+			var extra := PackedStringArray()
+			for f in fields:
+				if e.has(f) and str(e[f]) != "":
+					extra.append("%s %s" % [str(f), str(e[f])])
+			var i := _results.add_item("%s%s  (%s)" % [str(e.get("name", e.get("id", ""))), ("  —  " + " · ".join(extra)) if not extra.is_empty() else "", coll])
 			_results.set_item_metadata(i, {"collection": coll, "id": str(e.get("id", "")), "name": str(e.get("name", e.get("id", "")))})
+		if int(page.get("total", 0)) > 24:
+			var i := _results.add_item("… %d more: narrow the search" % (int(page.total) - 24))
+			_results.set_item_disabled(i, true)
 
 
 ## A creature line in the recipe: {collection, entry, name, count, cell, hidden}.
@@ -564,8 +677,10 @@ func add_creature(enc_id: String, pick: Variant, count := 1, cell := "", hidden 
 
 ## Launch: a scene over the encounter's map, the creatures placed through
 ## the ruleset's entry action (hidden as the recipe says), the scene
-## shown. Remembers what it made, for Return. "" or why.
-func launch(enc_id: String) -> String:
+## shown — or, not `show`n, staged: the Table looks at it while the
+## players stay on the scene they had, until `go`. Remembers what it
+## made, for Return. "" or why.
+func launch(enc_id: String, show := true) -> String:
 	var e := ctx.campaign.encounter_entry(enc_id) if ctx.campaign != null else {}
 	if e.is_empty():
 		return "pick a prepared encounter"
@@ -578,7 +693,7 @@ func launch(enc_id: String) -> String:
 	var previous := ctx.encounter().active_scene_id
 	var scene := Encounter.new_scene(m, str(e.get("level", m.levels[0].get("id", "ground"))), str(e.get("name", "")), str(entry.get("path", "")))
 	scene.fog.enabled = true
-	var why := ctx.commands.add_scene(scene, true)
+	var why := ctx.commands.add_scene(scene, show)
 	if why != "":
 		return why
 	ctx.set_scene(str(scene.id))
@@ -613,7 +728,8 @@ func launch(enc_id: String) -> String:
 			for aid in ctx.encounter().actors.keys():
 				if not before.has(aid):
 					made.append(str(aid))
-	e.live = {"scene": str(scene.id), "actors": made, "previous": previous}
+	# (with no scene active before, the kernel shows the first one: nothing to stage behind)
+	e.live = {"scene": str(scene.id), "actors": made, "previous": previous, "staged": ctx.encounter().active_scene_id != str(scene.id)}
 	if not e.has("played") or not (e.played is Array):
 		e.played = []
 	(e.played as Array).append(int(ctx.encounter().clock.get("session", 0)))
@@ -621,6 +737,26 @@ func launch(enc_id: String) -> String:
 	ctx.campaign_changed.emit()
 	if not problems.is_empty():
 		return "Launched with problems: " + "; ".join(problems)
+	return ""
+
+
+## Go: the staged fight becomes the scene the players see. "" or why.
+func go(enc_id: String) -> String:
+	var e := ctx.campaign.encounter_entry(enc_id) if ctx.campaign != null else {}
+	if e.is_empty() or not e.has("live") or (e.live as Dictionary).is_empty():
+		return "nothing staged"
+	var sid := str((e.live as Dictionary).get("scene", ""))
+	if ctx.encounter().scene(sid).is_empty():
+		return "the staged scene is gone"
+	if ctx.encounter().active_scene_id == sid:
+		return "the players are already there"
+	var why := ctx.commands.activate_scene(sid)
+	if why != "":
+		return why
+	(e.live as Dictionary).staged = false
+	ctx.set_scene(sid)
+	ctx.campaign.touch()
+	ctx.campaign_changed.emit()
 	return ""
 
 
