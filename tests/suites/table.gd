@@ -287,7 +287,7 @@ func test_table_window() -> void:
 	var win := TableWindow.new()
 	win.app = app
 	root.add_child(win)
-	check(win.view != null and win.dock != null and win._panes.size() == 9, "table window builds with nine panes")
+	check(win.view != null and win.dock != null and win._panes.size() == 11, "table window builds with eleven panes")
 	var names := LayoutStore.names(win.dock.layout)
 	for n in LayoutStore.TABLE_PANELS:
 		check(names.has(n), "table layout holds the %s panel: %s" % [n, names])
@@ -404,6 +404,31 @@ func test_campaign_first() -> void:
 	check(not ctx.campaign_dirty(), "saved")
 	var back := Campaign.load_file(dir.path_join("first.campaign"))
 	check(back.actors.a_h.ext["sample.ordered"].stats.agi == 3 and not (back.doc.runtime as Dictionary).is_empty() and back.runtime_encounter().actors.has("a_h"), "the file keeps the edit and the runtime")
+	# the Party pane: the hero, his sheet as the GM sees it, given to a player, a file brought in, retired
+	var party := win.party
+	check(party.actors() == ["a_h"] and win.npcs.actors().is_empty(), "the party lists the hero; the NPCs pane is empty")
+	party.selected = "a_h"
+	party._render_sheet()
+	await tree.process_frame
+	check(_find_label(party._sheet, "Defence") != null and _find_button(party._sheet, "Shove") != null, "the hero's sheet renders in the pane with its numbers and buttons")
+	party._set_owner("")
+	check(ctx.encounter().actor("a_h").owner == "" and ctx.history.undo_label().begins_with("Give"), "given to the DM, undoably")
+	party._set_owner("pl_1")
+	check(ctx.encounter().actor("a_h").owner == "pl_1", "and back to Ana")
+	var cf := CharacterFile.make({"id": "a_new", "kind": "pc", "name": "Newcomer", "ext": {"sample.ordered": {"level": 1, "stats": {"agi": 1, "str": 1, "wit": 1}}}}, [{"id": "sample.ordered", "version": "0.1.0"}])
+	check(CharacterFile.save(cf, dir.path_join("newcomer.character")) == "", "a character file to bring")
+	check(party.import_file(dir.path_join("newcomer.character"), "pl_1") == "" and party.actors() == ["a_h", "a_new"], "brought into the party for Ana")
+	check(party.import_file(dir.path_join("newcomer.character"), "pl_1") != "", "not twice")
+	party.selected = "a_new"
+	party._retire()
+	check(party.actors() == ["a_h"] and not ctx.encounter().actors.has("a_new"), "retired")
+	# the NPCs pane: a stat block from the compendium becomes an actor with no token
+	var npcs := win.npcs
+	npcs._search.text = "wolf"
+	npcs._search_compendium()
+	check(npcs._results.item_count >= 1, "the compendium answers the search: %d" % npcs._results.item_count)
+	npcs._add_from_compendium(npcs._results.get_item_metadata(0))
+	check(npcs.actors().size() == 1 and ctx.encounter().actor(npcs.actors()[0]).kind == "npc" and ctx.encounter().scenes.is_empty(), "a wolf in the roster, no token (no scene)")
 	# a session: start and end from the pane's verbs
 	check(ctx.start_session() == "", "started")
 	check(ctx.encounter().clock.session == 1 and ctx.encounter().checkpoints.size() == 1 and ctx.campaign.sessions.size() == 1, "session 1: the checkpoint and the entry")
@@ -552,3 +577,23 @@ class RollSystem extends TurnSystem:
 		data.stepped = int(data.get("stepped", 0)) + 1
 		ch["data"] = data
 		return ch
+
+
+func _find_label(root: Node, text: String) -> Label:
+	if root is Label and str((root as Label).text).begins_with(text):
+		return root
+	for c in root.get_children():
+		var l := _find_label(c, text)
+		if l != null:
+			return l
+	return null
+
+
+func _find_button(root: Node, text: String) -> Button:
+	if root is Button and str((root as Button).text).begins_with(text):
+		return root
+	for c in root.get_children():
+		var b := _find_button(c, text)
+		if b != null:
+			return b
+	return null

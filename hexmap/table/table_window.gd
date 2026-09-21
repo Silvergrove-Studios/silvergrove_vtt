@@ -30,6 +30,8 @@ var rules: RulesPanel
 var compendium: CompendiumPanel
 var players: PlayersPanel
 var campaign_panel: CampaignPanel
+var party: RosterPanel
+var npcs: RosterPanel
 var tool_options: HBoxContainer
 ## The tool the DM chose; a pick borrows the view and gives it back.
 var _tool_name := "select"
@@ -133,7 +135,7 @@ func _set_encounter(e: Encounter) -> void:
 
 
 func _bind_panels() -> void:
-	for p in [scenes, tokens, inspector, turns, rules, compendium, players, campaign_panel]:
+	for p in [scenes, tokens, inspector, turns, rules, compendium, players, campaign_panel, party, npcs]:
 		p.bind()
 
 
@@ -188,6 +190,8 @@ func _build_ui() -> void:
 	campaign_panel.on_campaign_action = func(kind: String) -> void:
 		if kind == "recap":
 			_recap_dialog()
+	party = RosterPanel.new(ctx, true)
+	npcs = RosterPanel.new(ctx, false)
 	var stack := Control.new()
 	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var dock_ctl := _build_dock_layout()
@@ -228,6 +232,8 @@ func _build_dock_layout() -> Control:
 		DockPane.new("Compendium", compendium),
 		DockPane.new("Players", players, players.header_actions()),
 		DockPane.new("Campaign", campaign_panel),
+		DockPane.new("Party", party, party.header_actions()),
+		DockPane.new("NPCs", npcs, npcs.header_actions()),
 	]
 	for p in _panes:
 		dock.add_child(p)
