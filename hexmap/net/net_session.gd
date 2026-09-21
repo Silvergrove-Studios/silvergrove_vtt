@@ -22,6 +22,10 @@ var joined := false
 var _peer := WebSocketPeer.new()
 var _was_open := false
 var _closed := false
+## Seconds a connection may spend connecting before it counts as unreachable.
+## Some stacks (Windows) take much longer than others to report a refusal.
+var connect_timeout := 5.0
+var _started_ms := 0
 var _pending_files := {}   # "pack/file" -> true
 var _maps_wanted := {}
 var _hello_name := ""
@@ -35,6 +39,7 @@ func _init(p_address: String, p_port: int, p_packs: PackLibrary, p_name := "") -
 
 
 func connect_to_host() -> Error:
+	_started_ms = Time.get_ticks_msec()
 	_peer.inbound_buffer_size = Protocol.BUFFER_SIZE
 	_peer.outbound_buffer_size = Protocol.BUFFER_SIZE
 	_peer.max_queued_packets = 4096
@@ -89,6 +94,11 @@ func poll() -> void:
 				var msg := Protocol.decode(_peer.get_packet().get_string_from_utf8())
 				if not msg.is_empty():
 					_handle(msg)
+		WebSocketPeer.STATE_CONNECTING:
+			if Time.get_ticks_msec() - _started_ms > connect_timeout * 1000.0:
+				_closed = true
+				_peer.close()
+				closed.emit("No answer from the table")
 		WebSocketPeer.STATE_CLOSED:
 			_closed = true
 			var why := "The table closed the connection" if _was_open else "Could not reach the table"
