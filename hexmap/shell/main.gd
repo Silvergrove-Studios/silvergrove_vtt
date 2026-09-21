@@ -11,6 +11,7 @@ extends Control
 ##   --editor [map]           the editor
 ##   --table [encounter]      the table; add --host to host it at once
 ##   --player [address]       the player client
+##   --display [address]      a display: joins a table as a screen everyone sees
 ##   --theme <name>           theme for this run, not persisted
 ##   --ui-scale <factor>      UI size for this run, not persisted
 ##   --shot <out.png>         screenshot and quit
@@ -101,6 +102,7 @@ static func _mode_from_args(args: PackedStringArray) -> Array:
 			"--editor": return ["editor", next]
 			"--table": return ["table", next]
 			"--player": return ["player", next]
+			"--display": return ["display", next]
 			"--home": return ["", ""]
 		if a.begins_with("--"):
 			continue
@@ -114,7 +116,7 @@ static func _mode_from_args(args: PackedStringArray) -> Array:
 ## Replace the current window with a mode's window (or the home screen when
 ## `p_mode` is empty). `arg` is a document path or address for the mode.
 func open_mode(p_mode: String, arg := "") -> void:
-	if p_mode != "" and not App.mode_available(p_mode):
+	if p_mode != "" and not App.mode_available("player" if p_mode == "display" else p_mode):
 		push_warning("mode '%s' is not available on this platform" % p_mode)
 		p_mode = ""
 	if window != null:
@@ -125,6 +127,10 @@ func open_mode(p_mode: String, arg := "") -> void:
 		"editor": window = EditorWindow.new()
 		"table": window = TableWindow.new()
 		"player": window = PlayerWindow.new()
+		"display":
+			var pw := PlayerWindow.new()
+			pw.display_mode = true
+			window = pw
 		_: window = HomeScreen.new()
 	window.app = app
 	if window.has_signal("go_home"):

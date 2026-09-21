@@ -5,10 +5,9 @@ the Table only, inside a sandboxed VM, and everything it does becomes
 events in the encounter's log. Players never run plugin code; they
 render what the plugin's data and derived numbers say.
 
-This is the API as of plugin API version 1 (Phases 2–3 of
-`docs/plugin-api-plan.md`). Prompts delivered to real Players, compendium
-queries, map queries and declarative UI arrive in later phases and will
-be added here.
+This is the API as of plugin API version 1 (Phases 2–4 of
+`docs/plugin-api-plan.md`). Compendium queries and map queries arrive in
+later phases and will be added here.
 
 ## Layout
 
@@ -129,6 +128,71 @@ with a context. Everything but `run` is public data the UI reads.
 hm.test("name", function(t) … end)
 ```
 See *Tests* below.
+
+### Views: what players see
+
+```lua
+hm.ui.register("sheet", {
+  type = "column",
+  children = {
+    { type = "number", label = "Evade", bind = "/derived/evade" },
+    { type = "track", label = "Hits", bind = "/resources/hp" },
+    { type = "cards", bind = "/derived/hand",
+      on_tap = { kind = "action", plugin = hm.id, action = "play", ctx = { actor = "$/actor/id", card = "$/card_id" } } },
+    { type = "action_bar", actions = {
+      { type = "button", label = "Act", cost = { actions = 1 },
+        intent = { kind = "action", plugin = hm.id, action = "act", ctx = { actor = "$/actor/id" } } } } },
+    { type = "effects", bind = "/effects" },
+  },
+})
+hm.ui.register("status", { type = "text", expr = "'GM pool: ' .. (@state.pool ?? 0)", style = "header" })
+hm.ui.register("gm", { … })
+```
+
+A view is data: what to show, bound to the data the Table projects for
+the viewer, and which *intent* a tap sends. Clients never run plugin
+code; a client that does not know a widget shows it as text. Three
+kinds:
+
+- **sheet** — rendered on the owner's phone (and for the GM) for each
+  actor that carries this plugin's data. Its data: `me` (player id),
+  `role`, `actor {id, name, owner, kind, mine}`, `ext` and `derived`
+  (this plugin's blocks), `resources` (name → record), `effects`,
+  `tokens`, `turns`, `clock`, `state` (this plugin's encounter state).
+- **status** — the table-wide view every client sees. Data: `me`,
+  `role`, `turns`, `clock`, `actors` (the ones this viewer may see, with
+  this plugin's `derived` and `resources`), `tracks`, `prompts`, `rolls`,
+  `log`, `state`.
+- **gm** — a Table panel, with the status data for the GM audience.
+
+Values: `text` (literal), `bind` (a JSON pointer, `"/derived/evade"`),
+`expr` (an Expr over the data, `"'Level ' .. @ext.level"`). A node with
+`if = "<expr>"` is hidden when it is false.
+
+Widgets: `column`, `row`, `section {title}`, `tabs {tabs = {{title,
+children}}}`, `text {style = header|dim|mono}`, `number` (a typed number
+with its breakdown as tooltip), `pool {spend, gain}` (intents for the
+− / + buttons), `track {on_mark, on_clear}`, `effects`, `list {bind,
+item, empty}` (the item schema sees `@item` and `@index`), `cards
+{on_tap}` (the tap sees `@card` and `@card_id`), `button {label,
+intent, cost, enabled = "<expr>", accent}`, `action_bar {actions}`,
+`tracker`, `prompt`, `form {fields, submit}`, `log {limit}`, `spacer`.
+
+Intents are Dictionaries; string values that start with `$/` are
+pointers into the data, filled in when the tap happens. What a client
+may send: `{kind = "action", plugin, action, ctx}` (the Table checks
+`ctx.actor` / `ctx.token` are the player's), `{kind = "answer", prompt,
+answer}` (only the player a prompt is for), `{kind = "focus", ref}`
+(one of their tokens or characters), `{kind = "contribute", roll, name,
+expr}`. Displays may send none.
+
+**Audience.** A player character's `ext` and `derived` are public except
+the paths its `audience.fields` marks `owner` or `gm`; any other actor is
+GM-only except the paths marked `all`, and is listed to players only when
+`audience.visible` is `"all"`. Effects, tracks and log entries carry an
+`audience` of `"all"`, `"gm"` or `"owner:<player>"`. This plugin's
+encounter `state` is shown to everyone: keep secrets on GM-only actors
+or in `gm`-audience records.
 
 ### Turns
 

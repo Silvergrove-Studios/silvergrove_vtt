@@ -1,11 +1,13 @@
 class_name HostSession
 extends RefCounted
 ## The Table's side of the network: a WebSocket server that hands every
-## client the encounter, tells them each applied event, answers their
-## requests through the Table's own commands (so a player's move is undoable
-## and explores fog like any other), and streams maps and pack files to
+## client the scene, tells them each scene event, sends each its own
+## projection of the rules (a view) whenever those change, resolves their
+## intents through the kernel and the plugins, answers their scene requests
+## through the Table's own commands (so a player's move is undoable and
+## explores fog like any other), and streams maps and pack files to
 ## clients that lack them. Announces itself on the LAN. Authority lives
-## here: a request is applied only if allowed() and validate() say so.
+## here: nothing a client sends is applied unless the rules say so.
 
 signal client_joined(player_id: String)
 signal client_left(player_id: String)
@@ -13,14 +15,19 @@ signal log(text: String)
 
 var state: EncounterState
 var packs: PackLibrary
+## The rules engine and plugins behind the views and intents (optional:
+## without them clients get scene events only and every intent is refused).
+var kernel: RulesKernel
+var plugins: PluginHost
 ## Called with (event, player_id) to apply an allowed request; returns ""
 ## or why not. The Table hands in its commands so history sees it.
 var apply_request: Callable
 var port := 0
 var announcer := Discovery.Announcer.new()
 var _server := TCPServer.new()
-var _clients: Array = []   # [{peer: WebSocketPeer, player: "", hello: false}]
+var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
 var _listening := false
+var _views_dirty := false
 
 
 func _init(p_state: EncounterState, p_packs: PackLibrary) -> void:
@@ -99,7 +106,7 @@ func poll(delta := 0.0) -> void:
 		peer.outbound_buffer_size = Protocol.BUFFER_SIZE
 		peer.max_queued_packets = 4096
 		if peer.accept_stream(_server.take_connection()) == OK:
-			_clients.append({"peer": peer, "player": "", "hello": false})
+			_clients.append({"peer": peer, "player": "", "role": "", "hello": false, "joined": false})
 	var gone := []
 	for c in _clients:
 		var peer: WebSocketPeer = c.peer
@@ -117,6 +124,11 @@ func poll(delta := 0.0) -> void:
 		if c.player != "":
 			log.emit("%s left" % _player_name(c.player))
 			client_left.emit(c.player)
+	if _views_dirty:
+		_views_dirty = false
+		for c in _clients:
+			if c.joined:
+				_send_view(c)
 
 
 func _player_name(pid: String) -> String:
@@ -133,8 +145,27 @@ func _broadcast(msg: Dictionary) -> void:
 			_send(c, msg)
 
 
+## Scene events go to every client as they are; anything about the rules
+## changes what each client is shown, so their views are resent (once per
+## poll, however many events a step applied).
 func _on_applied(ev: Dictionary, _inv: Dictionary) -> void:
-	_broadcast(Protocol.event(ev))
+	var t := str(ev.get("t", ""))
+	if Protocol.SCENE_EVENTS.has(t):
+		_broadcast(Protocol.event(ev))
+	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
+		_views_dirty = true
+
+
+## A client's projection of the rules, if there is a kernel to project.
+func projection(c: Dictionary) -> Dictionary:
+	if kernel == null:
+		return {}
+	return Views.project(kernel, plugins, str(c.player), str(c.role) if c.role != "" else Views.ROLE_PLAYER)
+
+
+func _send_view(c: Dictionary) -> void:
+	if kernel != null:
+		_send(c, Protocol.view(projection(c)))
 
 
 func _handle(c: Dictionary, msg: Dictionary) -> void:
@@ -145,30 +176,50 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 	match t:
 		"hello":
 			if int(msg.get("version", 0)) != Protocol.VERSION:
-				_send(c, Protocol.error("this table speaks protocol %d, you speak %d" % [Protocol.VERSION, int(msg.get("version", 0))]))
-				(c.peer as WebSocketPeer).close()
+				var why := "this table speaks protocol %d, you speak %d" % [Protocol.VERSION, int(msg.get("version", 0))]
+				_send(c, Protocol.error(why))
+				# the close reason carries it too: a client may see the close before the packet
+				(c.peer as WebSocketPeer).close(1002, why.left(120))
 				return
 			c.hello = true
 			c.name = str(msg.get("name", ""))
 			_send(c, Protocol.welcome(state.encounter))
 		"join":
 			var pid := str(msg.get("player", ""))
-			if state.encounter.player(pid).is_empty():
+			var role := str(msg.get("role", Views.ROLE_PLAYER))
+			if not Protocol.ROLES.has(role):
+				_send(c, Protocol.error("unknown role '%s'" % role))
+				return
+			if role == Views.ROLE_PLAYER and state.encounter.player(pid).is_empty():
 				_send(c, Protocol.error("no such player"))
 				return
+			if role == Views.ROLE_DISPLAY:
+				pid = ""
 			if c.player != "":
 				client_left.emit(c.player)
 			c.player = pid
-			_send(c, {"t": "joined", "player": pid})
-			log.emit("%s joined" % _player_name(pid))
-			client_joined.emit(pid)
+			c.role = role
+			c.joined = true
+			_send(c, {"t": "joined", "player": pid, "role": role})
+			_send_view(c)
+			log.emit("%s joined" % (_player_name(pid) if pid != "" else "a display (%s)" % str(c.get("name", ""))))
+			if pid != "":
+				client_joined.emit(pid)
+		"intent":
+			var intent = msg.get("intent", {})
+			if not (intent is Dictionary):
+				_send(c, Protocol.intent_refused({}, "not an intent"))
+				return
+			var why := _handle_intent(c, intent)
+			if why != "":
+				_send(c, Protocol.intent_refused(intent, why))
 		"request":
 			var ev = msg.get("ev", {})
 			if not (ev is Dictionary):
 				_send(c, Protocol.refused({}, "not an event"))
 				return
-			if c.player == "":
-				_send(c, Protocol.refused(ev, "join first"))
+			if c.player == "" or c.role != Views.ROLE_PLAYER:
+				_send(c, Protocol.refused(ev, "join as a player first"))
 				return
 			if not state.allowed(ev, c.player):
 				_send(c, Protocol.refused(ev, "not allowed"))
@@ -187,6 +238,63 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 func _apply_plain(ev: Dictionary) -> String:
 	state.apply(ev)
 	return ""
+
+
+## Resolve a client's intent through the kernel. Displays may send none;
+## a player may act only with actors they own, answer only prompts
+## addressed to them, and ask for the focus only for what they own.
+func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
+	if kernel == null:
+		return "this table runs no rules"
+	if c.role != Views.ROLE_PLAYER or c.player == "":
+		return "only players may act"
+	var pid := str(c.player)
+	match str(intent.get("kind", "")):
+		"action":
+			if plugins == null:
+				return "no plugins here"
+			var plugin := str(intent.get("plugin", ""))
+			var action := str(intent.get("action", ""))
+			var ctx: Dictionary = intent.get("ctx", {}) if intent.get("ctx") is Dictionary else {}
+			var p := plugins.plugin(plugin)
+			if p == null or not p.actions.has(action):
+				return "no action %s/%s" % [plugin, action]
+			if ctx.has("actor") and not _owns_actor(pid, str(ctx.actor)):
+				return "that is not your character"
+			if ctx.has("token") and not _owns_token(pid, str(ctx.token)):
+				return "that is not your token"
+			var pc := plugins.dispatch(plugin, action, ctx)
+			if pc.status == PluginHost.PluginCall.ERROR:
+				return pc.error
+			kernel.pending.drive(pc, plugin)
+			return ""
+		"answer":
+			return kernel.pending.answer(str(intent.get("prompt", "")), intent.get("answer", {}), pid)
+		"focus":
+			var ref := str(intent.get("ref", ""))
+			if ref.begins_with("actor:") and not _owns_actor(pid, ref.substr(6)):
+				return "that is not your character"
+			if ref.begins_with("token:") and not _owns_token(pid, ref.substr(6)):
+				return "that is not your token"
+			if not ref.begins_with("actor:") and not ref.begins_with("token:"):
+				return "ask for the focus for one of your tokens or characters"
+			return kernel.turns.request_focus(pid, ref)
+		"contribute":
+			return kernel.pending.contribute(str(intent.get("roll", "")), pid, str(intent.get("name", "")), str(intent.get("expr", "")))
+	return "unknown intent '%s'" % str(intent.get("kind", ""))
+
+
+func _owns_actor(pid: String, actor_id: String) -> bool:
+	return str(state.encounter.actor(actor_id).get("owner", "")) == pid and pid != ""
+
+
+func _owns_token(pid: String, token_id: String) -> bool:
+	var tk := state.find_token(token_id)
+	if tk.is_empty():
+		return false
+	if tk.get("owner", null) != null and str(tk.owner) == pid:
+		return true
+	return _owns_actor(pid, str(tk.get("actor", "")))
 
 
 ## Maps and pack files a client asks for.

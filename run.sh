@@ -8,6 +8,7 @@
 #   ./run.sh table [encounter] [--host] [--turns free|dm|ordered]
 #                                     the table: run an encounter (--host: on the LAN at once)
 #   ./run.sh player [address]         the player client
+#   ./run.sh display [address]        a display: joins a table as a screen everyone sees
 #   ./run.sh export <map> <target> <out> [options]
 #                                     png | uvtt | foundry | tiled | pdf | bundle | all
 #                                     (opens a small window: exports render on the GPU)
@@ -188,14 +189,14 @@ main() {
 		-h|--help|help) usage; return 0 ;;
 	esac
 	case "$cmd" in
-		app|edit|godot-editor|editor|table|player|export|shot|check|test|jointest|plugintest|examples|packs|sheet|godot|install|doctor) shift || true ;;
+		app|edit|godot-editor|editor|table|player|display|export|shot|check|test|jointest|plugintest|examples|packs|sheet|godot|install|doctor) shift || true ;;
 		*) cmd="app" ;;
 	esac
 
 	find_godot
 	setup_graphics
 	case "$cmd" in
-		app|editor|table|player|shot|export|check|test|jointest|plugintest|examples|packs|sheet) refresh_class_cache ;;
+		app|editor|table|player|display|shot|export|check|test|jointest|plugintest|examples|packs|sheet) refresh_class_cache ;;
 	esac
 
 	case "$cmd" in
@@ -214,7 +215,7 @@ main() {
 		app)
 			exec "$GODOT_BIN" --path "$PROJECT_DIR" ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"} -- "$@"
 			;;
-		editor|table|player)
+		editor|table|player|display)
 			exec "$GODOT_BIN" --path "$PROJECT_DIR" ${GUI_FLAGS[@]+"${GUI_FLAGS[@]}"} -- "--$cmd" "$@"
 			;;
 		edit|godot-editor)

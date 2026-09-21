@@ -1,27 +1,43 @@
 class_name Protocol
 extends RefCounted
-## The wire format between a Table (host) and Players (clients): JSON text
+## The wire format between a Table (host) and its clients: JSON text
 ## messages over a WebSocket, each with a type `t`. Kept tiny and versioned
 ## so a relay can sit in the middle one day without understanding much.
 ##
+## Version 2: clients hold the *scene* (maps, tokens, fog, doors, turns)
+## and receive the rules — sheets, effects, tracks, prompts, the log — as
+## a projected `view` for their audience. Rules actions are `intent`s the
+## Table resolves. A client joins with a role: `player` (one of the
+## encounter's players), `display` (a screen everyone can see: the "all"
+## audience, no controls) or `cogm` (a second Table view; later).
+##
 ## client → host
 ##   hello    {version, name}                 first thing on connect
-##   join     {player}                        which player this client is
-##   request  {ev}                            an event the player asks for
+##   join     {player, role}                  which player (or display) this client is
+##   request  {ev}                            a scene event the player asks for (a move)
+##   intent   {intent}                        a rules action: {kind: action|answer|focus|contribute, …}
 ##   need     {kind: map, id} | {kind: packs} | {kind: file, pack, file}
 ##   ping     {}
 ## host → client
-##   welcome  {version, encounter}            the whole document
-##   joined   {player}                        the join was accepted
-##   event    {ev}                            applied; apply it too
-##   refused  {ev, why}                       the request was not applied
+##   welcome  {version, encounter}            the document without its rules blocks
+##   joined   {player, role}                  the join was accepted
+##   event    {ev}                            a scene event applied; apply it too
+##   view     {view}                          the client's projection (Views.project)
+##   refused  {ev | intent, why}              the request was not applied
 ##   map      {id, doc}                       a map document
 ##   packs    {packs: [{id, version, manifest, files}]}
 ##   file     {pack, file, data}              base64 of one pack file
 ##   error    {why}                           then the host closes
 ##   pong     {}
 
-const VERSION := 1
+const VERSION := 2
+const ROLES := ["player", "display"]
+## Events clients apply themselves; everything else reaches them as a view.
+const SCENE_EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
+	"token.add", "token.remove", "token.set", "element.set", "fog.set", "fog.reveal", "fog.hide", "turns.set",
+	"player.add", "player.remove", "player.set", "clock.set"]
+## Document blocks a client does not hold.
+const RULES_BLOCKS := ["actors", "effects", "resources", "tracks", "pending", "log", "rng"]
 const DEFAULT_PORT := 47777
 ## Multicast group and port the Table announces on.
 const DISCOVERY_GROUP := "239.255.42.7"
@@ -46,8 +62,28 @@ static func hello(p_name: String) -> Dictionary:
 	return {"t": "hello", "version": VERSION, "name": p_name}
 
 
+## The document as a client holds it: without the rules blocks (those
+## reach it projected, as a view) and with the plugin state emptied.
 static func welcome(encounter: Encounter) -> Dictionary:
-	return {"t": "welcome", "version": VERSION, "encounter": encounter.doc}
+	return {"t": "welcome", "version": VERSION, "encounter": client_document(encounter.doc)}
+
+
+static func client_document(doc: Dictionary) -> Dictionary:
+	var out: Dictionary = JsonDoc.deep(doc)
+	for k in RULES_BLOCKS:
+		if out.has(k):
+			out[k] = {} if out[k] is Dictionary else []
+	out.pending = {"prompts": {}, "rolls": {}}
+	out.state = {"ext": {}}
+	return out
+
+
+static func view(projection: Dictionary) -> Dictionary:
+	return {"t": "view", "view": projection}
+
+
+static func intent_refused(intent: Dictionary, why: String) -> Dictionary:
+	return {"t": "refused", "intent": intent, "why": why}
 
 
 static func event(ev: Dictionary) -> Dictionary:

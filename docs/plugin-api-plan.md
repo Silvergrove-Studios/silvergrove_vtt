@@ -329,8 +329,8 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 | 1 Kernel core | done | v2 document and events, `EventLog`, `TypedNumber`, `HookBus`, `Dice`, `Effects`, `Resources`, `RulesKernel`, fixture ruleset, fuzz |
 | 2 Runtime and plugin host | done | `PluginHost`, manifests, `hm.*` API, prompts as yields, actions, `hm.test`, `sample.ordered` in Lua, `plugintest` |
 | 3 Turns, shared state, clock, prompts | done | `TurnRunner` (ordered + focus), tracks, clock, rests, prompts and open rolls as records, `sample.focus`, Table wiring |
-| 4 Declarative UI, intents, protocol v2 | next | views renderer, Player/Display clients, audience filtering |
-| 5 Compendium, packs, editors | | indexed packs, homebrew editors, `sample.degrees` |
+| 4 Declarative UI, intents, protocol v2 | done | `ViewRenderer`, `Views` projection by audience, protocol v2 (roles, views, intents), Player panes, Display role, the Rules panel |
+| 5 Compendium, packs, editors | next | indexed packs, homebrew editors, `sample.degrees` |
 | 6 Map queries | | distance/bands, templates, LoS/cover, zones, hex state |
 | 7 Campaign, growth, hardening | | `.campaign`, checkpoints UI, recap, prep triggers, bulk ops |
 | 8 Real rulesets | | in their own repositories, licensing decided then |
@@ -481,18 +481,41 @@ Decisions taken while building:
 - Prompt continuations are memory on the Table; the records are in the
   document. A restarted Table answers its orphans with their defaults.
 
-### Phase 4 — Declarative UI, intents, Protocol v2, three clients
+### Phase 4 — Declarative UI, intents, Protocol v2, three clients — **done 2026-09-21**
 
-`ui/views/` renderer and widget set; `Views` projection by audience;
-Protocol v2 (`view`, `prompt`, `answer`, `intent`, `role`); `HostSession`
-dispatch through `PluginHost`; Player client renders sheet/hand/status/log
-and answers prompts; Display role; QR join; theatre-of-the-mind (no scene).
+| piece | file | what it does | proven by |
+|---|---|---|---|
+| `ViewRenderer` | `ui/views/view_renderer.gd` | JSON view schemas over data: column/row/section/tabs, text (literal, `bind` pointer, `expr`), number with breakdown, pool, slot track, effects, list, cards, button/action bar with cost and `enabled`, tracker, prompt (form + Answer), form, log; intents with `$/pointer` substitution; unknown widgets as text; `if` | `tests/suites/ui_views.gd` (27 checks) |
+| `PropertyForm` moved | `ui/property_form.gd` | the form widget the Player can render | ui suite |
+| `hm.ui.register` | `rules/lua_prelude.gd`, `plugin_host.gd` | `sheet`, `status`, `gm` view kinds per plugin | reference plugins |
+| `Views` | `rules/views.gd` | the projection for an audience: actors (mine / public PCs / opened NPCs, per-field `audience.fields`), sheets with their data, status views, tracks, prompts, open rolls, log by audience, public action specs; GM audience sees all | `test_projection_audience` |
+| Protocol v2 | `net/protocol.gd` | `join {player, role}`, `view`, `intent`, `refused {intent}`; `client_document()` strips the rules blocks; scene events vs views; v1 refused with the reason in the error and the close frame | `test_wire_views_intents_and_roles` |
+| Host | `net/host_session.gd` | roles (`player`, `display`), a view per joined client re-sent once per poll after rules changes, intents resolved through the kernel (ownership of actor/token, prompt addressee, focus refs), scene requests from players only | same |
+| Client | `net/session.gd`, `net_session.gd` | `role`, `view`, `view_changed`, `intent()`, `my_actors()` | same |
+| Player | `player/player_window.gd` | a pane beside (wide) or instead of (phone) the map: **Sheet** (plugin sheets or a default one) and **Table** (turns/focus with "Ask for the focus", prompts for me, open rolls with Help, status views, tracks, log); a new prompt brings the pane up; intents from taps; `--display [address]` joins as a display (no controls, everyone's audience) | same |
+| Table | `table/rules_panel.gd`, `table_window.gd`, `layout_store.gd` | the Rules panel: plugins loaded, the selected actor's actions with a target picker (dispatched and driven through prompts), prompts waiting on players with Default / answer-for-them, plugins' GM views; the host gets the kernel | same, `test_table_window` |
+| Reference plugins | `tests/plugins/*/main.lua` | sheets, a status view and a GM view for both | plugin tests, wire test |
 
-Exit: on a phone (emulator in CI, device by hand) a Player sees the
-`sample.focus` sheet the Table derived, taps a card, spends from a pool,
-answers a damage prompt and helps another Player's pending roll; a v1
-Player client is refused with a message; a version-N Player renders a
-plugin using an unknown widget as text.
+Exit criterion met: over a real socket, Ana joins from a Player window,
+sees the `sample.focus` sheet the Table derived, taps a card (an effect
+appears on the Table and in her next view), acts, is refused when she
+tries to act with Ben's character, answers a damage prompt from her
+phone (the Table's action resumes and takes effect), helps another
+roll, asks for the focus; a display joins straight into play, sees the
+status and no sheets or prompts, and is refused when it sends an intent;
+a protocol-1 client is refused with a message; an unknown widget renders
+as text; the client holds no rules blocks.
+
+Decisions taken while building:
+- A sheet applies to the actors that carry that plugin's data
+  (`ext[plugin]`), not to every actor.
+- Views are resent whole, once per poll, after any rules change; scene
+  events still replicate as events. Diffs can come later without
+  changing plugins.
+- Player characters are public by default, everything else GM-only;
+  `audience.fields` and `audience.visible` open or close paths. A
+  plugin's encounter state is visible to all.
+- GDScript lambdas capture strings by value: box them (tests).
 
 ### Phase 5 — Compendium, packs, editors
 

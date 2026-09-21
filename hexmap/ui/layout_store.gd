@@ -6,7 +6,7 @@ extends RefCounted
 ## passes its own panel list, file and default builder.
 
 const PANELS := ["Palette", "Layers", "Canvas", "Inspector", "View options"]
-const TABLE_PANELS := ["Scenes", "Tokens", "Canvas", "Inspector", "Turns", "Players"]
+const TABLE_PANELS := ["Scenes", "Tokens", "Canvas", "Inspector", "Turns", "Rules", "Players"]
 
 
 static func default_path() -> String:
@@ -43,7 +43,7 @@ static func default_layout() -> DockableLayout:
 ## Inspector over Turns over Players on the right.
 static func table_layout() -> DockableLayout:
 	var left := _vsplit(_leaf("Scenes"), _leaf("Tokens"), 0.35)
-	var right := _vsplit(_leaf("Inspector"), _vsplit(_leaf("Turns"), _leaf("Players"), 0.65), 0.45)
+	var right := _vsplit(_leaf("Inspector"), _vsplit(_tabs(["Turns", "Rules"]), _leaf("Players"), 0.65), 0.45)
 	var inner := DockableLayoutSplit.new()
 	inner.direction = DockableLayoutSplit.Direction.HORIZONTAL
 	inner.percent = 0.76
@@ -62,6 +62,13 @@ static func table_layout() -> DockableLayout:
 static func _leaf(p_name: String) -> DockableLayoutPanel:
 	var l := DockableLayoutPanel.new()
 	l.names = PackedStringArray([p_name])
+	return l
+
+
+## Several panels as tabs in one place.
+static func _tabs(p_names: Array) -> DockableLayoutPanel:
+	var l := DockableLayoutPanel.new()
+	l.names = PackedStringArray(p_names)
 	return l
 
 

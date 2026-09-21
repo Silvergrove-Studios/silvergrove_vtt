@@ -73,6 +73,14 @@ function hm.test(name, fn)
 	table.insert(tests, { name = name, fn = fn })
 end
 
+-- A declarative view: "sheet" (rendered for each of this ruleset's actors
+-- on their owner's device and on the Table), "status" (the table-wide
+-- view every client sees), "gm" (a Table panel). See docs/plugin-authoring.md.
+hm.ui = {}
+function hm.ui.register(kind, schema)
+	call(host.ui_register, kind, schema)
+end
+
 -- ---------------------------------------------------------------- turns --
 
 hm.turns = {}

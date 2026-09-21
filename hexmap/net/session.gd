@@ -14,9 +14,17 @@ signal status(text: String)
 ## The session ended: the host left, the file went away.
 signal closed(reason: String)
 
+## The client's projection of the rules (Views.project) changed.
+signal view_changed
+
 var state: EncounterState
 ## Who this client is. "" is the DM's own view.
 var player_id := ""
+## "player" or "display".
+var role := "player"
+## The rules as this client may see them: sheets, effects, tracks,
+## prompts, the log. Empty until the table sends one.
+var view: Dictionary = {}
 var warnings: PackedStringArray = []
 
 
@@ -40,6 +48,23 @@ func my_tokens() -> Array:
 ## Ask for an event. Returns "" when it went through, else why not.
 func request(_ev: Dictionary) -> String:
 	return "no session"
+
+
+## Ask the table to do a rules thing: {kind: "action", plugin, action,
+## ctx} | {kind: "answer", prompt, answer} | {kind: "focus", ref} |
+## {kind: "contribute", roll, name, expr}. "" or why not (a refusal from
+## the table arrives later through `status`).
+func intent(_payload: Dictionary) -> String:
+	return "no session"
+
+
+## My actors in the view (the sheets I may act with).
+func my_actors() -> Array:
+	var out := []
+	for id in view.get("actors", {}):
+		if bool(view.actors[id].get("mine", false)):
+			out.append(view.actors[id])
+	return out
 
 
 ## Called regularly by the UI; transports use it to pump their sockets or

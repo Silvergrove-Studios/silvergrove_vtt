@@ -55,10 +55,12 @@ func _send(msg: Dictionary) -> void:
 		_peer.send_text(Protocol.encode(msg))
 
 
-## Become this player at the table.
-func join(p_player_id: String) -> void:
+## Become this player at the table (or a display: no player, everyone's
+## audience, no controls).
+func join(p_player_id: String, p_role := "player") -> void:
 	player_id = p_player_id
-	_send({"t": "join", "player": p_player_id})
+	role = p_role
+	_send({"t": "join", "player": p_player_id, "role": p_role})
 
 
 func request(ev: Dictionary) -> String:
@@ -72,6 +74,15 @@ func request(ev: Dictionary) -> String:
 	if why != "":
 		return why
 	_send({"t": "request", "ev": ev})
+	return ""
+
+
+func intent(payload: Dictionary) -> String:
+	if not is_connected_to_host():
+		return "not connected"
+	if not joined:
+		return "join first"
+	_send({"t": "intent", "intent": payload})
 	return ""
 
 
@@ -113,8 +124,13 @@ func _handle(msg: Dictionary) -> void:
 		"joined":
 			joined = true
 			player_id = str(msg.player)
+			role = str(msg.get("role", "player"))
 			joined_as.emit(player_id)
-			status.emit("Joined as " + player_name())
+			status.emit("Joined as " + (player_name() if role == "player" else "a display"))
+		"view":
+			if msg.get("view") is Dictionary:
+				view = msg.view
+				view_changed.emit()
 		"event":
 			if state != null and msg.get("ev") is Dictionary:
 				var why := state.validate(msg.ev)

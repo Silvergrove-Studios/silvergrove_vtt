@@ -67,6 +67,23 @@ hm.turns.register({
 	initiative = "initiative", tie_break = "highest", budgets = { actions = 1 },
 })
 
+-- ----------------------------------------------------------------- views --
+hm.ui.register("sheet", {
+	type = "column",
+	children = {
+		{ type = "text", bind = "/derived/label", style = "dim" },
+		{ type = "row", children = {
+			{ type = "number", label = "Defence", bind = "/derived/defence" },
+			{ type = "number", label = "Initiative", bind = "/derived/initiative" },
+			{ type = "number", label = "Attack", bind = "/derived/attack" },
+		} },
+		{ type = "pool", label = "Hit points", bind = "/resources/hp" },
+		{ type = "track", label = "Armour", bind = "/resources/armour" },
+		{ type = "effects", label = "Conditions", bind = "/effects" },
+		{ type = "glyphs", label = "an unknown widget type, for the test" },
+	},
+})
+
 -- ----------------------------------------------------------------- hooks --
 -- Attack rolls carry the attacker's attack parts and every condition that
 -- bears on rolls.

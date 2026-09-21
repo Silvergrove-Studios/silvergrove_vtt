@@ -39,6 +39,19 @@ var _pending_path := ""
 var _status_timer := 0.0
 var _columns: Array = []
 var _safe: MarginContainer
+## A display: joins as a screen everyone sees — no controls, the "all"
+## audience, the map and the table's status. `--display [address]`.
+var display_mode := false
+## The side pane beside (or, on a phone, instead of) the map: "" (map
+## only), "sheet" (my characters) or "table" (turns, prompts, tracks, log).
+var pane_mode := ""
+var _center: HBoxContainer
+var _pane: ScrollContainer
+var _pane_box: VBoxContainer
+var _sheet_button: Button
+var _table_button: Button
+var _renderers: Array = []
+var _seen_prompts: Dictionary = {}
 
 
 func _ready() -> void:
@@ -122,6 +135,7 @@ func _fit() -> void:
 	var avail: float = size.x - float(insets.left) - float(insets.right) - 32.0
 	for c in _columns:
 		(c as Control).custom_minimum_size.x = minf(440.0, maxf(200.0, avail))
+	_layout_pane()
 
 
 func _big(b: Button, text := "", icon := "") -> Button:
@@ -290,13 +304,37 @@ func _build_play() -> Control:
 	fit.pressed.connect(func() -> void: view.zoom_to_fit())
 	top.add_child(fit)
 	box.add_child(top)
+	_sheet_button = _big(Button.new(), "Sheet")
+	_sheet_button.theme_type_variation = "ToolButton"
+	_sheet_button.toggle_mode = true
+	_sheet_button.pressed.connect(func() -> void: set_pane("sheet" if pane_mode != "sheet" else ""))
+	top.add_child(_sheet_button)
+	_table_button = _big(Button.new(), "Table")
+	_table_button.theme_type_variation = "ToolButton"
+	_table_button.toggle_mode = true
+	_table_button.pressed.connect(func() -> void: set_pane("table" if pane_mode != "table" else ""))
+	top.add_child(_table_button)
+	_center = HBoxContainer.new()
+	_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_center.add_theme_constant_override("separation", 0)
 	view = CanvasView.new()
 	view.canvas.packs = app.packs
 	view.canvas.show_hidden = false
+	view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	view.zoom_changed.connect(func(z: float) -> void:
 		if tool != null:
 			tool.zoom = z)
-	box.add_child(view)
+	_center.add_child(view)
+	_pane = ScrollContainer.new()
+	_pane.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_pane.custom_minimum_size.x = 360
+	_pane.visible = false
+	_pane_box = VBoxContainer.new()
+	_pane_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pane_box.add_theme_constant_override("separation", 10)
+	_pane.add_child(_pane_box)
+	_center.add_child(_pane)
+	box.add_child(_center)
 	var bottom := HBoxContainer.new()
 	bottom.custom_minimum_size = Vector2(0, BAR_HEIGHT * 0.8)
 	_turn = Label.new()
@@ -418,6 +456,9 @@ func _connect_to(address: String, port: int, alternatives: Array = []) -> void:
 			var i := _players.add_item(str(p.get("name", "")))
 			_players.set_item_metadata(i, str(p.get("id", "")))
 			_players.set_item_custom_fg_color(i, Color(str(p.get("color", "#ffffff"))))
+		if display_mode:
+			s.join("", "display")
+			return
 		if s.state.encounter.players.is_empty():
 			s.leave()
 			session = null
@@ -427,7 +468,10 @@ func _connect_to(address: String, port: int, alternatives: Array = []) -> void:
 	s.joined_as.connect(func(_pid: String) -> void:
 		app.note_table(address, port, s.state.encounter.name)
 		_bind(s)
-		show_screen("play"))
+		show_screen("play")
+		if display_mode:
+			set_pane("table" if size.x > 900 else "")
+		view.zoom_to_fit.call_deferred())
 	s.closed.connect(func(reason: String) -> void:
 		if session != s:
 			return
@@ -499,11 +543,17 @@ func _bind(s: Session) -> void:
 		session.closed.connect(func(reason: String) -> void:
 			_leave()
 			_join_status(reason))
-	tool = PlayerTools.MoveTool.new(session, view.canvas)
-	tool.zoom = view.zoom()
-	view.set_handler(tool)
+	session.view_changed.connect(_on_view)
+	if display_mode:
+		tool = null
+		view.set_handler(null)
+	else:
+		tool = PlayerTools.MoveTool.new(session, view.canvas)
+		tool.zoom = view.zoom()
+		view.set_handler(tool)
 	view.canvas.viewpoint = session.player_id
 	_show_scene()
+	_on_view()
 	if not session.warnings.is_empty():
 		_say("; ".join(session.warnings))
 
@@ -516,7 +566,174 @@ func _leave() -> void:
 	tool = null
 	view.canvas.state = null
 	view.canvas.map = null
+	_clear_pane()
 	show_screen("join")
+
+
+# ====================================================================== pane ==
+
+## Show a pane beside the map (wide screens) or instead of it (phones).
+func set_pane(mode: String) -> void:
+	pane_mode = mode
+	_layout_pane()
+	_render_pane()
+
+
+## Wide: the map and a 360-wide pane side by side. Narrow: one or the other.
+func _layout_pane() -> void:
+	if _pane == null:
+		return
+	var wide := size.x > 900
+	_pane.visible = pane_mode != ""
+	view.visible = wide or pane_mode == ""
+	_pane.size_flags_horizontal = Control.SIZE_EXPAND_FILL if not wide else Control.SIZE_FILL
+	_pane.custom_minimum_size.x = 360 if wide else 0
+	_sheet_button.button_pressed = pane_mode == "sheet"
+	_table_button.button_pressed = pane_mode == "table"
+	_sheet_button.visible = not display_mode
+
+
+func _clear_pane() -> void:
+	_renderers.clear()
+	for c in _pane_box.get_children():
+		_pane_box.remove_child(c)
+		c.queue_free()
+
+
+## The table sent a new projection: redraw the pane, badge the buttons,
+## and bring a prompt for me to the front.
+func _on_view() -> void:
+	if session == null:
+		return
+	var v := session.view
+	var prompts: Array = v.get("prompts", [])
+	_table_button.text = "Table" + (" (%d)" % prompts.size() if not prompts.is_empty() else "")
+	_sheet_button.text = "Sheet" if session.my_actors().is_empty() else "Sheet (%d)" % session.my_actors().size()
+	var fresh := false
+	for p in prompts:
+		if not _seen_prompts.has(str(p.get("id", ""))):
+			fresh = true
+			_seen_prompts[str(p.get("id", ""))] = true
+	if fresh and pane_mode != "table" and not display_mode:
+		set_pane("table")
+		return
+	_render_pane()
+	_refresh_bars()
+
+
+func _render_pane() -> void:
+	_clear_pane()
+	if session == null or pane_mode == "":
+		return
+	var v := session.view
+	match pane_mode:
+		"sheet":
+			var mine := session.my_actors()
+			if mine.is_empty():
+				_pane_text("No character of yours here. Ask the DM to give you one." if not v.is_empty() else "Waiting for the table…", "dim")
+			for a in mine:
+				_pane_text(str(a.get("name", "")), "header")
+				var sheets: Array = a.get("sheets", [])
+				if sheets.is_empty():
+					_pane_render(_default_sheet(), {"actor": a, "ext": a.get("ext", {}), "derived": a.get("derived", {}), "resources": a.get("resources", {}), "effects": a.get("effects", [])})
+				for sh in sheets:
+					_pane_render(sh.get("schema", {}), sh.get("data", {}))
+		"table":
+			_pane_render(_table_schema(v), v)
+
+
+func _pane_text(text: String, style := "") -> void:
+	var l := Label.new()
+	l.text = text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if style == "header":
+		l.theme_type_variation = "HeaderLabel"
+	elif style == "dim":
+		l.theme_type_variation = "DimLabel"
+	_pane_box.add_child(l)
+
+
+func _pane_render(schema: Dictionary, data: Dictionary) -> void:
+	var r := ViewRenderer.new()
+	r.intent.connect(_send_intent)
+	_pane_box.add_child(r)
+	r.render(schema, data)
+	_renderers.append(r)
+
+
+func _send_intent(payload: Dictionary) -> void:
+	if session == null:
+		return
+	var why := session.intent(payload)
+	if why != "":
+		_say(why)
+
+
+## What a character looks like when its ruleset registered no sheet: the
+## derived numbers, the resources and the effects, plainly.
+func _default_sheet() -> Dictionary:
+	return {"type": "column", "children": [
+		{"type": "section", "title": "Numbers", "children": [
+			{"type": "list", "expr": "@derived", "item": {"type": "text", "expr": "str(@item)"}, "empty": "nothing derived"}]},
+		{"type": "section", "title": "Resources", "children": [
+			{"type": "list", "expr": "@resources", "item": {"type": "text", "expr": "str(@item)"}, "empty": "none"}]},
+		{"type": "section", "title": "Effects", "children": [{"type": "effects", "bind": "/effects"}]},
+	]}
+
+
+## The table pane: turns or focus (with a request button for my tokens),
+## prompts for me, rolls I may help with, the plugins' status views,
+## tracks, and the log.
+func _table_schema(v: Dictionary) -> Dictionary:
+	var children := []
+	var turns: Dictionary = v.get("turns", {})
+	var focus_shape := str(turns.get("strategy", "ordered")) == "focus" and bool(turns.get("running", false))
+	children.append({"type": "text", "text": session.turn_summary() if not focus_shape else "Focus: " + _holder_name(str(turns.get("focus", ""))), "style": "header"})
+	if focus_shape and not display_mode:
+		var acts := []
+		for tk in session.my_tokens():
+			acts.append({"type": "button", "label": "Ask for the focus: " + str(tk.get("name", "")), "intent": {"kind": "focus", "ref": "token:" + str(tk.id)}})
+		if not acts.is_empty():
+			children.append({"type": "action_bar", "actions": acts})
+	if not (v.get("prompts", []) as Array).is_empty():
+		var items := []
+		for i in (v.prompts as Array).size():
+			items.append({"type": "prompt", "bind": "/prompts/%d" % i})
+		children.append({"type": "section", "title": "For you", "children": items})
+	if not (v.get("rolls", []) as Array).is_empty() and not display_mode:
+		var items := []
+		for i in (v.rolls as Array).size():
+			var r: Dictionary = v.rolls[i]
+			items.append({"type": "row", "children": [
+				{"type": "text", "text": "%s (%s)" % [str(r.get("label", "A roll")), str(r.get("by", ""))]},
+				{"type": "button", "label": "Help (1d6)", "intent": {"kind": "contribute", "roll": str(r.get("id", "")), "name": "help_" + session.player_id, "expr": "1d6"}}]})
+		children.append({"type": "section", "title": "Open rolls", "children": items})
+	for st in v.get("status", []):
+		children.append({"type": "section", "title": str(st.get("plugin", "")), "children": [st.get("schema", {})]})
+	if not (v.get("tracks", []) as Array).is_empty():
+		var items := []
+		for i in (v.tracks as Array).size():
+			items.append({"type": "tracker", "bind": "/tracks/%d" % i})
+		children.append({"type": "section", "title": "Tracks", "children": items})
+	children.append({"type": "section", "title": "Log", "children": [{"type": "log", "bind": "/log", "limit": 12}]})
+	# status views bind to their own data, so they are rendered on the spot
+	var schema := {"type": "column", "children": []}
+	for c in children:
+		if c.get("type") == "section" and (c.children as Array).size() == 1 and (c.children[0] as Dictionary).has("type") and v.get("status", []).any(func(st: Dictionary) -> bool: return st.schema == c.children[0]):
+			continue
+		schema.children.append(c)
+	return schema
+
+
+func _holder_name(ref: String) -> String:
+	if ref == "gm":
+		return "the GM"
+	if ref.begins_with("token:") and session.state != null:
+		var tk := session.state.find_token(ref.substr(6))
+		return str(tk.get("name", ref)) if not tk.is_empty() else ref
+	if ref.begins_with("actor:"):
+		return str(session.view.get("actors", {}).get(ref.substr(6), {}).get("name", ref))
+	return "nobody"
 
 
 # ====================================================================== play ==

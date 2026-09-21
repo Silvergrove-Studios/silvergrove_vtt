@@ -62,6 +62,8 @@ class Plugin:
 	var capabilities: Array = []
 	var bridge: RefCounted
 	var turn_strategy: Dictionary = {}
+	## kind ("sheet", "status", "gm") -> view schema
+	var views: Dictionary = {}
 
 	func can(cap: String) -> bool:
 		return capabilities.has(cap)
@@ -375,7 +377,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"state_get", "commit", "note", "setting", "roll", "dice_parse", "effects_apply", "effects_remove", "effects_on",
 			"effects_expire", "resource_get", "resource_op", "resource_refill", "test_check", "test_actor", "test_dispatch",
 			"turns_register", "turns_get", "turns_op", "turns_consume", "track_make", "track_advance", "track_get", "track_all",
-			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending"]:
+			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -627,6 +629,18 @@ class Bridge:
 			out.append(JsonDoc.deep(_k().pending.rolls()[id]))
 		return out
 
+	# --- views
+	func ui_register(kind: String, schema: Variant) -> Variant:
+		var p := _p()
+		if p == null:
+			return {"__error": "unloaded"}
+		if not (schema is Dictionary):
+			return {"__error": "a view schema must be an object"}
+		if not ["sheet", "status", "gm"].has(str(kind)):
+			return {"__error": "unknown view kind '%s' (sheet, status, gm)" % kind}
+		p.views[str(kind)] = PluginHost._norm_view(schema)
+		return true
+
 	func test_check(cond: bool, msg: String) -> void:
 		var h := _h()
 		h._test_counts[0] += 1
@@ -707,6 +721,26 @@ static func _norm_effect(v: Variant) -> Dictionary:
 	if fx.get("changes") is Dictionary and (fx.changes as Dictionary).is_empty():
 		fx.changes = []
 	return fx
+
+
+## View schemas: children/tabs/actions/fields are lists, an empty intent
+## or cost is an object; anything else empty stays a list.
+static func _norm_view(v: Variant) -> Variant:
+	if v is Array:
+		var out := []
+		for item in v:
+			out.append(_norm_view(item))
+		return out
+	if v is Dictionary:
+		var out := {}
+		for k in v:
+			var key := str(k)
+			if ["intent", "cost", "values", "submit", "on_tap", "on_mark", "on_clear", "spend", "gain"].has(key) and v[k] is Array and (v[k] as Array).is_empty():
+				out[k] = {}
+			else:
+				out[k] = _norm_view(v[k])
+		return out
+	return v
 
 
 const _SCHEMA_LIST_KEYS := ["required", "enum", "prefixItems", "allOf", "anyOf", "oneOf", "type", "examples"]

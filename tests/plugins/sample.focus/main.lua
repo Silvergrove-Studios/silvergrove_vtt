@@ -45,6 +45,48 @@ end)
 -- ---------------------------------------------------------------- turns --
 hm.turns.register({ shape = "focus", name = "Spotlight", description = "The focus moves by fiction; the GM grants it, dark rolls take it." })
 
+-- ---------------------------------------------------------------- views --
+-- The sheet a player sees on their phone, and the status everyone sees.
+-- Data only: what to show and which intent a tap sends.
+hm.ui.register("sheet", {
+	type = "column",
+	children = {
+		{ type = "row", children = {
+			{ type = "number", label = "Evade", bind = "/derived/evade" },
+			{ type = "text", expr = "'Thresholds ' .. (@derived.thresholds.major ?? 4) .. ' / ' .. (@derived.thresholds.severe ?? 8)", style = "dim" },
+		} },
+		{ type = "track", label = "Hits", bind = "/resources/hp" },
+		{ type = "track", label = "Strain", bind = "/resources/strain" },
+		{ type = "track", label = "Armour", bind = "/resources/armour" },
+		{ type = "section", title = "Hand", children = {
+			{ type = "cards", bind = "/derived/hand", on_tap = { kind = "action", plugin = hm.id, action = "play", ctx = { actor = "$/actor/id", card = "$/card_id", target = "$/actor/id" } } },
+		} },
+		{ type = "section", title = "Vault", children = {
+			{ type = "cards", bind = "/derived/vault", on_tap = { kind = "action", plugin = hm.id, action = "recall", ctx = { actor = "$/actor/id", card = "$/card_id" } }, empty = "empty" },
+		} },
+		{ type = "action_bar", actions = {
+			{ type = "button", label = "Act (nerve)", intent = { kind = "action", plugin = hm.id, action = "act", ctx = { actor = "$/actor/id", trait = "nerve", dc = 10 } } },
+			{ type = "button", label = "Act (grace)", intent = { kind = "action", plugin = hm.id, action = "act", ctx = { actor = "$/actor/id", trait = "grace", dc = 10 } } },
+			{ type = "button", label = "Act (wit)", intent = { kind = "action", plugin = hm.id, action = "act", ctx = { actor = "$/actor/id", trait = "wit", dc = 10 } } },
+		} },
+		{ type = "effects", label = "Effects", bind = "/effects" },
+	},
+})
+hm.ui.register("status", {
+	type = "column",
+	children = {
+		{ type = "text", expr = "'GM pool: ' .. (@state.pool ?? 0)", style = "header" },
+		{ type = "list", bind = "/tracks", item = { type = "tracker", bind = "/item" } },
+	},
+})
+hm.ui.register("gm", {
+	type = "column",
+	children = {
+		{ type = "text", expr = "'Pool ' .. (@state.pool ?? 0) .. ' · focus ' .. (@turns.focus ?? '')" },
+		{ type = "list", bind = "/actors", item = { type = "text", expr = "@item.name .. ': evade ' .. (@item.derived.evade.total ?? '?')" } },
+	},
+})
+
 -- --------------------------------------------------------------- rolls --
 -- Every action roll is bright d10 + dark d10 + trait against a difficulty.
 -- Bright ≥ dark on a success: "bright"; otherwise "dark". Doubles are a

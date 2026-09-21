@@ -24,6 +24,7 @@ var scenes: ScenesPanel
 var tokens: TokensPanel
 var inspector: TableInspector
 var turns: TurnsPanel
+var rules: RulesPanel
 var players: PlayersPanel
 var tool_options: HBoxContainer
 var tool_buttons: Dictionary = {}
@@ -105,6 +106,8 @@ func _set_encounter(e: Encounter) -> void:
 	e.changed.connect(_on_encounter_changed)
 	if host != null:
 		host.set_state(ctx.state)
+		host.kernel = ctx.kernel
+		host.plugins = ctx.host
 	if view != null:
 		_bind_panels()
 		_refresh_scene_select()
@@ -115,7 +118,7 @@ func _set_encounter(e: Encounter) -> void:
 
 
 func _bind_panels() -> void:
-	for p in [scenes, tokens, inspector, turns, players]:
+	for p in [scenes, tokens, inspector, turns, rules, players]:
 		p.bind()
 
 
@@ -160,6 +163,7 @@ func _build_ui() -> void:
 	tokens = TokensPanel.new(ctx)
 	inspector = TableInspector.new(ctx)
 	turns = TurnsPanel.new(ctx)
+	rules = RulesPanel.new(ctx)
 	players = PlayersPanel.new(ctx)
 	root.add_child(_build_dock_layout())
 	_bind_panels()
@@ -190,6 +194,7 @@ func _build_dock_layout() -> Control:
 		DockPane.new("Canvas", view),
 		DockPane.new("Inspector", inspector),
 		DockPane.new("Turns", turns, turns.header_actions()),
+		DockPane.new("Rules", rules),
 		DockPane.new("Players", players, players.header_actions()),
 	]
 	for p in _panes:
@@ -690,6 +695,8 @@ func _on_menu(id: int) -> void:
 func _set_hosting(on: bool) -> void:
 	if on and host == null:
 		host = HostSession.new(ctx.state, app.packs)
+		host.kernel = ctx.kernel
+		host.plugins = ctx.host
 		host.apply_request = _apply_player_request
 		host.log.connect(ctx.say)
 		host.announcer.answered.connect(func(ip: String) -> void:

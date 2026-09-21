@@ -126,10 +126,10 @@ func test_host_and_net_session() -> void:
 	check(client.request(mv) == "", "in free mode the request goes out")
 	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) == Vector2(1.5, 1.5)), "applied at the host and echoed back")
 	check(applied == [str(ana.id)] and history.undo_label() == "Player move" and Vision.token_pos(st.token(sid, fighter.id)) == Vector2(1.5, 1.5), "the host applied it through the table's commands, undoably")
-	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(st.encounter.to_json()), "host and client documents are identical")
+	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(st.encounter.doc))), "the client holds the host's document minus its rules blocks")
 	history.undo()
 	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) != Vector2(1.5, 1.5)), "the DM's undo reaches the client")
-	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(st.encounter.to_json()), "still identical after undo")
+	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(st.encounter.doc))), "still the same after undo")
 	# A second client, as Ben, sees Ana's next move.
 	var client2 := NetSession.new("127.0.0.1", host.port, cpacks, "second")
 	client2.cache_dir = cache
@@ -251,7 +251,7 @@ func test_table_hosts_player_joins() -> void:
 	table.ctx.commands.start_turns(sid)
 	check(pump.call(func() -> bool: return player.session.state.effective(sid, "walls", door).state == "open" and player.session.state.encounter.turns.running), "door and turns reached the player")
 	check(player._turn.text.begins_with("Your turn: Ana's fighter"), "the player's bar says it is her turn")
-	check(JsonDoc.sans_modified(player.session.state.encounter.to_json()) == JsonDoc.sans_modified(table.ctx.state.encounter.to_json()), "documents identical across the wire")
+	check(JsonDoc.sans_modified(player.session.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(table.ctx.state.encounter.doc))), "the scene is identical across the wire")
 	# Leaving and stopping.
 	player._leave()
 	check(pump.call(func() -> bool: return table.players.online.is_empty()), "the table sees her leave")
