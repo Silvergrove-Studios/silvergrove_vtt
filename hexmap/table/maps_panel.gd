@@ -8,7 +8,10 @@ extends VBoxContainer
 ## *Launch* makes the scene, places the creatures through the ruleset's
 ## entry action and shows it; *Return* takes the creatures out again,
 ## leaves the party as the fight left them, and goes back to the scene
-## before. Old scenes can also be shown from here.
+## before. Old scenes can also be shown from here. On a regional map,
+## *places* are markers (tokens tagged `place`, hidden until revealed)
+## that link to a prepared encounter, another map or a note, and the
+## party marker (a token tagged `party`) says where the party is.
 
 var ctx: TableContext
 var selected_map := ""
@@ -21,6 +24,11 @@ var _search: LineEdit
 var _results: ItemList
 var _launch: Button
 var _return: Button
+var _places: VBoxContainer
+var _places_box: VBoxContainer
+var _place_name: LineEdit
+var _place_kind: OptionButton
+var _place_target: OptionButton
 var _bound_encounter: Encounter
 ## Set by the window: opens a file dialog and calls back with a map path.
 var pick_map_file: Callable
@@ -97,6 +105,40 @@ func _init(p_ctx: TableContext) -> void:
 	_results.item_activated.connect(func(i: int) -> void: add_creature(selected_enc, _results.get_item_metadata(i)))
 	_results.visible = false
 	box.add_child(_results)
+	# places on the shown regional map
+	_places_box = VBoxContainer.new()
+	_header(_places_box, "Places on this map")
+	_places = VBoxContainer.new()
+	_places_box.add_child(_places)
+	var prow := HBoxContainer.new()
+	_place_name = LineEdit.new()
+	_place_name.placeholder_text = "Place name"
+	_place_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	prow.add_child(_place_name)
+	_place_kind = OptionButton.new()
+	for k in ["encounter", "map", "note"]:
+		_place_kind.add_item(k)
+	_place_kind.item_selected.connect(func(_i: int) -> void: _fill_place_targets())
+	prow.add_child(_place_kind)
+	_place_target = OptionButton.new()
+	_place_target.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	prow.add_child(_place_target)
+	_places_box.add_child(prow)
+	var prow2 := HBoxContainer.new()
+	_button(prow2, "Add place at the selected cell", "A marker where the selected token stands (or the map's origin), hidden until revealed", func() -> void:
+		var tk := ctx.selected_token()
+		var cell := ctx.map().grid.axial_to_offset(ctx.map().grid.world_to_axial(Vision.token_pos(tk))) if not tk.is_empty() and ctx.map() != null else Vector2i(1, 1)
+		var target := str(_place_target.get_item_metadata(_place_target.selected)) if _place_target.selected >= 0 and _place_target.item_count > 0 else ""
+		ctx.say(add_place(_place_name.text, str(_place_kind.get_item_text(_place_kind.selected)), target, cell))
+		_place_name.text = "")
+	_button(prow2, "Party is here", "Put the party marker where the selected token stands", func() -> void:
+		var tk := ctx.selected_token()
+		if tk.is_empty() or ctx.map() == null:
+			ctx.say("Select a token (or a place) to mark where the party is")
+			return
+		ctx.say(set_party(ctx.map().grid.axial_to_offset(ctx.map().grid.world_to_axial(Vision.token_pos(tk))))))
+	_places_box.add_child(prow2)
+	box.add_child(_places_box)
 	_enc_notes = TextEdit.new()
 	_enc_notes.custom_minimum_size = Vector2(0, 70)
 	_enc_notes.placeholder_text = "Notes for running it"
@@ -120,11 +162,13 @@ func bind() -> void:
 	_bound_encounter.changed.connect(_on_changed)
 	if not ctx.campaign_changed.is_connected(refresh):
 		ctx.campaign_changed.connect(refresh)
+	if not ctx.scene_changed.is_connected(refresh):
+		ctx.scene_changed.connect(refresh)
 	refresh()
 
 
 func _on_changed(what: String, _s: String) -> void:
-	if what in ["scenes", "active_scene", "restore", "encounter"]:
+	if what in ["scenes", "active_scene", "restore", "encounter", "tokens"]:
 		refresh()
 
 
@@ -150,6 +194,7 @@ func refresh() -> void:
 		if str(e.get("id", "")) == selected_enc:
 			_encs.select(i)
 	_show_encounter()
+	_show_places()
 
 
 func _show_encounter() -> void:
@@ -217,6 +262,164 @@ func _show_encounter() -> void:
 			_show_encounter())
 		row.add_child(rm)
 		_creatures.add_child(row)
+
+
+# -------------------------------------------------------------- places --
+
+## The library map under the shown scene, and whether it is regional.
+func shown_map_entry() -> Dictionary:
+	if ctx.campaign == null:
+		return {}
+	return ctx.campaign.map_entry(str(ctx.scene().get("map", "")))
+
+
+func _show_places() -> void:
+	for c in _places.get_children():
+		_places.remove_child(c)
+		c.queue_free()
+	var entry := shown_map_entry()
+	var regional := not entry.is_empty() and str(entry.get("role", "battle")) == "regional"
+	_places_box.visible = regional
+	if not regional:
+		return
+	_fill_place_targets()
+	var any := false
+	for pl in ctx.campaign.places:
+		if str(pl.get("map", "")) != str(entry.id):
+			continue
+		any = true
+		var row := HBoxContainer.new()
+		var tk := ctx.state.token(ctx.scene_id, str(pl.get("id", "")))
+		var l := Label.new()
+		l.text = "%s → %s %s%s" % [str(pl.get("name", "")), str(pl.get("kind", "")), _target_name(pl), "  (hidden)" if bool(tk.get("hidden", true)) else ""]
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.clip_text = true
+		row.add_child(l)
+		var pid := str(pl.get("id", ""))
+		_button(row, "Go", "Launch the encounter, show the map, or read the note", func() -> void: ctx.say(go_to_place(pid)))
+		_button(row, "Reveal" if bool(tk.get("hidden", true)) else "Hide", "Whether the players see this marker", func() -> void:
+			if not tk.is_empty():
+				ctx.commands.run({"t": "token.set", "scene": ctx.scene_id, "id": pid, "changes": {"hidden": not bool(tk.get("hidden", true))}}, "Reveal " + str(pl.get("name", ""))))
+		var rm := Button.new()
+		rm.set_meta("icon", "trash")
+		rm.theme_type_variation = "ToolButton"
+		rm.tooltip_text = "Remove the place"
+		rm.pressed.connect(func() -> void: ctx.say(remove_place(pid)))
+		row.add_child(rm)
+		_places.add_child(row)
+	if not any:
+		var l := Label.new()
+		l.text = "No places yet."
+		l.theme_type_variation = "DimLabel"
+		_places.add_child(l)
+
+
+func _fill_place_targets() -> void:
+	_place_target.clear()
+	if ctx.campaign == null:
+		return
+	match str(_place_kind.get_item_text(maxi(_place_kind.selected, 0))):
+		"encounter":
+			for e in ctx.campaign.encounters:
+				_place_target.add_item(str(e.get("name", "")))
+				_place_target.set_item_metadata(_place_target.item_count - 1, str(e.get("id", "")))
+		"map":
+			for m in ctx.campaign.maps:
+				_place_target.add_item(str(m.get("name", "")))
+				_place_target.set_item_metadata(_place_target.item_count - 1, str(m.get("id", "")))
+		"note":
+			for j in ctx.campaign.journal:
+				if str(j.get("kind", "")) == "note" or str(j.get("kind", "")) == "handout":
+					_place_target.add_item(str(j.get("title", "")) if str(j.get("title", "")) != "" else str(j.get("text", "")).left(30))
+					_place_target.set_item_metadata(_place_target.item_count - 1, str(j.get("id", "")))
+
+
+func _target_name(pl: Dictionary) -> String:
+	match str(pl.get("kind", "")):
+		"encounter": return str(ctx.campaign.encounter_entry(str(pl.get("target", ""))).get("name", "?"))
+		"map": return str(ctx.campaign.map_entry(str(pl.get("target", ""))).get("name", "?"))
+		"note": return str(ctx.campaign.journal_entry(str(pl.get("target", ""))).get("title", "?"))
+	return ""
+
+
+## A place on the shown regional map: a marker token (hidden) and the
+## record with its link. "" or why.
+func add_place(p_name: String, kind: String, target: String, cell: Vector2i) -> String:
+	var entry := shown_map_entry()
+	if entry.is_empty() or str(entry.get("role", "battle")) != "regional":
+		return "show a regional map first"
+	if p_name.strip_edges() == "":
+		return "a place needs a name"
+	var m := ctx.map()
+	var pos := m.grid.cell_center(m.grid.offset_to_axial(cell.x, cell.y))
+	var pid := JsonDoc.new_id("pl")
+	var tk := Encounter.new_token(p_name.strip_edges(), pos, {"id": pid, "label": "◆", "color": "#d9a441", "hidden": true, "tags": ["place"], "vision": null})
+	var why := ctx.commands.add_token(ctx.scene_id, tk)
+	if why != "":
+		return why
+	ctx.campaign.places.append({"id": pid, "map": str(entry.id), "cell": "%d,%d" % [cell.x, cell.y], "name": p_name.strip_edges(), "kind": kind, "target": target})
+	ctx.campaign.touch()
+	ctx.campaign_changed.emit()
+	return ""
+
+
+func remove_place(pid: String) -> String:
+	for i in ctx.campaign.places.size():
+		if str(ctx.campaign.places[i].get("id", "")) == pid:
+			ctx.campaign.places.remove_at(i)
+			break
+	var why := ""
+	if not ctx.state.token(ctx.scene_id, pid).is_empty():
+		why = ctx.commands.remove_tokens(ctx.scene_id, [pid])
+	ctx.campaign.touch()
+	ctx.campaign_changed.emit()
+	return why
+
+
+## What the place links to: launch the encounter, show the map, or say the note.
+func go_to_place(pid: String) -> String:
+	var pl := {}
+	for p in ctx.campaign.places:
+		if str(p.get("id", "")) == pid:
+			pl = p
+	if pl.is_empty():
+		return "no such place"
+	match str(pl.get("kind", "")):
+		"encounter":
+			selected_enc = str(pl.get("target", ""))
+			return launch(selected_enc)
+		"map":
+			return show_map(str(pl.get("target", "")))
+		"note":
+			var j := ctx.campaign.journal_entry(str(pl.get("target", "")))
+			if j.is_empty():
+				return "the note is gone"
+			ctx.say("%s: %s" % [str(j.get("title", "Note")), str(j.get("text", ""))])
+			return ""
+	return "the place links to nothing"
+
+
+## The party marker on the shown regional map, at a cell. "" or why.
+func set_party(cell: Vector2i) -> String:
+	var entry := shown_map_entry()
+	if entry.is_empty():
+		return "show a library map first"
+	var m := ctx.map()
+	var pos := m.grid.cell_center(m.grid.offset_to_axial(cell.x, cell.y))
+	var why := ""
+	var existing := ""
+	for tk in ctx.state.tokens(ctx.scene_id):
+		if (tk.get("tags", []) as Array).has("party"):
+			existing = str(tk.id)
+	if existing != "":
+		why = ctx.commands.move_token(ctx.scene_id, existing, pos)
+	else:
+		why = ctx.commands.add_token(ctx.scene_id, Encounter.new_token("The party", pos, {"id": JsonDoc.new_id("party"), "label": "★", "color": "#4f9cf6", "hidden": false, "tags": ["party"], "vision": {"radius": 3}}))
+	if why == "":
+		ctx.campaign.doc.party = {"map": str(entry.id), "cell": "%d,%d" % [cell.x, cell.y]}
+		ctx.campaign.touch()
+		ctx.campaign_changed.emit()
+	return why
 
 
 # ---------------------------------------------------------------- maps --

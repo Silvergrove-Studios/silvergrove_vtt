@@ -465,6 +465,22 @@ func test_campaign_first() -> void:
 	check(mp.return_from(enc) == "", "returned")
 	check(ctx.encounter().scenes.size() == scenes_before and ctx.encounter().actors.size() == actors_before and not ctx.campaign.encounter_entry(enc).has("live"), "the goblins and the scene are gone; the party stays")
 	check(mp.show_map(mid) == "" and ctx.encounter().scenes.size() == 1, "Show makes a scene over a library map")
+	# a regional map: the forest road, with a place that launches the chapel fight and the party marker
+	check(mp.add_map(_example("forest_road.hexmap"), "regional") == "", "the forest road as a regional map")
+	var rid := str(ctx.campaign.maps[1].id)
+	check(mp.show_map(rid) == "" and str(ctx.scene().get("map", "")) == rid and not ctx.scene().fog.enabled, "shown, no fog on a regional map")
+	await tree.process_frame
+	check(mp._places_box.visible, "the places section shows on a regional map")
+	check(mp.add_place("Chapel ruins", "encounter", enc, Vector2i(6, 4)) == "", "a place linking to the prepared encounter")
+	var place: Dictionary = ctx.campaign.places[0]
+	var ptk := ctx.state.token(ctx.scene_id, str(place.id))
+	check(not ptk.is_empty() and bool(ptk.hidden) and (ptk.tags as Array).has("place") and place.map == rid and place.cell == "6,4", "a hidden marker token on the map, the record with its link")
+	check(mp.set_party(Vector2i(3, 4)) == "" and ctx.campaign.doc.party.cell == "3,4" and ctx.state.tokens(ctx.scene_id).any(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")), "the party marker")
+	check(mp.set_party(Vector2i(4, 4)) == "" and ctx.campaign.doc.party.cell == "4,4" and ctx.state.tokens(ctx.scene_id).filter(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")).size() == 1, "moved, not doubled")
+	var regional_scene := ctx.scene_id
+	check(mp.go_to_place(str(place.id)) == "" and ctx.scene_id != regional_scene and ctx.encounter().scenes.size() == 3, "Go launches the fight from the place")
+	check(mp.return_from(enc) == "" and ctx.scene_id == regional_scene, "and Return comes back to the regional map")
+	check(mp.remove_place(str(place.id)) == "" and ctx.campaign.places.is_empty() and ctx.state.token(regional_scene, str(place.id)).is_empty(), "the place removed with its marker")
 	# a session: start and end from the pane's verbs
 	check(ctx.start_session() == "", "started")
 	notes.selected = nid
