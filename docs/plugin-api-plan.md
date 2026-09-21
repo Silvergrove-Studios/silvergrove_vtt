@@ -729,7 +729,7 @@ concentration, damage and death, rests, a spellbook and casting with
 areas, initiative with budgets, stat blocks onto the map, the attack
 workflow with cover and opportunity attacks, class features, weapon
 mastery, character creation and level-up, homebrew editors from the
-collection schemas; 627 plugin checks plus an end-to-end session check
+collection schemas; 670 plugin checks plus an end-to-end session check
 over the wire. Its `GAPS.md` is the record of what the API lacked. No
 desirement was blocked; the host changes it produced are small:
 
@@ -741,9 +741,10 @@ desirement was blocked; the host changes it produced are small:
 | a 25 s plugin test run | `run_tests` indexes the plugin's packs once and shares them across tests (rebuilt after a test writes to a user pack): 28.7 s → 4.1 s for srd5e | this commit |
 | H11 | the Rules panel shows each plugin's manifest `attribution` | `499ffc4` |
 | a Roll initiative button on the GM panel (G3) | `hm.scene()` and `scene` in the status/gm view data | `3b69f73` |
-| half cover from a creature vs a wall (G7) | `hm.map.los` counts the rays a wall stopped (`walls`) beside the tokens in the way | this commit |
-| the 2014 paths untestable (G15) | `t.setting(key, value)` in the test harness, restored after each test | this commit |
-| a monster's opportunity attack (G11) | `hm.prompt("gm", …)` already worked; documented | this commit |
+| half cover from a creature vs a wall (G7) | `hm.map.los` counts the rays a wall stopped (`walls`) beside the tokens in the way | `0699165` |
+| the 2014 paths untestable (G15) | `t.setting(key, value)` in the test harness, restored after each test | `0699165` |
+| a monster's opportunity attack (G11) | `hm.prompt("gm", …)` already worked; documented | `0699165` |
+| the sheet's Features tab (G16, G17) | Expr continues a path after a computed index (`@pools["hp_" .. @id].max`); a button's `if` inside an `action_bar` hides it | `98fed5b` |
 
 Still open from `GAPS.md`, all small and none blocking: per-setting
 packs (G5), a `picker` field inside forms and wizard steps (G9), one
