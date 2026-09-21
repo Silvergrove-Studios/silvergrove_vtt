@@ -36,10 +36,10 @@ func _init(p_ctx: TableContext) -> void:
 	_campaign.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_campaign)
 	_campaign_buttons = HBoxContainer.new()
-	_button(_campaign_buttons, "Start session", "Bring the campaign's players, characters, tracks and clock into this encounter and mark the start", func() -> void: _say(ctx.start_session(), "Session started"))
-	_button(_campaign_buttons, "Bank session", "Write this session's characters, journal and clock back to the campaign file", func() -> void:
-		var r := ctx.bank_session()
-		_say(str(r.get("error", "")), "Banked: %d actors, %d journal entries, %d tracks" % [int(r.get("actors", 0)), int(r.get("journal", 0)), int(r.get("tracks", 0))]))
+	_button(_campaign_buttons, "Start session", "The next session: the counter, the rules' session refills, a checkpoint to recap from", func() -> void: _say(ctx.start_session(), "Session started"))
+	_button(_campaign_buttons, "End session", "Close the session: the journal stamped, the recap kept, the campaign saved", func() -> void:
+		var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all") if ctx.campaign_is_live() else "")
+		_say(str(r.get("error", "")), "Session ended: %d journal entries kept" % int(r.get("journal", 0))))
 	_button(_campaign_buttons, "Recap…", "The session recap as Markdown", func() -> void:
 		if on_campaign_action.is_valid():
 			on_campaign_action.call("recap"))
@@ -89,6 +89,8 @@ func bind() -> void:
 	ctx.encounter().changed.connect(func(what: String, _s: String) -> void:
 		if what in ["checkpoints", "log", "scenes", "regions", "restore", "clock", "encounter"]:
 			refresh())
+	if not ctx.campaign_changed.is_connected(refresh):
+		ctx.campaign_changed.connect(refresh)
 	refresh()
 
 
@@ -97,9 +99,11 @@ func refresh() -> void:
 		return
 	var e := ctx.encounter()
 	if ctx.campaign != null:
-		_campaign.text = "%s — session %d, day %d" % [ctx.campaign.name, int(e.clock.get("session", 1)), int(e.clock.get("day", 1))]
-		if str(e.campaign.get("id", "")) != ctx.campaign.id:
-			_campaign.text += "\nThis encounter has not started a session of it yet."
+		var n := int(e.clock.get("session", 0))
+		var open_session := not ctx.campaign.session_entry(n).is_empty() and not ctx.campaign.session_entry(n).has("ended")
+		_campaign.text = "%s — %s, day %d" % [ctx.campaign.name, ("session %d" % n) if open_session else ("between sessions (%d played)" % n), int(e.clock.get("day", 1))]
+		if ctx.campaign.path == "":
+			_campaign.text += "\nNot saved as a campaign yet (File › Save campaign)."
 	else:
 		_campaign.text = "No campaign open (File › Open campaign…)."
 	for b in _campaign_buttons.get_children():

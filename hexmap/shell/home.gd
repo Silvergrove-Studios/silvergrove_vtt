@@ -119,7 +119,7 @@ func _file_list(column: VBoxContainer, title: String, paths: Array) -> VBoxConta
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.theme_type_variation = "ToolButton"
 		b.custom_minimum_size = Vector2(0, 40)
-		var mode := "table" if str(p).ends_with(".encounter") else "editor"
+		var mode := "table" if (str(p).ends_with(".encounter") or str(p).ends_with(".campaign")) else "editor"
 		b.disabled = not App.mode_available(mode)
 		b.pressed.connect(func() -> void: open_mode.emit(mode, str(p)))
 		box.add_child(b)

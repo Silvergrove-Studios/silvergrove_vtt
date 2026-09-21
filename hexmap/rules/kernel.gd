@@ -267,7 +267,10 @@ func drop_checkpoint(id: String) -> String:
 ## players, actors, tracks, clock and state come in as one step, then a
 ## checkpoint marks the start so the recap knows what changed. "" or why.
 func start_session(campaign: Campaign, campaign_path := "") -> String:
-	var events := campaign.begin_session(state.encounter, campaign_path)
+	# the campaign's own runtime already holds its actors: only the ritual;
+	# a foreign encounter (the version-1 way) takes everything in
+	var full := str(state.encounter.campaign.get("id", "")) != campaign.id
+	var events := campaign.begin_session(state.encounter, campaign_path, full)
 	return transaction("Session start", func() -> String:
 		var why := commit(events, "Session %d" % int(campaign.clock.get("session", 0) + 1))
 		if why != "":

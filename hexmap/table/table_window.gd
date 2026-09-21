@@ -1,8 +1,10 @@
 class_name TableWindow
 extends Control
-## The Table: where a DM runs an encounter on their maps. Owns the open
-## encounter (through a TableContext), the docked panels, menus, files and
-## autosave. Desktop only — it docks panels and opens file dialogs. The map
+## The Table: where a DM runs a campaign — the party's sheets, the NPCs,
+## the notes, the maps — and, from it, sessions and fights on the maps
+## (docs/campaign-plan.md). Owns the open campaign and its live encounter
+## (through a TableContext), the docked panels, menus, files and autosave.
+## With no campaign open it shows the picker. Desktop only — it docks panels and opens file dialogs. The map
 ## itself is drawn by the same MapCanvas as the editor, given the encounter
 ## state, so what the DM sees is what the players' clients will draw.
 
@@ -48,9 +50,12 @@ var _layout_save := Timer.new()
 var _native_menus := NativeMenuMirror.new()
 var _last_menu := [-1, -1]
 var _token_form: PropertyForm
+## The campaign picker shown over the dock while no campaign is open.
+var _picker: Control
+var _picker_recent: VBoxContainer
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
-	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP,
+	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
@@ -85,6 +90,7 @@ func _ready() -> void:
 	add_child(_layout_save)
 	_select_tool("select")
 	_update_title()
+	_show_picker(true)
 
 
 func _process(delta: float) -> void:
@@ -92,9 +98,10 @@ func _process(delta: float) -> void:
 		host.poll(delta)
 
 
-## An encounter path from the command line or the home screen. On the
-## command line, `--host` starts hosting at once and `--turns free|dm|ordered`
-## sets the turn mode (`./run.sh table x.encounter --host --turns free`).
+## A campaign (or an encounter to import) from the command line or the
+## home screen. On the command line, `--host` starts hosting at once and
+## `--turns free|dm|ordered` sets the turn mode
+## (`./run.sh table reach.campaign --host --turns free`).
 func open_argument(path: String) -> void:
 	_open_path(App.resolve_path(path))
 	var args := OS.get_cmdline_user_args()
@@ -181,7 +188,14 @@ func _build_ui() -> void:
 	campaign_panel.on_campaign_action = func(kind: String) -> void:
 		if kind == "recap":
 			_recap_dialog()
-	root.add_child(_build_dock_layout())
+	var stack := Control.new()
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var dock_ctl := _build_dock_layout()
+	dock_ctl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	stack.add_child(dock_ctl)
+	_picker = _build_picker()
+	stack.add_child(_picker)
+	root.add_child(stack)
 	_bind_panels()
 	_refresh_scene_select()
 	_refresh_viewpoints()
@@ -222,6 +236,85 @@ func _build_dock_layout() -> Control:
 	return dock
 
 
+## The first screen of the Table: the campaigns this device has opened,
+## and the ways to start one.
+func _build_picker() -> Control:
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	panel.add_child(center)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(460, 0)
+	box.add_theme_constant_override("separation", 10)
+	center.add_child(box)
+	var title := Label.new()
+	title.text = "Campaigns"
+	title.theme_type_variation = "HeaderLabel"
+	box.add_child(title)
+	var blurb := Label.new()
+	blurb.text = "A campaign keeps the party's sheets, the NPCs, the notes and the maps between sessions. Open one, or start a new one."
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.theme_type_variation = "DimLabel"
+	box.add_child(blurb)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	var new_b := Button.new()
+	new_b.text = "New campaign…"
+	new_b.theme_type_variation = "AccentButton"
+	new_b.pressed.connect(_new_campaign_dialog)
+	actions.add_child(new_b)
+	var open_b := Button.new()
+	open_b.text = "Open campaign…"
+	open_b.pressed.connect(_open_campaign_dialog)
+	actions.add_child(open_b)
+	var imp := Button.new()
+	imp.text = "Import an encounter…"
+	imp.tooltip_text = "An encounter file from before campaigns: opened as a campaign of its own"
+	imp.pressed.connect(_open_dialog)
+	actions.add_child(imp)
+	box.add_child(actions)
+	var rl := Label.new()
+	rl.text = "Recent"
+	rl.theme_type_variation = "HeaderLabel"
+	box.add_child(rl)
+	_picker_recent = VBoxContainer.new()
+	box.add_child(_picker_recent)
+	var home := Button.new()
+	home.text = "Home"
+	home.pressed.connect(func() -> void: go_home.emit())
+	box.add_child(home)
+	return panel
+
+
+func _show_picker(on: bool) -> void:
+	if _picker == null:
+		return
+	_picker.visible = on
+	if not on:
+		return
+	for c in _picker_recent.get_children():
+		_picker_recent.remove_child(c)
+		c.queue_free()
+	var any := false
+	for p in app.recent():
+		if not (str(p).ends_with(".campaign") or str(p).ends_with(".encounter")):
+			continue
+		any = true
+		var b := Button.new()
+		b.text = str(p).get_file().get_basename().capitalize() + ("" if str(p).ends_with(".campaign") else "  (encounter)")
+		b.tooltip_text = str(p)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var path := str(p)
+		b.pressed.connect(func() -> void: _open_path(path))
+		_picker_recent.add_child(b)
+	if not any:
+		var l := Label.new()
+		l.text = "Nothing yet."
+		l.theme_type_variation = "DimLabel"
+		_picker_recent.add_child(l)
+
+
 func _reset_layout() -> void:
 	dock.layout = LayoutStore.table_layout()
 	dock.layout.changed.connect(func() -> void: _layout_save.start())
@@ -234,19 +327,17 @@ func _build_menus() -> MenuBar:
 	bar.prefer_global_menu = false
 	var file := PopupMenu.new()
 	file.name = "File"
-	_item(file, "New encounter…", M_NEW, KEY_N, true)
-	_item(file, "Open…", M_OPEN, KEY_O, true)
+	_item(file, "New campaign…", M_NEW_CAMPAIGN, KEY_N, true)
+	_item(file, "Open campaign…", M_OPEN_CAMPAIGN, KEY_O, true)
 	file.add_separator()
-	_item(file, "Save", M_SAVE, KEY_S, true)
-	_item(file, "Save As…", M_SAVE_AS, KEY_S, true, true)
+	_item(file, "Save campaign", M_SAVE, KEY_S, true)
+	_item(file, "Save campaign as…", M_SAVE_AS, KEY_S, true, true)
 	file.add_separator()
 	_item(file, "Add map as scene…", M_ADD_SCENE, KEY_M, true)
-	file.add_separator()
-	_item(file, "New campaign…", M_NEW_CAMPAIGN)
-	_item(file, "Open campaign…", M_OPEN_CAMPAIGN)
-	_item(file, "Save campaign", M_SAVE_CAMPAIGN)
+	_item(file, "Import an encounter…", M_OPEN)
 	_item(file, "Export session recap…", M_RECAP)
 	file.add_separator()
+	_item(file, "Close campaign", M_CLOSE_CAMPAIGN)
 	_item(file, "Home", M_HOME)
 	_item(file, "Quit", M_QUIT, KEY_Q, true)
 	file.id_pressed.connect(_on_menu)
@@ -371,7 +462,7 @@ func _check(menu: PopupMenu, label: String, id: int, checked: bool, key := KEY_N
 func _build_toolbar() -> HBoxContainer:
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 2)
-	for entry in [["file-plus", M_NEW, "New encounter (Ctrl/Cmd+N)"], ["folder-open", M_OPEN, "Open an encounter (Ctrl/Cmd+O)"], ["save", M_SAVE, "Save (Ctrl/Cmd+S)"],
+	for entry in [["file-plus", M_NEW_CAMPAIGN, "New campaign (Ctrl/Cmd+N)"], ["folder-open", M_OPEN_CAMPAIGN, "Open a campaign (Ctrl/Cmd+O)"], ["save", M_SAVE, "Save the campaign (Ctrl/Cmd+S)"],
 			["map", M_ADD_SCENE, "Add a map as a scene (Ctrl/Cmd+M)"],
 			["undo-2", M_UNDO, "Undo (Ctrl/Cmd+Z)"], ["redo-2", M_REDO, "Redo (Shift+Ctrl/Cmd+Z)"]]:
 		var fb := Button.new()
@@ -603,7 +694,8 @@ func _on_cursor(hex: Vector2) -> void:
 
 func _update_title() -> void:
 	var e := ctx.encounter()
-	get_window().title = "%s%s — Table — %s" % [e.name, "*" if e.dirty else "", App.NAME]
+	var what := ctx.campaign.name if ctx.campaign != null else e.name
+	get_window().title = "%s%s — Table — %s" % [what, "*" if ctx.campaign_dirty() else "", App.NAME]
 
 
 func _update_menus() -> void:
@@ -654,7 +746,8 @@ func _on_menu(id: int) -> void:
 		M_ADD_SCENE: _add_scene_dialog()
 		M_NEW_CAMPAIGN: _new_campaign_dialog()
 		M_OPEN_CAMPAIGN: _open_campaign_dialog()
-		M_SAVE_CAMPAIGN: _save_campaign()
+		M_SAVE_CAMPAIGN: _save(false)
+		M_CLOSE_CAMPAIGN: _close_campaign()
 		M_RECAP: _recap_dialog()
 		M_CHECKPOINT:
 			_prompt("Checkpoint", "Name", "Checkpoint %d" % (ctx.encounter().checkpoints.size() + 1), func(v: String) -> void:
@@ -795,48 +888,83 @@ func _refresh_online() -> void:
 # ================================================================== campaign ==
 
 func _new_campaign_dialog() -> void:
-	_prompt("New campaign", "Name", "New campaign", func(v: String) -> void:
-		var c := Campaign.create(v if v.strip_edges() != "" else "Untitled campaign")
-		for pl in ctx.encounter().players:
-			c.players.append(JsonDoc.deep(pl))
-		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
-		fd.current_file = c.name.to_lower().replace(" ", "_") + ".campaign"
-		fd.file_selected.connect(func(path: String) -> void:
-			var err := c.save(path)
-			if err != OK:
-				_info("Could not save the campaign: " + error_string(err))
-				return
-			ctx.campaign = c
-			ctx.say("Campaign '%s' created. Start a session from the Campaign panel." % c.name)
-			campaign_panel.refresh())
-		fd.popup_centered_ratio(0.7))
+	_guard_unsaved(func() -> void:
+		_prompt("New campaign", "Name", "New campaign", func(v: String) -> void:
+			var c := Campaign.create(v if v.strip_edges() != "" else "Untitled campaign")
+			var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
+			fd.current_file = c.name.to_lower().replace(" ", "_") + ".campaign"
+			fd.file_selected.connect(func(path: String) -> void:
+				if path.get_extension() == "":
+					path += ".campaign"
+				var err := c.save(path)
+				if err != OK:
+					_info("Could not save the campaign: " + error_string(err))
+					return
+				_open_campaign(c)
+				ctx.say("Campaign '%s' created. Add the party in the Session pane, and a map as a scene when there is somewhere to be." % c.name))
+			fd.popup_centered_ratio(0.7)))
 
 
 func _open_campaign_dialog() -> void:
-	var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.campaign ; Campaigns"])
-	fd.file_selected.connect(func(path: String) -> void:
-		var err := []
-		var c := Campaign.load_file(path, err)
-		if c == null:
-			_info("Could not open %s:\n%s" % [path, "\n".join(PackedStringArray(err))])
-			return
-		ctx.campaign = c
-		ctx.say("Campaign '%s' open (%d players, %d characters, session %d)" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
-		campaign_panel.refresh())
-	fd.popup_centered_ratio(0.7)
+	_guard_unsaved(func() -> void:
+		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.campaign ; Campaigns"])
+		fd.file_selected.connect(_open_campaign_path)
+		fd.popup_centered_ratio(0.7))
 
 
-func _save_campaign() -> void:
-	if ctx.campaign == null:
-		ctx.say("No campaign is open")
+## A campaign file (the autosave beside it, when newer and the DM wants it).
+func _open_campaign_path(path: String) -> void:
+	var err: Array = []
+	var c := Campaign.load_file(path, err)
+	if c == null:
+		_info("Could not open %s:\n%s" % [path, "\n".join(PackedStringArray(err))])
 		return
-	if ctx.campaign.path == "":
-		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
-		fd.file_selected.connect(func(path: String) -> void:
-			ctx.say("Saved the campaign" if ctx.campaign.save(path) == OK else "Could not save the campaign"))
-		fd.popup_centered_ratio(0.7)
+	var auto := path + ".autosave"
+	if FileAccess.file_exists(auto) and FileAccess.get_modified_time(auto) > FileAccess.get_modified_time(path):
+		_confirm("An autosave newer than this campaign exists. Restore it?", func() -> void:
+			var c2 := Campaign.load_file(auto, err)
+			if c2 != null:
+				c2.path = path
+				c2.dirty = true
+				_open_campaign(c2)
+				ctx.say("Restored the autosave. Save to keep it."),
+			func() -> void: _open_campaign(c))
 		return
-	ctx.say("Saved the campaign" if ctx.campaign.save() == OK else "Could not save the campaign")
+	_open_campaign(c)
+
+
+## Make a campaign the live document.
+func _open_campaign(c: Campaign) -> void:
+	var warn := ctx.open_campaign(c)
+	if ctx.state.encounter.changed.is_connected(_on_encounter_changed):
+		ctx.state.encounter.changed.disconnect(_on_encounter_changed)
+	ctx.state.encounter.changed.connect(_on_encounter_changed)
+	if host != null:
+		host.set_state(ctx.state)
+		host.kernel = ctx.kernel
+		host.plugins = ctx.host
+	_bind_panels()
+	_refresh_scene_select()
+	_refresh_viewpoints()
+	view.show_scene()
+	ctx.selection_changed.emit()
+	_show_picker(false)
+	if c.path != "":
+		app.note_recent(c.path)
+	if warn != "":
+		_info("Opened with problems:\n\n" + warn)
+	ctx.say("Campaign '%s' open: %d players, %d characters, session %d" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
+	_update_title()
+	_update_menus()
+
+
+func _close_campaign() -> void:
+	_guard_unsaved(func() -> void:
+		if host != null:
+			_set_hosting(false)
+		ctx.campaign = null
+		_set_encounter(Encounter.create("Untitled encounter"))
+		_show_picker(true))
 
 
 ## The recap as Markdown: shown, and saved beside the encounter on request.
@@ -1005,10 +1133,15 @@ func _apply_player_request(ev: Dictionary, pid: String) -> String:
 
 # ====================================================================== files ==
 
+## A scratch encounter with no campaign: what the Table ran before
+## campaigns. Kept for tests and the command line; the picker offers a
+## campaign instead.
 func _new_encounter_dialog() -> void:
 	_guard_unsaved(func() -> void:
 		_prompt("New encounter", "Name", "New encounter", func(v: String) -> void:
+			ctx.campaign = null
 			_set_encounter(Encounter.create(v if v.strip_edges() != "" else "Untitled encounter"))
+			_show_picker(false)
 			ctx.say("New encounter. Add a map as a scene to begin (Ctrl/Cmd+M).")))
 
 
@@ -1060,7 +1193,12 @@ func _open_dialog() -> void:
 		fd.popup_centered_ratio(0.7))
 
 
+## A path of either kind: a campaign opens; an encounter is imported as
+## a campaign of its own (unsaved until the DM saves it as one).
 func _open_path(path: String) -> void:
+	if path.ends_with(".campaign"):
+		_open_campaign_path(path)
+		return
 	var err: Array = []
 	var e := Encounter.load_file(path, err)
 	if e == null:
@@ -1081,24 +1219,78 @@ func _open_path(path: String) -> void:
 	ctx.say("Opened " + path)
 
 
+## An encounter file becomes a campaign of its own: its players and
+## persistent actors are the campaign's, the encounter is its runtime.
+## Unless it names a campaign beside it, which is opened instead with
+## the encounter as a session in it (the version-1 way).
 func _load(e: Encounter) -> void:
+	var c := Campaign.for_encounter(e)
+	if c == null:
+		c = Campaign.create(e.name)
+		c.doc.id = str(e.campaign.get("id", "")) if str(e.campaign.get("id", "")) != "" else c.id
+		e.doc.campaign.id = c.id
+		for p in e.players:
+			c.players.append(JsonDoc.deep(p))
+	ctx.campaign = c
 	_set_encounter(e)
 	var warn := ctx.state.resolve_maps()
 	view.show_scene()
+	_show_picker(false)
 	app.note_recent(e.path)
 	if not warn.is_empty():
 		_info("Opened with problems:\n\n" + "\n".join(warn))
+	if c.path == "":
+		ctx.say("Imported the encounter '%s' as a campaign. Save it as a campaign to keep the party between sessions." % e.name)
+	_update_title()
 
 
+## Save the campaign (the live state captured into it). A campaign with
+## no file yet — one made from an imported encounter — asks where. A
+## scratch encounter with no campaign saves as an encounter file.
 func _save(as_new: bool) -> void:
-	# A bundled example is read-only: save it somewhere of the user's.
-	if ctx.encounter().path == "" or as_new or ctx.encounter().path.begins_with("res://"):
-		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.encounter ; Encounters"])
-		fd.current_file = ctx.encounter().name.to_snake_case() + ".encounter"
-		fd.file_selected.connect(func(p: String) -> void: _save_to(p))
+	if ctx.campaign == null:
+		if ctx.encounter().path == "" or as_new or ctx.encounter().path.begins_with("res://"):
+			var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.encounter ; Encounters"])
+			fd.current_file = ctx.encounter().name.to_snake_case() + ".encounter"
+			fd.file_selected.connect(func(p: String) -> void: _save_to(p))
+			fd.popup_centered_ratio(0.7)
+			return
+		_save_to(ctx.encounter().path)
+		return
+	if ctx.campaign.path == "" or as_new or ctx.campaign.path.begins_with("res://"):
+		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
+		fd.current_file = ctx.campaign.name.to_snake_case() + ".campaign"
+		fd.file_selected.connect(func(p: String) -> void: _save_campaign_to(p))
 		fd.popup_centered_ratio(0.7)
 		return
-	_save_to(ctx.encounter().path)
+	_save_campaign_to(ctx.campaign.path)
+
+
+func _save_campaign_to(path: String) -> void:
+	if path.get_extension() == "":
+		path += ".campaign"
+	var first := ctx.campaign.path == "" or ctx.campaign.path != path
+	if first:
+		# now that it has a home, the scenes' map paths are relative to it
+		var e := ctx.encounter()
+		var old_base := e.base_dir()
+		for s in e.scenes:
+			var mp := str(s.get("map_path", ""))
+			if mp != "" and not mp.is_absolute_path() and not mp.begins_with("res://") and old_base != "":
+				mp = old_base.path_join(mp)
+			s["map_path"] = mp
+		ctx.campaign.path = path
+		e.path = path
+		for s in e.scenes:
+			s["map_path"] = _relative_map_path(str(s.get("map_path", "")))
+	var why := ctx.save_campaign(path)
+	if why != "":
+		_info("Save failed: %s" % why)
+		return
+	DirAccess.remove_absolute(path + ".autosave")
+	_update_title()
+	app.note_recent(path)
+	ctx.say("Saved " + path)
 
 
 func _save_to(path: String) -> void:
@@ -1121,9 +1313,22 @@ func _save_to(path: String) -> void:
 	ctx.say("Saved " + path)
 
 
+## Every minute: the campaign, live state included, beside its file; a
+## scratch encounter beside its own.
 func _autosave_now() -> void:
 	var e := ctx.encounter()
-	if e == null or not e.dirty or e.path == "":
+	if e == null:
+		return
+	if ctx.campaign != null:
+		if not ctx.campaign_dirty() or ctx.campaign.path == "":
+			return
+		ctx.campaign.capture(e)
+		var f := FileAccess.open(ctx.campaign.path + ".autosave", FileAccess.WRITE)
+		if f != null:
+			f.store_string(ctx.campaign.to_json())
+			f.close()
+		return
+	if not e.dirty or e.path == "":
 		return
 	var f := FileAccess.open(e.path + ".autosave", FileAccess.WRITE)
 	if f != null:
@@ -1133,12 +1338,12 @@ func _autosave_now() -> void:
 
 func _guard_unsaved(then: Callable) -> void:
 	var e := ctx.encounter()
-	if e == null or not e.dirty:
+	if e == null or not ctx.campaign_dirty():
 		then.call()
 		return
 	var d := ConfirmationDialog.new()
 	d.title = "Unsaved changes"
-	d.dialog_text = "'%s' has unsaved changes. Discard them?" % e.name
+	d.dialog_text = "'%s' has unsaved changes. Discard them?" % (ctx.campaign.name if ctx.campaign != null else e.name)
 	d.ok_button_text = "Discard"
 	d.confirmed.connect(then)
 	d.close_requested.connect(d.queue_free)

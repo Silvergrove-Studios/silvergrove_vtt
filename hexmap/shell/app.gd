@@ -80,7 +80,7 @@ static func mode_label(mode: String) -> String:
 static func mode_blurb(mode: String) -> String:
 	match mode:
 		"editor": return "Draw maps: terrain, props, walls, lights. Export to VTTs and print."
-		"table": return "Run an encounter on your maps: tokens, doors, lights, fog, turns."
+		"table": return "Run a campaign: the party's sheets, NPCs, notes, maps; sessions and fights on your maps."
 		"player": return "Join a table as a player and see the map from your tokens' eyes."
 	return ""
 

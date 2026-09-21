@@ -371,6 +371,65 @@ func test_table_window() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_table_win.json"))
 
 
+## The Table is campaign-first: the picker until a campaign opens, the
+## campaign as the live document, edits between sessions saved and
+## restored, the session ritual, close back to the picker.
+func test_campaign_first() -> void:
+	var dir := "user://table_campaign_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_table_campaign.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	check(win._picker != null and win._picker.visible and win.ctx.campaign == null, "the picker shows until a campaign opens")
+	# a campaign with a party, made and saved as the New… dialog would
+	var c := Campaign.create("Table first")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1", "ext": {"sample.ordered": {"level": 2, "stats": {"agi": 2, "str": 1, "wit": 0}}}}
+	c.resources["actor:a_h"] = {"sample.ordered": {"hp": Resources.pool(9, 15, "rest")}}
+	c.plugins.append({"id": "sample.ordered"})
+	check(c.save(dir.path_join("first.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("first.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	check(not win._picker.visible and ctx.campaign != null and ctx.campaign.name == "Table first" and ctx.campaign_is_live(), "opened: the picker is gone and the campaign is the live document")
+	check(ctx.encounter().actors.has("a_h") and ctx.encounter().actor("a_h").derived.has("sample.ordered") and int(ctx.encounter().actor("a_h").derived["sample.ordered"].defence.total) == 12, "the hero is in the kernel with a derived sheet, no session running")
+	check(ctx.host != null and ctx.host.plugins.has("sample.ordered"), "the campaign's rules loaded")
+	check(win.get_window().title.begins_with("Table first"), "the title is the campaign's")
+	# the DM fixes the sheet between sessions and saves: the file has it
+	check(ctx.kernel.commit([{"t": "actor.set", "id": "a_h", "changes": {"ext/sample.ordered/stats/agi": 3}}], "Fix") == "", "an edit with no session")
+	check(ctx.campaign_dirty(), "dirty")
+	win._save(false)
+	check(not ctx.campaign_dirty(), "saved")
+	var back := Campaign.load_file(dir.path_join("first.campaign"))
+	check(back.actors.a_h.ext["sample.ordered"].stats.agi == 3 and not (back.doc.runtime as Dictionary).is_empty() and back.runtime_encounter().actors.has("a_h"), "the file keeps the edit and the runtime")
+	# a session: start and end from the pane's verbs
+	check(ctx.start_session() == "", "started")
+	check(ctx.encounter().clock.session == 1 and ctx.encounter().checkpoints.size() == 1 and ctx.campaign.sessions.size() == 1, "session 1: the checkpoint and the entry")
+	ctx.kernel.commit([{"t": "log.add", "entry": {"id": "r_1", "kind": "ruling", "text": "ruled", "audience": "gm"}}], "Ruling")
+	var r := ctx.end_session("# recap")
+	check(not r.has("error") and ctx.campaign.sessions[0].recap == "# recap" and ctx.campaign.journal.size() == 1 and ctx.campaign.journal[0].session == 1, "ended: the recap and the journal, saved")
+	check(win.campaign_panel._campaign.text.contains("between sessions (1 played)"), "the pane says so: %s" % win.campaign_panel._campaign.text)
+	# autosave writes the campaign beside its file
+	ctx.kernel.commit([{"t": "actor.set", "id": "a_h", "changes": {"name": "Hero the Bold"}}], "Rename")
+	win._autosave_now()
+	check(FileAccess.file_exists(dir.path_join("first.campaign.autosave")) and Campaign.load_file(dir.path_join("first.campaign.autosave")).actors.a_h.name == "Hero the Bold", "the autosave is a campaign file with the live state")
+	DirAccess.remove_absolute(dir.path_join("first.campaign.autosave"))
+	# close: back to the picker (the unsaved rename is discarded on purpose)
+	ctx.encounter().dirty = false
+	ctx.campaign.dirty = false
+	win._close_campaign()
+	check(win._picker.visible and ctx.campaign == null, "closed: the picker again")
+	# an old encounter imports as a campaign of its own
+	win._open_path(_example("chapel_ambush.encounter"))
+	check(not win._picker.visible and ctx.campaign != null and ctx.campaign.path == "" and ctx.campaign.name == "Chapel Ambush" and ctx.campaign.players.size() == 2, "an encounter file becomes an unsaved campaign with its players")
+	win.queue_free()
+	for f in ["first.campaign"]:
+		DirAccess.remove_absolute(dir.path_join(f))
+	DirAccess.remove_absolute(dir)
+
+
 func test_canvas_view_touch() -> void:
 	var view := CanvasView.new()
 	view.size = Vector2(800, 600)

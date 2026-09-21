@@ -7,15 +7,21 @@ extends RefCounted
 ## plugin state, long-running tracks, the journal (notes, handouts and
 ## rulings with their session), and the sessions played.
 ##
-## A campaign is not event-sourced: it is read at the start of a session
-## — `begin_session()` produces the events that bring it into a fresh
-## encounter — and written at the end — `bank()` takes what the session
-## changed back. Everything in between happens in the encounter through
-## the kernel. The document is plain JSON, stable key order, meant to
-## live in git beside the adventure.
+## Since version 2 the campaign is the live document (docs/campaign-plan.md):
+## the Table opens it into a kernel — `runtime_encounter()` gives the
+## encounter it runs on, built from the campaign or restored from the
+## `runtime` block the last save kept — so sheets, rolls and rests work
+## between sessions. `capture()` writes the live state back into the
+## document (the summary fields and the runtime) whenever it is saved;
+## `begin_session()` and `end_session()` are the ritual around a
+## session (the counter, the checkpoint, the journal stamp, the recap).
+## Old encounter-first files still work: `begin_session(e, path, true)`
+## brings a campaign into a foreign encounter as version 1 did, and
+## `bank()` takes a session back. The document is plain JSON, stable key
+## order, meant to live in git beside the adventure.
 
 const FORMAT := "silvergrove.campaign"
-const VERSION := 1
+const VERSION := 2
 ## Actor kinds that belong to the campaign when a session ends even if
 ## the campaign had not seen them before (a character brought by a
 ## player, a companion gained).
@@ -46,7 +52,16 @@ static func create(p_name: String) -> Campaign:
 		"clock": {"session": 0, "day": 1, "minute": 0},
 		"tracks": {},
 		"journal": [],
+		# the campaign's maps (places), by id; prepared encounters (recipes for
+		# a scene over a map); places on regional maps; where the party is
+		"maps": [],
 		"encounters": [],
+		"places": [],
+		"party": {},
+		# the sessions played: {n, started, ended, recap, file (v1 encounters)}
+		"sessions": [],
+		# the live encounter document as of the last save; {} until then
+		"runtime": {},
 		"meta": {"author": "", "description": "", "created": now, "modified": now},
 		"ext": {},
 	}
@@ -75,6 +90,83 @@ var clock: Dictionary:
 	get: return doc.clock
 var encounters: Array:
 	get: return doc.encounters
+var maps: Array:
+	get: return doc.maps
+var places: Array:
+	get: return doc.places
+var sessions: Array:
+	get: return doc.sessions
+
+
+func map_entry(mid: String) -> Dictionary:
+	for m in maps:
+		if str(m.get("id", "")) == mid:
+			return m
+	return {}
+
+
+func encounter_entry(eid: String) -> Dictionary:
+	for e in encounters:
+		if str(e.get("id", "")) == eid:
+			return e
+	return {}
+
+
+# ------------------------------------------------------------- runtime --
+
+## The encounter the Table runs this campaign on: the one the last save
+## kept, or a fresh one with the campaign's players, actors, resources,
+## tracks, clock and state in it. Its path is the campaign's, so map
+## paths in its scenes resolve beside the campaign file.
+func runtime_encounter() -> Encounter:
+	var e: Encounter = null
+	if doc.get("runtime") is Dictionary and not (doc.runtime as Dictionary).is_empty():
+		var err := []
+		e = Encounter.from_json(JsonDoc.stringify(doc.runtime), err)
+	if e == null:
+		e = Encounter.create(name)
+		var st := EncounterState.new(e)
+		for ev in begin_session(e, path, true, false):
+			st.apply(ev)
+	e.path = path
+	e.dirty = false
+	e.doc.name = name
+	return e
+
+
+## Write the live encounter into the document: the summary fields the
+## journal, players, actors, resources, tracks, clock and state — and the
+## runtime itself. No session stamping. What `save()` does first.
+func capture(e: Encounter) -> void:
+	_take_state(e)
+	var rt: Dictionary = JsonDoc.deep(e.doc)
+	rt.erase("checkpoints")   # the ones worth keeping between sessions are in `sessions`
+	doc.runtime = rt
+	touch()
+
+
+## The ritual at the end of a session: journal-worthy log entries stamped
+## with the session, the session listed with its recap, the state
+## captured. Returns the summary.
+func end_session(e: Encounter, recap := "") -> Dictionary:
+	var summary := bank(e, "")
+	var n := int(e.clock.get("session", clock.get("session", 0)))
+	var rec := session_entry(n)
+	if rec.is_empty():
+		rec = {"n": n, "started": ""}
+		sessions.append(rec)
+	rec.ended = JsonDoc.now()
+	if recap != "":
+		rec.recap = recap
+	capture(e)
+	return summary
+
+
+func session_entry(n: int) -> Dictionary:
+	for s in sessions:
+		if int(s.get("n", 0)) == n:
+			return s
+	return {}
 
 
 func player(pid: String) -> Dictionary:
@@ -113,13 +205,23 @@ func touch() -> void:
 
 # ------------------------------------------------------------ sessions --
 
-## The events that bring the campaign into an encounter at the start of
-## a session: its players, its actors (added, or their data refreshed
-## when the encounter already has them), its tracks, the clock advanced
-## to the next session, the campaign reference and campaign-scoped
-## state. Nothing is applied here.
-func begin_session(e: Encounter, campaign_path := "") -> Array:
+## The events that start a session. On the campaign's own runtime the
+## ritual is small (`full = false`): the clock to the next session and
+## the campaign reference. Into a foreign encounter (`full`, the
+## version-1 way) the players, the actors (added, or their data refreshed
+## when the encounter already has them), their resources and the tracks
+## come in too. `bump` false loads the clock as it stands (a fresh runtime).
+## Nothing is applied here.
+func begin_session(e: Encounter, campaign_path := "", full := false, bump := true) -> Array:
 	var events := []
+	var session := int(clock.get("session", 0)) + (1 if bump else 0)
+	if not full:
+		events.append({"t": "clock.set", "changes": {"session": session}})
+		events.append({"t": "encounter.set", "changes": {"campaign": {"id": id, "path": campaign_path, "ext": JsonDoc.deep(e.campaign.get("ext", doc.state.get("ext", {})))}}})
+		var rec := session_entry(session)
+		if rec.is_empty():
+			sessions.append({"n": session, "started": JsonDoc.now()})
+		return events
 	for p in players:
 		if e.player(str(p.id)).is_empty():
 			events.append({"t": "player.add", "player": JsonDoc.deep(p)})
@@ -146,7 +248,6 @@ func begin_session(e: Encounter, campaign_path := "") -> Array:
 			var tr: Dictionary = JsonDoc.deep(tracks[tid])
 			tr.campaign = true
 			events.append({"t": "track.add", "track": tr})
-	var session := int(clock.get("session", 0)) + 1
 	events.append({"t": "clock.set", "changes": {"session": session, "day": int(clock.get("day", 1)), "minute": int(clock.get("minute", 0))}})
 	events.append({"t": "encounter.set", "changes": {"campaign": {"id": id, "path": campaign_path, "ext": JsonDoc.deep(doc.state.get("ext", {}))}}})
 	return events
@@ -159,6 +260,33 @@ func begin_session(e: Encounter, campaign_path := "") -> Array:
 ## notes marked for the journal) stamped with the session, and the
 ## session's path. Returns a summary of what moved.
 func bank(e: Encounter, encounter_path := "") -> Dictionary:
+	var summary := _take_state(e)
+	var session := int(e.clock.get("session", int(clock.get("session", 0)) + 1))
+	for entry in e.log:
+		if not JOURNAL_KINDS.has(str(entry.get("kind", ""))):
+			continue
+		if str(entry.kind) == "note" and not bool(entry.get("journal", false)):
+			continue
+		if not journal_entry(str(entry.get("id", ""))).is_empty():
+			continue
+		var j: Dictionary = JsonDoc.deep(entry)
+		j.session = session
+		j.encounter = e.name
+		journal.append(j)
+		summary.journal += 1
+	if encounter_path != "":
+		var rec := session_entry(session)
+		if rec.is_empty():
+			rec = {"n": session, "started": ""}
+			sessions.append(rec)
+		rec.file = encounter_path
+	touch()
+	return summary
+
+
+## Players, persistent actors and their resources, campaign tracks, the
+## clock and campaign state from the live encounter into the document.
+func _take_state(e: Encounter) -> Dictionary:
 	var summary := {"actors": 0, "players": 0, "tracks": 0, "journal": 0}
 	for p in e.players:
 		if player(str(p.id)).is_empty():
@@ -192,26 +320,10 @@ func bank(e: Encounter, encounter_path := "") -> Dictionary:
 			kept.erase("campaign")
 			tracks[str(tid)] = kept
 			summary.tracks += 1
-	var session := int(e.clock.get("session", int(clock.get("session", 0)) + 1))
-	clock.session = session
+	clock.session = int(e.clock.get("session", int(clock.get("session", 0))))
 	clock.day = int(e.clock.get("day", clock.get("day", 1)))
 	clock.minute = int(e.clock.get("minute", clock.get("minute", 0)))
 	doc.state.ext = JsonDoc.deep(e.campaign.get("ext", {}))
-	for entry in e.log:
-		if not JOURNAL_KINDS.has(str(entry.get("kind", ""))):
-			continue
-		if str(entry.kind) == "note" and not bool(entry.get("journal", false)):
-			continue
-		if not journal_entry(str(entry.get("id", ""))).is_empty():
-			continue
-		var j: Dictionary = JsonDoc.deep(entry)
-		j.session = session
-		j.encounter = e.name
-		journal.append(j)
-		summary.journal += 1
-	if encounter_path != "" and not encounters.has(encounter_path):
-		encounters.append(encounter_path)
-	touch()
 	return summary
 
 
@@ -269,10 +381,20 @@ static func from_json(text: String, error: Array = []) -> Campaign:
 
 
 func _upgrade() -> void:
-	for k in ["plugins", "packs", "players", "journal", "encounters"]:
+	# version 1 listed the sessions' encounter files under `encounters`;
+	# version 2 keeps prepared encounters there and the sessions apart
+	if int(doc.get("version", 1)) < 2 and doc.get("encounters") is Array:
+		var files: Array = []
+		for f in doc.encounters:
+			if f is String:
+				files.append({"n": files.size() + 1, "file": str(f)})
+		if not files.is_empty() or (doc.encounters as Array).is_empty():
+			doc.sessions = files
+			doc.encounters = []
+	for k in ["plugins", "packs", "players", "journal", "encounters", "maps", "places", "sessions"]:
 		if not (doc.get(k) is Array):
 			doc[k] = []
-	for k in ["actors", "resources", "state", "tracks", "meta", "ext", "clock"]:
+	for k in ["actors", "resources", "state", "tracks", "meta", "ext", "clock", "party", "runtime"]:
 		if not (doc.get(k) is Dictionary):
 			doc[k] = {}
 	if not (doc.state.get("ext") is Dictionary):

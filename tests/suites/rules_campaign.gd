@@ -142,7 +142,7 @@ func test_campaign_two_sessions_with_a_recap() -> void:
 	check(loaded.actors.has("a_dog") and not loaded.actors.has("a_g") and not loaded.actors.a_h.has("derived"), "the companion came along, the goblin did not, derived is left behind")
 	check(loaded.clock.session == 1 and loaded.clock.day == 3 and loaded.clock.minute == 600 and loaded.doc.state.ext.sample.luck == 2 and loaded.resources["actor:a_h"].sample.hp.current == 6, "the clock, campaign state and the hero's pool carried")
 	check(loaded.journal.size() == 3 and loaded.journal[0].session == 1 and loaded.search_journal("cover").size() == 1 and loaded.search_journal("favour").size() == 1 and loaded.search_journal("nothing here").is_empty(), "the journal has the ruling, the handout and the marked note, searchable")
-	check(loaded.encounters == ["one.encounter"], "the session is listed")
+	check(loaded.sessions.size() == 1 and loaded.sessions[0].file == "one.encounter" and loaded.sessions[0].n == 1, "the session is listed with its file: %s" % [loaded.sessions])
 	check(loaded.save() == OK, "campaign saved again")
 	# session two: a new encounter, the luck and the dog come back, the recap of the second session stands alone
 	var again := Campaign.load_file(dir.path_join("reach.campaign"))
@@ -164,6 +164,63 @@ func test_campaign_two_sessions_with_a_recap() -> void:
 	check(back.campaign.ext.sample.luck == 2 and back.checkpoints.size() == 1, "campaign state and checkpoints are in the file")
 	for f in ["reach.campaign", "one.encounter"]:
 		DirAccess.remove_absolute(dir.path_join(f))
+	DirAccess.remove_absolute(dir)
+
+
+## Version 2: the campaign is the live document. Opening it gives a
+## runtime encounter with everything in; sheets change between sessions;
+## saving captures the runtime; sessions are a ritual on top.
+func test_campaign_is_the_live_document() -> void:
+	var dir := "user://campaign_live_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var c := Campaign.create("Between sessions")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1", "ext": {"sample": {"level": 1, "stats": {"agi": 2, "str": 1, "wit": 0}}}}
+	c.resources["actor:a_h"] = {"sample": {"hp": Resources.pool(6, 10, "rest")}}
+	c.doc.state.ext = {"sample": {"luck": 3}}
+	c.clock.session = 2
+	c.clock.day = 4
+	check(c.save(dir.path_join("live.campaign")) == OK, "saved (v2)")
+	# open: a runtime with the campaign in it, no session started
+	var opened := Campaign.load_file(dir.path_join("live.campaign"))
+	var e := opened.runtime_encounter()
+	check(e.path == opened.path and e.name == "Between sessions" and e.players.size() == 1 and e.actors.has("a_h") and e.campaign.id == opened.id, "a fresh runtime holds the players, the actors and the campaign reference")
+	var st := EncounterState.new(e)
+	var k := RulesKernel.new(st)
+	SampleRules.new().install(k)
+	k.rederive_all()
+	check(Resources.get_record(st, "actor:a_h", "sample", "hp").current == 6 and e.clock.session == 2 and e.clock.day == 4 and e.campaign.ext.sample.luck == 3, "the hurt hero, the clock and the campaign state, as left")
+	check(e.actor("a_h").derived.sample.defence.total == 12, "and the sheet derives with no session running")
+	# the DM fixes the sheet between sessions and saves: the file keeps it
+	check(k.commit([{"t": "actor.set", "id": "a_h", "changes": {"ext/sample/stats/agi": 3}}, Resources.gain(st, "actor:a_h", "sample", "hp", 2)], "Fix") == "", "an edit with no session")
+	opened.capture(e)
+	check(opened.actors.a_h.ext.sample.stats.agi == 3 and opened.resources["actor:a_h"].sample.hp.current == 8 and not (opened.doc.runtime as Dictionary).is_empty() and opened.clock.session == 2, "capture: the summary fields and the runtime, no session stamp")
+	check(opened.save() == OK, "saved")
+	# reopen: the runtime comes back exactly, not rebuilt
+	var again := Campaign.load_file(dir.path_join("live.campaign"))
+	var e2 := again.runtime_encounter()
+	check(e2.actor("a_h").ext.sample.stats.agi == 3 and e2.id == e.id and e2.resources["actor:a_h"].sample.hp.current == 8, "the runtime restored from the file")
+	# a session on the runtime: the ritual only (no re-adding of actors), the checkpoint, the hook
+	var st2 := EncounterState.new(e2)
+	var k2 := RulesKernel.new(st2)
+	SampleRules.new().install(k2)
+	k2.commit([{"t": "actor.set", "id": "a_h", "changes": {"name": "Hero the Bold"}}], "Rename")
+	check(k2.start_session(again, again.path) == "", "session three starts")
+	check(e2.clock.session == 3 and e2.actor("a_h").name == "Hero the Bold" and e2.checkpoints.size() == 1 and again.sessions.size() == 1 and again.sessions[0].n == 3, "the counter moved, the live edit stood (nothing re-applied), the checkpoint and the session entry exist")
+	k2.commit([{"t": "log.add", "entry": {"id": "j_x", "kind": "ruling", "text": "ruled", "audience": "gm"}}], "Ruling")
+	var summary := again.end_session(e2, "# Session 3\nWe ruled.")
+	check(summary.journal == 1 and again.journal[0].session == 3 and again.sessions[0].recap.begins_with("# Session 3") and again.sessions[0].has("ended") and again.clock.session == 3, "end: the journal stamped, the recap kept, the clock captured")
+	# a version-1 file upgrades: its session files move under sessions
+	var v1 := JsonDoc.parse(again.to_json())
+	v1.version = 1
+	v1.encounters = ["sessions/one.encounter"]
+	v1.erase("sessions")
+	v1.erase("runtime")
+	var up := Campaign.from_json(JsonDoc.stringify(v1))
+	check(up != null and up.sessions.size() == 1 and up.sessions[0].file == "sessions/one.encounter" and up.encounters.is_empty() and up.maps.is_empty() and up.doc.version == 2, "a v1 campaign upgrades in memory")
+	var e3 := up.runtime_encounter()
+	check(e3.actors.has("a_h") and e3.actor("a_h").name == "Hero the Bold", "and its runtime is built from the summary fields")
+	DirAccess.remove_absolute(dir.path_join("live.campaign"))
 	DirAccess.remove_absolute(dir)
 
 
@@ -516,7 +573,8 @@ func test_table_campaign_panel_and_dialogs() -> void:
 	table._open_path(_example("chapel_ambush.encounter"))
 	await tree.process_frame
 	var panel := table.campaign_panel
-	check(panel != null and panel._campaign.text.begins_with("No campaign"), "the Campaign pane says no campaign is open")
+	check(panel != null and panel._campaign.text.begins_with("Chapel Ambush") and panel._campaign.text.contains("Not saved as a campaign"), "an opened encounter is a campaign of its own, unsaved: %s" % panel._campaign.text)
+	check(table.ctx.campaign != null and table.ctx.campaign.players.size() == table.ctx.encounter().players.size(), "with the encounter's players")
 	# a campaign made from the table's players, a session started, banked
 	var dir := "user://campaign_panel_test"
 	DirAccess.make_dir_recursive_absolute(dir)
@@ -528,7 +586,7 @@ func test_table_campaign_panel_and_dialogs() -> void:
 	check(c.save(dir.path_join("panel.campaign")) == OK, "saved")
 	table.ctx.campaign = Campaign.load_file(dir.path_join("panel.campaign"))
 	panel.refresh()
-	check(panel._campaign.text.begins_with("Panel test") and panel._campaign.text.contains("not started"), "the pane names the campaign and says no session has started")
+	check(panel._campaign.text.begins_with("Panel test") and panel._campaign.text.contains("between sessions"), "the pane names the campaign, between sessions: %s" % panel._campaign.text)
 	check(table.ctx.start_session() == "", "a session starts from the pane's verb")
 	await tree.process_frame
 	check(table.ctx.encounter().checkpoints.size() == 1 and panel._checkpoints.get_child_count() == 1, "the session start is a checkpoint in the list")
@@ -563,7 +621,7 @@ func test_table_campaign_panel_and_dialogs() -> void:
 	check(not table.ctx.encounter().log.any(func(x: Dictionary) -> bool: return x.kind == "ruling") and table.ctx.encounter().checkpoints.size() == 2, "restored to before the ruling; the checkpoints remain")
 	# bank: the campaign gained the session
 	var r := table.ctx.bank_session()
-	check(not r.has("error") and table.ctx.campaign.clock.session == 1 and table.ctx.campaign.encounters.size() == 1, "banked and saved: %s" % [r])
+	check(not r.has("error") and table.ctx.campaign.clock.session == 1 and table.ctx.campaign.sessions.size() == 1, "banked and saved: %s" % [r])
 	# the campaign's plugin order and settings shape the plugins on reload
 	# (where there is a runtime to load them into: phones have none)
 	table._set_encounter(table.ctx.encounter())

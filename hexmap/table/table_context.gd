@@ -8,6 +8,8 @@ extends RefCounted
 signal selection_changed
 signal scene_changed
 signal encounter_changed
+## The campaign opened, saved, or a session started or ended.
+signal campaign_changed
 signal status(text: String)
 ## A pick on the map began or ended (`pick` is set or empty).
 signal pick_changed
@@ -135,6 +137,66 @@ func campaign_ref_path() -> String:
 	return campaign.path
 
 
+# ---------------------------------------------------------------- campaign --
+
+## Open a campaign as the live document: its runtime encounter (restored
+## from the file, or built from it) becomes the encounter the kernel runs
+## on. "" or why not.
+func open_campaign(c: Campaign) -> String:
+	campaign = c
+	var e := c.runtime_encounter()
+	set_encounter(e)
+	var warn := state.resolve_maps()
+	campaign_changed.emit()
+	if not warn.is_empty():
+		return "\n".join(warn)
+	return ""
+
+
+## Whether the live encounter is the open campaign's own runtime (as
+## against an encounter file that merely names a campaign).
+func campaign_is_live() -> bool:
+	return campaign != null and state != null and str(state.encounter.campaign.get("id", "")) == campaign.id and state.encounter.path == campaign.path
+
+
+## Capture the live state into the campaign and save it. "" or why.
+func save_campaign(p_path := "") -> String:
+	if campaign == null:
+		return "no campaign is open"
+	if p_path != "":
+		campaign.path = p_path
+		state.encounter.path = p_path
+	if campaign.path == "":
+		return "the campaign has no file yet"
+	campaign.capture(state.encounter)
+	var err := campaign.save()
+	if err != OK:
+		return "could not save the campaign (%s)" % error_string(err)
+	state.encounter.dirty = false
+	campaign_changed.emit()
+	return ""
+
+
+## Whether anything is unsaved: the live encounter or the campaign.
+func campaign_dirty() -> bool:
+	return (state != null and state.encounter.dirty) or (campaign != null and campaign.dirty)
+
+
+## End the session on the live campaign: journal, recap, capture, save.
+## The summary, or {error}.
+func end_session(recap := "") -> Dictionary:
+	if campaign == null:
+		return {"error": "no campaign is open"}
+	if not campaign_is_live():
+		return bank_session()
+	var summary := campaign.end_session(state.encounter, recap)
+	var why := save_campaign()
+	if why != "":
+		summary.error = why
+	campaign_changed.emit()
+	return summary
+
+
 ## Start a session of the open campaign in this encounter. "" or why.
 func start_session() -> String:
 	if campaign == null:
@@ -143,6 +205,7 @@ func start_session() -> String:
 	if why == "":
 		# the campaign's plugin order and settings may differ from what loaded
 		encounter_changed.emit()
+		campaign_changed.emit()
 	return why
 
 

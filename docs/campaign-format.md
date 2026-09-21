@@ -1,11 +1,14 @@
-# The `.campaign` format (v1)
+# The `.campaign` format (v2)
 
-A campaign is what a group keeps between sessions: the players, their
-characters, the rulesets in play, the packs of content they have added,
-the clock, the journal, and everything a ruleset needs to remember
-across encounters (a resource that carries over, a faction's standing).
-An encounter is one session's scenes over one or more maps; a campaign
-is the thing those encounters belong to.
+A campaign is what a group keeps: the players, their characters, the
+NPCs, the rulesets in play, the packs of content they have added, the
+clock, the journal, the maps and the prepared encounters, and everything
+a ruleset needs to remember (a resource that carries over, a faction's
+standing). Since version 2 it is also the **live document**: the Table
+opens a campaign into its rules kernel, so sheets, rolls and rests work
+between sessions, and keeps the running state in the file's `runtime`
+block (docs/campaign-plan.md). Fights are scenes of that runtime; a
+session is a span of it between *Start session* and *End session*.
 
 Same conventions as `.hexmap` and `.encounter`: one JSON document, plain
 text, stable key order, no image data, meant to live in git next to the
@@ -16,7 +19,7 @@ adventure. `hexmap/encounter/campaign.gd` reads and writes it.
 ```json
 {
   "format": "silvergrove.campaign",
-  "version": 1,
+  "version": 2,
   "id": "c_9b1e…",
   "name": "The Sunken Reach",
   "plugins": [ { "id": "sample.ordered", "version": "0.1.0", "settings": { "critical_on": 19 } },
@@ -29,11 +32,23 @@ adventure. `hexmap/encounter/campaign.gd` reads and writes it.
   "clock": { "session": 4, "day": 12, "minute": 870 },
   "tracks": { "k_doom": { …progress track… } },
   "journal": [ { "id": "j_1", "kind": "ruling", "session": 3, "encounter": "The chapel", "text": "…", "rule": "cover", "tags": ["cover"], "audience": "gm" } ],
-  "encounters": [ "sessions/chapel_ambush.encounter" ],
+  "maps": [ { "id": "m_reach", "path": "maps/reach.hexmap", "role": "regional", "name": "The Reach" } ],
+  "encounters": [ { "id": "enc_cave", "name": "The cave mouth", "map": "m_cave", "level": "ground",
+                    "creatures": [ { "entry": "goblin-warrior", "count": 3, "cell": "7,8", "hidden": true } ], "notes": "…", "played": [4] } ],
+  "places": [ { "id": "pl_cave", "map": "m_reach", "cell": "12,5", "name": "Cave mouth", "encounter": "enc_cave" } ],
+  "party": { "map": "m_reach", "cell": "11,5" },
+  "sessions": [ { "n": 4, "started": "…", "ended": "…", "recap": "# Session 4 …", "file": "" } ],
+  "runtime": { …the live encounter document as of the last save… },
   "meta": { "author": "", "description": "", "created": "…", "modified": "…" },
   "ext": {}
 }
 ```
+
+Version 2 adds `maps`, `encounters` (prepared, a recipe for a scene over
+a map — version 1 listed the sessions' encounter files here; those move
+to `sessions[].file` on upgrade), `places` (markers on a regional map
+that link to an encounter, another map or a note), `party` (where the
+party is), `sessions` and `runtime`. Every other field is as before.
 
 - `plugins`: the rulesets this campaign runs, in order. The Table loads
   what it names first, in that order (a base always before what layers
@@ -66,29 +81,50 @@ adventure. `hexmap/encounter/campaign.gd` reads and writes it.
 - `journal`: what the sessions left worth keeping — rulings, handouts,
   notes marked `journal: true` — each stamped with its `session` and the
   encounter's name; the Table searches it.
-- `encounters`: the sessions, by path relative to the campaign file.
-  Informational; an encounter carries its own campaign reference.
+- `maps`: the campaign's map library — places, drawn in the Editor —
+  by path relative to the campaign file, with a `role` (`battle` or
+  `regional`). A map is never changed from the Table; scenes are made
+  over it.
+- `encounters`: prepared encounters: a recipe for a scene — the map and
+  level, creatures by compendium entry with a count, a cell and whether
+  they start hidden, the DM's notes, the sessions it was `played` in.
+- `places`: markers on a regional map (`map`, `cell`, `name`) that link to
+  an `encounter`, another `map`, or a journal `note`.
+- `party`: where the party is (a map and a cell), for the marker.
+- `sessions`: the sessions played, `n` with `started`/`ended`, the
+  `recap` kept at the end, and `file` for version-1 sessions that lived
+  in their own encounter files.
+- `runtime`: the live encounter document as of the last save.
 
-## Sessions
+## The live document and sessions
 
-A campaign is not event-sourced. It is read once when a session starts
-and written once when it ends; in between, everything happens in the
-encounter through the kernel, where it is undoable and replicated.
+The campaign is not event-sourced; its runtime encounter is. **Open**
+(`Campaign.runtime_encounter()`): the encounter kept in `runtime`, or —
+for a fresh or version-1 campaign — one built from the summary fields
+(players, actors with their resources, tracks, the clock as it stands,
+the `campaign` reference and state). The Table runs its kernel on it;
+everything that happens is an undoable, replicated event on it, session
+or no session. **Save** (`Campaign.capture(encounter)`, then `save()`):
+the summary fields are refreshed from the live state and the runtime is
+stored, so the top of the file stays a readable summary and the runtime
+restores exactly. The Table autosaves the same beside the file.
 
-**Start** (`Campaign.begin_session(encounter)` → events, committed by
-`RulesKernel.start_session()` as one step): players the encounter
-lacks are added; every campaign actor is added (or its data refreshed
-if the encounter already has it) with its resources; campaign tracks
-the encounter lacks are added; the clock moves to the next session;
-the encounter's `campaign` block is set (`id`, `path`, `ext`). Then the
-rules hear `session_start` (session refills, expiries, the hook) and a
-checkpoint named `Session N start` is marked, which is what the recap
-measures from.
+**Start session** (`begin_session(encounter, path)` → events, committed
+by `RulesKernel.start_session()` as one step): on the campaign's own
+runtime, the clock moves to the next session and the `campaign` block
+is refreshed — nothing is re-added, so an edit made between sessions
+stands. Then the rules hear `session_start` (session refills, expiries,
+the hook) and a checkpoint named `Session N start` is marked, which is
+what the recap measures from; `sessions` gains the entry. Into a
+foreign encounter (an old encounter file that names a campaign), the
+version-1 load happens instead: players, actors with resources and
+tracks come in too.
 
-**End** (`Campaign.bank(encounter, path)`): players, persistent actors
-and their resources, campaign tracks, the clock, campaign state and
-journal-worthy log entries are written back; the encounter's path is
-listed. The Table's Campaign pane does both, and saves the file.
+**End session** (`end_session(encounter, recap)`): journal-worthy log
+entries (rulings, handouts, notes marked `journal: true`) are stamped
+with the session, the session entry gets its `ended` time and the recap,
+and the state is captured. `bank(encounter, file)` is the version-1 end,
+kept for old flows.
 
 ## Actor
 

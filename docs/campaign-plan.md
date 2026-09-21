@@ -68,6 +68,15 @@ later step; it is noted, not planned here.)
 
 ## 3. The shape after
 
+**Maps and scenes are different things.** A *map* is a place, drawn
+once in the Editor and kept in the campaign's library: the cave, the
+reach, the chapel. A *scene* is that map in play — tokens on it, some
+hidden, fog explored, doors as the party left them, lights lit. One map
+can be under many scenes (the same inn in session 2 and session 9) and
+a prepared encounter is a recipe for a scene over a map, never a change
+to the map. Nothing in this plan writes to a map; the Editor is the only
+thing that does.
+
 **One document.** The campaign *is* the live document. Opening a
 campaign loads it into a kernel (the same `EncounterState` and
 `RulesKernel` the fight uses) with the campaign's actors, resources,
@@ -165,6 +174,6 @@ most), C5–C6 (the thing that makes sessions flow), C4, C7–C8, C9.
 - **Prepared encounters are ruleset-neutral**: a map, creatures by
   compendium entry with counts and cells. The ruleset's `spawn` places
   them; a ruleset that offers a budget (`srd5e` does) shows it.
-- **Between sessions the phone is read-only.** Running rules on the
-  phone against a saved copy is a separate design (it changes who is
-  authoritative) and is left out on purpose.
+- **Between sessions the phone is read-only, and stays so.** The Table
+  is the one authority; a player who wants to change a sheet does it
+  while the Table is up. No second copy on the phone runs rules.
