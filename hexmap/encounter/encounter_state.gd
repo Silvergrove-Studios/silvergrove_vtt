@@ -23,10 +23,11 @@ const EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "sce
 	"actor.add", "actor.remove", "actor.set", "actor.overlay.push", "actor.overlay.pop",
 	"effect.apply", "effect.set", "effect.remove", "resource.set", "ext.set",
 	"log.add", "log.remove",
-	"track.add", "track.remove", "track.set", "pending.open", "pending.close", "pending.set", "clock.set"]
+	"track.add", "track.remove", "track.set", "pending.open", "pending.close", "pending.set", "clock.set",
+	"region.add", "region.remove", "region.set", "cell.set"]
 const PENDING_KINDS := ["prompts", "rolls"]
 ## Where an `ext.set` may point.
-const EXT_SCOPES := ["encounter", "scene", "token"]
+const EXT_SCOPES := ["encounter", "scene", "token", "cell"]
 ## What a reference to a thing that carries effects or resources looks like.
 const REF_KINDS := ["token", "actor", "encounter"]
 ## What a player may change on a token they own.
@@ -355,6 +356,12 @@ func validate(ev: Dictionary) -> String:
 			if scope == "token":
 				var sc := _need_scene(ev, "scene")
 				return sc if sc != "" else _need_token(ev)
+			if scope == "cell":
+				var sc := _need_scene(ev, "scene")
+				if sc != "":
+					return sc
+				if not _is_cell_key(str(ev.get("id", ""))):
+					return "ext.set: a cell id is \"q,r\""
 		"log.add":
 			if not (ev.get("entry") is Dictionary) or str(ev.entry.get("id", "")) == "" or str(ev.entry.get("kind", "")) == "":
 				return "log.add needs an entry with an id and a kind"
@@ -404,7 +411,50 @@ func validate(ev: Dictionary) -> String:
 			for k in ev.changes:
 				if not Encounter.DEFAULT_CLOCK.has(str(k)) or not (ev.changes[k] is float or ev.changes[k] is int):
 					return "clock.set: '%s' is not a clock field or not a number" % str(k)
+		"region.add":
+			var e := _need_scene(ev, "scene")
+			if e != "":
+				return e
+			if not (ev.get("region") is Dictionary) or str(ev.region.get("id", "")) == "":
+				return "region.add needs a region with an id"
+			if not (ev.region.get("cells") is Array):
+				return "region.add: 'cells' must be a list of \"q,r\" keys"
+			if encounter.scene(str(ev.scene)).regions.has(str(ev.region.id)):
+				return "region '%s' already exists" % str(ev.region.id)
+		"region.remove":
+			var e := _need_scene(ev, "scene")
+			if e != "":
+				return e
+			if not encounter.scene(str(ev.scene)).regions.has(str(ev.get("id", ""))):
+				return "no region '%s'" % str(ev.get("id", ""))
+		"region.set":
+			var e := _need_scene(ev, "scene")
+			if e != "":
+				return e
+			if not encounter.scene(str(ev.scene)).regions.has(str(ev.get("id", ""))):
+				return "no region '%s'" % str(ev.get("id", ""))
+			e = _need_dict(ev, "changes")
+			if e != "":
+				return e
+			if ev.changes.has("id"):
+				return "region.set cannot change 'id'"
+		"cell.set":
+			var e := _need_scene(ev, "scene")
+			if e != "":
+				return e
+			if not _is_cell_key(str(ev.get("id", ""))):
+				return "cell.set: a cell id is \"q,r\""
+			e = _need_dict(ev, "changes")
+			if e != "":
+				return e
+			if ev.changes.has("ext") or ev.changes.keys().any(func(k) -> bool: return str(k).begins_with("ext/")):
+				return "cell.set: plugin state goes through ext.set with scope 'cell'"
 	return ""
+
+
+static func _is_cell_key(k: String) -> bool:
+	var parts := k.split(",")
+	return parts.size() == 2 and parts[0].is_valid_int() and parts[1].is_valid_int()
 
 
 func _need_actor(ev: Dictionary) -> String:
@@ -572,7 +622,9 @@ func apply(ev: Dictionary) -> Dictionary:
 			var arr: Array = doc.scenes
 			var idx := int(ev.get("index", arr.size()))
 			idx = clampi(idx, 0, arr.size())
-			arr.insert(idx, JsonDoc.deep(ev.scene))
+			var added: Dictionary = JsonDoc.deep(ev.scene)
+			Encounter.fill_scene(added)
+			arr.insert(idx, added)
 			if str(doc.get("active_scene", "")) == "":
 				doc.active_scene = str(ev.scene.id)
 			inv = {"t": "scene.remove", "id": str(ev.scene.id)}
@@ -756,12 +808,21 @@ func apply(ev: Dictionary) -> Dictionary:
 					if not tk.has("ext"):
 						tk.ext = {}
 					holder = tk.ext
+				"cell":
+					var cells: Dictionary = encounter.scene(scene_id).cells
+					if not cells.has(str(ev.id)):
+						cells[str(ev.id)] = {}
+					if not cells[str(ev.id)].has("ext"):
+						cells[str(ev.id)].ext = {}
+					holder = cells[str(ev.id)].ext
 			if not holder.has(str(ev.plugin)):
 				holder[str(ev.plugin)] = {}
 			inv = JsonDoc.deep(ev)
 			inv.changes = JsonDoc.merge_paths(holder[str(ev.plugin)], ev.changes)
 			if holder[str(ev.plugin)].is_empty():
 				holder.erase(str(ev.plugin))
+			if str(ev.scope) == "cell":
+				_prune_cell(scene_id, str(ev.id))
 			what = "ext"
 		"log.add":
 			var entry: Dictionary = JsonDoc.deep(ev.entry)
@@ -812,11 +873,44 @@ func apply(ev: Dictionary) -> Dictionary:
 		"clock.set":
 			inv = {"t": t, "changes": JsonDoc.merge(doc.clock, ev.changes)}
 			what = "clock"
+		"region.add":
+			var r: Dictionary = JsonDoc.deep(ev.region)
+			encounter.scene(scene_id).regions[str(r.id)] = r
+			inv = {"t": "region.remove", "scene": scene_id, "id": str(r.id)}
+			what = "regions"
+		"region.remove":
+			var regions: Dictionary = encounter.scene(scene_id).regions
+			var gone: Dictionary = regions[str(ev.id)]
+			regions.erase(str(ev.id))
+			inv = {"t": "region.add", "scene": scene_id, "region": JsonDoc.deep(gone)}
+			what = "regions"
+		"region.set":
+			inv = {"t": t, "scene": scene_id, "id": str(ev.id), "changes": JsonDoc.merge_paths(encounter.scene(scene_id).regions[str(ev.id)], ev.changes)}
+			what = "regions"
+		"cell.set":
+			var cells: Dictionary = encounter.scene(scene_id).cells
+			if not cells.has(str(ev.id)):
+				cells[str(ev.id)] = {}
+			inv = {"t": t, "scene": scene_id, "id": str(ev.id), "changes": JsonDoc.merge_paths(cells[str(ev.id)], ev.changes)}
+			_prune_cell(scene_id, str(ev.id))
+			what = "cells"
 	if t == "scene.add" and bool(ev.get("activate", false)):
 		doc.active_scene = str(ev.scene.id)
 	encounter.touch(what, scene_id)
 	applied.emit(ev, inv)
 	return inv
+
+
+## A cell record with nothing left in it is not stored.
+func _prune_cell(scene_id: String, key: String) -> void:
+	var cells: Dictionary = encounter.scene(scene_id).cells
+	var c: Variant = cells.get(key)
+	if not (c is Dictionary):
+		return
+	if c.has("ext") and c.ext is Dictionary and (c.ext as Dictionary).is_empty():
+		(c as Dictionary).erase("ext")
+	if (c as Dictionary).is_empty():
+		cells.erase(key)
 
 
 ## Cells in `cells` that the players have not explored yet on this scene:

@@ -42,6 +42,34 @@ hm.derive(function(view)
 	}
 end)
 
+-- ------------------------------------------------------------------ map --
+-- Distances are bands, not numbers: what matters is whether you are
+-- close enough, and the table tells you in words.
+-- edge-to-edge distances in hexes: adjacent is 0, one hex between is 1
+hm.map.bands({ { name = "melee", max = 0.5 }, { name = "very_close", max = 2.5 }, { name = "close", max = 5.5 }, { name = "far", max = 11.5 }, { name = "very_far", max = 1e9 } })
+local BAND_ORDER = { melee = 1, very_close = 2, close = 3, far = 4, very_far = 5 }
+
+-- Throw something at a target within Close: an action roll, and a
+-- highlight on the table showing the throw's reach.
+hm.actions.register("throw", {
+	label = "Throw", target = "actor",
+	run = function(ctx)
+		local mine, theirs = hm.tokens(ctx.actor), hm.tokens(ctx.target)
+		if #mine == 0 or #theirs == 0 then error("throw needs both on the map") end
+		local scene = mine[1].scene or ctx.scene
+		local d = hm.map.distance(scene, "token:" .. mine[1].id, "token:" .. theirs[1].id)
+		if BAND_ORDER[d.band] > BAND_ORDER.close then error("too far to throw: " .. d.band) end
+		local reach = hm.map.template(scene, { shape = "band", at = "token:" .. mine[1].id, band = "close" })
+		hm.commit(hm.map.highlight(scene, reach.cells, "#ffd166", "Close"), "Reach")
+		local a = hm.actor(ctx.actor)
+		local value = (a.ext[ID].traits or {}).grace or 0
+		local entry = hm.dice.roll({ named = { bright = "1d10", dark = "1d10" }, parts = { { label = "grace", type = "trait", value = value } }, kind = "action" },
+			{ actor = ctx.actor, kind = "action", dc = 10 + BAND_ORDER[d.band] }, "Throw")
+		hm.commit(hm.map.highlight(scene, nil), "Reach")
+		return { band = d.band, outcome = entry.result.outcome }
+	end,
+})
+
 -- ---------------------------------------------------------------- turns --
 hm.turns.register({ shape = "focus", name = "Spotlight", description = "The focus moves by fiction; the GM grants it, dark rolls take it." })
 

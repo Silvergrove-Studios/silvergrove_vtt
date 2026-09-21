@@ -82,9 +82,9 @@ func update_token(scene_id: String, id: String, changes: Dictionary, label := "E
 
 
 ## Move a token and, when fog is on, reveal what it now sees. One undo step.
-func move_token(scene_id: String, id: String, to: Vector2) -> String:
+func move_token(scene_id: String, id: String, to: Vector2, by := "gm") -> String:
 	begin_group()
-	var why := run({"t": "token.set", "scene": scene_id, "id": id, "changes": {"pos": [to.x, to.y]}})
+	var why := kernel.move_token(scene_id, id, to, by) if kernel != null else run({"t": "token.set", "scene": scene_id, "id": id, "changes": {"pos": [to.x, to.y]}})
 	if why == "":
 		explore_from(scene_id, [state.token(scene_id, id)])
 	end_group("Move %s" % str(state.token(scene_id, id).get("name", "token")))

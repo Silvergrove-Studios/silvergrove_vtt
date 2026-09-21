@@ -37,7 +37,7 @@ func advance(minutes: float, label := "Time passes") -> String:
 	return kernel.transaction(label, func() -> String:
 		var why := kernel.commit([{"t": "clock.set", "changes": {"day": day, "minute": minute}}], label)
 		if why == "":
-			why = kernel.commit(Effects.expire(kernel.state, {"kind": "time", "now": absolute_minutes()}), "Timed effects")
+			why = kernel.commit(kernel.expire({"kind": "time", "now": absolute_minutes()}), "Timed effects")
 		if why == "":
 			why = kernel.fire("time_advanced", {"from": before, "to": absolute_minutes(), "minutes": minutes, "day": day}, label)
 		return why)
@@ -49,7 +49,7 @@ func next_session() -> String:
 	return kernel.transaction("Session %d" % n, func() -> String:
 		var why := kernel.commit([{"t": "clock.set", "changes": {"session": n}}], "Session %d" % n)
 		if why == "":
-			why = kernel.commit(Effects.expire(kernel.state, {"kind": "session"}) + Resources.refill(kernel.state, "session") + Tracks.on_trigger(kernel.state, "session"), "Session reset")
+			why = kernel.commit(kernel.expire({"kind": "session"}) + Resources.refill(kernel.state, "session") + Tracks.on_trigger(kernel.state, "session"), "Session reset")
 		if why == "":
 			why = kernel.fire("session_start", {"session": n}, "Session %d" % n)
 		return why)
@@ -61,7 +61,7 @@ func next_scene() -> String:
 	return kernel.transaction("Scene %d" % n, func() -> String:
 		var why := kernel.commit([{"t": "clock.set", "changes": {"scene": n}}], "Scene %d" % n)
 		if why == "":
-			why = kernel.commit(Effects.expire(kernel.state, {"kind": "scene"}), "Scene effects")
+			why = kernel.commit(kernel.expire({"kind": "scene"}), "Scene effects")
 		if why == "":
 			why = kernel.fire("scene_start", {"scene": n}, "Scene %d" % n)
 		return why)

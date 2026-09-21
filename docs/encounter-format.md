@@ -75,7 +75,12 @@ A scene is one map level with its overlay, tokens and fog.
     "props:p_3c1d": { "hidden": false }
   },
   "fog": { "enabled": true, "explored": ["4,3", "5,3", "5,2"] },
-  "tokens": [ { …token… } ]
+  "tokens": [ { …token… } ],
+  "regions": { "fire_1": { "id": "fire_1", "cells": ["4,3", "5,3"], "tags": ["fire", "hazard"], "label": "Fire",
+                           "color": "#ff4500", "audience": "all", "plugin": "sample.degrees",
+                           "duration": { "kind": "rounds", "rounds": 2 } } },
+  "cells": { "5,2": { "revealed": true, "note": "ash", "ext": { "sample.degrees": { "trap": true } } } },
+  "highlight": { "cells": ["4,3", "5,3"], "color": "#ffd166", "label": "Close" }
 }
 ```
 
@@ -98,6 +103,23 @@ A scene is one map level with its overlay, tokens and fog.
   *now* is not stored: it is computed from their tokens' vision each time
   (`Vision`). Explored cells are drawn dimmed; unexplored ones are dark;
   what a token currently sees is clear.
+- `regions` (version 2): named sets of cells a ruleset or the DM lays on
+  the scene — zones of fire, difficult ground, an aura, a wall of force.
+  `id`, `cells` (`"q,r"` keys), `tags` (what plugins test for), `label`
+  and `color` (what the canvas draws), `audience` (`all` | `gm`),
+  `plugin` (who owns it) and an optional `duration` with the same kinds
+  as an effect's: the kernel removes the region when its trigger fires.
+  Anything else in the record is the plugin's.
+- `cells` (version 2): per-cell state that is not the map's — the map
+  stays read-only. A record exists only while it has something in it:
+  `revealed` (whether players may know the rest), any plain fields a
+  plugin or the DM sets, and `ext.<plugin>` state set through `ext.set`
+  with scope `cell`. Players receive a cell's record only once it is
+  `revealed`.
+- `highlight` (version 2, optional): a template being shown —
+  `{cells, color, label}` — set by a plugin through `scene.set` and
+  cleared with `null`. Transient by nature; it is fine for it to be in
+  the file.
 
 ### Token
 
@@ -277,7 +299,7 @@ Events added in version 2 (all invertible, all through `apply()`):
 | `effect.set` | `id`, `changes` (paths allowed) | `effect.set` |
 | `effect.remove` | `id` | `effect.apply` |
 | `resource.set` | `ref`, `plugin`, `name`, `record` (or `null` to remove) | `resource.set` with the old record |
-| `ext.set` | `scope` (`encounter` \| `scene` \| `token`), `id` / `scene`+`id`, `plugin`, `changes` | `ext.set` |
+| `ext.set` | `scope` (`encounter` \| `scene` \| `token` \| `cell`), `id` / `scene`+`id` (a `"q,r"` key for a cell), `plugin`, `changes` | `ext.set` |
 | `log.add` | `entry` (with `id`, `kind`) [, `index`] | `log.remove` |
 | `log.remove` | `id` | `log.add` at the old index |
 | `track.add` / `track.remove` / `track.set` | `track` / `id` / `id`, `changes` | the usual |
@@ -285,6 +307,10 @@ Events added in version 2 (all invertible, all through `apply()`):
 | `pending.close` | `kind`, `id` | `pending.open` |
 | `pending.set` | `kind`, `id`, `changes` | `pending.set` |
 | `clock.set` | `changes` (numbers for the clock's fields) | `clock.set` |
+| `region.add` | `scene`, `region` (with `id`, `cells`) | `region.remove` |
+| `region.remove` | `scene`, `id` | `region.add` |
+| `region.set` | `scene`, `id`, `changes` (paths allowed; not `id`) | `region.set` |
+| `cell.set` | `scene`, `id` (`"q,r"`), `changes` (plain fields; plugin state goes through `ext.set`); a record left empty is dropped | `cell.set` |
 
 Every event may carry `reason` (`{by, hook, roll}`) and `audience`; the
 EventLog assigns `seq` and keeps them beside the event.

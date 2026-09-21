@@ -81,6 +81,44 @@ function hm.ui.register(kind, schema)
 	call(host.ui_register, kind, schema)
 end
 
+-- ------------------------------------------------------------------ map --
+-- Questions to the map, and the few things a ruleset may put on it. A
+-- place is "token:<id>", a "q,r" cell, or {x, y} in hex units.
+hm.map = {}
+function hm.map.bands(table) call(host.map_bands, table) end          -- { {name=, max=}, … } ascending
+function hm.map.distance(scene, a, b) return call(host.map_distance, scene, a, b) end   -- {units, edge, cells, band}
+function hm.map.band(scene, a, b) return call(host.map_distance, scene, a, b).band end
+function hm.map.within(scene, origin, r) return call(host.map_within, scene, origin, r) end
+function hm.map.template(scene, spec) return call(host.map_template, scene, spec) end
+function hm.map.los(scene, a, b, tokens_block)
+	if tokens_block == nil then tokens_block = true end
+	return call(host.map_los, scene, a, b, tokens_block)
+end
+function hm.map.light_at(scene, p) return call(host.map_light, scene, p) end
+function hm.map.can_see(scene, viewer, target) return call(host.map_can_see, scene, viewer, target) end
+function hm.map.regions_at(scene, cell) return call(host.map_regions_at, scene, cell) end
+function hm.map.tags_at(scene, cell) return call(host.map_tags_at, scene, cell) end
+function hm.map.region(id, cells, tags, extra)
+	local r = { id = id, cells = cells, tags = tags or {}, audience = "all", label = "", color = "#ffb060", plugin = hm.id }
+	for k, v in pairs(extra or {}) do r[k] = v end
+	return r
+end
+function hm.map.region_add(scene, region) return { t = "region.add", scene = scene, region = region } end
+function hm.map.region_remove(scene, id) return { t = "region.remove", scene = scene, id = id } end
+function hm.map.region_set(scene, id, changes) return { t = "region.set", scene = scene, id = id, changes = changes } end
+function hm.map.move(scene, token, to) return call(host.map_move, scene, token, to) end   -- {events, entered, left, cells}
+function hm.map.cell(scene, key) return call(host.map_cell, scene, key) end
+function hm.map.cell_set(scene, key, changes) return { t = "cell.set", scene = scene, id = key, changes = changes } end
+function hm.map.cell_state(scene, key, changes) return { t = "ext.set", scope = "cell", scene = scene, id = key, plugin = hm.id, changes = changes } end
+function hm.map.neighbors(scene, cell) return call(host.map_cells, "neighbors", scene, cell, 0) end
+function hm.map.cells_within(scene, cell, r) return call(host.map_cells, "within", scene, cell, r) end
+function hm.map.cells_between(scene, a, b) return call(host.map_cells, "between", scene, a, b) end
+function hm.map.highlight(scene, cells, color, label)
+	return { t = "scene.set", id = scene, changes = { highlight = cells and { cells = cells, color = color or "#ffffff", label = label or "" } or nil } }
+end
+function hm.map.token(scene, id) return call(host.map_token, scene, id) end
+function hm.map.tokens(scene) return call(host.map_token, scene, "") end
+
 -- ----------------------------------------------------------- compendium --
 -- Content packs, indexed on the Table: query a page at a time, never the
 -- whole thing. `opts`: filter = { field = value | {values} }, text = "…",
@@ -327,6 +365,8 @@ function __run_test(index, helpers)
 	function h.commit(events, label) return hm.commit(events, label or "test") end
 	function h.dispatch(action, ctx, answers) return call(host.test_dispatch, action, ctx or {}, answers or {}) end
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
+	-- a scene over a map file (the examples' chapel by default), with tokens = { {id, actor, x, y}, … }
+	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end
 	for k, v in pairs(helpers or {}) do h[k] = v end
 	return t.fn(h)
 end

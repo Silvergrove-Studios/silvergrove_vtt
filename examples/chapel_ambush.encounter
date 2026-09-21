@@ -50,6 +50,7 @@
   },
   "scenes": [
     {
+      "cells": {},
       "fog": {
         "enabled": true,
         "explored": [
@@ -162,6 +163,7 @@
           "on": false
         }
       },
+      "regions": {},
       "tokens": [
         {
           "art": "",
@@ -287,6 +289,7 @@
       ]
     },
     {
+      "cells": {},
       "fog": {
         "enabled": true,
         "explored": []
@@ -297,6 +300,7 @@
       "map_path": "ruined_chapel.hexmap",
       "name": "The crypt",
       "overrides": {},
+      "regions": {},
       "tokens": [
         {
           "art": "",

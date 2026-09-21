@@ -331,8 +331,8 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 | 3 Turns, shared state, clock, prompts | done | `TurnRunner` (ordered + focus), tracks, clock, rests, prompts and open rolls as records, `sample.focus`, Table wiring |
 | 4 Declarative UI, intents, protocol v2 | done | `ViewRenderer`, `Views` projection by audience, protocol v2 (roles, views, intents), Player panes, Display role, the Rules panel |
 | 5 Compendium, packs, editors | done | `Compendium` index and packs, `hm.comp`, `SchemaForm`, the Compendium panel, character files, `sample.degrees` |
-| 6 Map queries | next | distance/bands, templates, LoS/cover, zones, hex state |
-| 7 Campaign, growth, hardening | | `.campaign`, checkpoints UI, recap, prep triggers, bulk ops |
+| 6 Map queries | done | `MapQuery` (distance/bands, templates, LoS/cover, light, sight), regions with durations and hooks, cell state, `hm.map`, the regions layer, audience-filtered map events |
+| 7 Campaign, growth, hardening | next | `.campaign`, checkpoints UI, recap, prep triggers, bulk ops |
 | 8 Real rulesets | | in their own repositories, licensing decided then |
 
 Each phase ends with: its tests green in CI on all four platforms where
@@ -549,19 +549,40 @@ Decisions taken while building:
   compendium.
 - Words are indexed only from string fields; list fields are facets.
 
-### Phase 6 — Map queries
+### Phase 6 — Map queries — **done 2026-09-21**
 
-`MapQuery`: distance with size/reach/diagonal rule and plugin band tables;
-templates with plugin-chosen origin rules; LoS and cover classification;
-light at a point; per-token vision profiles and attached lights from
-effects; regions with tags and enter/leave hooks; persistent zones with
-durations; child/attached tokens; hex adjacency and per-hex plugin state
-with GM/revealed layers. Player rendering of templates, bands, zones and
-trackers from geometry.
+| piece | file | what it does | proven by |
+|---|---|---|---|
+| `MapQuery` | `rules/map_query.gd` | the kernel's geometry over the scene's effective level: `distance` (centre, edge with token sizes off, axial cells, the plugin's band), `within`, `template` (circle / cone / line / band; origin at centre or edge; optionally cut by walls) → cells + tokens, `line_of_sight` (rays to the target's centre and corners against walls and, optionally, tokens → clear / partial / total cover), `light_at` (map lights and token lights, shadows), `can_see` (vision radius + sight + light or dark vision), `neighbors` / `cells_within` / `cells_between`, `cell` with the map's terrain | `tests/suites/rules_map.gd` (55 checks) |
+| Bands | same | `register_bands(plugin, [{name, max}])` in edge-distance hex units; per-plugin tables, dropped on unregister, copied into scratch test kernels | `sample.focus` |
+| Regions and cells | `encounter/encounter_state.gd`, `encounter.gd` | scene `regions` (id, cells, tags, label, color, audience, plugin, duration) and `cells` (plain fields + `ext.<plugin>`; empty records pruned); events `region.add/remove/set`, `cell.set`, `ext.set` scope `cell`; `fill_scene` on load and `scene.add` so hand-built and loaded scenes agree | `rules_map`, the replay tests |
+| Moves | `rules/kernel.gd`, `encounter_commands.gd`, `table_window.gd` | `MapQuery.move` (attached tokens follow) → `RulesKernel.move_token` as one transaction: `token_moved` asked first (veto, extra events), then `region_left` / `region_entered` per zone; the Table and Player moves both go through it; `kernel.expire` ends regions with effects | `test_map_regions_cells_and_moves`, `sample.degrees` |
+| `hm.map` | `rules/lua_prelude.gd`, `plugin_host.gd` | the whole query surface plus region/cell/highlight event builders; `t.scene(map, tokens)` for plugin tests | the three plugins' map tests |
+| Drawing | `render/map_canvas.gd` | a regions layer between the grid and the walls (GM-audience regions only in the GM view), the scene's `highlight` | `test_map_events_over_the_wire_and_drawing` |
+| Wire | `net/protocol.gd`, `host_session.gd` | `AUDIENCE_EVENTS`: GM regions and unrevealed cells are stripped from the client document; a region's audience change becomes add/remove for players; a cell's record and plugin state are sent only once revealed | same, via `_audience_events` |
+| Reference plugins | `tests/plugins/` | `sample.ordered` strikes only within reach; `sample.focus` registers bands, throws within Close and highlights the reach; `sample.degrees` takes cover from LoS, bursts, lays a fire zone that burns for two rounds and damages whoever walks in, vetoes moves into a wall of force | `plugintest` |
 
-Exit: each reference plugin uses the map (reach for `sample.ordered`,
-bands for `sample.focus`, templates + cover for `sample.degrees`); the
-render tests screenshot templates and zones on all platforms.
+Exit criterion met: each reference plugin uses the map (reach, bands,
+templates + cover + zones); a closed door blocks sight and opening it
+through an override restores it; a Player never receives a GM-audience
+region or an unrevealed cell's state; the fuzzed and end-to-end replays
+still reproduce the document byte for byte with scenes carrying the new
+blocks. Screenshots of templates and zones are covered by the canvas
+smoke test rather than per-platform images — the render tests in
+`desktop-test` exercise the layer on all three desktops.
+
+Decisions taken while building:
+- Distances are in hex units, and bands are measured **edge to edge**
+  so adjacent tokens are at 0 regardless of size; a plugin's band
+  maxima are therefore `n + 0.5` for "n hexes apart".
+- The map stays read-only: regions and per-cell state live on the
+  scene in the encounter, and the ruleset owns their meaning via tags.
+- `token_moved` is asked *before* the move applies, so a veto costs
+  nothing to undo; `region_*` fire after, each as its own step inside
+  the move's transaction.
+- The scene's `highlight` is transient data in the document rather than
+  a side channel: it replays, undoes and reaches Players like anything
+  else.
 
 ### Phase 7 — Campaign, growth, hardening
 

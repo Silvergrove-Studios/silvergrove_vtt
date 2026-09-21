@@ -45,6 +45,7 @@ var _props := DrawLayer.new()
 var _lights := DrawLayer.new()
 var _dark := DrawLayer.new()
 var _grid := DrawLayer.new()
+var _regions := DrawLayer.new()
 var _walls := DrawLayer.new()
 var _tokens := DrawLayer.new()
 var _notes := DrawLayer.new()
@@ -91,6 +92,7 @@ func _init() -> void:
 	_lights.fn = _draw_lights
 	_dark.fn = _draw_darkness
 	_grid.fn = _draw_grid
+	_regions.fn = _draw_regions
 	_walls.fn = _draw_walls
 	_tokens.fn = _draw_tokens
 	_notes.fn = _draw_notes
@@ -98,7 +100,7 @@ func _init() -> void:
 	var add := CanvasItemMaterial.new()
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_lights.material = add
-	for l in [_terrain, _props, _dark, _lights, _grid, _walls, _tokens, _notes, _fog, overlay]:
+	for l in [_terrain, _props, _dark, _lights, _grid, _regions, _walls, _tokens, _notes, _fog, overlay]:
 		l.canvas = self
 		add_child(l)
 	if _radial == null:
@@ -463,6 +465,48 @@ func _draw_darkness(c: Node2D) -> void:
 
 
 # ------------------------------------------------------------------------ grid --
+
+## Regions the encounter put on the scene (zones, tagged cells) and the
+## scene's highlight (a template being shown): filled cells with a label.
+## Players do not see GM-only regions.
+func _draw_regions(c: Node2D) -> void:
+	if map == null or state == null or scene_id == "":
+		return
+	var sc := state.encounter.scene(scene_id)
+	var grid := map.grid
+	var regions: Dictionary = sc.get("regions", {})
+	var ids := regions.keys()
+	ids.sort()
+	for id in ids:
+		var r: Dictionary = regions[id]
+		if not gm_view() and str(r.get("audience", "all")) == "gm":
+			continue
+		_draw_cells(c, grid, r.get("cells", []), Color(str(r.get("color", "#ffb060"))), 0.22, str(r.get("label", "")))
+	var hl: Variant = sc.get("highlight")
+	if hl is Dictionary and hl.get("cells") is Array:
+		_draw_cells(c, grid, hl.cells, Color(str(hl.get("color", "#ffffff"))), 0.35, str(hl.get("label", "")))
+
+
+func _draw_cells(c: Node2D, grid: HexGrid, cells: Array, color: Color, alpha: float, label: String) -> void:
+	var first := true
+	for key in cells:
+		if not (key is String):
+			continue
+		var cell := HexMap.key_cell(key)
+		var corners := grid.cell_corners(cell)
+		var pts := PackedVector2Array()
+		for i in 6:
+			pts.append(corners[i] * ppx)
+		c.draw_colored_polygon(pts, Color(color, alpha))
+		var outline := pts.duplicate()
+		outline.append(pts[0])
+		c.draw_polyline(outline, Color(color, alpha * 2.0), maxf(1.0, 0.02 * ppx), true)
+		if first and label != "":
+			var font := ThemeDB.fallback_font
+			var size := maxi(10, int(0.22 * ppx))
+			c.draw_string(font, grid.cell_center(cell) * ppx + Vector2(-0.4 * ppx, 0.1 * ppx), label, HORIZONTAL_ALIGNMENT_CENTER, 0.8 * ppx, size, Color(1, 1, 1, 0.9))
+			first = false
+
 
 func _draw_grid(c: Node2D) -> void:
 	if map == null or not show_grid:

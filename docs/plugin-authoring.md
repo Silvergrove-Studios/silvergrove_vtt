@@ -5,9 +5,8 @@ the Table only, inside a sandboxed VM, and everything it does becomes
 events in the encounter's log. Players never run plugin code; they
 render what the plugin's data and derived numbers say.
 
-This is the API as of plugin API version 1 (Phases 2–5 of
-`docs/plugin-api-plan.md`). Map queries arrive in Phase 6 and will be
-added here.
+This is the API as of plugin API version 1 (Phases 2–6 of
+`docs/plugin-api-plan.md`).
 
 ## Layout
 
@@ -114,6 +113,8 @@ Hooks in API 1:
 | `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock |
 | `time_advanced` | `{from, to, minutes, day, events}` | minutes are absolute since day 1 |
 | `track_done` | `{track, roll, events}` | a progress track completed |
+| `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost) |
+| `region_entered`, `region_left` | `{scene, token, actor, region, record, events}` | after a move, once per region crossed |
 
 Handlers of the turn, clock and rest hooks run synchronously and may not
 prompt; they append events to `payload.events` and the kernel commits
@@ -307,6 +308,48 @@ never separators.
 
 `hm.log(text [, audience])` puts a note in the encounter log.
 
+### The map
+
+The map is read-only and the kernel does the geometry; a ruleset asks
+questions and gets answers in **hex units** (one cell across = 1). A
+*place* is `"token:<id>"`, a `"q,r"` cell key, or `{x, y}` / `{x, y}`
+as a two-element list in hex units. Every call takes the scene id first.
+
+```lua
+hm.map.bands({ { name = "melee", max = 0.5 }, { name = "close", max = 5.5 }, { name = "far", max = 1e9 } })
+```
+Registers this ruleset's range bands, ascending, in *edge* distance
+(token sizes taken off, so two adjacent medium tokens are at 0). The
+last band is what lies beyond the rest. Bands are pure data: nothing
+in Hexmap knows what "close" means.
+
+| call | returns |
+|---|---|
+| `hm.map.distance(scene, a, b)` | `{units, edge, cells, band}` — centre to centre, edge to edge, axial steps, and this ruleset's band |
+| `hm.map.band(scene, a, b)` | just the band name |
+| `hm.map.within(scene, origin, r)` | token ids whose edge is within `r` of the origin |
+| `hm.map.template(scene, spec)` | `{cells, tokens, origin}` for `{shape="circle", at, radius}`, `{shape="cone", at, direction, length, angle}`, `{shape="line", at, direction, length, width}` or `{shape="band", at, band}`; `origin="edge"` starts cones and lines at the token's edge, `blocked_by_walls=true` drops what the origin cannot see |
+| `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens |
+| `hm.map.light_at(scene, p)` | `{level="bright" \| "dim" \| "dark", sources}` |
+| `hm.map.can_see(scene, viewer, target)` | within vision, sight clear, target lit (or the viewer sees in the dark) |
+| `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys |
+| `hm.map.cell(scene, key)` | the cell's record (`revealed`, plain fields, `ext`) with the map's `terrain` for it |
+| `hm.map.regions_at(scene, cell)` / `hm.map.tags_at(scene, cell)` | the regions covering a cell / the union of their tags |
+| `hm.map.token(scene, id)` / `hm.map.tokens(scene)` | a token / all of them |
+| `hm.map.move(scene, token, to)` | `{events, entered, left, from, to, cells}` — nothing applied; the Table's own moves go through the kernel and the `token_moved` hooks |
+
+What a ruleset may put on the map, as events for `hm.commit`:
+
+| helper | event |
+|---|---|
+| `hm.map.region(id, cells, tags [, extra])` | a region record (`label`, `color`, `audience`, `duration` as for effects) — then `hm.map.region_add(scene, region)`, `hm.map.region_set(scene, id, changes)`, `hm.map.region_remove(scene, id)` |
+| `hm.map.cell_set(scene, key, changes)` | plain fields on a cell (`revealed`, a note…) |
+| `hm.map.cell_state(scene, key, changes)` | this ruleset's `ext` on a cell (a trap, a marker); Players receive it only once the cell is `revealed` |
+| `hm.map.highlight(scene, cells [, color, label])` | show a template on the table; `hm.map.highlight(scene, nil)` clears it |
+
+Regions with a `duration` expire with the same triggers as effects; a
+token entering or leaving one fires `region_entered` / `region_left`.
+
 ### Rolling
 
 ```lua
@@ -354,8 +397,10 @@ Each test runs on a fresh scratch encounter with a fixed dice seed.
 `t.ok(cond, msg)`, `t.eq(a, b, msg)`, `t.actor(data)` → id,
 `t.roll_with_faces(faces, spec, ctx)` (typed-in faces, nothing drawn),
 `t.commit(events, label)`, `t.dispatch(action, ctx, answers)` (answers
-are given to the action's prompts in order). Tests may not prompt
-themselves. The Hexmap self-test runs the shipped plugins' tests on every
+are given to the action's prompts in order), `t.scene([map_path,
+tokens])` → a scene id over a real map (the examples' chapel by default)
+with `tokens = { { id=, actor=, x=, y= }, … }` placed by offset cell, for
+map tests. Tests may not prompt themselves. The Hexmap self-test runs the shipped plugins' tests on every
 platform that has the runtime.
 
 ## Conventions

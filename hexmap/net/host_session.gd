@@ -148,12 +148,54 @@ func _broadcast(msg: Dictionary) -> void:
 ## Scene events go to every client as they are; anything about the rules
 ## changes what each client is shown, so their views are resent (once per
 ## poll, however many events a step applied).
-func _on_applied(ev: Dictionary, _inv: Dictionary) -> void:
+func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 	var t := str(ev.get("t", ""))
 	if Protocol.SCENE_EVENTS.has(t):
 		_broadcast(Protocol.event(ev))
+	elif Protocol.AUDIENCE_EVENTS.has(t):
+		for msg in _audience_events(ev, inv):
+			_broadcast(Protocol.event(msg))
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
+
+
+## Regions and cells reach players only as far as their audience allows:
+## a GM-only region is never sent, one opened later arrives whole, one
+## closed is removed; a cell's record and plugin state follow its
+## `revealed` flag.
+func _audience_events(ev: Dictionary, inv: Dictionary) -> Array:
+	var t := str(ev.get("t", ""))
+	var scene_id := str(ev.get("scene", ""))
+	match t:
+		"region.add":
+			return [ev] if str(ev.region.get("audience", "all")) != "gm" else []
+		"region.remove":
+			return [ev] if str(inv.get("region", {}).get("audience", "all")) != "gm" else []
+		"region.set":
+			var now: Dictionary = state.encounter.scene(scene_id).regions.get(str(ev.id), {})
+			var was_gm := str(inv.get("changes", {}).get("audience", now.get("audience", "all"))) == "gm"
+			var is_gm := str(now.get("audience", "all")) == "gm"
+			if is_gm:
+				return [{"t": "region.remove", "scene": scene_id, "id": str(ev.id)}] if not was_gm else []
+			if was_gm:
+				return [{"t": "region.add", "scene": scene_id, "region": JsonDoc.deep(now)}]
+			return [ev]
+		"cell.set", "ext.set":
+			if t == "ext.set" and str(ev.get("scope", "")) != "cell":
+				return []
+			var cell: Dictionary = state.encounter.scene(scene_id).get("cells", {}).get(str(ev.id), {})
+			if not bool(cell.get("revealed", false)):
+				return []
+			# the whole cell as it is now, so a cell just revealed arrives complete
+			var out := []
+			var plain: Dictionary = JsonDoc.deep(cell)
+			plain.erase("ext")
+			if not plain.is_empty():
+				out.append({"t": "cell.set", "scene": scene_id, "id": str(ev.id), "changes": plain})
+			for pid in cell.get("ext", {}):
+				out.append({"t": "ext.set", "scope": "cell", "scene": scene_id, "id": str(ev.id), "plugin": str(pid), "changes": JsonDoc.deep(cell.ext[pid])})
+			return out
+	return []
 
 
 ## A client's projection of the rules, if there is a kernel to project.

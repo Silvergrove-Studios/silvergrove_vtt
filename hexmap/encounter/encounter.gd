@@ -68,6 +68,8 @@ static func new_scene(map: HexMap, level_id: String, p_name := "", map_path := "
 		"overrides": {},
 		"fog": {"enabled": false, "explored": []},
 		"tokens": [],
+		"regions": {},
+		"cells": {},
 	}
 
 
@@ -274,25 +276,35 @@ func _upgrade(_from_version: int) -> void:
 	if not TURN_STRATEGIES.has(str(turns.strategy)):
 		turns.strategy = "ordered"
 	for s in doc["scenes"]:
-		if not s.has("overrides"):
-			s["overrides"] = {}
-		if not s.has("tokens"):
-			s["tokens"] = []
-		if not s.has("fog"):
-			s["fog"] = {}
-		if not s["fog"].has("explored"):
-			s["fog"]["explored"] = []
-		(s["fog"]["explored"] as Array).sort()
-		if not s["fog"].has("enabled"):
-			s["fog"]["enabled"] = false
-		for t in s["tokens"]:
-			fill_token(t)
+		fill_scene(s)
 	for id in doc["actors"]:
 		fill_actor(doc["actors"][id])
 	if not doc.has("active_scene"):
 		doc["active_scene"] = str(doc["scenes"][0].get("id", "")) if not (doc["scenes"] as Array).is_empty() else ""
 	if not doc.has("id"):
 		doc["id"] = JsonDoc.uuid()
+
+
+## Give a hand-written or partial scene every field it is expected to have.
+## Applied on load and on scene.add so a scene built by hand and one that
+## went through a file agree byte for byte (the replay tests rely on it).
+static func fill_scene(s: Dictionary) -> void:
+	if not s.has("overrides"):
+		s["overrides"] = {}
+	if not s.has("tokens"):
+		s["tokens"] = []
+	if not s.has("fog"):
+		s["fog"] = {}
+	if not s["fog"].has("explored"):
+		s["fog"]["explored"] = []
+	(s["fog"]["explored"] as Array).sort()
+	if not s["fog"].has("enabled"):
+		s["fog"]["enabled"] = false
+	for k in ["regions", "cells"]:
+		if not (s.get(k) is Dictionary):
+			s[k] = {}
+	for t in s["tokens"]:
+		fill_token(t)
 
 
 ## Give a hand-written or partial actor every field it is expected to have.

@@ -353,6 +353,8 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 		kernel.register_ruleset(id, real_kernel.rulesets[id])
 		if not p.turn_strategy.is_empty():
 			kernel.turns.register(id, p.turn_strategy)
+		if real_kernel.map.band_tables.has(id):
+			kernel.map.band_tables[id] = real_kernel.map.band_tables[id]
 		_attach_hooks(p, kernel)
 		# the plugin's shipped packs, fresh for each test
 		for rel in p.manifest.get("packs", []):
@@ -393,7 +395,9 @@ func _host_table(p: Plugin) -> Dictionary:
 			"effects_expire", "resource_get", "resource_op", "resource_refill", "test_check", "test_actor", "test_dispatch",
 			"turns_register", "turns_get", "turns_op", "turns_consume", "track_make", "track_advance", "track_get", "track_all",
 			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register",
-			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated"]:
+			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated",
+			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
+			"map_move", "map_cell", "map_cells", "map_token", "test_scene"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -657,6 +661,72 @@ class Bridge:
 		p.views[str(kind)] = PluginHost._norm_view(schema)
 		return true
 
+	# --- map
+	static func _place(v: Variant) -> Variant:
+		if v is Array and (v as Array).size() == 2:
+			return Vector2(float(v[0]), float(v[1]))
+		if v is Dictionary and v.has("x") and v.has("y"):
+			return Vector2(float(v.x), float(v.y))
+		return v
+
+	func map_bands(table: Variant) -> void:
+		_k().map.register_bands(plugin_id, table if table is Array else [])
+
+	func map_distance(scene: String, a: Variant, b: Variant) -> Dictionary:
+		var d := _k().map.distance(str(scene), _place(a), _place(b), plugin_id)
+		if is_inf(float(d.get("units", 0))):
+			d.units = -1
+			d.edge = -1
+		return d
+
+	func map_within(scene: String, origin: Variant, r: Variant) -> Array:
+		return _k().map.within(str(scene), _place(origin), float(r))
+
+	func map_template(scene: String, spec: Variant) -> Dictionary:
+		var s := PluginHost._as_dict(spec)
+		if s.has("at"):
+			s.at = _place(s.at)
+		s.plugin = plugin_id
+		return _k().map.template(str(scene), s)
+
+	func map_los(scene: String, a: Variant, b: Variant, tokens_block: bool) -> Dictionary:
+		return _k().map.line_of_sight(str(scene), _place(a), _place(b), tokens_block)
+
+	func map_light(scene: String, p: Variant) -> Dictionary:
+		return _k().map.light_at(str(scene), _place(p))
+
+	func map_can_see(scene: String, viewer: String, target: String) -> Dictionary:
+		return _k().map.can_see(str(scene), str(viewer), str(target))
+
+	func map_regions_at(scene: String, cell: Variant) -> Array:
+		return JsonDoc.deep(_k().map.regions_at(str(scene), _place(cell)))
+
+	func map_tags_at(scene: String, cell: Variant) -> Array:
+		return _k().map.tags_at(str(scene), _place(cell))
+
+	func map_move(scene: String, token: String, to: Variant) -> Dictionary:
+		var p: Variant = _place(to)
+		if not (p is Vector2):
+			return {"events": [], "error": "a destination is {x, y}"}
+		return _k().map.move(str(scene), str(token), p)
+
+	func map_cell(scene: String, key: Variant) -> Dictionary:
+		return _k().map.cell(str(scene), _place(key))
+
+	func map_cells(op: String, scene: String, a: Variant, b: Variant) -> Array:
+		var m := _k().map
+		match str(op):
+			"neighbors": return m.neighbors(str(scene), _place(a))
+			"within": return m.cells_within(str(scene), _place(a), int(b))
+			"between": return m.cells_between(str(scene), _place(a), _place(b))
+		return []
+
+	func map_token(scene: String, id: String) -> Variant:
+		if str(id) == "":
+			return JsonDoc.deep(_k().state.tokens(str(scene)))
+		var tk := _k().state.token(str(scene), str(id))
+		return JsonDoc.deep(tk) if not tk.is_empty() else null
+
 	# --- compendium
 	func comp_query(coll: String, opts: Variant) -> Dictionary:
 		return _k().comp.query(str(coll), PluginHost._as_dict(opts))
@@ -712,6 +782,31 @@ class Bridge:
 			a.packs = _k().comp.versions(plugin_id)
 		var why := _k().commit([{"t": "actor.add", "actor": a}], "Test actor")
 		return str(a.id) if why == "" else {"__error": why}
+
+	## A scene on a real map for a plugin test, with tokens placed by cell.
+	func test_scene(map_path: String, tokens: Variant) -> Variant:
+		var k := _k()
+		var m := HexMap.load_file(str(map_path))
+		if m == null:
+			return {"__error": "no map at " + str(map_path)}
+		k.state.attach_map(m)
+		var lvl := str(m.levels[0].get("id", "ground")) if not m.levels.is_empty() else "ground"
+		var sc := Encounter.new_scene(m, lvl, "Test scene", str(map_path))
+		var events := [{"t": "scene.add", "scene": sc}]
+		for t in (tokens if tokens is Array else []):
+			if not (t is Dictionary):
+				continue
+			var cell := Vector2i(int(t.get("x", 0)), int(t.get("y", 0)))
+			var extra := {"id": str(t.get("id", JsonDoc.new_id("t"))), "actor": str(t.get("actor", "")), "size": int(t.get("size", 1))}
+			if t.has("vision"):
+				extra.vision = PluginHost._as_dict(t.vision)
+			if t.has("light"):
+				extra.light = PluginHost._as_dict(t.light)
+			if t.has("owner"):
+				extra.owner = str(t.owner)
+			events.append({"t": "token.add", "scene": sc.id, "token": Encounter.new_token(str(t.get("name", extra.id)), m.grid.cell_center(m.grid.offset_to_axial(cell.x, cell.y)), extra)})
+		var why := k.commit(events, "Test scene")
+		return str(sc.id) if why == "" else {"__error": why}
 
 	func test_dispatch(action: String, ctx: Variant, answers: Variant) -> Variant:
 		var pc := _h().dispatch(plugin_id, str(action), PluginHost._as_dict(ctx))

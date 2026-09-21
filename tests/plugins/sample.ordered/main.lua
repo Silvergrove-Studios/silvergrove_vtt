@@ -132,6 +132,14 @@ hm.actions.register("strike", {
 				hm.commit(spend, "Action")
 			end
 		end
+		-- on a map, a strike needs the target within reach (one hex)
+		if ctx.token and ctx.scene then
+			local theirs = hm.tokens(ctx.target)
+			if #theirs > 0 then
+				local d = hm.map.distance(ctx.scene, "token:" .. ctx.token, "token:" .. theirs[1].id)
+				if d.edge > 1 then error(string.format("out of reach (%.1f hexes away)", d.edge)) end
+			end
+		end
 		local dc = hm.value((hm.derived(ctx.target) or {}).defence)
 		local attack = hm.dice.roll("1d20", { actor = ctx.actor, kind = "attack", dc = dc }, "Strike")
 		local out = { outcome = attack.result.outcome, damage = 0 }

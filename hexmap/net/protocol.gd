@@ -36,6 +36,9 @@ const ROLES := ["player", "display"]
 const SCENE_EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
 	"token.add", "token.remove", "token.set", "element.set", "fog.set", "fog.reveal", "fog.hide", "turns.set",
 	"player.add", "player.remove", "player.set", "clock.set"]
+## Scene events the host filters by audience before sending (regions with
+## a GM audience, cells that are not revealed).
+const AUDIENCE_EVENTS := ["region.add", "region.remove", "region.set", "cell.set", "ext.set"]
 ## Document blocks a client does not hold.
 const RULES_BLOCKS := ["actors", "effects", "resources", "tracks", "pending", "log", "rng"]
 const DEFAULT_PORT := 47777
@@ -75,6 +78,15 @@ static func client_document(doc: Dictionary) -> Dictionary:
 			out[k] = {} if out[k] is Dictionary else []
 	out.pending = {"prompts": {}, "rolls": {}}
 	out.state = {"ext": {}}
+	for sc in out.get("scenes", []):
+		var regions: Dictionary = sc.get("regions", {})
+		for id in regions.keys():
+			if str(regions[id].get("audience", "all")) == "gm":
+				regions.erase(id)
+		var cells: Dictionary = sc.get("cells", {})
+		for key in cells.keys():
+			if not bool(cells[key].get("revealed", false)):
+				cells.erase(key)
 	return out
 
 

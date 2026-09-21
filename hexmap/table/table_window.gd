@@ -759,10 +759,13 @@ func _apply_player_request(ev: Dictionary, pid: String) -> String:
 	var who := str(ctx.encounter().player(pid).get("name", "player"))
 	if str(ev.get("t", "")) == "token.set" and (ev.get("changes", {}) as Dictionary).has("pos"):
 		var tk := ctx.state.token(str(ev.scene), str(ev.id))
+		var pos: Array = ev.changes.pos
 		ctx.commands.begin_group()
-		var why := ctx.commands.run(ev)
-		if why == "":
-			ctx.commands.explore_from(str(ev.scene), [ctx.state.token(str(ev.scene), str(ev.id))])
+		var why := ctx.commands.move_token(str(ev.scene), str(ev.id), Vector2(float(pos[0]), float(pos[1])), pid)
+		if why == "" and ev.changes.size() > 1:
+			var rest: Dictionary = ev.changes.duplicate()
+			rest.erase("pos")
+			why = ctx.commands.run({"t": "token.set", "scene": str(ev.scene), "id": str(ev.id), "changes": rest})
 		ctx.commands.end_group("%s moves %s" % [who, str(tk.get("name", "token"))])
 		return why
 	return ctx.commands.run(ev, who)

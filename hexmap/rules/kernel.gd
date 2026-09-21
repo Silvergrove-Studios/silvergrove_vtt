@@ -27,6 +27,8 @@ var clock: Clock
 var pending: Pending
 ## Content packs: the rulesets' and the table's, indexed.
 var comp := Compendium.new()
+## Distances, templates, sight, light, regions, cells.
+var map: MapQuery
 ## id -> {derive: Callable(view) -> Dictionary, fields: {name: expr},
 ##        policy: {type: stack|best|override}, order, depends_on_state}
 var rulesets: Dictionary = {}
@@ -44,6 +46,7 @@ func _init(p_state: EncounterState, p_log: EventLog = null) -> void:
 	turns = TurnRunner.new(self)
 	clock = Clock.new(self)
 	pending = Pending.new(self)
+	map = MapQuery.new(self)
 	# Through a weak reference: the log must not keep the kernel alive.
 	var me: WeakRef = weakref(self)
 	log.changed.connect(func() -> void:
@@ -70,7 +73,43 @@ func unregister_ruleset(id: String) -> void:
 	rulesets.erase(id)
 	hooks.off(id)
 	turns.unregister(id)
+	map.band_tables.erase(id)
 	rederive_all()
+
+
+## Everything a trigger ends: effects and regions alike.
+func expire(trigger: Dictionary) -> Array:
+	var out := Effects.expire(state, trigger)
+	out.append_array(map.expire_all_regions(trigger))
+	return out
+
+
+## Move a token (and what is attached to it) with the rulesets asked:
+## `token_moved` may veto or add events; `region_entered` / `region_left`
+## fire for the zones crossed. One undo step. "" or why not.
+func move_token(scene_id: String, id: String, to: Vector2, by := "gm") -> String:
+	var mv := map.move(scene_id, id, to)
+	if mv.has("error"):
+		return str(mv.error)
+	return transaction("Move", func() -> String:
+		var asked := ask("token_moved", {"scene": scene_id, "token": id, "actor": actor_of_ref("token:" + id), "from": mv.from, "to": mv.to,
+			"cells": mv.cells, "entered": mv.entered, "left": mv.left, "by": by})
+		if not asked.ok:
+			return asked.why
+		var events: Array = mv.events.duplicate()
+		events.append_array(asked.events)
+		var why := commit(events, "Move", {"hook": "token_moved", "by": by})
+		if why != "":
+			return why
+		for rid in mv.left:
+			why = fire("region_left", {"scene": scene_id, "token": id, "actor": actor_of_ref("token:" + id), "region": rid, "record": state.encounter.scene(scene_id).regions.get(rid, {})}, "Left")
+			if why != "":
+				return why
+		for rid in mv.entered:
+			why = fire("region_entered", {"scene": scene_id, "token": id, "actor": actor_of_ref("token:" + id), "region": rid, "record": state.encounter.scene(scene_id).regions.get(rid, {})}, "Entered")
+			if why != "":
+				return why
+		return "")
 
 
 ## The stacking policy rolls total their parts under: every registered
@@ -198,7 +237,7 @@ func rest(kind := "rest", label := "") -> String:
 	return transaction(lbl, func() -> String:
 		var why := commit([{"t": "clock.set", "changes": {"rests": int(state.encounter.clock.get("rests", 0)) + 1}}], lbl)
 		if why == "":
-			why = commit(Effects.expire(state, {"kind": kind}) + Resources.refill(state, kind) + Tracks.on_trigger(state, kind), lbl)
+			why = commit(expire({"kind": kind}) + Resources.refill(state, kind) + Tracks.on_trigger(state, kind), lbl)
 		if why == "":
 			why = fire("rest", {"kind": kind}, lbl)
 		return why)

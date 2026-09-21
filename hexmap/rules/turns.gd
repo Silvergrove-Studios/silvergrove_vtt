@@ -336,7 +336,7 @@ func _end_turn(ref: String) -> String:
 	if why != "":
 		return why
 	var token := ref.substr(6) if ref.begins_with("token:") else ""
-	return kernel.commit(Effects.expire(kernel.state, {"kind": "turn_end", "of": token if token != "" else ref}), "Turn effects")
+	return kernel.commit(kernel.expire({"kind": "turn_end", "of": token if token != "" else ref}), "Turn effects")
 
 
 func _begin_turn(ref: String) -> String:
@@ -348,7 +348,7 @@ func _begin_turn(ref: String) -> String:
 	if why != "":
 		return why
 	var token := ref.substr(6) if ref.begins_with("token:") else ""
-	why = kernel.commit(Effects.expire(kernel.state, {"kind": "turn_start", "of": token if token != "" else ref}), "Turn effects")
+	why = kernel.commit(kernel.expire({"kind": "turn_start", "of": token if token != "" else ref}), "Turn effects")
 	if why != "":
 		return why
 	return _fire("turn_start", {"ref": ref, "actor": kernel.actor_of_ref(ref)}, "Turn starts")

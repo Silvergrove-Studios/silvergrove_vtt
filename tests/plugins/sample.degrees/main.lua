@@ -143,7 +143,17 @@ hm.actions.register("strike", {
 			hm.commit(spend, "Action")
 		end
 		local ac = hm.value((hm.derived(ctx.target) or {}).ac)
+		-- cover from what stands between, when both are on the map
+		local cover = "none"
+		local mine, theirs = hm.tokens(ctx.actor), hm.tokens(ctx.target)
+		if #mine > 0 and #theirs > 0 then
+			local los = hm.map.los(mine[1].scene, "token:" .. mine[1].id, "token:" .. theirs[1].id)
+			cover = los.cover
+			if not los.clear then error("no line of sight to the target") end
+			if cover == "partial" then ac = ac + 2 end
+		end
 		local attack = hm.dice.roll("1d20", { actor = ctx.actor, kind = "attack", dc = ac }, "Strike")
+		attack.result.cover = cover
 		local n = ((hm.state.get("encounter").attacks or {})[ctx.actor]) or 0
 		hm.commit(hm.state.set("encounter", "", { ["attacks/" .. ctx.actor] = n + 1 }), "Attack count")
 		local out = { outcome = attack.result.outcome, degree = attack.result.degree, damage = 0 }
@@ -203,6 +213,61 @@ hm.actions.register("spawn", {
 		return { actor = id }
 	end,
 })
+
+-- A burst: everything in a circle around a place takes damage.
+hm.actions.register("burst", {
+	label = "Burst", cost = { actions = 2 }, target = "ref",
+	run = function(ctx)
+		local area = hm.map.template(ctx.scene, { shape = "circle", at = ctx.at, radius = ctx.radius or 1, blocked_by_walls = true, include_self = true })
+		hm.commit(hm.map.highlight(ctx.scene, area.cells, "#ff6b35", "Burst"), "Burst")
+		local hit = {}
+		for _, tid in ipairs(area.tokens) do
+			local tk = hm.map.token(ctx.scene, tid)
+			if tk and tk.actor and tk.actor ~= "" then
+				local dmg = hm.dice.roll("1d6", { actor = ctx.actor, kind = "damage" }, "Burst")
+				local ev = hm.resources.spend(ref_of(tk.actor), "hp", dmg.result.total)
+				if ev then hm.commit(ev, "Burst damage") end
+				table.insert(hit, tk.actor)
+			end
+		end
+		hm.commit(hm.map.highlight(ctx.scene, nil), "Burst")
+		return { cells = #area.cells, hit = hit }
+	end,
+})
+
+-- A zone of fire that burns for two rounds; whoever walks in takes damage.
+hm.actions.register("fire_zone", {
+	label = "Fire zone", cost = { actions = 2 }, target = "ref",
+	run = function(ctx)
+		local cells = hm.map.cells_within(ctx.scene, ctx.at, ctx.radius or 1)
+		local region = hm.map.region("fire_" .. tostring(#cells) .. tostring(hm.clock.get().rests), cells, { "fire", "hazard" },
+			{ label = "Fire", color = "#ff4500", duration = { kind = "rounds", rounds = 2 } })
+		hm.commit(hm.map.region_add(ctx.scene, region), "Fire")
+		return { region = region.id, cells = #cells }
+	end,
+})
+
+hm.on("region_entered", function(p)
+	local rec = p.record or {}
+	local tags = rec.tags or {}
+	local fire = false
+	for _, tg in ipairs(tags) do if tg == "fire" then fire = true end end
+	if fire and p.actor and p.actor ~= "" then
+		local dmg = hm.dice.roll("1d6", { actor = p.actor, kind = "damage" }, "Fire")
+		local ev = hm.resources.spend(ref_of(p.actor), "hp", dmg.result.total)
+		if ev then table.insert(p.events, ev) end
+		hm.log(hm.actor(p.actor).name .. " walks into the fire", "all")
+	end
+	return p
+end)
+
+-- Difficult ground costs a step of movement budget: a tagged region.
+hm.on("token_moved", function(p)
+	for _, tg in ipairs(hm.map.tags_at(p.scene, p.to)) do
+		if tg == "wall_of_force" then p.veto = "the wall of force stops you" return p end
+	end
+	return p
+end)
 
 hm.actions.register("setup", {
 	label = "Set up", target = "actor",

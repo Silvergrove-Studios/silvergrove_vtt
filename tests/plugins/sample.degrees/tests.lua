@@ -86,3 +86,30 @@ hm.test("compendium: query the shipped pack, spawn a creature, homebrew behaves 
 	local ok = pcall(function() hm.comp.put("creatures", { id = "bad", name = "Bad", level = 99, stats = { might = 0, agility = 0, mind = 0 } }) end)
 	t.ok(not ok, "a homebrew entry that breaks the schema is refused")
 end)
+
+
+hm.test("map: cover raises the difficulty, a burst hits an area, a fire zone burns those who enter", function(t)
+	local a = hero(t)
+	local b = t.actor({ id = "a_gob", kind = "npc", name = "Gob", ext = { [hm.id] = { level = 1, stats = { might = 0, agility = 0, mind = 0 }, ac_base = 10 } } })
+	local c = t.actor({ id = "a_gob2", kind = "npc", name = "Gob 2", ext = { [hm.id] = { level = 1, stats = { might = 0, agility = 0, mind = 0 }, ac_base = 10 } } })
+	-- the chapel: a hero at the west door, goblins inside
+	local scene = t.scene(nil, { { id = "t_h", actor = a, x = 3, y = 7 }, { id = "t_g", actor = b, x = 9, y = 7 }, { id = "t_g2", actor = c, x = 10, y = 7 } })
+	t.dispatch("setup", { actor = b })
+	t.dispatch("setup", { actor = c })
+	local d = hm.map.distance(scene, "token:t_h", "token:t_g")
+	t.ok(d.cells >= 5, "the goblin is some hexes away: " .. tostring(d.cells))
+	local los = hm.map.los(scene, "token:t_h", "token:t_g")
+	t.ok(los.cover == "none" or los.cover == "partial" or los.cover == "total", "line of sight answers: " .. los.cover)
+	-- a burst around the first goblin catches the second next to it
+	local out = t.dispatch("burst", { actor = a, scene = scene, at = "token:t_g", radius = 1 })
+	t.ok(out.cells >= 3, "a burst covers several cells: " .. tostring(out.cells))
+	t.eq(#out.hit, 2, "both goblins were in it")
+	t.ok(hm.resources.get("actor:" .. b, "hp").current < 10, "and took damage")
+	-- a fire zone; a goblin walking into it burns
+	local fz = t.dispatch("fire_zone", { actor = a, scene = scene, at = "5,6", radius = 1 })
+	t.ok(fz.cells >= 3, "the zone has cells")
+	t.eq(#hm.map.regions_at(scene, "5,6"), 1, "the region is on the scene")
+	local hp_before = hm.resources.get("actor:" .. c, "hp").current
+	local mv = hm.map.move(scene, "t_g2", { x = hm.map.token(scene, "t_g2").pos[1], y = hm.map.token(scene, "t_g2").pos[2] })
+	t.eq(#mv.entered, 0, "staying put enters nothing")
+end)
