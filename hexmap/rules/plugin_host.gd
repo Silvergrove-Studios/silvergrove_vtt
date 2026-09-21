@@ -499,6 +499,10 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 	var list: Array = names.value if names.value is Array else []
 	out.names = list
 	var real_kernel := kernel
+	# the packs are indexed once for the run and shared by every test's
+	# scratch kernel; a test that wrote to a user pack gets them rebuilt
+	# for the next one, so tests stay independent
+	var shared: Compendium = null
 	for i in list.size():
 		var name := str(list[i])
 		say.call("  · " + name)
@@ -507,10 +511,15 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 		kernel = RulesKernel.new(scratch)
 		kernel.plugin_host = weakref(self)
 		kernel.validators = real_kernel.validators.duplicate()
-		# the plugin, its dependencies (so a layered plugin is tested over
-		# its base) and their packs, fresh for each test
+		# the plugin and its dependencies (so a layered plugin is tested
+		# over its base), fresh for each test
+		if shared == null or shared.writes > 0:
+			shared = Compendium.new()
+			for pid in _with_dependencies(id):
+				_load_packs_into(shared, str(pid))
+		kernel.comp = shared
 		for pid in _with_dependencies(id):
-			_attach_to(kernel, real_kernel, str(pid))
+			_attach_to(kernel, real_kernel, str(pid), false)
 		_test_counts = [0, 0]
 		_test_failures = []
 		var c := p.vm.call_function("__run_test", [i + 1, {}])
@@ -544,7 +553,7 @@ func _with_dependencies(id: String) -> Array:
 
 ## Register a loaded plugin on another kernel (a scratch one): its
 ## ruleset, turn strategy, bands, hooks, overrides and shipped packs.
-func _attach_to(k: RulesKernel, real_kernel: RulesKernel, pid: String) -> void:
+func _attach_to(k: RulesKernel, real_kernel: RulesKernel, pid: String, with_packs := true) -> void:
 	var p: Plugin = plugins[pid]
 	k.register_ruleset(pid, real_kernel.rulesets[pid])
 	if not p.turn_strategy.is_empty():
@@ -554,9 +563,15 @@ func _attach_to(k: RulesKernel, real_kernel: RulesKernel, pid: String) -> void:
 	_attach_hooks(p, k)
 	for over in p.manifest.get("overrides", {}):
 		k.hooks.override(pid, str(over), Array(p.manifest.overrides[over]))
+	if with_packs:
+		_load_packs_into(k.comp, pid)
+
+
+func _load_packs_into(comp: Compendium, pid: String) -> void:
+	var p: Plugin = plugins[pid]
 	for rel in p.manifest.get("packs", []):
 		if p.dir != "":
-			k.comp.load_path(p.dir.path_join(str(rel)))
+			comp.load_path(p.dir.path_join(str(rel)))
 
 
 # --------------------------------------------------------- host table --

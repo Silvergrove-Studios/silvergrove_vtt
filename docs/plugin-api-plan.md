@@ -713,12 +713,40 @@ Decisions taken while building:
   only what the viewer's audience allows; GM secrets are a pack (or an
   entry) marked `audience: gm`.
 
-### Phase 8 — Real rulesets
+### Phase 8 — Real rulesets — **in progress 2026-09-21**
 
 Only now, and in their own repositories, the studied rulesets are written
 against the API — with the licensing decisions taken then. The API is
 declared 1.0 when the first of them ships without a host change it could
 not have made through the plugin.
+
+**The first ruleset: `srd5e`** (`Silvergrove-Studios/ruleset-dnd5e`,
+`plugin/`), the 5E-compatible rules on SRD 5.2.1 and 5.1 (CC-BY-4.0),
+built 2026-09-21 through the eleven milestones of its `PLAN.md`: packs
+from Open5e (4,141 entries), a character sheet with tabs on the phone,
+D20 Tests with advantage from conditions, the fifteen conditions,
+concentration, damage and death, rests, a spellbook and casting with
+areas, initiative with budgets, stat blocks onto the map, the attack
+workflow with cover and opportunity attacks, class features, weapon
+mastery, character creation and level-up, homebrew editors from the
+collection schemas; 627 plugin checks plus an end-to-end session check
+over the wire. Its `GAPS.md` is the record of what the API lacked. No
+desirement was blocked; the host changes it produced are small:
+
+| found by | change | commit |
+|---|---|---|
+| timing packs at SRD volume | `plugintest` prints the load time, entry count and test time | `82c538e` |
+| the sheet's `versatile ? … : …` | `Expr.truthy` no longer compares a String to `false` | `8b8b6bc` |
+| a requested-roll prompt on the phone | `PropertyForm.set_values` reads a null bool as unchecked | `db14401` |
+| a 25 s plugin test run | `run_tests` indexes the plugin's packs once and shares them across tests (rebuilt after a test writes to a user pack): 28.7 s → 4.1 s for srd5e | this commit |
+| H11 | the Rules panel shows each plugin's manifest `attribution` | this commit |
+
+Still open from `GAPS.md`, all small and none blocking: the active scene
+for a plugin action from the GM panel (`hm.scene()`, G3), per-setting
+packs (G5), which kind of thing blocked a line of sight (G7), a `picker`
+field inside forms and wizard steps (G9), prompting the GM (G11), one
+rule for numeric-string Dictionary keys across the bridge (G13). H10
+(cues) stays out.
 
 ---
 

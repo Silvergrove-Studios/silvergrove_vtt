@@ -41,6 +41,9 @@ var _layer := 0
 var _sorted: Dictionary = {}
 ## Where user packs are written.
 var user_dir := "user://content"
+## How many times a user pack was written to (put, remove, a new user
+## pack): a reader that caches an index knows when it went stale.
+var writes := 0
 
 
 # --------------------------------------------------------------- loading --
@@ -117,6 +120,7 @@ func unload(id: String) -> void:
 ## Make (or open) a writable pack for a table's own entries.
 func user_pack(id: String, p_name := "", plugin := "") -> Dictionary:
 	if not packs.has(id):
+		writes += 1
 		load_pack({"id": id, "name": p_name if p_name != "" else id, "plugin": plugin, "user": true, "pack_version": "1"}, {}, user_dir.path_join(id))
 	return packs[id]
 
@@ -430,6 +434,7 @@ func put(coll: String, entry: Dictionary, pack_id: String, schema: JsonSchema = 
 			return why
 	var clean: Dictionary = JsonDoc.deep(entry)
 	clean.erase("__pack")
+	writes += 1
 	if _by_pack.get(coll, {}).get(pack_id, {}).has(str(clean.id)):
 		_remove_from_pack(coll, str(clean.id), pack_id)
 	_put(coll, clean, pack_id)
@@ -444,6 +449,7 @@ func remove(coll: String, id: String, pack_id: String) -> String:
 		return "no writable pack '%s'" % pack_id
 	if not _by_pack.get(coll, {}).get(pack_id, {}).has(id):
 		return "no entry '%s' in %s" % [id, pack_id]
+	writes += 1
 	_remove_from_pack(coll, id, pack_id)
 	return ""
 

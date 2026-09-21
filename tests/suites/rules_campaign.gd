@@ -473,6 +473,7 @@ func test_targets_picked_on_the_table() -> void:
 	ctx.select_token(hero_tk)
 	table.rules.refresh()
 	await tree.process_frame
+	check(table.rules._plugins.text.contains("Sample rules by Silvergrove Studios, CC0."), "the Rules panel shows each plugin's attribution")
 	table.rules._dispatch("sample.ordered", "shove", "token")
 	check(not ctx.pick.is_empty() and ctx.pick.kind == "token" and table.view.tool is TableTools.PickTool, "the table is picking a token: %s" % [ctx.pick.get("kind")])
 	var pick_tool := table.view.tool as TableTools.PickTool

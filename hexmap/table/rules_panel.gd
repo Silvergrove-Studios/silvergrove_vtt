@@ -102,6 +102,9 @@ func refresh() -> void:
 		for id in host.plugins:
 			var p: PluginHost.Plugin = host.plugins[id]
 			lines.append("%s %s%s" % [str(p.manifest.get("name", id)), str(p.manifest.get("version", "")), (" — %d error(s)" % p.errors.size()) if not p.errors.is_empty() else ""])
+			# the licence's attribution travels with the rules that carry it
+			if str(p.manifest.get("attribution", "")) != "":
+				lines.append("    " + str(p.manifest.attribution))
 		_plugins.text = "\n".join(lines) if not lines.is_empty() else "No plugins loaded (put them under user://plugins)."
 	# targets: every actor with a token on this scene
 	var current_target := str(_target.get_item_metadata(_target.selected)) if _target.selected >= 0 and _target.item_count > 0 else ""
