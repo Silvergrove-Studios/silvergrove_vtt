@@ -33,6 +33,7 @@ var campaign_panel: CampaignPanel
 var party: RosterPanel
 var npcs: RosterPanel
 var notes: NotesPanel
+var maps: MapsPanel
 var tool_options: HBoxContainer
 ## The tool the DM chose; a pick borrows the view and gives it back.
 var _tool_name := "select"
@@ -136,7 +137,7 @@ func _set_encounter(e: Encounter) -> void:
 
 
 func _bind_panels() -> void:
-	for p in [scenes, tokens, inspector, turns, rules, compendium, players, campaign_panel, party, npcs, notes]:
+	for p in [scenes, tokens, inspector, turns, rules, compendium, players, campaign_panel, party, npcs, notes, maps]:
 		p.bind()
 
 
@@ -194,6 +195,11 @@ func _build_ui() -> void:
 	party = RosterPanel.new(ctx, true)
 	npcs = RosterPanel.new(ctx, false)
 	notes = NotesPanel.new(ctx)
+	maps = MapsPanel.new(ctx)
+	maps.pick_map_file = func(then: Callable) -> void:
+		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.hexmap ; Hex maps", "*.json ; Map JSON"])
+		fd.file_selected.connect(then)
+		fd.popup_centered_ratio(0.7)
 	var stack := Control.new()
 	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var dock_ctl := _build_dock_layout()
@@ -237,6 +243,7 @@ func _build_dock_layout() -> Control:
 		DockPane.new("Party", party, party.header_actions()),
 		DockPane.new("NPCs", npcs, npcs.header_actions()),
 		DockPane.new("Notes", notes),
+		DockPane.new("Maps", maps),
 	]
 	for p in _panes:
 		dock.add_child(p)

@@ -126,6 +126,17 @@ func encounter() -> Encounter:
 	return state.encounter
 
 
+## A file path as the live document should store it: relative to the
+## campaign (or encounter) file when it has one, else as given.
+func relative_path(p: String) -> String:
+	var base := state.encounter.base_dir() if state != null else ""
+	if base == "":
+		return p
+	if p.begins_with(base + "/"):
+		return p.substr(base.length() + 1)
+	return p
+
+
 ## The path the encounter's campaign reference should carry: relative to
 ## the encounter file when both are saved, else absolute.
 func campaign_ref_path() -> String:

@@ -287,7 +287,7 @@ func test_table_window() -> void:
 	var win := TableWindow.new()
 	win.app = app
 	root.add_child(win)
-	check(win.view != null and win.dock != null and win._panes.size() == 12, "table window builds with twelve panes")
+	check(win.view != null and win.dock != null and win._panes.size() == 13, "table window builds with thirteen panes")
 	var names := LayoutStore.names(win.dock.layout)
 	for n in LayoutStore.TABLE_PANELS:
 		check(names.has(n), "table layout holds the %s panel: %s" % [n, names])
@@ -438,6 +438,33 @@ func test_campaign_first() -> void:
 	var nid := notes.save()
 	check(nid != "" and ctx.campaign.journal.size() == 1 and ctx.campaign.journal[0].tags == ["runes", "altar"] and ctx.campaign.journal[0].audience == "all", "a note saved to the journal ahead of the session")
 	check(notes._list.item_count == 1 and str(notes._list.get_item_text(0)).begins_with("[N] The stone"), "listed")
+	# the Maps pane: the chapel into the library, a prepared fight over it, launched and returned from
+	var mp := win.maps
+	check(mp.add_map(_example("ruined_chapel.hexmap")) == "" and ctx.campaign.maps.size() == 1 and ctx.campaign.maps[0].role == "battle", "the chapel is in the library")
+	var mid := str(ctx.campaign.maps[0].id)
+	var enc := mp.new_encounter("The chapel ambush", mid, "ground")
+	check(ctx.campaign.encounter_entry(enc).name == "The chapel ambush" and ctx.campaign.encounter_entry(enc).map == mid, "a prepared encounter over it")
+	mp._search.text = "goblin"
+	mp._search_compendium()
+	check(mp._results.item_count >= 1, "the compendium offers goblins")
+	check(mp.add_creature(enc, mp._results.get_item_metadata(0), 2, "9,8", true) == "" and ctx.campaign.encounter_entry(enc).creatures.size() == 1, "two goblins at 9,8, hidden, in the recipe")
+	var scenes_before := ctx.encounter().scenes.size()
+	var actors_before := ctx.encounter().actors.size()
+	check(mp.launch(enc) == "", "launched")
+	var live: Dictionary = ctx.campaign.encounter_entry(enc).get("live", {})
+	check(ctx.encounter().scenes.size() == scenes_before + 1 and ctx.encounter().active_scene_id == str(live.get("scene", "")) and ctx.scene_id == str(live.scene), "a scene over the chapel is shown")
+	check((live.actors as Array).size() == 2 and ctx.encounter().actors.size() == actors_before + 2, "two goblin actors were made")
+	var placed := 0
+	var cell9 := ctx.state.map_for(ctx.scene_id).grid.cell_center(ctx.state.map_for(ctx.scene_id).grid.offset_to_axial(9, 8))
+	for tk in ctx.state.tokens(ctx.scene_id):
+		if (live.actors as Array).has(str(tk.get("actor", ""))):
+			placed += 1
+			check(bool(tk.get("hidden", false)) and Vision.token_pos(tk).distance_to(cell9) < 2.5, "a goblin token, hidden, at or beside 9,8 (%s)" % [tk.pos])
+	check(placed == 2, "both placed on the scene")
+	check(ctx.campaign.encounter_entry(enc).played == [0], "played this (zeroth) session")
+	check(mp.return_from(enc) == "", "returned")
+	check(ctx.encounter().scenes.size() == scenes_before and ctx.encounter().actors.size() == actors_before and not ctx.campaign.encounter_entry(enc).has("live"), "the goblins and the scene are gone; the party stays")
+	check(mp.show_map(mid) == "" and ctx.encounter().scenes.size() == 1, "Show makes a scene over a library map")
 	# a session: start and end from the pane's verbs
 	check(ctx.start_session() == "", "started")
 	notes.selected = nid
