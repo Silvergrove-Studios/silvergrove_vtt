@@ -52,6 +52,13 @@ func test_view_renderer_widgets() -> void:
 	r.render(schema, data)
 	await tree.process_frame
 	check(_find(r, "Label", "Ana") != null, "a bound text")
+	# a prompt form whose bool field has no default renders (bool(null) was a GDScript error)
+	var r2 := ViewRenderer.new()
+	root.add_child(r2)
+	r2.render({"type": "prompt", "bind": "/prompts/0"}, {"prompts": [{"id": "p_2", "to": "pl_1", "form": {"title": "?", "fields": [{"key": "roll", "type": "bool", "label": "Roll"}, {"key": "insp", "type": "bool", "label": "Inspiration"}]}, "default": {"roll": true}}]})
+	await tree.process_frame
+	check(_count(r2, "CheckBox") == 2, "a prompt with an undefaulted bool field renders its two checkboxes")
+	r2.queue_free()
 	check(_find(r, "Label", "Level 2 Ana") != null, "an expression text")
 	var def := _find(r, "Label", "13")
 	check(def != null and def.tooltip_text.contains("agility +3"), "a typed number with its breakdown as tooltip: %s" % [def.tooltip_text if def != null else "none"])

@@ -128,7 +128,7 @@ func set_values(values: Dictionary) -> void:
 			"float", "int":
 				(ctl as SpinBox).set_value_no_signal(float(v) if v != null else 0.0)
 			"bool":
-				(ctl as CheckBox).set_pressed_no_signal(bool(v))
+				(ctl as CheckBox).set_pressed_no_signal(v == true or (v is String and str(v) == "true"))
 			"enum":
 				var ob := ctl as OptionButton
 				var i: int = (item.options as Array).find(str(v))
