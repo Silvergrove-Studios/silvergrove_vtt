@@ -22,12 +22,25 @@ func test_pack_library() -> void:
 	check(big.get_width() == 1024, "prop texture sized by footprint (2.2 hex × 256 → 1024 bucket): %d" % big.get_width())
 	var missing := lib.terrain_texture("nope:x", 0, 64)
 	check(missing != null, "missing texture gives a placeholder")
+	# square-cell art: its own variants, square, opaque to the corners
+	check(grass.textures_square.size() == 3 and lib.terrain_has_square_art("woodland:grass"), "grass ships square variants")
+	var sq := lib.terrain_texture("woodland:grass", 1, 100, "square")
+	check(sq != tex and sq.get_width() == sq.get_height(), "a square texture for square cells: %dx%d" % [sq.get_width(), sq.get_height()])
+	var sq_img: Image = sq.get_image()
+	sq_img = sq_img.duplicate()
+	sq_img.convert(Image.FORMAT_RGBA8)
+	check(sq_img.get_pixel(1, 1).a > 0.9 and sq_img.get_pixel(sq_img.get_width() - 2, sq_img.get_height() - 2).a > 0.9, "opaque to its corners")
+	check(lib.terrain_texture("woodland:grass", 1, 100, "hex") == tex, "hex asks get the hex art")
+	var only_hex := {"id": "solo", "name": "Solo", "color": "#123456", "textures": ["terrain/grass_1.svg"], "fit": "hex"}
+	lib.packs.woodland.terrains.append(only_hex)
+	check(not lib.terrain_has_square_art("woodland:solo") and lib.terrain_texture("woodland:solo", 0, 100, "square") == lib.terrain_texture("woodland:solo", 0, 100, "hex"), "a terrain without square art falls back to its hex art (the renderer crops it)")
+	lib.packs.woodland.terrains.erase(only_hex)
 	# Every texture in every manifest exists and rasterises.
 	var bad := 0
 	for pid in lib.pack_ids():
 		var p: Dictionary = lib.packs[pid]
 		for t in p.terrains:
-			for f in t.textures:
+			for f in t.textures + t.get("textures_square", []):
 				if not FileAccess.file_exists(str(p._dir).path_join(f)):
 					bad += 1
 		for pr in p.props:

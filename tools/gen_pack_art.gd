@@ -179,9 +179,11 @@ func _dungeons() -> Dictionary:
 
 func _t(id: String, name: String, color: String, deco: String, variants: int, tags: Array = []) -> Dictionary:
 	var files: Array = []
+	var square: Array = []
 	for v in variants:
 		files.append("terrain/%s_%d.svg" % [id, v + 1])
-	return {"id": id, "name": name, "color": color, "textures": files, "fit": "hex", "tags": tags, "_deco": deco}
+		square.append("terrain/%s_sq_%d.svg" % [id, v + 1])
+	return {"id": id, "name": name, "color": color, "textures": files, "textures_square": square, "fit": "hex", "tags": tags, "_deco": deco}
 
 
 func _p(id: String, name: String, kind: String, size: Array, anchor: Array, layer: String, colors: Dictionary, blocks: Dictionary, height: float, light = null) -> Dictionary:
@@ -213,6 +215,9 @@ func _write_pack(pack: Dictionary) -> void:
 	for t in pack.terrains:
 		for v in t.textures.size():
 			_save(dir.path_join(t.textures[v]), _terrain_svg(t.color, t._deco, "%s/%s/%d" % [pack.id, t.id, v]))
+		for v in t.get("textures_square", []).size():
+			# the same scatter, seeded alike, framed as a square
+			_save(dir.path_join(t.textures_square[v]), _terrain_svg(t.color, t._deco, "%s/%s/%d" % [pack.id, t.id, v], true))
 		var clean: Dictionary = t.duplicate()
 		clean.erase("_deco")
 		manifest.terrains.append(clean)
@@ -245,14 +250,23 @@ func _n(v: float) -> String:
 const HEX_POINTS := "50,0 100,28.87 100,86.6 50,115.47 0,86.6 0,28.87"
 
 
-func _terrain_svg(color: String, deco: String, key: String) -> String:
+## The art for one cell: a pointy hexagon in a 100 × 115.47 box, or — for
+## `square` — the middle 100 × 100 of the same scatter, filled edge to
+## edge, so a terrain looks alike on either grid.
+func _terrain_svg(color: String, deco: String, key: String, square := false) -> String:
 	_seed(key)
 	var base := Color(color)
 	var s := PackedStringArray()
-	s.append('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115.47" width="256" height="296">')
-	s.append('<defs><clipPath id="hex"><polygon points="%s"/></clipPath></defs>' % HEX_POINTS)
-	s.append('<polygon points="%s" fill="%s"/>' % [HEX_POINTS, color])
-	s.append('<g clip-path="url(#hex)">')
+	if square:
+		s.append('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256">')
+		s.append('<defs><clipPath id="cell"><rect x="0" y="0" width="100" height="100"/></clipPath></defs>')
+		s.append('<rect x="0" y="0" width="100" height="100" fill="%s"/>' % color)
+		s.append('<g clip-path="url(#cell)"><g transform="translate(0 -7.735)">')
+	else:
+		s.append('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115.47" width="256" height="296">')
+		s.append('<defs><clipPath id="hex"><polygon points="%s"/></clipPath></defs>' % HEX_POINTS)
+		s.append('<polygon points="%s" fill="%s"/>' % [HEX_POINTS, color])
+		s.append('<g clip-path="url(#hex)">')
 	# Gentle mottling so neighbouring cells do not read as one flat sheet.
 	for i in 4:
 		var c := base.lightened(_rng.randf_range(-0.08, 0.08))
@@ -352,11 +366,18 @@ func _terrain_svg(color: String, deco: String, key: String) -> String:
 				s.append('<rect x="-5" y="%s" width="110" height="15" fill="%s"/>' % [_n(y), light if i % 2 == 0 else color])
 				s.append('<line x1="-5" y1="%s" x2="105" y2="%s" stroke="%s" stroke-width="2"/>' % [_n(y), _n(y), dark])
 		"border":
-			s.append('<polygon points="50,10 91,33.6 91,81.8 50,105.4 9,81.8 9,33.6" fill="none" stroke="%s" stroke-width="3"/>' % _h(base.lightened(0.35)))
+			if square:
+				s.append('<rect x="9" y="16.7" width="82" height="82" fill="none" stroke="%s" stroke-width="3"/>' % _h(base.lightened(0.35)))
+			else:
+				s.append('<polygon points="50,10 91,33.6 91,81.8 50,105.4 9,81.8 9,33.6" fill="none" stroke="%s" stroke-width="3"/>' % _h(base.lightened(0.35)))
 		"solid":
 			pass
 	s.append('</g>')
-	s.append('<polygon points="%s" fill="none" stroke="%s" stroke-width="1" opacity="0.5"/>' % [HEX_POINTS, _h(base.darkened(0.35))])
+	if square:
+		s.append('</g>')
+		s.append('<rect x="0.5" y="0.5" width="99" height="99" fill="none" stroke="%s" stroke-width="1" opacity="0.5"/>' % _h(base.darkened(0.35)))
+	else:
+		s.append('<polygon points="%s" fill="none" stroke="%s" stroke-width="1" opacity="0.5"/>' % [HEX_POINTS, _h(base.darkened(0.35))])
 	s.append('</svg>')
 	return "\n".join(s) + "\n"
 

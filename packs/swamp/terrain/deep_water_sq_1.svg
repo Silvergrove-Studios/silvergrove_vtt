@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256">
+<defs><clipPath id="cell"><rect x="0" y="0" width="100" height="100"/></clipPath></defs>
+<rect x="0" y="0" width="100" height="100" fill="#2b4a48"/>
+<g clip-path="url(#cell)"><g transform="translate(0 -7.735)">
+<circle cx="93.4" cy="105.5" r="32.0" fill="#1a3c3a" opacity="0.5"/>
+<circle cx="93.6" cy="107.5" r="27.1" fill="#385553" opacity="0.5"/>
+<circle cx="81.0" cy="28.7" r="32.2" fill="#345150" opacity="0.5"/>
+<circle cx="89.5" cy="47.4" r="33.2" fill="#1d3e3c" opacity="0.5"/>
+<path d="M-8.6 9.5 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#516b69" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M8.2 24.0 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#516b69" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M4.7 37.0 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#516b69" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M-6.1 51.6 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#516b69" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M3.7 65.5 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#516b69" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M-9.6 84.6 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#516b69" stroke-width="1.4" fill="none" opacity="0.7"/>
+<path d="M4.9 99.1 q12 -4 24 0 t24 0 t24 0 t24 0 t24 0" stroke="#516b69" stroke-width="1.4" fill="none" opacity="0.7"/>
+</g>
+</g>
+<rect x="0.5" y="0.5" width="99" height="99" fill="none" stroke="#1c302f" stroke-width="1" opacity="0.5"/>
+</svg>

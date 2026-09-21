@@ -19,6 +19,11 @@
         "terrain/marsh_grass_2.svg",
         "terrain/marsh_grass_3.svg"
       ],
+      "textures_square": [
+        "terrain/marsh_grass_sq_1.svg",
+        "terrain/marsh_grass_sq_2.svg",
+        "terrain/marsh_grass_sq_3.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -29,6 +34,10 @@
       "textures": [
         "terrain/reeds_1.svg",
         "terrain/reeds_2.svg"
+      ],
+      "textures_square": [
+        "terrain/reeds_sq_1.svg",
+        "terrain/reeds_sq_2.svg"
       ],
       "fit": "hex",
       "tags": [
@@ -43,6 +52,10 @@
         "terrain/murky_water_1.svg",
         "terrain/murky_water_2.svg"
       ],
+      "textures_square": [
+        "terrain/murky_water_sq_1.svg",
+        "terrain/murky_water_sq_2.svg"
+      ],
       "fit": "hex",
       "tags": [
         "water"
@@ -55,6 +68,10 @@
       "textures": [
         "terrain/deep_water_1.svg",
         "terrain/deep_water_2.svg"
+      ],
+      "textures_square": [
+        "terrain/deep_water_sq_1.svg",
+        "terrain/deep_water_sq_2.svg"
       ],
       "fit": "hex",
       "tags": [
@@ -70,6 +87,10 @@
         "terrain/mud_1.svg",
         "terrain/mud_2.svg"
       ],
+      "textures_square": [
+        "terrain/mud_sq_1.svg",
+        "terrain/mud_sq_2.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -80,6 +101,10 @@
       "textures": [
         "terrain/peat_1.svg",
         "terrain/peat_2.svg"
+      ],
+      "textures_square": [
+        "terrain/peat_sq_1.svg",
+        "terrain/peat_sq_2.svg"
       ],
       "fit": "hex",
       "tags": []
@@ -92,6 +117,10 @@
         "terrain/moss_stone_1.svg",
         "terrain/moss_stone_2.svg"
       ],
+      "textures_square": [
+        "terrain/moss_stone_sq_1.svg",
+        "terrain/moss_stone_sq_2.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -102,6 +131,10 @@
       "textures": [
         "terrain/rotting_boardwalk_1.svg",
         "terrain/rotting_boardwalk_2.svg"
+      ],
+      "textures_square": [
+        "terrain/rotting_boardwalk_sq_1.svg",
+        "terrain/rotting_boardwalk_sq_2.svg"
       ],
       "fit": "hex",
       "tags": []

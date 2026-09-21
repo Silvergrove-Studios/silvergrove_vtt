@@ -77,11 +77,11 @@ static func tiled(map: HexMap, packs: PackLibrary, path: String, ppx: int, level
 	for t in r.tiles:
 		var out := path.get_base_dir().path_join(t.file)
 		_ensure_dir(out)
-		var tex := packs.terrain_texture(t.ref, t.variant, ppx)
+		var tex := packs.terrain_texture(t.ref, t.variant, ppx, "square" if map.grid.is_square() else "hex")
 		var img := tex.get_image()
 		img = img.duplicate()
 		img.convert(Image.FORMAT_RGBA8)
-		if map.grid.is_square() and str(packs.terrain(t.ref).get("fit", "hex")) == "hex":
+		if map.grid.is_square() and not packs.terrain_has_square_art(t.ref):
 			# hex-shaped art on square tiles: the square inside the hexagon
 			var k := HexGrid.INSCRIBED_SQUARE
 			var w := img.get_width()

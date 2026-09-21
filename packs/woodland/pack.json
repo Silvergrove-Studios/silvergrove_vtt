@@ -19,6 +19,11 @@
         "terrain/grass_2.svg",
         "terrain/grass_3.svg"
       ],
+      "textures_square": [
+        "terrain/grass_sq_1.svg",
+        "terrain/grass_sq_2.svg",
+        "terrain/grass_sq_3.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -29,6 +34,10 @@
       "textures": [
         "terrain/tall_grass_1.svg",
         "terrain/tall_grass_2.svg"
+      ],
+      "textures_square": [
+        "terrain/tall_grass_sq_1.svg",
+        "terrain/tall_grass_sq_2.svg"
       ],
       "fit": "hex",
       "tags": []
@@ -42,6 +51,11 @@
         "terrain/forest_floor_2.svg",
         "terrain/forest_floor_3.svg"
       ],
+      "textures_square": [
+        "terrain/forest_floor_sq_1.svg",
+        "terrain/forest_floor_sq_2.svg",
+        "terrain/forest_floor_sq_3.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -52,6 +66,10 @@
       "textures": [
         "terrain/undergrowth_1.svg",
         "terrain/undergrowth_2.svg"
+      ],
+      "textures_square": [
+        "terrain/undergrowth_sq_1.svg",
+        "terrain/undergrowth_sq_2.svg"
       ],
       "fit": "hex",
       "tags": [
@@ -66,6 +84,10 @@
         "terrain/dirt_path_1.svg",
         "terrain/dirt_path_2.svg"
       ],
+      "textures_square": [
+        "terrain/dirt_path_sq_1.svg",
+        "terrain/dirt_path_sq_2.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -77,6 +99,10 @@
         "terrain/rocky_ground_1.svg",
         "terrain/rocky_ground_2.svg"
       ],
+      "textures_square": [
+        "terrain/rocky_ground_sq_1.svg",
+        "terrain/rocky_ground_sq_2.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -87,6 +113,10 @@
       "textures": [
         "terrain/shallow_stream_1.svg",
         "terrain/shallow_stream_2.svg"
+      ],
+      "textures_square": [
+        "terrain/shallow_stream_sq_1.svg",
+        "terrain/shallow_stream_sq_2.svg"
       ],
       "fit": "hex",
       "tags": [
@@ -100,6 +130,10 @@
       "textures": [
         "terrain/clearing_flowers_1.svg",
         "terrain/clearing_flowers_2.svg"
+      ],
+      "textures_square": [
+        "terrain/clearing_flowers_sq_1.svg",
+        "terrain/clearing_flowers_sq_2.svg"
       ],
       "fit": "hex",
       "tags": []

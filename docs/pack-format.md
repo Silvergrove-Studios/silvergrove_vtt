@@ -46,10 +46,15 @@ map uses. `pack_version` is recorded by maps that use the pack.
 
 - `textures`: one or more variants. The editor cycles variants on repeated
   clicks and randomises them for fills.
+- `textures_square` (optional): the same variants drawn for a square cell —
+  a square image filled edge to edge — used on square-grid maps. Without
+  them a square map shows the hexagon's inscribed square of the hex art,
+  which works but throws away the edges; tile-shaped art should ship both.
 - `fit`: `hex` — the image is a hexagon that exactly fills the cell's bounding
   box (pointy-top for pointy maps; the loader rotates for flat maps).
   `square` — a seamless square texture; the cell is cut out of it in place,
-  so neighbouring cells of the same terrain tile continuously.
+  so neighbouring cells of the same terrain tile continuously (on either
+  grid; such a terrain needs no `textures_square`).
 - `color`: used for the palette swatch, for the minimap, and as the fill when
   the texture is missing.
 

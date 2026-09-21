@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256">
+<defs><clipPath id="cell"><rect x="0" y="0" width="100" height="100"/></clipPath></defs>
+<rect x="0" y="0" width="100" height="100" fill="#8b6b45"/>
+<g clip-path="url(#cell)"><g transform="translate(0 -7.735)">
+<circle cx="91.2" cy="88.2" r="44.7" fill="#8e6e49" opacity="0.5"/>
+<circle cx="45.7" cy="64.9" r="34.1" fill="#85643c" opacity="0.5"/>
+<circle cx="77.1" cy="62.0" r="23.9" fill="#8b6a44" opacity="0.5"/>
+<circle cx="44.4" cy="70.8" r="22.4" fill="#937652" opacity="0.5"/>
+<circle cx="33.6" cy="75.6" r="0.9" fill="#7a5e3d"/>
+<circle cx="2.9" cy="28.2" r="1.1" fill="#755a3a"/>
+<circle cx="38.8" cy="16.7" r="1.3" fill="#6c5336"/>
+<circle cx="65.1" cy="112.1" r="0.9" fill="#785c3b"/>
+<circle cx="84.9" cy="24.4" r="1.0" fill="#6f5537"/>
+<circle cx="33.3" cy="78.4" r="1.5" fill="#725839"/>
+<circle cx="49.6" cy="40.0" r="1.0" fill="#695134"/>
+<circle cx="20.6" cy="67.0" r="1.0" fill="#775c3b"/>
+<circle cx="17.9" cy="71.8" r="0.9" fill="#735839"/>
+<circle cx="66.2" cy="46.8" r="1.1" fill="#785c3c"/>
+<circle cx="91.0" cy="107.0" r="1.2" fill="#705637"/>
+<circle cx="17.8" cy="109.4" r="1.5" fill="#765b3a"/>
+<circle cx="48.6" cy="104.2" r="0.9" fill="#795d3c"/>
+<circle cx="28.4" cy="45.2" r="0.8" fill="#7a5e3c"/>
+<circle cx="87.9" cy="53.3" r="0.8" fill="#7b5f3d"/>
+<circle cx="74.1" cy="19.1" r="0.8" fill="#6d5436"/>
+<circle cx="10.8" cy="23.9" r="1.2" fill="#6f5537"/>
+<circle cx="19.7" cy="30.1" r="1.4" fill="#7a5e3d"/>
+<circle cx="46.2" cy="53.8" r="0.9" fill="#664f33"/>
+<circle cx="91.7" cy="78.8" r="0.9" fill="#644d32"/>
+<circle cx="77.3" cy="73.6" r="0.8" fill="#6f5637"/>
+<circle cx="75.2" cy="4.8" r="0.8" fill="#755a3a"/>
+</g>
+</g>
+<rect x="0.5" y="0.5" width="99" height="99" fill="none" stroke="#5a462d" stroke-width="1" opacity="0.5"/>
+</svg>

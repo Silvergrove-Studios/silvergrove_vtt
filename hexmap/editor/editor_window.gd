@@ -100,6 +100,8 @@ func _set_map(m: HexMap) -> void:
 		inspector.refresh()
 		layers.bind_map()
 		ctx.selection_changed.emit()
+		if palette != null:
+			palette.refresh()   # terrain thumbnails take the map's cell shape
 	_update_title()
 
 
@@ -110,6 +112,8 @@ func _on_map_changed(what: String) -> void:
 	if what == "grid":
 		view.canvas.ppx = float(ctx.map.reference_ppx)
 		view.zoom_to_fit()
+		if palette != null:
+			palette.refresh()
 	_update_title()
 
 

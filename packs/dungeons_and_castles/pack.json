@@ -19,6 +19,11 @@
         "terrain/flagstone_2.svg",
         "terrain/flagstone_3.svg"
       ],
+      "textures_square": [
+        "terrain/flagstone_sq_1.svg",
+        "terrain/flagstone_sq_2.svg",
+        "terrain/flagstone_sq_3.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -29,6 +34,10 @@
       "textures": [
         "terrain/cobblestone_1.svg",
         "terrain/cobblestone_2.svg"
+      ],
+      "textures_square": [
+        "terrain/cobblestone_sq_1.svg",
+        "terrain/cobblestone_sq_2.svg"
       ],
       "fit": "hex",
       "tags": []
@@ -41,6 +50,10 @@
         "terrain/rough_stone_1.svg",
         "terrain/rough_stone_2.svg"
       ],
+      "textures_square": [
+        "terrain/rough_stone_sq_1.svg",
+        "terrain/rough_stone_sq_2.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -51,6 +64,10 @@
       "textures": [
         "terrain/dirt_floor_1.svg",
         "terrain/dirt_floor_2.svg"
+      ],
+      "textures_square": [
+        "terrain/dirt_floor_sq_1.svg",
+        "terrain/dirt_floor_sq_2.svg"
       ],
       "fit": "hex",
       "tags": []
@@ -63,6 +80,10 @@
         "terrain/wooden_floor_1.svg",
         "terrain/wooden_floor_2.svg"
       ],
+      "textures_square": [
+        "terrain/wooden_floor_sq_1.svg",
+        "terrain/wooden_floor_sq_2.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -73,6 +94,10 @@
       "textures": [
         "terrain/rubble_1.svg",
         "terrain/rubble_2.svg"
+      ],
+      "textures_square": [
+        "terrain/rubble_sq_1.svg",
+        "terrain/rubble_sq_2.svg"
       ],
       "fit": "hex",
       "tags": [
@@ -86,6 +111,9 @@
       "textures": [
         "terrain/pit_1.svg"
       ],
+      "textures_square": [
+        "terrain/pit_sq_1.svg"
+      ],
       "fit": "hex",
       "tags": [
         "hazard"
@@ -98,6 +126,9 @@
       "textures": [
         "terrain/stairs_1.svg"
       ],
+      "textures_square": [
+        "terrain/stairs_sq_1.svg"
+      ],
       "fit": "hex",
       "tags": []
     },
@@ -107,6 +138,9 @@
       "color": "#7a2a2a",
       "textures": [
         "terrain/carpet_red_1.svg"
+      ],
+      "textures_square": [
+        "terrain/carpet_red_sq_1.svg"
       ],
       "fit": "hex",
       "tags": []
@@ -118,6 +152,10 @@
       "textures": [
         "terrain/moat_water_1.svg",
         "terrain/moat_water_2.svg"
+      ],
+      "textures_square": [
+        "terrain/moat_water_sq_1.svg",
+        "terrain/moat_water_sq_2.svg"
       ],
       "fit": "hex",
       "tags": [
@@ -131,6 +169,10 @@
       "textures": [
         "terrain/grass_courtyard_1.svg",
         "terrain/grass_courtyard_2.svg"
+      ],
+      "textures_square": [
+        "terrain/grass_courtyard_sq_1.svg",
+        "terrain/grass_courtyard_sq_2.svg"
       ],
       "fit": "hex",
       "tags": []

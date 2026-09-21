@@ -192,7 +192,7 @@ func _tile(kind: String, a: Dictionary) -> Button:
 func _icon(kind: String, a: Dictionary, px: int) -> Texture2D:
 	var ref := str(a._ref)
 	match kind:
-		"terrain": return ctx.packs.terrain_texture(ref, 0, px)
+		"terrain": return ctx.packs.terrain_texture(ref, 0, px, _shape())
 		"props": return ctx.packs.prop_texture(ref, px / maxf(0.2, float(a.get("size", [1, 1])[0])))
 		_: return ctx.packs.placeholder(Color(str(a.get("color", "#808080"))))
 
@@ -270,7 +270,7 @@ func _show_preview() -> void:
 		"terrain":
 			var n: int = maxi(1, (a.get("textures", []) as Array).size())
 			for v in mini(n, 4):
-				row.add_child(_tex_rect(ctx.packs.terrain_texture(ref, v, 160), 160))
+				row.add_child(_tex_rect(ctx.packs.terrain_texture(ref, v, 160, _shape()), 160))
 		"props":
 			var size: Array = a.get("size", [1, 1])
 			row.add_child(_tex_rect(ctx.packs.prop_texture(ref, 200.0 / maxf(0.2, float(size[0]))), 200))
@@ -314,3 +314,8 @@ func _tex_rect(tex: Texture2D, px: int) -> TextureRect:
 	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	return tr
+
+
+## The cell shape of the map being edited, for terrain thumbnails.
+func _shape() -> String:
+	return "square" if ctx.map != null and ctx.map.grid.is_square() else "hex"

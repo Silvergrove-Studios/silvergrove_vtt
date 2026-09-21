@@ -187,16 +187,27 @@ static func bucket_for(ppx: float) -> int:
 	return DENSITY_BUCKETS[-1]
 
 
-## Texture for a terrain variant at roughly `ppx` pixels per hex.
-func terrain_texture(ref: String, variant: int, ppx: float) -> Texture2D:
+## Texture for a terrain variant at roughly `ppx` pixels per cell, for
+## cells of `shape` ("hex" or "square"). Square cells get the terrain's
+## `textures_square` when it has them; otherwise its hex art, which the
+## renderer then crops to the square inside the hexagon.
+func terrain_texture(ref: String, variant: int, ppx: float, shape := "hex") -> Texture2D:
 	var t := terrain(ref)
-	var files: Array = t.get("textures", [])
+	var square := shape == "square" and terrain_has_square_art(ref)
+	var files: Array = t.get("textures_square", []) if square else t.get("textures", [])
 	if files.is_empty():
 		return placeholder(Color(t.get("color", "#ff00ff")))
 	var file: String = files[posmod(variant, files.size())]
 	# A hex-fit texture is about one hex wide; a square one tiles, so
 	# rasterise it around one hex too.
-	return _texture(split_ref(ref)[0], file, 1.25 * ppx, "%s@%d" % [ref, variant])
+	return _texture(split_ref(ref)[0], file, 1.25 * ppx, "%s@%d%s" % [ref, variant, "@sq" if square else ""])
+
+
+## Whether a terrain ships art drawn for square cells (`textures_square`).
+## Seamless `fit: square` textures count: they tile either way.
+func terrain_has_square_art(ref: String) -> bool:
+	var t := terrain(ref)
+	return not (t.get("textures_square", []) as Array).is_empty() or str(t.get("fit", "hex")) == "square"
 
 
 ## Texture for a prop at roughly `ppx` pixels per hex; sized by its footprint.

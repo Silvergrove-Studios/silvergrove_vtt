@@ -307,7 +307,7 @@ func _draw_terrain(c: Node2D) -> void:
 		if def.is_empty():
 			c.draw_colored_polygon(pts, Color.MAGENTA.darkened(0.3))
 			continue
-		var tex := packs.terrain_texture(ref, int(t.get("v", 0)), texture_ppx)
+		var tex := packs.terrain_texture(ref, int(t.get("v", 0)), texture_ppx, "square" if square else "hex")
 		var uvs := PackedVector2Array()
 		uvs.resize(n)
 		var fit := str(def.get("fit", "hex"))
@@ -317,6 +317,11 @@ func _draw_terrain(c: Node2D) -> void:
 			for i in n:
 				var d := (corners[i] - center).rotated(ang)
 				uvs[i] = (center + d) * 0.5
+		elif square and packs.terrain_has_square_art(ref):
+			# Art drawn for a square cell fills it edge to edge.
+			for i in n:
+				var d := (corners[i] - center).rotated(ang)
+				uvs[i] = Vector2(0.5 + d.x, 0.5 + d.y)
 		elif square:
 			# Hex-shaped art on a square cell: show the square inside the
 			# hexagon, so its transparent corners never reach the cell.
