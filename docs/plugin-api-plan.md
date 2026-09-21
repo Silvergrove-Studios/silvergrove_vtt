@@ -332,8 +332,8 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 | 4 Declarative UI, intents, protocol v2 | done | `ViewRenderer`, `Views` projection by audience, protocol v2 (roles, views, intents), Player panes, Display role, the Rules panel |
 | 5 Compendium, packs, editors | done | `Compendium` index and packs, `hm.comp`, `SchemaForm`, the Compendium panel, character files, `sample.degrees` |
 | 6 Map queries | done | `MapQuery` (distance/bands, templates, LoS/cover, light, sight), regions with durations and hooks, cell state, `hm.map`, the regions layer, audience-filtered map events |
-| 7 Campaign, growth, hardening | next | `.campaign`, checkpoints UI, recap, prep triggers, bulk ops |
-| 8 Real rulesets | | in their own repositories, licensing decided then |
+| 7 Campaign, growth, hardening | done | `Campaign` and sessions, checkpoints in the document, `Recap`, `Triggers`, `Bulk`, `Improv`, rulings journal, co-GM role, plugin layering, perf budgets and the sandbox red-team in CI |
+| 8 Real rulesets | next | in their own repositories, licensing decided then |
 
 Each phase ends with: its tests green in CI on all four platforms where
 applicable; the reference plugins updated; the format docs updated; a dev
@@ -584,17 +584,51 @@ Decisions taken while building:
   a side channel: it replays, undoes and reaches Players like anything
   else.
 
-### Phase 7 — Campaign, growth, hardening
+### Phase 7 — Campaign, growth, hardening — **done 2026-09-21**
 
-`.campaign` document and the Table's campaign screen; checkpoints and
-restore (G5); recap export from the log (G6); prep triggers on regions and
-scenes (G3); bulk operations (G13); improvisation panel driven by plugin
-benchmark tables (G4); rulings journal (G18); co-GM role (G17); plugin
-layering and override order (G10); performance budgets enforced in CI;
-sandbox red-team pass.
+| piece | file | what it does | proven by |
+|---|---|---|---|
+| `Campaign` | `encounter/campaign.gd` | the `.campaign` document (docs/campaign-format.md): players, persistent actors and their resources, plugin order and settings, tracks, clock, campaign-scoped state, the journal, the sessions; `begin_session()` → events, `bank()` ← the encounter; `search_journal`; `for_encounter()` finds it beside the file | `tests/suites/rules_campaign.gd` (136 checks), `test_campaign_two_sessions_with_a_recap` |
+| Sessions | `rules/kernel.gd` | `start_session(campaign)`: one step that brings the campaign in, runs session refills/expiries and `session_start`, and marks the `Session N start` checkpoint; `ext.set` scope `campaign` on the encounter's `campaign.ext` | same |
+| Checkpoints (G5) | `encounter/encounter.gd`, `encounter_state.gd`, `rules/kernel.gd` | snapshots in the document: `checkpoint.mark/drop/restore` events (a restore is one undoable step that re-derives everyone and closes orphaned prompts), `Encounter.snapshot/restore_snapshot`; the host re-welcomes every client on a restore | `test_checkpoints_in_the_document` (replay reproduces a document with checkpoints, restore from a reloaded file is exact) |
+| `Recap` (G6) | `rules/recap.gd` | `summary()` and `markdown()` from the log and the diff against the session-start checkpoint: who was there, where, read-aloud, what changed (actors, tokens, pools, tracks, effects, clock, state), dice per actor, rulings; a players' version leaves GM matter out; `diff()` is the "what happened since" beside any checkpoint | same, the recap dialog on the Table |
+| `Triggers` (G3) | `rules/triggers.gd`, kernel | prep as data on scenes and regions: `enter`/`leave`/`scene`/`door`/`reveal`/`manual`; steps `read`, `note`, `spawn`, `actor`, `light`, `door`, `hide`, `reveal`, `track`, `effect`, `region`, `event`, `action` (the rules half, dispatched with prompts); `Triggers.due()` after every commit and after moves, fired after the step that set them off as their own undo steps; `once`/`fired`; a failing step undoes the trigger | `test_prep_triggers` |
+| `Bulk` (G13) | `rules/bulk.gd`, `hm.bulk` | one op over many refs as one step: effect, resource (floors at zero), set/move/remove, roll-per-target with ops per outcome, action, each; capability per op kind from Lua | `test_bulk_operations`, `sample.degrees` `burst` (a save per target) |
+| `Improv` (G4) | `rules/improv.gd`, `hm.improv`, the Improvise dialog | plugin benchmarks (`params` schema + `make`) → an actor with a token where the DM points; number-only actors under the `table` pseudo-plugin whose numbers are pools; a seeded name generator | `test_improvisation_without_plugins`, `sample.degrees` `creature` |
+| Rulings (G18) | `hm.ruling`, log kind `ruling`, `Campaign.journal`, the Campaign pane | "we ruled that", with the rule and the roll; GM audience; banked into the campaign's journal with the session; searched from the pane | `test_campaign_two_sessions_with_a_recap`, `test_table_campaign_panel_and_dialogs` |
+| Co-GM (G17) | `net/protocol.gd`, `host_session.gd`, `net_session.gd`, `player_window.gd` | role `cogm`, joined with the four-digit code the Players pane shows: the GM projection, the whole scene (GM regions, cells, triggers), scene requests for any token through the Table's commands, actions for any actor, answers for anyone, and the `gm` intent (next/previous turn, checkpoint, restore, trigger, bulk) | `test_cogm_role` (a player is refused the GM verbs and never sees GM regions) |
+| Layering (G10) | `rules/hook_bus.gd`, `plugin_host.gd` | manifest `overrides` (must depend on what it overrides): the base's handlers for those hooks do not run; `load_all()` loads dependencies first in the campaign's order, `settings_overrides` from the campaign over the defaults; scratch test kernels carry a plugin's dependencies | `test_plugin_layering_and_campaign_order`, `sample.house` |
+| Budgets | `tests/suites/rules_perf.gd` | expiry over 500 effects < 10 ms (was 80: link index made it linear), a Player projection < 5 ms, a checkpoint < 30 ms, a bulk op over 100 < 120 ms, a restore < 150 ms, a Lua hook round-trip < 0.5 ms median; ×3 on CI, skipped on phones | CI |
+| Red team | `tests/suites/rules_sandbox.gd` | escapes, tampering, cross-plugin reach, capabilities, cyclic/deep/function-bearing data (now refused at the bridge by `plain()`), bad events, runaway loops, commit and roll storms (a wall-clock budget per call, `PluginHost.call_ms_budget`) | CI |
+| Table | `table/campaign_panel.gd`, `table_window.gd`, `players_panel.gd` | the Campaign pane (session start/bank/recap, checkpoints, prep on the scene, journal + rulings), File › New/Open/Save campaign and Export recap, Edit › Checkpoint / Bulk on selected tokens / Improvise a creature, the co-GM code | `test_table_campaign_panel_and_dialogs` |
+| Reference plugins | `tests/plugins/` | `sample.house` (house rules over `sample.ordered`); `sample.degrees` gained a benchmark, a ruling action and a bulk-save burst; `sample.ordered` keeps campaign-scoped luck; every plugin's tests now run in the suite and on every platform | `test_every_reference_plugin_passes_its_own_tests` |
 
-Exit: a two-session campaign runs end to end on the reference plugins
-with a recap generated between sessions.
+Exit criterion met: a two-session campaign runs end to end on the
+reference rules — session one starts from the campaign, is played,
+banked with its journal, and session two picks up the hurt hero, the
+luck, the ticked doom track and the day; a recap is generated between
+them for the GM and for the players.
+
+Decisions taken while building:
+- A checkpoint is a snapshot in the document, not a position in the
+  event log: it survives a reload and a restore is one event, so the
+  log stays append-only, undo works and clients are simply re-welcomed.
+- The campaign is not event-sourced. It is read at the start and
+  written at the end of a session; everything in between is encounter
+  events. Persistent actors travel without `derived`.
+- Triggers fire *after* the step that set them off, as their own undo
+  steps, so the DM can undo a trigger's effects without undoing the
+  move or the door.
+- The wall-clock budget per plugin call bounds what a plugin may cost
+  the table through host calls; the instruction budget alone did not
+  (a loop of cheap commits could run for seconds).
+- A co-GM is a Player-window client with the GM audience and the GM's
+  powers, not a second Table: the Table stays the one authority, and a
+  phone or tablet is enough for the second screen. A networked Table
+  window is not in scope.
+- Everything crossing the Lua bridge is copied as plain data with a
+  depth limit; a self-referencing table is an error, not a stack
+  overflow in the extension.
 
 ### Phase 8 — Real rulesets
 

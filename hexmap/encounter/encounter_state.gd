@@ -24,10 +24,13 @@ const EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "sce
 	"effect.apply", "effect.set", "effect.remove", "resource.set", "ext.set",
 	"log.add", "log.remove",
 	"track.add", "track.remove", "track.set", "pending.open", "pending.close", "pending.set", "clock.set",
-	"region.add", "region.remove", "region.set", "cell.set"]
+	"region.add", "region.remove", "region.set", "cell.set",
+	# Phase 7: named snapshots and going back to them
+	"checkpoint.mark", "checkpoint.drop", "checkpoint.restore"]
 const PENDING_KINDS := ["prompts", "rolls"]
-## Where an `ext.set` may point.
-const EXT_SCOPES := ["encounter", "scene", "token", "cell"]
+## Where an `ext.set` may point. "campaign" is the campaign-scoped state
+## this encounter carries for its campaign (docs/campaign-format.md).
+const EXT_SCOPES := ["campaign", "encounter", "scene", "token", "cell"]
 ## What a reference to a thing that carries effects or resources looks like.
 const REF_KINDS := ["token", "actor", "encounter"]
 ## What a player may change on a token they own.
@@ -184,7 +187,7 @@ func validate(ev: Dictionary) -> String:
 			var e := _need_dict(ev, "changes")
 			if e != "":
 				return e
-			for k in ["format", "version", "id", "scenes", "active_scene", "turns", "players"]:
+			for k in ["format", "version", "id", "scenes", "active_scene", "turns", "players", "checkpoints"]:
 				if ev.changes.has(k):
 					return "encounter.set cannot change '%s'; use its own events" % k
 		"turns.set":
@@ -216,9 +219,17 @@ func validate(ev: Dictionary) -> String:
 			e = _need_dict(ev, "changes")
 			if e != "":
 				return e
-			for k in ["id", "tokens", "overrides", "fog"]:
-				if ev.changes.has(k):
-					return "scene.set cannot change '%s'; use its own events" % k
+			for k in ["id", "tokens", "overrides", "fog", "regions", "cells"]:
+				for key in ev.changes:
+					if str(key) == k or str(key).begins_with(k + "/"):
+						return "scene.set cannot change '%s'; use its own events" % k
+			if ev.changes.has("triggers"):
+				if not (ev.changes.triggers is Array):
+					return "scene.set: 'triggers' must be a list"
+				for tr in ev.changes.triggers:
+					var w := Triggers.check(tr)
+					if w != "":
+						return "scene.set: " + w
 		"token.add":
 			var e := _need_scene(ev, "scene")
 			if e != "":
@@ -365,10 +376,10 @@ func validate(ev: Dictionary) -> String:
 		"log.add":
 			if not (ev.get("entry") is Dictionary) or str(ev.entry.get("id", "")) == "" or str(ev.entry.get("kind", "")) == "":
 				return "log.add needs an entry with an id and a kind"
-			if _log_index(str(ev.entry.id)) >= 0:
+			if _log_has(str(ev.entry.id)):
 				return "log entry '%s' already exists" % str(ev.entry.id)
 		"log.remove":
-			if _log_index(str(ev.get("id", ""))) < 0:
+			if not _log_has(str(ev.get("id", ""))):
 				return "no log entry '%s'" % str(ev.get("id", ""))
 		"track.add":
 			if not (ev.get("track") is Dictionary) or str(ev.track.get("id", "")) == "":
@@ -419,6 +430,10 @@ func validate(ev: Dictionary) -> String:
 				return "region.add needs a region with an id"
 			if not (ev.region.get("cells") is Array):
 				return "region.add: 'cells' must be a list of \"q,r\" keys"
+			for tr in ev.region.get("triggers", []):
+				var w := Triggers.check(tr)
+				if w != "":
+					return "region.add: " + w
 			if encounter.scene(str(ev.scene)).regions.has(str(ev.region.id)):
 				return "region '%s' already exists" % str(ev.region.id)
 		"region.remove":
@@ -438,6 +453,13 @@ func validate(ev: Dictionary) -> String:
 				return e
 			if ev.changes.has("id"):
 				return "region.set cannot change 'id'"
+			if ev.changes.has("triggers"):
+				if not (ev.changes.triggers is Array):
+					return "region.set: 'triggers' must be a list"
+				for tr in ev.changes.triggers:
+					var w := Triggers.check(tr)
+					if w != "":
+						return "region.set: " + w
 		"cell.set":
 			var e := _need_scene(ev, "scene")
 			if e != "":
@@ -449,6 +471,20 @@ func validate(ev: Dictionary) -> String:
 				return e
 			if ev.changes.has("ext") or ev.changes.keys().any(func(k) -> bool: return str(k).begins_with("ext/")):
 				return "cell.set: plugin state goes through ext.set with scope 'cell'"
+		"checkpoint.mark":
+			if not (ev.get("checkpoint") is Dictionary) or str(ev.checkpoint.get("id", "")) == "":
+				return "checkpoint.mark needs a checkpoint with an id"
+			if not encounter.checkpoint(str(ev.checkpoint.id)).is_empty():
+				return "checkpoint '%s' already exists" % str(ev.checkpoint.id)
+		"checkpoint.drop":
+			if encounter.checkpoint(str(ev.get("id", ""))).is_empty():
+				return "no checkpoint '%s'" % str(ev.get("id", ""))
+		"checkpoint.restore":
+			if ev.get("snapshot") is Dictionary:
+				if not (ev.snapshot.get("scenes") is Array):
+					return "checkpoint.restore: not a snapshot"
+			elif encounter.checkpoint(str(ev.get("id", ""))).is_empty():
+				return "no checkpoint '%s'" % str(ev.get("id", ""))
 	return ""
 
 
@@ -500,9 +536,28 @@ func _overlay_index(actor_id: String, overlay_id: String) -> int:
 	return -1
 
 
+## Log entries are looked up by id on every log.add (uniqueness) and
+## log.remove; the log grows all session, so search from the end (what
+## is removed is almost always recent) and keep a set of ids for the
+## uniqueness question, rebuilt whenever the array is not the one it
+## was built from.
+var _log_ids: Dictionary = {}
+var _log_ids_n := -1
+
+
+func _log_has(id: String) -> bool:
+	var lg: Array = encounter.log
+	if _log_ids_n != lg.size():
+		_log_ids.clear()
+		for e in lg:
+			_log_ids[str(e.get("id", ""))] = true
+		_log_ids_n = lg.size()
+	return _log_ids.has(id)
+
+
 func _log_index(id: String) -> int:
 	var lg: Array = encounter.log
-	for i in lg.size():
+	for i in range(lg.size() - 1, -1, -1):
 		if str(lg[i].get("id", "")) == id:
 			return i
 	return -1
@@ -644,7 +699,7 @@ func apply(ev: Dictionary) -> Dictionary:
 			what = "scenes"
 			scene_id = str(ev.id)
 		"scene.set":
-			inv = {"t": t, "id": str(ev.id), "changes": JsonDoc.merge(encounter.scene(str(ev.id)), ev.changes)}
+			inv = {"t": t, "id": str(ev.id), "changes": JsonDoc.merge_paths(encounter.scene(str(ev.id)), ev.changes)}
 			what = "scenes"
 			scene_id = str(ev.id)
 		"scene.activate":
@@ -797,6 +852,7 @@ func apply(ev: Dictionary) -> Dictionary:
 		"ext.set":
 			var holder: Dictionary
 			match str(ev.scope):
+				"campaign": holder = doc.campaign.ext
 				"encounter": holder = doc.state.ext
 				"scene":
 					var sc := encounter.scene(str(ev.id))
@@ -829,6 +885,9 @@ func apply(ev: Dictionary) -> Dictionary:
 			var lg: Array = doc.log
 			var idx := clampi(int(ev.get("index", lg.size())), 0, lg.size())
 			lg.insert(idx, entry)
+			if _log_ids_n == lg.size() - 1:
+				_log_ids[str(entry.id)] = true
+				_log_ids_n = lg.size()
 			inv = {"t": "log.remove", "id": str(entry.id)}
 			# A roll entry says where in the dice stream it was drawn: the
 			# stream moves past it, and back again when it is removed.
@@ -840,6 +899,9 @@ func apply(ev: Dictionary) -> Dictionary:
 			var idx := _log_index(str(ev.id))
 			var gone: Dictionary = doc.log[idx]
 			(doc.log as Array).remove_at(idx)
+			if _log_ids_n == (doc.log as Array).size() + 1:
+				_log_ids.erase(str(ev.id))
+				_log_ids_n = (doc.log as Array).size()
 			inv = {"t": "log.add", "entry": JsonDoc.deep(gone), "index": idx}
 			if ev.has("rng_index"):
 				doc.rng.index = int(ev.rng_index)
@@ -894,6 +956,32 @@ func apply(ev: Dictionary) -> Dictionary:
 			inv = {"t": t, "scene": scene_id, "id": str(ev.id), "changes": JsonDoc.merge_paths(cells[str(ev.id)], ev.changes)}
 			_prune_cell(scene_id, str(ev.id))
 			what = "cells"
+		"checkpoint.mark":
+			# The snapshot is taken now unless the event carries one (the
+			# inverse of a drop does), so a replay lands on the same bytes.
+			var rec: Dictionary = JsonDoc.deep(ev.checkpoint)
+			if not (rec.get("snapshot") is Dictionary):
+				rec.snapshot = encounter.snapshot()
+			var arr: Array = doc.checkpoints
+			var idx := clampi(int(ev.get("index", arr.size())), 0, arr.size())
+			arr.insert(idx, rec)
+			inv = {"t": "checkpoint.drop", "id": str(rec.id)}
+			what = "checkpoints"
+		"checkpoint.drop":
+			var arr: Array = doc.checkpoints
+			var idx := 0
+			for i in arr.size():
+				if str(arr[i].get("id", "")) == str(ev.id):
+					idx = i
+			var gone: Dictionary = arr[idx]
+			arr.remove_at(idx)
+			inv = {"t": "checkpoint.mark", "checkpoint": JsonDoc.deep(gone), "index": idx}
+			what = "checkpoints"
+		"checkpoint.restore":
+			var snap: Dictionary = ev.snapshot if ev.get("snapshot") is Dictionary else encounter.checkpoint(str(ev.id)).snapshot
+			var before := encounter.restore_snapshot(snap)
+			inv = {"t": t, "snapshot": before}
+			what = "restore"
 	if t == "scene.add" and bool(ev.get("activate", false)):
 		doc.active_scene = str(ev.scene.id)
 	encounter.touch(what, scene_id)

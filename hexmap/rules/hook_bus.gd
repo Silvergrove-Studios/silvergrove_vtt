@@ -46,11 +46,54 @@ func off(owner: String) -> void:
 
 
 func has(hook: String) -> bool:
-	return _handlers.has(hook) and not _handlers[hook].is_empty()
+	return not handlers(hook).is_empty()
 
 
+## The handlers that would run: an owner's handler for a hook that
+## another owner overrides is left out (plugin layering, G10).
 func handlers(hook: String) -> Array:
-	return _handlers.get(hook, [])
+	var all: Array = _handlers.get(hook, [])
+	if _overrides.is_empty():
+		return all
+	var out := []
+	for h in all:
+		if not is_overridden(str(h.owner), hook):
+			out.append(h)
+	return out
+
+
+## by -> {owner: [hooks]}: `by` replaces `owner`'s handlers for those
+## hooks (or all of them, with "*"). Lifted with `unoverride(by)`.
+var _overrides: Dictionary = {}
+
+
+func override(by: String, owner: String, hooks: Array) -> void:
+	if not _overrides.has(by):
+		_overrides[by] = {}
+	_overrides[by][owner] = hooks.duplicate()
+
+
+func unoverride(by: String) -> void:
+	_overrides.erase(by)
+
+
+func is_overridden(owner: String, hook: String) -> bool:
+	for by in _overrides:
+		var per: Dictionary = _overrides[by]
+		if per.has(owner):
+			var list: Array = per[owner]
+			if list.has(hook) or list.has("*"):
+				return true
+	return false
+
+
+## Who overrides what: [{by, owner, hooks}].
+func overrides() -> Array:
+	var out := []
+	for by in _overrides:
+		for owner in _overrides[by]:
+			out.append({"by": str(by), "owner": str(owner), "hooks": _overrides[by][owner].duplicate()})
+	return out
 
 
 ## Run a hook to completion or to its first pause. The payload is copied

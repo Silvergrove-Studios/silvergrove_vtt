@@ -1,6 +1,12 @@
 {
   "active_scene": "s_b10e8ea8",
   "actors": {},
+  "campaign": {
+    "ext": {},
+    "id": "",
+    "path": ""
+  },
+  "checkpoints": [],
   "clock": {
     "day": 1,
     "minute": 0,

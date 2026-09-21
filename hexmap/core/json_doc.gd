@@ -113,13 +113,22 @@ static func set_at_path(target: Dictionary, path: String, value: Variant) -> Var
 ## set_at_path with the bookkeeping an exact inverse needs: `created` is
 ## the path of the topmost dictionary this call made (or ""), so undoing
 ## the set removes that, not just the leaf, and leaves no empty shells.
+## An integer step walks into an existing array element (arrays are
+## never created or grown on the way; a missing index is a no-op removal
+## or an error for a set).
 static func set_at_path_ex(target: Dictionary, path: String, value: Variant) -> Dictionary:
 	var parts := path.split(PATH_SEP)
-	var d: Dictionary = target
+	var d: Variant = target
 	var created := ""
 	for i in parts.size() - 1:
 		var k := parts[i]
-		if not (d.get(k) is Dictionary):
+		if d is Array:
+			var idx := int(k) if k.is_valid_int() else -1
+			if idx < 0 or idx >= (d as Array).size():
+				return {"before": null, "created": ""}
+			d = d[idx]
+			continue
+		if not ((d as Dictionary).get(k) is Dictionary or (d as Dictionary).get(k) is Array):
 			if value == null:
 				return {"before": null, "created": ""}
 			d[k] = {}
@@ -127,6 +136,16 @@ static func set_at_path_ex(target: Dictionary, path: String, value: Variant) -> 
 				created = PATH_SEP.join(parts.slice(0, i + 1))
 		d = d[k]
 	var last := parts[parts.size() - 1]
+	if d is Array:
+		var idx := int(last) if last.is_valid_int() else -1
+		if idx < 0 or idx >= (d as Array).size():
+			return {"before": null, "created": ""}
+		var was: Variant = deep(d[idx])
+		if value == null:
+			(d as Array).remove_at(idx)
+		else:
+			d[idx] = deep(value)
+		return {"before": was, "created": created}
 	var before: Variant = deep(d[last]) if d.has(last) else null
 	if value == null:
 		d.erase(last)

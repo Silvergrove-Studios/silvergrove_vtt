@@ -10,6 +10,11 @@ var _name_edit: LineEdit
 var _color: ColorPickerButton
 ## Player ids connected over the network right now.
 var online: Dictionary = {}
+## What a co-GM types to join, while hosting ("" otherwise), and how
+## many have.
+var cogm_code := ""
+var cogm_count := 0
+var _cogm: Label
 
 
 func _init(p_ctx: TableContext) -> void:
@@ -36,6 +41,11 @@ func _init(p_ctx: TableContext) -> void:
 	add.pressed.connect(_add)
 	row.add_child(add)
 	add_child(row)
+	_cogm = Label.new()
+	_cogm.theme_type_variation = "DimLabel"
+	_cogm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_cogm.visible = false
+	add_child(_cogm)
 	var remove := Button.new()
 	remove.set_meta("icon", "trash")
 	remove.tooltip_text = "Remove the selected player (their tokens become the DM's)"
@@ -104,6 +114,9 @@ func refresh() -> void:
 	list.clear()
 	if ctx.state == null:
 		return
+	_cogm.visible = cogm_code != ""
+	_cogm.text = "Co-GM code: %s%s" % [cogm_code, ("  (%d joined)" % cogm_count) if cogm_count > 0 else ""]
+	_cogm.tooltip_text = "A second device joins with this code as a co-GM: the whole table, the GM's controls"
 	for p in ctx.encounter().players:
 		var owned := 0
 		for s in ctx.encounter().scenes:

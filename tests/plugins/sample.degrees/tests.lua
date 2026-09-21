@@ -100,11 +100,12 @@ hm.test("map: cover raises the difficulty, a burst hits an area, a fire zone bur
 	t.ok(d.cells >= 5, "the goblin is some hexes away: " .. tostring(d.cells))
 	local los = hm.map.los(scene, "token:t_h", "token:t_g")
 	t.ok(los.cover == "none" or los.cover == "partial" or los.cover == "total", "line of sight answers: " .. los.cover)
-	-- a burst around the first goblin catches the second next to it
-	local out = t.dispatch("burst", { actor = a, scene = scene, at = "token:t_g", radius = 1 })
+	-- a burst around the first goblin catches the second next to it: each saves
+	local out = t.dispatch("burst", { actor = a, scene = scene, at = "token:t_g", radius = 1, dc = 30 })
 	t.ok(out.cells >= 3, "a burst covers several cells: " .. tostring(out.cells))
 	t.eq(#out.hit, 2, "both goblins were in it")
-	t.ok(hm.resources.get("actor:" .. b, "hp").current < 10, "and took damage")
+	t.ok(out.hit[1].outcome == "failure" or out.hit[1].outcome == "critical_failure", "against dc 30 the save fails: " .. tostring(out.hit[1].outcome))
+	t.ok(hm.resources.get("actor:" .. b, "hp").current < 10, "and they took damage")
 	-- a fire zone; a goblin walking into it burns
 	local fz = t.dispatch("fire_zone", { actor = a, scene = scene, at = "5,6", radius = 1 })
 	t.ok(fz.cells >= 3, "the zone has cells")
@@ -112,4 +113,31 @@ hm.test("map: cover raises the difficulty, a burst hits an area, a fire zone bur
 	local hp_before = hm.resources.get("actor:" .. c, "hp").current
 	local mv = hm.map.move(scene, "t_g2", { x = hm.map.token(scene, "t_g2").pos[1], y = hm.map.token(scene, "t_g2").pos[2] })
 	t.eq(#mv.entered, 0, "staying put enters nothing")
+end)
+
+hm.test("improvise: a creature from the benchmark, a ruling in the log, campaign state", function(t)
+	local made = hm.improv and true
+	t.ok(made, "hm.improv exists")
+	-- the benchmark makes valid actor data at any level
+	local a = hero(t)
+	local scene = t.scene(nil, { { id = "t_h", actor = a, x = 3, y = 7 } })
+	local id = t.improvise("creature", { level = 4, role = "brute" }, scene, "5,7")
+	local brute = hm.actor(id)
+	t.eq(brute.ext[hm.id].level, 4, "level 4")
+	t.eq(brute.ext[hm.id].stats.might, 3, "a brute's might grows with level")
+	t.eq(hm.resources.get("actor:" .. id, "hp").max, 48, "8 + 4 × 10 hp")
+	t.ok(#hm.tokens(id) == 1, "and it stands on the scene")
+	-- a ruling, with the rule it rests on
+	local r = t.dispatch("rule", { text = "Cover from a table is partial", rule = "cover", tags = { "cover", "terrain" } })
+	t.ok(type(r.id) == "string" and r.id ~= "", "the ruling has an id")
+	-- campaign-scoped state survives in the encounter's campaign block
+	t.commit(hm.state.set("campaign", "", { visits = (hm.state.get("campaign").visits or 0) + 1 }), "Visit")
+	t.eq(hm.state.get("campaign").visits, 1, "campaign state reads back")
+	t.ok(type(hm.campaign().session) == "number", "the session number is known")
+	-- a checkpoint and a restore
+	local cp = hm.checkpoint.mark("before the fight")
+	t.commit(hm.resources.spend("actor:" .. id, "hp", 10), "Hurt")
+	t.eq(hm.resources.get("actor:" .. id, "hp").current, 38, "hurt")
+	hm.checkpoint.restore(cp)
+	t.eq(hm.resources.get("actor:" .. id, "hp").current, 48, "whole again after the restore")
 end)

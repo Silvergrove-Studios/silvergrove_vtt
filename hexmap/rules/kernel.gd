@@ -35,7 +35,14 @@ var rulesets: Dictionary = {}
 ## [{owner, fn: Callable(actor) -> "" | why}] consulted before an actor is
 ## added or changed: plugins' schemas, mostly.
 var validators: Array = []
+## The PluginHost over this kernel, when there is one (weak: the host
+## holds the kernel). Triggers and bulk actions dispatch through it.
+var plugin_host: WeakRef = null
 var _order := 0
+## Trigger firings gathered while a commit is in flight, run once the
+## outermost commit has finished (a trigger's own commits nest here).
+var _due_triggers: Array = []
+var _commit_depth := 0
 
 
 func _init(p_state: EncounterState, p_log: EventLog = null) -> void:
@@ -109,6 +116,13 @@ func move_token(scene_id: String, id: String, to: Vector2, by := "gm") -> String
 			why = fire("region_entered", {"scene": scene_id, "token": id, "actor": actor_of_ref("token:" + id), "region": rid, "record": state.encounter.scene(scene_id).regions.get(rid, {})}, "Entered")
 			if why != "":
 				return why
+		# prep on the regions crossed: fired once the move is done
+		for rid in mv.left:
+			for tr in Triggers.armed(state, scene_id, "leave", rid):
+				_due_triggers.append({"scene": scene_id, "trigger": tr, "region": rid, "ctx": {"token": id, "actor": actor_of_ref("token:" + id), "by": by}})
+		for rid in mv.entered:
+			for tr in Triggers.armed(state, scene_id, "enter", rid):
+				_due_triggers.append({"scene": scene_id, "trigger": tr, "region": rid, "ctx": {"token": id, "actor": actor_of_ref("token:" + id), "by": by}})
 		return "")
 
 
@@ -154,7 +168,89 @@ func commit(events: Array, label: String, reason: Dictionary = {}, audience := E
 		ids.sort()
 		for id in ids:
 			rederive(str(id))
+	for ev in events:
+		if str(ev.get("t", "")) == "checkpoint.restore":
+			# prompts open in the snapshot have no continuation any more
+			pending.close_orphans()
+			break
+	# prep that this batch set off: fired after the batch, each as its own step
+	_due_triggers.append_array(Triggers.due(state, events))
+	_run_due_triggers()
 	return ""
+
+
+func _run_due_triggers() -> void:
+	if _commit_depth > 0:
+		return
+	_commit_depth += 1
+	while not _due_triggers.is_empty():
+		var d: Dictionary = _due_triggers.pop_front()
+		var why := Triggers.fire(self, str(d.scene), d.trigger, str(d.get("region", "")), d.get("ctx", {}))
+		if why != "":
+			trigger_failed.emit(str(d.trigger.get("id", "")), why)
+	_commit_depth -= 1
+
+
+## A trigger refused to fire (its steps were undone).
+signal trigger_failed(trigger_id: String, why: String)
+
+
+## The DM's button: fire a trigger by id, wherever it sits on the scene.
+func fire_trigger(scene_id: String, trigger_id: String) -> String:
+	var sc := state.encounter.scene(scene_id)
+	for tr in sc.get("triggers", []):
+		if str(tr.get("id", "")) == trigger_id:
+			return Triggers.fire(self, scene_id, tr)
+	for rid in sc.get("regions", {}):
+		for tr in sc.regions[rid].get("triggers", []):
+			if str(tr.get("id", "")) == trigger_id:
+				return Triggers.fire(self, scene_id, tr, str(rid))
+	return "no trigger '%s' on this scene" % trigger_id
+
+
+# ---------------------------------------------------------- checkpoints --
+
+## Name where we are: a snapshot in the document the table can go back
+## to, in this session or a later one. Returns the checkpoint id.
+func checkpoint(p_name: String, label := "") -> String:
+	var id := JsonDoc.new_id("cp")
+	var why := commit([{"t": "checkpoint.mark", "checkpoint": {"id": id, "name": p_name, "when": JsonDoc.now(), "seq": log.seq}}], label if label != "" else "Checkpoint: " + p_name)
+	return id if why == "" else ""
+
+
+## Go back to a checkpoint: one undoable step that puts the snapshot
+## back, derives everyone again and closes prompts whose continuations
+## are gone. "" or why not.
+func restore_checkpoint(id: String) -> String:
+	var cp := state.encounter.checkpoint(id)
+	if cp.is_empty():
+		return "no checkpoint '%s'" % id
+	return commit([{"t": "checkpoint.restore", "id": id}], "Restore: " + str(cp.get("name", id)), {"restore": id})
+
+
+func drop_checkpoint(id: String) -> String:
+	return commit([{"t": "checkpoint.drop", "id": id}], "Drop checkpoint")
+
+
+# ------------------------------------------------------------- sessions --
+
+## Start a session of a campaign in this encounter: the campaign's
+## players, actors, tracks, clock and state come in as one step, then a
+## checkpoint marks the start so the recap knows what changed. "" or why.
+func start_session(campaign: Campaign, campaign_path := "") -> String:
+	var events := campaign.begin_session(state.encounter, campaign_path)
+	return transaction("Session start", func() -> String:
+		var why := commit(events, "Session %d" % int(campaign.clock.get("session", 0) + 1))
+		if why != "":
+			return why
+		var n := int(state.encounter.clock.get("session", 1))
+		# what a new session means to the rules: refills, expiries, the hook
+		why = commit(expire({"kind": "session"}) + Resources.refill(state, "session") + Tracks.on_trigger(state, "session"), "Session reset")
+		if why == "":
+			why = fire("session_start", {"session": n}, "Session %d" % n)
+		if why != "":
+			return why
+		return "" if checkpoint("Session %d start" % n, "Session start") != "" else "could not mark the session start")
 
 
 ## Run the validators over the actors a batch adds or changes (as they
@@ -221,12 +317,21 @@ func fire(hook: String, payload: Dictionary, label: String) -> String:
 func transaction(label: String, fn: Callable) -> String:
 	var depth := log.undo_depth()
 	log.begin_group()
+	_commit_depth += 1
 	var why: String = fn.call()
+	_commit_depth -= 1
 	log.end_group(label)
 	if why != "" and log.undo_depth() > depth:
 		log.undo()
 		log._redo.clear()   # a step that never happened is not there to redo
 		log.changed.emit()
+	if why != "":
+		# whatever the undone commits set off goes with them
+		if _commit_depth == 0:
+			_due_triggers.clear()
+	else:
+		# prep the transaction set off fires after it, as its own steps
+		_run_due_triggers()
 	return why
 
 
@@ -397,10 +502,10 @@ func _collect(events: Array, touched: Dictionary, everyone: Array) -> void:
 					_touch_ref(touched, str(fx.get("on", "")))
 			"resource.set":
 				_touch_ref(touched, str(ev.ref))
-			"token.set", "token.add", "token.remove":
+			"token.set", "token.add", "token.remove", "checkpoint.restore":
 				everyone[0] = true
 			"ext.set":
-				if str(ev.scope) == "encounter":
+				if str(ev.scope) == "encounter" or str(ev.scope) == "campaign":
 					for rid in rulesets:
 						if bool(rulesets[rid].get("depends_on_state", false)):
 							everyone[0] = true

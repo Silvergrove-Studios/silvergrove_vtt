@@ -57,10 +57,18 @@ func _send(msg: Dictionary) -> void:
 
 ## Become this player at the table (or a display: no player, everyone's
 ## audience, no controls).
-func join(p_player_id: String, p_role := "player") -> void:
+## `code` is what a co-GM gives (the table shows it).
+func join(p_player_id: String, p_role := "player", code := "") -> void:
 	player_id = p_player_id
 	role = p_role
-	_send({"t": "join", "player": p_player_id, "role": p_role})
+	var msg := {"t": "join", "player": p_player_id, "role": p_role}
+	if code != "":
+		msg.code = code
+	_send(msg)
+
+
+func is_gm() -> bool:
+	return role == Views.ROLE_COGM
 
 
 func request(ev: Dictionary) -> String:
@@ -68,7 +76,7 @@ func request(ev: Dictionary) -> String:
 		return "Not connected"
 	if not joined:
 		return "Not joined yet"
-	if not state.allowed(ev, player_id):
+	if not is_gm() and not state.allowed(ev, player_id):
 		return LocalSession.why_not(state, ev)
 	var why := state.validate(ev)
 	if why != "":
@@ -126,7 +134,7 @@ func _handle(msg: Dictionary) -> void:
 			player_id = str(msg.player)
 			role = str(msg.get("role", "player"))
 			joined_as.emit(player_id)
-			status.emit("Joined as " + (player_name() if role == "player" else "a display"))
+			status.emit("Joined as " + (player_name() if role == "player" else ("a co-GM" if is_gm() else "a display")))
 		"view":
 			if msg.get("view") is Dictionary:
 				view = msg.view

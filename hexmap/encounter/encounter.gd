@@ -49,6 +49,11 @@ static func create(p_name: String) -> Encounter:
 		"clock": DEFAULT_CLOCK.duplicate(),
 		"log": [],
 		"rng": {"seed": int(randi()) & 0x7fffffff, "index": 0},
+		# the campaign this session belongs to ({id, path}) and the
+		# campaign-scoped plugin state carried in and banked back out
+		"campaign": {"id": "", "path": "", "ext": {}},
+		# named snapshots the table can go back to
+		"checkpoints": [],
 		"meta": {"author": "", "description": "", "created": now, "modified": now},
 		"ext": {},
 	}
@@ -131,6 +136,12 @@ var clock: Dictionary:
 ## Informational entries (rolls, notes) in order.
 var log: Array:
 	get: return doc.log
+## The campaign reference and campaign-scoped plugin state: {id, path, ext}.
+var campaign: Dictionary:
+	get: return doc.campaign
+## Named snapshots: [{id, name, when, snapshot}].
+var checkpoints: Array:
+	get: return doc.checkpoints
 var active_scene_id: String:
 	get: return str(doc.get("active_scene", ""))
 
@@ -185,6 +196,40 @@ func player(id: String) -> Dictionary:
 		if str(p.get("id", "")) == id:
 			return p
 	return {}
+
+
+func checkpoint(id: String) -> Dictionary:
+	for c in checkpoints:
+		if str(c.get("id", "")) == id:
+			return c
+	return {}
+
+
+## The document as a checkpoint holds it: everything but the checkpoints
+## themselves (a snapshot inside a snapshot would grow without bound).
+## Keys a restore never touches are left out too.
+const SNAPSHOT_SKIPS := ["checkpoints", "format", "version", "id"]
+
+func snapshot() -> Dictionary:
+	var out := {}
+	for k in doc:
+		if not SNAPSHOT_SKIPS.has(str(k)):
+			out[k] = JsonDoc.deep(doc[k])
+	return out
+
+
+## Put a snapshot back, in place (the doc Dictionary is what everything
+## holds). Returns what was there, as a snapshot.
+func restore_snapshot(snap: Dictionary) -> Dictionary:
+	var before := snapshot()
+	for k in doc.keys():
+		if not SNAPSHOT_SKIPS.has(str(k)):
+			doc.erase(k)
+	for k in snap:
+		if not SNAPSHOT_SKIPS.has(str(k)):
+			doc[k] = JsonDoc.deep(snap[k])
+	_upgrade(VERSION)
+	return before
 
 
 func player_index(id: String) -> int:
@@ -259,6 +304,15 @@ func _upgrade(_from_version: int) -> void:
 			doc["clock"][k] = DEFAULT_CLOCK[k]
 	if not (doc.get("rng") is Dictionary):
 		doc["rng"] = {"seed": int(randi()) & 0x7fffffff, "index": 0}
+	if not (doc.get("campaign") is Dictionary):
+		doc["campaign"] = {}
+	for k in ["id", "path"]:
+		if not doc["campaign"].has(k):
+			doc["campaign"][k] = ""
+	if not (doc["campaign"].get("ext") is Dictionary):
+		doc["campaign"]["ext"] = {}
+	if not (doc.get("checkpoints") is Array):
+		doc["checkpoints"] = []
 	doc["version"] = VERSION
 	if doc.has("initiative") and not doc.has("turns"):
 		# Pre-release files had a D&D-shaped "initiative" block.

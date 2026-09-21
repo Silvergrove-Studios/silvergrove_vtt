@@ -6,7 +6,7 @@ extends RefCounted
 ## passes its own panel list, file and default builder.
 
 const PANELS := ["Palette", "Layers", "Canvas", "Inspector", "View options"]
-const TABLE_PANELS := ["Scenes", "Tokens", "Canvas", "Inspector", "Turns", "Rules", "Compendium", "Players"]
+const TABLE_PANELS := ["Scenes", "Tokens", "Canvas", "Inspector", "Turns", "Rules", "Compendium", "Players", "Campaign"]
 
 
 static func default_path() -> String:
@@ -43,7 +43,7 @@ static func default_layout() -> DockableLayout:
 ## Inspector over Turns over Players on the right.
 static func table_layout() -> DockableLayout:
 	var left := _vsplit(_leaf("Scenes"), _leaf("Tokens"), 0.35)
-	var right := _vsplit(_leaf("Inspector"), _vsplit(_tabs(["Turns", "Rules", "Compendium"]), _leaf("Players"), 0.65), 0.45)
+	var right := _vsplit(_leaf("Inspector"), _vsplit(_tabs(["Turns", "Rules", "Compendium", "Campaign"]), _leaf("Players"), 0.65), 0.45)
 	var inner := DockableLayoutSplit.new()
 	inner.direction = DockableLayoutSplit.Direction.HORIZONTAL
 	inner.percent = 0.76

@@ -242,7 +242,7 @@ func test_table_window() -> void:
 	var win := TableWindow.new()
 	win.app = app
 	root.add_child(win)
-	check(win.view != null and win.dock != null and win._panes.size() == 8, "table window builds with eight panes")
+	check(win.view != null and win.dock != null and win._panes.size() == 9, "table window builds with nine panes")
 	var names := LayoutStore.names(win.dock.layout)
 	for n in LayoutStore.TABLE_PANELS:
 		check(names.has(n), "table layout holds the %s panel: %s" % [n, names])

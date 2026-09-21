@@ -33,6 +33,9 @@ const MANIFEST_SCHEMA := {
 		"main": {"type": "string"},
 		"files": {"type": "array", "items": {"type": "string"}},
 		"depends": {"type": "array", "items": {"type": "string"}},
+		# plugin layering: this plugin replaces another's handlers for these
+		# hooks ("*" for all of them); it must depend on that plugin
+		"overrides": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
 		"packs": {"type": "array", "items": {"type": "string"}},
 		"capabilities": {"type": "array", "items": {"type": "string", "enum": CAPABILITIES}},
 		"policy": {"type": "object"},
@@ -48,6 +51,12 @@ var plugins: Dictionary = {}
 ## Budgets applied to every VM.
 var instruction_budget := 1_000_000
 var memory_budget := 64 * 1024 * 1024
+## Wall-clock budget for one call into a plugin (an action, a hook, a
+## derive): the instruction budget bounds Lua, this bounds what a loop of
+## host calls (commits, rolls) may cost the table. Checked by the costly
+## host calls; a call over it fails with a readable error.
+var call_ms_budget := 2000
+var _call_started_ms := 0
 
 
 class Plugin:
@@ -65,6 +74,8 @@ class Plugin:
 	var turn_strategy: Dictionary = {}
 	## kind ("sheet", "status", "gm") -> view schema
 	var views: Dictionary = {}
+	## improvisation benchmarks: name -> {label, params}
+	var improv: Dictionary = {}
 
 	func can(cap: String) -> bool:
 		return capabilities.has(cap)
@@ -89,8 +100,10 @@ class PluginCall:
 	func resume(answer: Variant) -> PluginCall:
 		if status != PENDING or _call == null:
 			return self
-		_call.resume(answer)
 		var h: PluginHost = _host.get_ref()
+		if h != null:
+			h._call_started_ms = Time.get_ticks_msec()
+		_call.resume(answer)
 		if h != null:
 			h._absorb_call(self, _call)
 		return self
@@ -98,6 +111,7 @@ class PluginCall:
 
 func _init(p_kernel: RulesKernel) -> void:
 	kernel = p_kernel
+	kernel.plugin_host = weakref(self)
 
 
 static func available() -> bool:
@@ -164,12 +178,18 @@ func load_source(manifest: Dictionary, sources: Array, dir := "") -> String:
 	for dep in manifest.get("depends", []):
 		if not plugins.has(str(dep)):
 			return "%s depends on '%s', which is not loaded" % [id, str(dep)]
+	for over in manifest.get("overrides", {}):
+		if not Array(manifest.get("depends", [])).has(str(over)):
+			return "%s overrides '%s' without depending on it" % [id, str(over)]
 	var p := Plugin.new()
 	p.id = id
 	p.manifest = JsonDoc.deep(manifest)
 	p.dir = dir
 	p.capabilities = Array(manifest.get("capabilities", []))
 	p.settings = JsonDoc.deep(manifest.get("settings", {}).get("defaults", {}))
+	# the campaign's settings for it, over the defaults
+	for k in settings_overrides.get(id, {}):
+		JsonDoc.set_at_path(p.settings, str(k), settings_overrides[id][k])
 	p.vm = LuaVm.new()
 	p.vm.instruction_budget = instruction_budget
 	p.vm.memory_budget = memory_budget
@@ -192,11 +212,66 @@ func load_source(manifest: Dictionary, sources: Array, dir := "") -> String:
 		var pw := kernel.comp.load_path(dir.path_join(str(rel)))
 		if pw != "":
 			_fail(p, "pack " + str(rel), pw)
-	kernel.register_ruleset(id, {"derive": _derive.bind(id), "policy": manifest.get("policy", {}),
-		"depends_on_state": bool(manifest.get("depends_on_state", false))})
+	var spec := {"derive": _derive.bind(id), "policy": manifest.get("policy", {}), "depends_on_state": bool(manifest.get("depends_on_state", false))}
+	if load_order.has(id):
+		# the campaign's list runs first, in its order; the rest follow in load order
+		spec.order = load_order.find(id) - 1000
+	kernel.register_ruleset(id, spec)
 	_attach_hooks(p, kernel)
+	for over in manifest.get("overrides", {}):
+		kernel.hooks.override(id, str(over), Array(manifest.overrides[over]))
 	plugin_loaded.emit(id)
 	return ""
+
+
+## Settings a campaign gives plugins (id -> {path: value}), applied when
+## each loads. Set before load_dir / load_all.
+var settings_overrides: Dictionary = {}
+## The campaign's plugin order: ids listed here get that order; the rest
+## follow in load order.
+var load_order: Array = []
+
+
+## Load every plugin found under `dirs`, dependencies first, in the
+## campaign's order where it names them. Returns [{id, why}] per plugin
+## ("" for loaded), in the order tried.
+func load_all(dirs: Array, order: Array = []) -> Array:
+	load_order = order.duplicate()
+	var found := discover(dirs)
+	var by_id := {}
+	for m in found:
+		by_id[str(m.get("id", ""))] = m
+	# the campaign's order first, then the rest by id; dependencies pulled ahead
+	var ids := []
+	for id in order:
+		if by_id.has(str(id)) and not ids.has(str(id)):
+			ids.append(str(id))
+	for m in found:
+		if not ids.has(str(m.get("id", ""))):
+			ids.append(str(m.get("id", "")))
+	var sorted := []
+	var visiting := {}
+	var missing := {}
+	var visit := func(id: String, self_ref: Callable) -> void:
+		if sorted.has(id) or not by_id.has(id):
+			if not by_id.has(id):
+				missing[id] = true
+			return
+		if visiting.has(id):
+			return   # a cycle: the load itself will complain
+		visiting[id] = true
+		for dep in by_id[id].get("depends", []):
+			self_ref.call(str(dep), self_ref)
+		sorted.append(id)
+	for id in ids:
+		visit.call(id, visit)
+	# the campaign's plugins keep their place in the resolved order (a
+	# base always precedes what layers over it, whatever the list said)
+	load_order = sorted.filter(func(id: String) -> bool: return order.has(id))
+	var out := []
+	for id in sorted:
+		out.append({"id": id, "why": load_dir(str(by_id[id].__dir))})
+	return out
 
 
 ## Register the plugin's hook handlers on a kernel, in the plugin's order.
@@ -213,6 +288,7 @@ func unload(id: String) -> void:
 		if str(kernel.comp.packs[pid].plugin) == id and not bool(kernel.comp.packs[pid].get("user", false)):
 			kernel.comp.unload(str(pid))
 	kernel.unregister_ruleset(id)
+	kernel.hooks.unoverride(id)
 	kernel.validators = kernel.validators.filter(func(v: Dictionary) -> bool: return str(v.get("owner", "")) != id)
 	plugins.erase(id)
 
@@ -230,6 +306,7 @@ func _fail(p: Plugin, where: String, message: String) -> void:
 
 ## The ruleset's derive: the view in, the plugin's block out.
 func _derive(view: Dictionary, id: String) -> Dictionary:
+	_call_started_ms = Time.get_ticks_msec()
 	var p: Plugin = plugins.get(id)
 	if p == null:
 		return {}
@@ -243,6 +320,7 @@ func _derive(view: Dictionary, id: String) -> Dictionary:
 ## One HookBus handler per (plugin, hook): runs the plugin's handlers in a
 ## thread; a yield becomes a Wait the bus can resume.
 func _on_hook(payload: Dictionary, id: String, hook: String) -> Variant:
+	_call_started_ms = Time.get_ticks_msec()
 	var p: Plugin = plugins.get(id)
 	if p == null:
 		return null
@@ -296,9 +374,40 @@ func dispatch(id: String, action: String, ctx: Dictionary = {}) -> PluginCall:
 		pc.status = PluginCall.ERROR
 		pc.error = "%s has no action '%s'" % [id, action]
 		return pc
+	_call_started_ms = Time.get_ticks_msec()
 	var c := p.vm.call_function("__run_action", [action, ctx])
 	pc._call = c
 	_absorb_call(pc, c)
+	return pc
+
+
+## Whether the call in flight has spent its wall-clock budget.
+func over_time_budget() -> bool:
+	return call_ms_budget > 0 and Time.get_ticks_msec() - _call_started_ms > call_ms_budget
+
+
+## Run a benchmark: the plugin's `make(params)` → an actor's data.
+## Benchmarks may not prompt.
+func improvise(id: String, benchmark: String, params: Dictionary = {}) -> PluginCall:
+	var pc := PluginCall.new()
+	pc.plugin_id = id
+	pc.action = "improv " + benchmark
+	pc._host = weakref(self)
+	var p: Plugin = plugins.get(id)
+	if p == null:
+		pc.status = PluginCall.ERROR
+		pc.error = "no plugin '%s'" % id
+		return pc
+	if not p.improv.has(benchmark):
+		pc.status = PluginCall.ERROR
+		pc.error = "%s has no benchmark '%s'" % [id, benchmark]
+		return pc
+	var c := p.vm.call_function("__run_improv", [benchmark, params])
+	pc._call = c
+	_absorb_call(pc, c)
+	if pc.status == PluginCall.PENDING:
+		pc.status = PluginCall.ERROR
+		pc.error = "a benchmark may not prompt"
 	return pc
 
 
@@ -349,17 +458,12 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 		var scratch := EncounterState.new(Encounter.create("plugin test"))
 		scratch.encounter.doc.rng = {"seed": 7, "index": 0}
 		kernel = RulesKernel.new(scratch)
+		kernel.plugin_host = weakref(self)
 		kernel.validators = real_kernel.validators.duplicate()
-		kernel.register_ruleset(id, real_kernel.rulesets[id])
-		if not p.turn_strategy.is_empty():
-			kernel.turns.register(id, p.turn_strategy)
-		if real_kernel.map.band_tables.has(id):
-			kernel.map.band_tables[id] = real_kernel.map.band_tables[id]
-		_attach_hooks(p, kernel)
-		# the plugin's shipped packs, fresh for each test
-		for rel in p.manifest.get("packs", []):
-			if p.dir != "":
-				kernel.comp.load_path(p.dir.path_join(str(rel)))
+		# the plugin, its dependencies (so a layered plugin is tested over
+		# its base) and their packs, fresh for each test
+		for pid in _with_dependencies(id):
+			_attach_to(kernel, real_kernel, str(pid))
 		_test_counts = [0, 0]
 		_test_failures = []
 		var c := p.vm.call_function("__run_test", [i + 1, {}])
@@ -376,6 +480,36 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 
 var _test_counts := [0, 0]
 var _test_failures: Array = []
+
+
+## A plugin's dependencies (transitively) then itself, in load order.
+func _with_dependencies(id: String) -> Array:
+	var out := []
+	var walk := func(pid: String, self_ref: Callable) -> void:
+		if out.has(pid) or not plugins.has(pid):
+			return
+		for dep in (plugins[pid] as Plugin).manifest.get("depends", []):
+			self_ref.call(str(dep), self_ref)
+		out.append(pid)
+	walk.call(id, walk)
+	return out
+
+
+## Register a loaded plugin on another kernel (a scratch one): its
+## ruleset, turn strategy, bands, hooks, overrides and shipped packs.
+func _attach_to(k: RulesKernel, real_kernel: RulesKernel, pid: String) -> void:
+	var p: Plugin = plugins[pid]
+	k.register_ruleset(pid, real_kernel.rulesets[pid])
+	if not p.turn_strategy.is_empty():
+		k.turns.register(pid, p.turn_strategy)
+	if real_kernel.map.band_tables.has(pid):
+		k.map.band_tables[pid] = real_kernel.map.band_tables[pid]
+	_attach_hooks(p, k)
+	for over in p.manifest.get("overrides", {}):
+		k.hooks.override(pid, str(over), Array(p.manifest.overrides[over]))
+	for rel in p.manifest.get("packs", []):
+		if p.dir != "":
+			k.comp.load_path(p.dir.path_join(str(rel)))
 
 
 # --------------------------------------------------------- host table --
@@ -397,7 +531,8 @@ func _host_table(p: Plugin) -> Dictionary:
 			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register",
 			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated",
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
-			"map_move", "map_cell", "map_cells", "map_token", "test_scene"]:
+			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
+			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -421,6 +556,9 @@ class Bridge:
 		var p := _p()
 		if p != null and not p.hooks.has(hook):
 			p.hooks.append(hook)
+
+	func improv_registered(name: String, public: Variant) -> void:
+		_p().improv[str(name)] = PluginHost._as_dict(public)
 
 	func action_registered(name: String, public: Variant) -> void:
 		var p := _p()
@@ -467,12 +605,22 @@ class Bridge:
 	func state_get(scope: String, sid: String) -> Variant:
 		var st := _k().state
 		match str(scope):
+			"campaign": return JsonDoc.deep(st.encounter.campaign.get("ext", {}).get(plugin_id, {}))
 			"encounter": return JsonDoc.deep(st.encounter.doc.state.ext.get(plugin_id, {}))
 			"scene": return JsonDoc.deep(st.encounter.scene(str(sid)).get("ext", {}).get(plugin_id, {}))
 			"token": return JsonDoc.deep(st.find_token(str(sid)).get("ext", {}).get(plugin_id, {}))
 		return {"__error": "unknown scope '%s'" % scope}
 
+	func _timed_out() -> Variant:
+		var h := _h()
+		if h != null and h.over_time_budget():
+			return {"__error": "the plugin ran out of time (%d ms in one call)" % h.call_ms_budget}
+		return null
+
 	func commit(events: Variant, label: String, reason: Variant) -> Variant:
+		var late: Variant = _timed_out()
+		if late != null:
+			return late
 		var p := _p()
 		var evs := PluginHost._norm_events(events)
 		for ev in evs:
@@ -494,7 +642,77 @@ class Bridge:
 	func setting(key: String) -> Variant:
 		return JsonDoc.at_path(_p().settings, str(key))
 
+	## A ruling in the log (kind "ruling"): what was decided, the rule it
+	## rests on, the roll that prompted it, tags to find it by. GM audience
+	## unless said otherwise; the campaign's journal keeps it.
+	func ruling(text: String, opts: Variant) -> Variant:
+		if not _p().can("log"):
+			return {"__error": "hm.ruling needs the 'log' capability"}
+		var o := PluginHost._as_dict(opts)
+		var entry := {"id": JsonDoc.new_id("j"), "kind": "ruling", "text": text, "rule": str(o.get("rule", "")), "roll": str(o.get("roll", "")),
+			"tags": PluginHost._as_list(o.get("tags", [])), "audience": str(o.get("audience", "gm")), "plugin": plugin_id}
+		var why := _k().commit([{"t": "log.add", "entry": entry}], "Ruling", {"by": plugin_id}, entry.audience)
+		return entry.id if why == "" else {"__error": why}
+
+	## Bulk.run for the plugin: targets are refs, op is data. Each kind of
+	## op needs the capability its single form would.
+	const BULK_CAPS := {"effect": "effects", "resource": "resources", "roll": "dice", "action": "actions", "set": "state", "move": "state", "remove": "state"}
+
+	func _bulk_cap_missing(op: Dictionary) -> String:
+		var kind := str(op.get("kind", ""))
+		var cap := str(BULK_CAPS.get(kind, ""))
+		if cap != "" and not _p().can(cap):
+			return "hm.bulk '%s' needs the '%s' capability" % [kind, cap]
+		for sub in op.get("ops", []):
+			var w := _bulk_cap_missing(PluginHost._as_dict(sub))
+			if w != "":
+				return w
+		for outcome in PluginHost._as_dict(op.get("per", {})):
+			for sub in PluginHost._as_list(op.per[outcome]):
+				var w := _bulk_cap_missing(PluginHost._as_dict(sub))
+				if w != "":
+					return w
+		return ""
+
+	func bulk_run(targets: Variant, op: Variant, label: String) -> Variant:
+		var late: Variant = _timed_out()
+		if late != null:
+			return late
+		var spec := PluginHost._as_dict(op)
+		var missing := _bulk_cap_missing(spec)
+		if missing != "":
+			return {"__error": missing}
+		var r := Bulk.run(_k(), PluginHost._as_list(targets), spec, label)
+		if not r.ok:
+			return {"__error": r.why}
+		return r.results
+
+	func checkpoint_op(op: String, arg: String) -> Variant:
+		if not _p().can("state"):
+			return {"__error": "checkpoints need the 'state' capability"}
+		match op:
+			"mark":
+				var id := _k().checkpoint(arg)
+				return id if id != "" else {"__error": "could not mark"}
+			"list":
+				var out := []
+				for cp in _k().state.encounter.checkpoints:
+					out.append({"id": str(cp.id), "name": str(cp.get("name", "")), "when": str(cp.get("when", ""))})
+				return out
+			"restore":
+				var why := _k().restore_checkpoint(arg)
+				return true if why == "" else {"__error": why}
+		return {"__error": "unknown checkpoint op '%s'" % op}
+
+	## What the plugin may know about the campaign: its id and the session.
+	func campaign_get() -> Dictionary:
+		var e := _k().state.encounter
+		return {"id": str(e.campaign.get("id", "")), "session": int(e.clock.get("session", 1))}
+
 	func roll(spec: Variant, ctx: Variant, label: String) -> Variant:
+		var late: Variant = _timed_out()
+		if late != null:
+			return late
 		var s := PluginHost._as_dict(spec)
 		if s.has("faces"):
 			s.faces = PluginHost._as_dict(s.faces)
@@ -808,6 +1026,17 @@ class Bridge:
 		var why := k.commit(events, "Test scene")
 		return str(sc.id) if why == "" else {"__error": why}
 
+	func test_improvise(benchmark: String, params: Variant, scene: String, at: String) -> Variant:
+		var k := _k()
+		var pos := Vector2.ZERO
+		var m := k.state.map_for(str(scene))
+		if m != null and str(at) != "":
+			pos = m.grid.cell_center(m.key_cell(str(at)))
+		var r := Improv.spawn(k, plugin_id, str(benchmark), PluginHost._as_dict(params), str(scene), pos)
+		if r.has("error"):
+			return {"__error": str(r.error)}
+		return str(r.actor)
+
 	func test_dispatch(action: String, ctx: Variant, answers: Variant) -> Variant:
 		var pc := _h().dispatch(plugin_id, str(action), PluginHost._as_dict(ctx))
 		var list: Array = answers if answers is Array else []
@@ -829,6 +1058,14 @@ static func _as_dict(v: Variant) -> Dictionary:
 	if v is Dictionary:
 		return v
 	return {}
+
+
+static func _as_list(v: Variant) -> Array:
+	if v is Array:
+		return v
+	if v is Dictionary and (v as Dictionary).is_empty():
+		return []
+	return [v] if v != null else []
 
 
 const _EVENT_DICT_KEYS := ["changes", "record", "actor", "entry", "overlay", "scene", "token", "player", "patch", "ext", "audience", "derived", "meta"]

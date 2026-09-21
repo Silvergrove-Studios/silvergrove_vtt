@@ -214,24 +214,65 @@ hm.actions.register("spawn", {
 	end,
 })
 
--- A burst: everything in a circle around a place takes damage.
+-- A burst: everything in a circle around a place saves against it as one
+-- step — a failure takes the damage, a critical failure double, a success
+-- half, a critical success none. hm.bulk.roll does the per-target work.
 hm.actions.register("burst", {
 	label = "Burst", cost = { actions = 2 }, target = "ref",
 	run = function(ctx)
 		local area = hm.map.template(ctx.scene, { shape = "circle", at = ctx.at, radius = ctx.radius or 1, blocked_by_walls = true, include_self = true })
 		hm.commit(hm.map.highlight(ctx.scene, area.cells, "#ff6b35", "Burst"), "Burst")
-		local hit = {}
+		local dmg = hm.dice.roll("2d6", { actor = ctx.actor, kind = "damage" }, "Burst").result.total
+		local targets = {}
 		for _, tid in ipairs(area.tokens) do
 			local tk = hm.map.token(ctx.scene, tid)
-			if tk and tk.actor and tk.actor ~= "" then
-				local dmg = hm.dice.roll("1d6", { actor = ctx.actor, kind = "damage" }, "Burst")
-				local ev = hm.resources.spend(ref_of(tk.actor), "hp", dmg.result.total)
-				if ev then hm.commit(ev, "Burst damage") end
-				table.insert(hit, tk.actor)
-			end
+			if tk and tk.actor and tk.actor ~= "" then table.insert(targets, ref_of(tk.actor)) end
 		end
+		local results = hm.bulk.roll(targets, "1d20", { kind = "save", dc = ctx.dc or 12 }, {
+			critical_failure = { { kind = "resource", plugin = ID, name = "hp", delta = -dmg * 2 } },
+			failure = { { kind = "resource", plugin = ID, name = "hp", delta = -dmg } },
+			success = { { kind = "resource", plugin = ID, name = "hp", delta = -math.floor(dmg / 2) } },
+			critical_success = {},
+		}, "Burst")
 		hm.commit(hm.map.highlight(ctx.scene, nil), "Burst")
-		return { cells = #area.cells, hit = hit }
+		local hit = {}
+		for _, r in ipairs(results) do table.insert(hit, { ref = r.ref, outcome = r.outcome }) end
+		return { cells = #area.cells, hit = hit, damage = dmg }
+	end,
+})
+
+-- "We ruled that…": a GM decision recorded with the rule it rests on.
+hm.actions.register("rule", {
+	label = "Record a ruling", target = "",
+	run = function(ctx)
+		local id = hm.ruling(ctx.text or "", { rule = ctx.rule, roll = ctx.roll, tags = ctx.tags or {} })
+		return { id = id }
+	end,
+})
+
+-- ------------------------------------------------------------ improvise --
+-- "A level-4 brute, now": the benchmark tables of this ruleset, one form.
+hm.improv.register("creature", {
+	label = "Creature by level",
+	params = {
+		level = { type = "integer", minimum = 0, maximum = 20, default = 1, title = "Level" },
+		role = { type = "string", enum = { "brute", "skirmisher", "caster" }, default = "brute", title = "Role" },
+	},
+	make = function(p)
+		local level = tonumber(p.level) or 1
+		local role = p.role or "brute"
+		local stats = { might = 0, agility = 0, mind = 0 }
+		local bump = math.floor(level / 3) + 1
+		if role == "brute" then stats.might = bump + 1 stats.agility = 0 stats.mind = -1
+		elseif role == "skirmisher" then stats.agility = bump + 1 stats.might = 0 stats.mind = 0
+		else stats.mind = bump + 1 stats.might = -1 stats.agility = 0 end
+		local hp = 8 + level * (role == "brute" and 10 or 7)
+		return {
+			kind = "npc",
+			ext = { level = math.max(1, level), stats = stats, ac_base = 10 + math.floor(level / 2) + (role == "skirmisher" and 2 or 0), source = "improvised" },
+			token = { color = role == "brute" and "#a83232" or (role == "skirmisher" and "#3273a8" or "#7a32a8"), size = (role == "brute" and level >= 6) and 2 or 1 },
+			resources = { [ID] = { hp = { kind = "pool", current = hp, max = hp, recharge = "rest" } } },
+		}
 	end,
 })
 

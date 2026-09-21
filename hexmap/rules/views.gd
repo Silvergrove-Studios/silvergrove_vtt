@@ -14,6 +14,8 @@ extends RefCounted
 const ROLE_PLAYER := "player"
 const ROLE_DISPLAY := "display"
 const ROLE_GM := "gm"
+## A co-GM client: projected with ROLE_GM, joins with the table's code.
+const ROLE_COGM := "cogm"
 
 
 ## May `player_id` with `role` see something whose audience is `audience`?

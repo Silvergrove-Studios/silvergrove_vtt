@@ -25,10 +25,40 @@ local tests = {}
 local turn_initiative_fn = nil
 local turn_label_fn = nil
 
+-- What crosses to the host is plain data: a copy with no cycles, no
+-- functions, no more than MAX_DEPTH levels (a self-referencing table would
+-- otherwise recurse for ever in the bridge). Errors name the problem.
+local MAX_DEPTH = 32
+local function plain(v, depth, seen)
+	if type(v) ~= "table" then
+		if type(v) == "function" or type(v) == "thread" or type(v) == "userdata" then
+			error("a " .. type(v) .. " cannot cross to the host", 3)
+		end
+		return v
+	end
+	depth = depth or 0
+	if depth >= MAX_DEPTH then error("data nested deeper than " .. MAX_DEPTH .. " levels", 3) end
+	seen = seen or {}
+	if seen[v] then error("a table that refers to itself cannot cross to the host", 3) end
+	seen[v] = true
+	local out = {}
+	for k, x in pairs(v) do
+		if type(k) == "table" then error("a table key cannot cross to the host", 3) end
+		out[k] = plain(x, depth + 1, seen)
+	end
+	seen[v] = nil
+	return out
+end
+
 -- A host call that failed hands back { __error = message }; raise it here,
 -- on the Lua side, where an error is safe.
 local function call(fn, ...)
-	local r = fn(...)
+	local n = select("#", ...)
+	local args = { ... }
+	for i = 1, n do
+		if type(args[i]) == "table" then args[i] = plain(args[i]) end
+	end
+	local r = fn(table.unpack(args, 1, n))
 	if type(r) == "table" and r.__error then
 		error(r.__error, 2)
 	end
@@ -71,6 +101,23 @@ end
 
 function hm.test(name, fn)
 	table.insert(tests, { name = name, fn = fn })
+end
+
+-- An improvisation benchmark: "a level-4 brute, now". `spec.params` is a
+-- JSON-schema properties table the Table renders as a form; `spec.make`
+-- turns the parameters into { name, kind, ext, token, resources }.
+hm.improv = {}
+local benchmarks = {}
+function hm.improv.register(name, spec)
+	if type(name) ~= "string" or type(spec) ~= "table" or type(spec.make) ~= "function" then
+		error("hm.improv.register(name, {make = function, params = {...}, label = ...})", 2)
+	end
+	benchmarks[name] = spec
+	local public = {}
+	for k, v in pairs(spec) do
+		if k ~= "make" then public[k] = v end
+	end
+	host.improv_registered(name, public)
 end
 
 -- A declarative view: "sheet" (rendered for each of this ruleset's actors
@@ -216,7 +263,7 @@ end
 
 -- The only way to wait: yield a request to the host, resume with the answer.
 function hm.prompt(to, form, opts)
-	return coroutine.yield({ kind = "prompt", to = to, form = form, opts = opts or {} })
+	return coroutine.yield(plain({ kind = "prompt", to = to, form = form, opts = opts or {} }))
 end
 
 -- ---------------------------------------------------------------- state --
@@ -242,6 +289,28 @@ end
 function hm.log(text, audience)
 	return call(host.note, tostring(text), audience or "all")
 end
+
+-- "We ruled that X": kept in the campaign's journal. opts = { rule =, roll =, tags = {...}, audience = }
+function hm.ruling(text, opts)
+	return call(host.ruling, tostring(text), opts or {})
+end
+
+-- One thing done to many refs as one step (docs/plugin-authoring.md, "Bulk").
+hm.bulk = {}
+function hm.bulk.run(targets, op, label) return call(host.bulk_run, targets, op, label or "") end
+function hm.bulk.effect(targets, effect, label) return hm.bulk.run(targets, { kind = "effect", effect = effect }, label) end
+function hm.bulk.resource(targets, name, delta, label) return hm.bulk.run(targets, { kind = "resource", plugin = hm.id, name = name, delta = delta }, label) end
+function hm.bulk.roll(targets, spec, ctx, per, label) return hm.bulk.run(targets, { kind = "roll", spec = spec, ctx = ctx or {}, per = per or {} }, label) end
+
+-- Named snapshots of the whole encounter (needs "state").
+hm.checkpoint = {}
+function hm.checkpoint.mark(name) return call(host.checkpoint_op, "mark", tostring(name)) end
+function hm.checkpoint.list() return call(host.checkpoint_op, "list", "") end
+function hm.checkpoint.restore(id) return call(host.checkpoint_op, "restore", tostring(id)) end
+
+-- The campaign this session belongs to: { id, session }. Campaign-scoped
+-- state is hm.state.get("campaign") / hm.state.set("campaign", "", changes).
+function hm.campaign() return call(host.campaign_get) end
 
 hm.settings = {}
 function hm.settings.get(key, default)
@@ -309,8 +378,8 @@ function hm.resources.refill(kind) return call(host.resource_refill, kind) end
 function __derive(view)
 	if derive_fn == nil then return {} end
 	local out = derive_fn(view)
-	if type(out) ~= "table" then return {} end
-	return out
+	if type(out) ~= "table" then error("derive returned a " .. type(out) .. ", not a table") end
+	return plain(out)
 end
 
 function __run_hook(hook, payload)
@@ -321,12 +390,12 @@ function __run_hook(hook, payload)
 		if type(r) == "table" then payload = r end
 		if payload.veto ~= nil and payload.veto ~= false and payload.veto ~= "" then break end
 	end
-	return payload
+	return plain(payload)
 end
 
 function __turn_initiative(view, token)
 	if turn_initiative_fn == nil then return nil end
-	return turn_initiative_fn(view, token)
+	return plain(turn_initiative_fn(view, token))
 end
 
 function __turn_label(view, init)
@@ -337,7 +406,13 @@ end
 function __run_action(name, ctx)
 	local a = actions[name]
 	if a == nil then error("no action '" .. tostring(name) .. "'") end
-	return a.run(ctx or {})
+	return plain(a.run(ctx or {}))
+end
+
+function __run_improv(name, params)
+	local b = benchmarks[name]
+	if b == nil then error("no benchmark '" .. tostring(name) .. "'") end
+	return plain(b.make(params or {}))
 end
 
 function __tests()
@@ -367,6 +442,8 @@ function __run_test(index, helpers)
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
 	-- a scene over a map file (the examples' chapel by default), with tokens = { {id, actor, x, y}, … }
 	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end
+	-- a creature from one of this plugin's benchmarks, placed on a scene at a "q,r" cell: its actor id
+	function h.improvise(benchmark, params, scene, at) return call(host.test_improvise, benchmark, params or {}, scene, at or "") end
 	for k, v in pairs(helpers or {}) do h[k] = v end
 	return t.fn(h)
 end

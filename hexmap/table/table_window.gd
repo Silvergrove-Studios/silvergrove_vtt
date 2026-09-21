@@ -27,6 +27,7 @@ var turns: TurnsPanel
 var rules: RulesPanel
 var compendium: CompendiumPanel
 var players: PlayersPanel
+var campaign_panel: CampaignPanel
 var tool_options: HBoxContainer
 var tool_buttons: Dictionary = {}
 var scene_select: OptionButton
@@ -47,7 +48,8 @@ var _last_menu := [-1, -1]
 var _token_form: PropertyForm
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
-	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE,
+	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP,
+	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
 	T_FREE, T_DM, T_ORDERED, T_START, T_NEXT, T_PREV, T_END,
@@ -119,15 +121,18 @@ func _set_encounter(e: Encounter) -> void:
 
 
 func _bind_panels() -> void:
-	for p in [scenes, tokens, inspector, turns, rules, compendium, players]:
+	for p in [scenes, tokens, inspector, turns, rules, compendium, players, campaign_panel]:
 		p.bind()
 
 
 func _on_encounter_changed(what: String, scene_id: String) -> void:
-	if what == "scenes" or what == "active_scene":
+	if what == "scenes" or what == "active_scene" or what == "restore":
 		_refresh_scene_select()
-	if what == "players":
+	if what == "players" or what == "restore":
 		_refresh_viewpoints()
+	if what == "restore":
+		ctx.clear_selection()
+		view.show_scene()
 	if scene_id == ctx.scene_id or scene_id == "" or what == "turns":
 		view.canvas.refresh()
 	_update_title()
@@ -167,6 +172,10 @@ func _build_ui() -> void:
 	rules = RulesPanel.new(ctx)
 	compendium = CompendiumPanel.new(ctx)
 	players = PlayersPanel.new(ctx)
+	campaign_panel = CampaignPanel.new(ctx)
+	campaign_panel.on_campaign_action = func(kind: String) -> void:
+		if kind == "recap":
+			_recap_dialog()
 	root.add_child(_build_dock_layout())
 	_bind_panels()
 	_refresh_scene_select()
@@ -199,6 +208,7 @@ func _build_dock_layout() -> Control:
 		DockPane.new("Rules", rules),
 		DockPane.new("Compendium", compendium),
 		DockPane.new("Players", players, players.header_actions()),
+		DockPane.new("Campaign", campaign_panel),
 	]
 	for p in _panes:
 		dock.add_child(p)
@@ -227,6 +237,11 @@ func _build_menus() -> MenuBar:
 	file.add_separator()
 	_item(file, "Add map as scene…", M_ADD_SCENE, KEY_M, true)
 	file.add_separator()
+	_item(file, "New campaign…", M_NEW_CAMPAIGN)
+	_item(file, "Open campaign…", M_OPEN_CAMPAIGN)
+	_item(file, "Save campaign", M_SAVE_CAMPAIGN)
+	_item(file, "Export session recap…", M_RECAP)
+	file.add_separator()
 	_item(file, "Home", M_HOME)
 	_item(file, "Quit", M_QUIT, KEY_Q, true)
 	file.id_pressed.connect(_on_menu)
@@ -240,6 +255,10 @@ func _build_menus() -> MenuBar:
 	_item(edit_menu, "Remove tokens", M_DELETE)
 	_item(edit_menu, "Hide / reveal tokens", M_HIDE, KEY_H)
 	_item(edit_menu, "Select all tokens", M_SELECT_ALL, KEY_A, true)
+	edit_menu.add_separator()
+	_item(edit_menu, "Checkpoint…", M_CHECKPOINT, KEY_K, true)
+	_item(edit_menu, "Bulk on selected tokens…", M_BULK, KEY_B, true)
+	_item(edit_menu, "Improvise a creature…", M_IMPROVISE, KEY_I, true)
 	edit_menu.id_pressed.connect(_on_menu)
 	bar.add_child(edit_menu)
 
@@ -625,6 +644,15 @@ func _on_menu(id: int) -> void:
 		M_SAVE: _save(false)
 		M_SAVE_AS: _save(true)
 		M_ADD_SCENE: _add_scene_dialog()
+		M_NEW_CAMPAIGN: _new_campaign_dialog()
+		M_OPEN_CAMPAIGN: _open_campaign_dialog()
+		M_SAVE_CAMPAIGN: _save_campaign()
+		M_RECAP: _recap_dialog()
+		M_CHECKPOINT:
+			_prompt("Checkpoint", "Name", "Checkpoint %d" % (ctx.encounter().checkpoints.size() + 1), func(v: String) -> void:
+				ctx.say("Marked " + v if ctx.kernel.checkpoint(v if v.strip_edges() != "" else "Checkpoint") != "" else "Could not mark a checkpoint"))
+		M_BULK: _bulk_dialog()
+		M_IMPROVISE: _improvise_dialog()
 		M_HOME: _guard_unsaved(func() -> void: go_home.emit())
 		M_QUIT: request_quit()
 		M_UNDO: ctx.history.undo()
@@ -722,6 +750,7 @@ func _set_hosting(on: bool) -> void:
 				how = "Bonjour via %s, %s" % [bonjour.tool, how]
 			ctx.say("Hosting '%s' at %s (%s)" % [ctx.encounter().name, host_address(), how])
 			print("hosting '%s' at %s (%s)" % [ctx.encounter().name, host_address(), how])
+			_refresh_online()
 	elif not on and host != null:
 		host.stop()
 		host = null
@@ -747,21 +776,216 @@ func host_address() -> String:
 
 func _refresh_online() -> void:
 	players.online.clear()
+	players.cogm_code = host.cogm_code if host != null else ""
+	players.cogm_count = host.cogm_count() if host != null else 0
 	if host != null:
 		for p in host.connected_players():
 			players.online[p] = true
 	players.refresh()
 
 
+# ================================================================== campaign ==
+
+func _new_campaign_dialog() -> void:
+	_prompt("New campaign", "Name", "New campaign", func(v: String) -> void:
+		var c := Campaign.create(v if v.strip_edges() != "" else "Untitled campaign")
+		for pl in ctx.encounter().players:
+			c.players.append(JsonDoc.deep(pl))
+		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
+		fd.current_file = c.name.to_lower().replace(" ", "_") + ".campaign"
+		fd.file_selected.connect(func(path: String) -> void:
+			var err := c.save(path)
+			if err != OK:
+				_info("Could not save the campaign: " + error_string(err))
+				return
+			ctx.campaign = c
+			ctx.say("Campaign '%s' created. Start a session from the Campaign panel." % c.name)
+			campaign_panel.refresh())
+		fd.popup_centered_ratio(0.7))
+
+
+func _open_campaign_dialog() -> void:
+	var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.campaign ; Campaigns"])
+	fd.file_selected.connect(func(path: String) -> void:
+		var err := []
+		var c := Campaign.load_file(path, err)
+		if c == null:
+			_info("Could not open %s:\n%s" % [path, "\n".join(PackedStringArray(err))])
+			return
+		ctx.campaign = c
+		ctx.say("Campaign '%s' open (%d players, %d characters, session %d)" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
+		campaign_panel.refresh())
+	fd.popup_centered_ratio(0.7)
+
+
+func _save_campaign() -> void:
+	if ctx.campaign == null:
+		ctx.say("No campaign is open")
+		return
+	if ctx.campaign.path == "":
+		var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
+		fd.file_selected.connect(func(path: String) -> void:
+			ctx.say("Saved the campaign" if ctx.campaign.save(path) == OK else "Could not save the campaign"))
+		fd.popup_centered_ratio(0.7)
+		return
+	ctx.say("Saved the campaign" if ctx.campaign.save() == OK else "Could not save the campaign")
+
+
+## The recap as Markdown: shown, and saved beside the encounter on request.
+func _recap_dialog() -> void:
+	var form := PropertyForm.new()
+	form.build([{"key": "who", "label": "For", "type": "enum", "options": ["the players", "the GM"]}], {"who": "the players"})
+	_form_dialog("Session recap", form, func(v: Dictionary) -> void:
+		var audience := "gm" if str(v.who) == "the GM" else "all"
+		var md := Recap.markdown(ctx.encounter(), audience)
+		var d := AcceptDialog.new()
+		d.title = "Recap"
+		d.min_size = Vector2i(560, 480)
+		var box := VBoxContainer.new()
+		var te := TextEdit.new()
+		te.text = md
+		te.custom_minimum_size = Vector2(540, 400)
+		te.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		te.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+		box.add_child(te)
+		d.add_child(box)
+		d.ok_button_text = "Close"
+		var save := d.add_button("Save as…", false, "save")
+		save.pressed.connect(func() -> void:
+			var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.md ; Markdown"])
+			fd.current_file = "%s_session_%d_%s.md" % [ctx.encounter().name.to_lower().replace(" ", "_"), int(ctx.encounter().clock.get("session", 1)), audience]
+			fd.file_selected.connect(func(path: String) -> void:
+				var f := FileAccess.open(path, FileAccess.WRITE)
+				if f != null:
+					f.store_string(te.text)
+					f.close()
+					ctx.say("Recap saved to " + path)
+				else:
+					_info("Could not write " + path))
+			fd.popup_centered_ratio(0.7))
+		d.confirmed.connect(d.queue_free)
+		d.canceled.connect(d.queue_free)
+		d.close_requested.connect(d.queue_free)
+		add_child(d)
+		d.popup_centered())
+
+
+# ===================================================================== bulk ==
+
+## One thing done to every selected token, as one undo step.
+func _bulk_dialog() -> void:
+	var ids := ctx.selected_token_ids()
+	if ids.is_empty():
+		ctx.say("Select the tokens first")
+		return
+	var plugins := []
+	if ctx.host != null:
+		plugins = ctx.host.plugins.keys()
+		plugins.sort()
+	plugins.append(Improv.TABLE_PLUGIN)
+	var form := PropertyForm.new()
+	form.build([
+		{"key": "what", "label": "Do", "type": "enum", "options": ["Change a pool", "Roll for each, then change a pool", "Move together", "Hide", "Reveal", "Remove"]},
+		{"key": "plugin", "label": "Ruleset", "type": "enum", "options": plugins},
+		{"key": "pool", "label": "Pool", "type": "string"},
+		{"key": "delta", "label": "Change (− spends)", "type": "float", "step": 1},
+		{"key": "spec", "label": "Roll", "type": "string"},
+		{"key": "dc", "label": "Against", "type": "int"},
+		{"key": "fail_delta", "label": "On failure", "type": "float", "step": 1},
+		{"key": "success_delta", "label": "On success", "type": "float", "step": 1},
+		{"key": "dx", "label": "Move by x", "type": "float", "step": 0.5},
+		{"key": "dy", "label": "Move by y", "type": "float", "step": 0.5},
+	], {"what": "Change a pool", "plugin": plugins[0], "pool": "hp", "delta": -5.0, "spec": "1d20", "dc": 12, "fail_delta": -8.0, "success_delta": -4.0, "dx": 0.0, "dy": 0.0})
+	_form_dialog("Bulk on %d token%s" % [ids.size(), "" if ids.size() == 1 else "s"], form, func(v: Dictionary) -> void:
+		var op := {}
+		match str(v.what):
+			"Change a pool": op = {"kind": "resource", "plugin": str(v.plugin), "name": str(v.pool), "delta": float(v.delta)}
+			"Roll for each, then change a pool":
+				var hit := [{"kind": "resource", "plugin": str(v.plugin), "name": str(v.pool), "delta": float(v.fail_delta)}]
+				var miss := [{"kind": "resource", "plugin": str(v.plugin), "name": str(v.pool), "delta": float(v.success_delta)}]
+				op = {"kind": "roll", "spec": str(v.spec), "ctx": {"kind": "save", "dc": int(v.dc)}, "label": "Save",
+					"per": {"failure": hit, "critical_failure": hit, "fumble": hit, "success": miss, "critical": miss, "critical_success": miss, "": hit}}
+			"Move together": op = {"kind": "move", "delta": [float(v.dx), float(v.dy)]}
+			"Hide": op = {"kind": "set", "changes": {"hidden": true}}
+			"Reveal": op = {"kind": "set", "changes": {"hidden": false}}
+			"Remove": op = {"kind": "remove"}
+		var r := Bulk.run(ctx.kernel, Bulk.refs_for_tokens(ids), op, "Bulk: " + str(v.what))
+		if not r.ok:
+			ctx.say("Bulk refused: " + r.why)
+			return
+		var bits := PackedStringArray()
+		for res in r.results:
+			if res.has("outcome"):
+				bits.append("%s %s" % [str(ctx.state.find_token(str(res.ref).substr(6)).get("name", res.ref)), str(res.outcome)])
+		ctx.say("%s on %d token%s%s" % [str(v.what), ids.size(), "" if ids.size() == 1 else "s", (": " + ", ".join(bits)) if not bits.is_empty() else ""]))
+
+
+# ================================================================ improvise ==
+
+## A creature from a ruleset's benchmark, or a number-only token, placed
+## beside the selection or at the middle of the view.
+func _improvise_dialog() -> void:
+	if ctx.scene_id == "" or ctx.map() == null:
+		ctx.say("Add a scene first")
+		return
+	var benchmarks := Improv.benchmarks(ctx.host)
+	var options := ["Numbers only"]
+	for b in benchmarks:
+		options.append("%s — %s" % [str(b.plugin), str(b.label)])
+	var form := PropertyForm.new()
+	form.build([
+		{"key": "kind", "label": "From", "type": "enum", "options": options},
+		{"key": "name", "label": "Name (blank: invent one)", "type": "string"},
+		{"key": "numbers", "label": "Numbers (hp=12, ac=15)", "type": "string"},
+		{"key": "level", "label": "Level", "type": "int", "min": 0, "max": 30},
+		{"key": "role", "label": "Role / variant", "type": "string"},
+		{"key": "hidden", "label": "Hidden from players", "type": "bool"},
+	], {"kind": options[0], "name": "", "numbers": "hp=10, ac=12", "level": 1, "role": "", "hidden": true})
+	_form_dialog("Improvise", form, func(v: Dictionary) -> void:
+		var pos := view.screen_to_hex(view.size * 0.5)
+		var sel := ctx.selected_token()
+		if not sel.is_empty():
+			pos = Vision.token_pos(sel) + Vector2(1, 0)
+		var opts := {"hidden": bool(v.hidden), "name": str(v.name).strip_edges()}
+		if opts.name == "":
+			opts.erase("name")
+		var r := {}
+		var idx := options.find(str(v.kind))
+		if idx <= 0:
+			var numbers := {}
+			for part in str(v.numbers).split(",", false):
+				var kv := part.split("=")
+				if kv.size() == 2 and kv[1].strip_edges().is_valid_float():
+					numbers[kv[0].strip_edges()] = float(kv[1].strip_edges())
+			r = Improv.quick(ctx.kernel, str(opts.get("name", "")), numbers, ctx.scene_id, pos, opts)
+		else:
+			var b: Dictionary = benchmarks[idx - 1]
+			var params := {}
+			var props: Dictionary = b.params
+			if props.has("level"):
+				params.level = int(v.level)
+			for k in props:
+				if k != "level" and str(v.role) != "":
+					params[k] = str(v.role)
+					break
+			r = Improv.spawn(ctx.kernel, str(b.plugin), str(b.name), params, ctx.scene_id, pos, opts)
+		if r.has("error"):
+			ctx.say("Improvise: " + str(r.error))
+			return
+		ctx.select_token(str(r.token))
+		ctx.say("%s is on the table" % str(ctx.encounter().actor(str(r.actor)).get("name", "It"))))
+
+
 ## A player's request, applied through the table's commands so it is one
 ## undo step for the DM and explores fog like the DM's own moves.
 func _apply_player_request(ev: Dictionary, pid: String) -> String:
-	var who := str(ctx.encounter().player(pid).get("name", "player"))
+	# an empty player id is a co-GM: the request is the Table's own
+	var who := str(ctx.encounter().player(pid).get("name", "player")) if pid != "" else "co-GM"
 	if str(ev.get("t", "")) == "token.set" and (ev.get("changes", {}) as Dictionary).has("pos"):
 		var tk := ctx.state.token(str(ev.scene), str(ev.id))
 		var pos: Array = ev.changes.pos
 		ctx.commands.begin_group()
-		var why := ctx.commands.move_token(str(ev.scene), str(ev.id), Vector2(float(pos[0]), float(pos[1])), pid)
+		var why := ctx.commands.move_token(str(ev.scene), str(ev.id), Vector2(float(pos[0]), float(pos[1])), pid if pid != "" else "gm")
 		if why == "" and ev.changes.size() > 1:
 			var rest: Dictionary = ev.changes.duplicate()
 			rest.erase("pos")

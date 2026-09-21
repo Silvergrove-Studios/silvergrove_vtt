@@ -31,6 +31,8 @@ var browser := Discovery.Browser.new()
 var _browsing := false
 var _players: ItemList
 var _pick_title: Label
+var _pick_hint: Label
+var _cogm_code: LineEdit
 var _title: Label
 var _turn: Label
 var _status: Label
@@ -300,18 +302,43 @@ func _build_pick() -> Control:
 	_pick_title = Label.new()
 	_pick_title.theme_type_variation = "HeaderLabel"
 	column.add_child(_pick_title)
-	var h := Label.new()
-	h.text = "Who are you?"
-	h.theme_type_variation = "DimLabel"
-	column.add_child(h)
+	_pick_hint = Label.new()
+	_pick_hint.text = "Who are you?"
+	_pick_hint.theme_type_variation = "DimLabel"
+	_pick_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(_pick_hint)
 	_players = ItemList.new()
 	_players.custom_minimum_size = Vector2(0, 200)
 	_players.item_selected.connect(func(i: int) -> void: _start(str(_players.get_item_metadata(i))))
 	column.add_child(_players)
+	# a second GM: the table shows a code; this device gets the GM's view
+	var cogm := HBoxContainer.new()
+	_cogm_code = LineEdit.new()
+	_cogm_code.placeholder_text = "Co-GM code"
+	_cogm_code.max_length = 4
+	_cogm_code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cogm_code.text_submitted.connect(func(_t: String) -> void: _join_as_cogm())
+	cogm.add_child(_cogm_code)
+	var cb := _big(Button.new(), "Join as co-GM")
+	cb.tooltip_text = "The whole table on this device, with the code shown on the Table's Players panel"
+	cb.pressed.connect(_join_as_cogm)
+	cogm.add_child(cb)
+	column.add_child(cogm)
 	var back := _big(Button.new(), "Back")
 	back.pressed.connect(func() -> void: show_screen("join"))
 	column.add_child(back)
 	return center
+
+
+func _join_as_cogm() -> void:
+	if not (session is NetSession):
+		_say("Co-GMs join a hosted table")
+		return
+	var code := _cogm_code.text.strip_edges()
+	if code == "":
+		_say("Type the code the Table shows")
+		return
+	(session as NetSession).join("", Views.ROLE_COGM, code)
 
 
 func _build_play() -> Control:
@@ -498,11 +525,7 @@ func _connect_to(address: String, port: int, alternatives: Array = []) -> void:
 		if display_mode:
 			s.join("", "display")
 			return
-		if s.state.encounter.players.is_empty():
-			s.leave()
-			session = null
-			_join_status("'%s' has no players yet. Ask the DM to add them." % s.state.encounter.name)
-			return
+		_pick_hint.text = "Who are you?" if not s.state.encounter.players.is_empty() else "'%s' has no players yet. Ask the DM to add them — or join as a co-GM." % s.state.encounter.name
 		show_screen("pick"))
 	s.joined_as.connect(func(_pid: String) -> void:
 		app.note_table(address, port, s.state.encounter.name)

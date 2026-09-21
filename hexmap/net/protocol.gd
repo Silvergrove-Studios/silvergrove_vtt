@@ -9,11 +9,12 @@ extends RefCounted
 ## a projected `view` for their audience. Rules actions are `intent`s the
 ## Table resolves. A client joins with a role: `player` (one of the
 ## encounter's players), `display` (a screen everyone can see: the "all"
-## audience, no controls) or `cogm` (a second Table view; later).
+## audience, no controls) or `cogm` (a co-GM: the GM audience and the
+## GM's powers on a second device; joins with the code the Table shows).
 ##
 ## client → host
 ##   hello    {version, name}                 first thing on connect
-##   join     {player, role}                  which player (or display) this client is
+##   join     {player, role, code}            which player (or display, or co-GM with the code) this client is
 ##   request  {ev}                            a scene event the player asks for (a move)
 ##   intent   {intent}                        a rules action: {kind: action|answer|focus|contribute, …}
 ##   need     {kind: map, id} | {kind: packs} | {kind: file, pack, file}
@@ -31,7 +32,7 @@ extends RefCounted
 ##   pong     {}
 
 const VERSION := 2
-const ROLES := ["player", "display"]
+const ROLES := ["player", "display", "cogm"]
 ## Events clients apply themselves; everything else reaches them as a view.
 const SCENE_EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
 	"token.add", "token.remove", "token.set", "element.set", "fog.set", "fog.reveal", "fog.hide", "turns.set",
@@ -40,7 +41,7 @@ const SCENE_EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set"
 ## a GM audience, cells that are not revealed).
 const AUDIENCE_EVENTS := ["region.add", "region.remove", "region.set", "cell.set", "ext.set"]
 ## Document blocks a client does not hold.
-const RULES_BLOCKS := ["actors", "effects", "resources", "tracks", "pending", "log", "rng"]
+const RULES_BLOCKS := ["actors", "effects", "resources", "tracks", "pending", "log", "rng", "checkpoints"]
 const DEFAULT_PORT := 47777
 ## Multicast group and port the Table announces on.
 const DISCOVERY_GROUP := "239.255.42.7"
@@ -67,18 +68,25 @@ static func hello(p_name: String) -> Dictionary:
 
 ## The document as a client holds it: without the rules blocks (those
 ## reach it projected, as a view) and with the plugin state emptied.
-static func welcome(encounter: Encounter) -> Dictionary:
-	return {"t": "welcome", "version": VERSION, "encounter": client_document(encounter.doc)}
+static func welcome(encounter: Encounter, gm := false) -> Dictionary:
+	return {"t": "welcome", "version": VERSION, "encounter": client_document(encounter.doc, gm)}
 
 
-static func client_document(doc: Dictionary) -> Dictionary:
+## With `gm` (a co-GM), the scene is sent whole: GM regions, every cell,
+## the scene's triggers. The rules blocks still travel as a view.
+static func client_document(doc: Dictionary, gm := false) -> Dictionary:
 	var out: Dictionary = JsonDoc.deep(doc)
 	for k in RULES_BLOCKS:
 		if out.has(k):
 			out[k] = {} if out[k] is Dictionary else []
 	out.pending = {"prompts": {}, "rolls": {}}
 	out.state = {"ext": {}}
+	if out.get("campaign") is Dictionary:
+		out.campaign.ext = {}
+	if gm:
+		return out
 	for sc in out.get("scenes", []):
+		sc.erase("triggers")
 		var regions: Dictionary = sc.get("regions", {})
 		for id in regions.keys():
 			if str(regions[id].get("audience", "all")) == "gm":

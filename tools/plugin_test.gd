@@ -31,11 +31,20 @@ func _run(dir: String) -> int:
 	var st := EncounterState.new(Encounter.create("plugin test"))
 	var host := PluginHost.new(RulesKernel.new(st))
 	host.plugin_failed.connect(func(id: String, where: String, msg: String) -> void: print("  %s: %s: %s" % [id, where, msg]))
+	# dependencies from sibling directories first (a layered plugin is
+	# tested over its base)
+	var err := []
+	var manifest := JsonDoc.parse(FileAccess.get_file_as_string(dir.path_join("manifest.json")), err)
+	for dep in manifest.get("depends", []):
+		var dw := host.load_dir(dir.get_base_dir().path_join(str(dep)))
+		if dw != "":
+			print("FAIL load dependency %s: %s" % [str(dep), dw])
+			return 1
 	var why := host.load_dir(dir)
 	if why != "":
 		print("FAIL load %s: %s" % [dir, why])
 		return 1
-	var id := str(host.plugins.keys()[0])
+	var id := str(manifest.get("id", host.plugins.keys()[0]))
 	print("-- %s (%s)" % [id, dir])
 	var r := host.run_tests(id, func(line: String) -> void: print(line))
 	print("%d checks, %d failed" % [r.count, r.fails])

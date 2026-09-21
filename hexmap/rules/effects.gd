@@ -72,15 +72,30 @@ static func on(state: EncounterState, ref: String, key := "") -> Array:
 ## Events removing `id` and everything linked to it.
 static func remove(state: EncounterState, id: String) -> Array:
 	var out := []
-	if not state.encounter.effects.has(id):
-		return out
-	out.append({"t": "effect.remove", "id": id})
-	for other_id in state.encounter.effects:
-		var fx: Dictionary = state.encounter.effects[other_id]
-		var d: Dictionary = fx.get("duration", {})
-		if str(d.get("kind", "")) == "linked" and str(d.get("to", "")) == id:
-			out.append_array(remove(state, str(other_id)))
+	_remove_linked(state, id, _link_index(state), out)
 	return out
+
+
+## id -> the ids of effects linked to it, built once so removing many
+## effects at a time stays linear.
+static func _link_index(state: EncounterState) -> Dictionary:
+	var links := {}
+	for other_id in state.encounter.effects:
+		var d: Dictionary = state.encounter.effects[other_id].get("duration", {})
+		if str(d.get("kind", "")) == "linked":
+			var to := str(d.get("to", ""))
+			if not links.has(to):
+				links[to] = []
+			links[to].append(str(other_id))
+	return links
+
+
+static func _remove_linked(state: EncounterState, id: String, links: Dictionary, out: Array) -> void:
+	if not state.encounter.effects.has(id):
+		return
+	out.append({"t": "effect.remove", "id": id})
+	for other_id in links.get(id, []):
+		_remove_linked(state, str(other_id), links, out)
 
 
 ## Events for a trigger: {kind: "turn_end", of: "t_7f"} | {kind: "round"}
@@ -92,6 +107,7 @@ static func expire(state: EncounterState, trigger: Dictionary) -> Array:
 	var kind := str(trigger.get("kind", ""))
 	var ids := state.encounter.effects.keys()
 	ids.sort()
+	var links := _link_index(state)
 	for id in ids:
 		var fx: Dictionary = state.encounter.effects[id]
 		var d: Dictionary = fx.get("duration", {})
@@ -101,28 +117,28 @@ static func expire(state: EncounterState, trigger: Dictionary) -> Array:
 				if dk == kind and str(d.get("of", "")) == str(trigger.get("of", "")):
 					var left := int(d.get("turns", 1)) - 1
 					if left <= 0:
-						out.append_array(remove(state, str(id)))
+						_remove_linked(state, str(id), links, out)
 					else:
 						out.append({"t": "effect.set", "id": str(id), "changes": {"duration/turns": left}})
 			"round":
 				if dk == "rounds":
 					var left := int(d.get("rounds", 1)) - 1
 					if left <= 0:
-						out.append_array(remove(state, str(id)))
+						_remove_linked(state, str(id), links, out)
 					else:
 						out.append({"t": "effect.set", "id": str(id), "changes": {"duration/rounds": left}})
 			"scene", "rest", "session":
 				if dk == kind or (kind == "rest" and dk == "long_rest" and bool(trigger.get("long", false))):
-					out.append_array(remove(state, str(id)))
+					_remove_linked(state, str(id), links, out)
 			"long_rest":
 				if dk == "long_rest" or dk == "rest":
-					out.append_array(remove(state, str(id)))
+					_remove_linked(state, str(id), links, out)
 			"time":
 				if dk == "time" and float(d.get("until", 0)) <= float(trigger.get("now", 0)):
-					out.append_array(remove(state, str(id)))
+					_remove_linked(state, str(id), links, out)
 			"check":
 				if dk == "until_check" and str(trigger.get("id", "")) == str(id):
-					out.append_array(remove(state, str(id)))
+					_remove_linked(state, str(id), links, out)
 	# an effect may be reached twice through links; keep the first removal
 	var seen := {}
 	var unique := []

@@ -71,6 +71,17 @@ do not even log it. `LuaVm.available()` is false there.
 7. **Errors are values.** A plugin error becomes `Call.ERROR` with the
    message; it never propagates as an engine error. The kernel logs it
    against the plugin id and fails the hook it was running.
+8. **Plain data only, and not too deep.** The prelude copies every
+   value that crosses to the host (`plain()`): functions, threads and
+   table keys are refused, cycles are refused, and nesting stops at 32
+   levels — a self-referencing table handed to `to_variant` overflows
+   the extension's stack (observed: a flood of errors, not a crash, but
+   not something to rely on).
+9. **Time, not only instructions.** One call into a plugin (an action,
+   a hook, a derive) also has a wall-clock budget (`PluginHost.call_ms_budget`,
+   2 s), checked by the host calls that cost the table something —
+   commits, rolls, bulk ops. A loop of cheap commits ran for seconds
+   under the instruction budget alone.
 
 ## Numbers (M-series Mac, debug build)
 

@@ -80,7 +80,11 @@ A scene is one map level with its overlay, tokens and fog.
                            "color": "#ff4500", "audience": "all", "plugin": "sample.degrees",
                            "duration": { "kind": "rounds", "rounds": 2 } } },
   "cells": { "5,2": { "revealed": true, "note": "ash", "ext": { "sample.degrees": { "trap": true } } } },
-  "highlight": { "cells": ["4,3", "5,3"], "color": "#ffd166", "label": "Close" }
+  "highlight": { "cells": ["4,3", "5,3"], "color": "#ffd166", "label": "Close" },
+  "triggers": [ { "id": "tr_door", "label": "The crypt opens", "on": "door", "ref": "walls:w_2bf8ecbc", "state": "open", "once": true, "fired": false,
+                  "do": [ { "kind": "read", "title": "The crypt", "text": "Cold air…", "audience": "all" },
+                          { "kind": "spawn", "tokens": [ { "name": "Ghoul", "at": "6,5", "actor": { "kind": "npc", "name": "Ghoul", "ext": { … } } } ] },
+                          { "kind": "action", "plugin": "sample.degrees", "action": "fire_zone", "ctx": { "at": "6,5" } } ] } ]
 }
 ```
 
@@ -120,6 +124,20 @@ A scene is one map level with its overlay, tokens and fog.
   `{cells, color, label}` — set by a plugin through `scene.set` and
   cleared with `null`. Transient by nature; it is fine for it to be in
   the file.
+- `triggers` (version 2, optional; also on a region): prep that fires
+  during play. `on` is `scene` (this scene shown to the players),
+  `door` (the wall `ref` reaches `state`, default `open`), `reveal` (any
+  of `cells` explored), `manual` (the DM's button) — or, on a region,
+  `enter` / `leave` (a token crosses in or out). `once` (default true)
+  and `fired` say whether it fires again. `do` is the list of steps:
+  `read` (a handout in the log: `title`, `text`, `audience`), `note`,
+  `spawn` (`tokens` with `at` as `"q,r"` or `[x, y]` and an optional
+  inline `actor`), `actor`, `light` / `door` / `hide` (`ref`, then `on` /
+  `state` / `hidden`), `reveal` (`cells`), `track`, `effect`, `region`,
+  `event` (`ev`, any event) and `action` (`plugin`, `action`, `ctx` —
+  the rules half, dispatched after the events, prompts and all). A
+  trigger is one undo step after the step that set it off; a step that
+  fails undoes the whole trigger. Players never receive triggers.
 
 ### Token
 
@@ -227,6 +245,8 @@ below puts rules in the map or numbers on tokens; it puts them in
              "result": { "total": 18, "outcome": "success", "dice": [ … ], "groups": { … }, "parts": [ … ], "modifier": 3 } },
            { "id": "n_9", "kind": "note", "text": "…", "audience": "gm" } ],
   "rng": { "seed": 425830988, "index": 1 },
+  "campaign": { "id": "c_9b1e…", "path": "reach.campaign", "ext": { "sample": { "luck": 2 } } },
+  "checkpoints": [ { "id": "cp_1a2b", "name": "Session 3 start", "when": "2026-09-21T19:00:00", "seq": 12, "snapshot": { …the document without its checkpoints… } } ],
   …scenes, turns, players, notes, meta, ext…
 }
 ```
@@ -285,6 +305,22 @@ below puts rules in the map or numbers on tokens; it puts them in
   restarts closes its prompts with their defaults.
 - **clock**: `{session, scene, day, minute, rests}` — the second clock,
   for durations longer than a fight.
+- **campaign**: which campaign this session belongs to (`id`, `path`
+  relative to the encounter file) and `ext.<plugin>`, the
+  campaign-scoped plugin state brought in when the session starts and
+  banked back when it ends (docs/campaign-format.md). Changed by
+  `ext.set` with scope `campaign`.
+- **checkpoints**: named snapshots the table can go back to, in this
+  session or a later one from the file: `{id, name, when, seq,
+  snapshot}`, the snapshot being the whole document but the checkpoints
+  themselves (`format`, `version` and `id` are never restored either).
+  Restoring is an event, so it is undoable and replicated; the recap
+  reads the difference between the last `Session…` checkpoint and now.
+- **log** entry kinds beyond `roll` and `note`: `handout` (`title`,
+  `text`; read-aloud text a trigger or the DM pushed) and `ruling`
+  (`text`, `rule`, `roll`, `tags`; GM audience by default). Rulings,
+  handouts and notes marked `journal: true` are what a campaign's
+  journal keeps.
 
 Events added in version 2 (all invertible, all through `apply()`):
 
@@ -299,7 +335,7 @@ Events added in version 2 (all invertible, all through `apply()`):
 | `effect.set` | `id`, `changes` (paths allowed) | `effect.set` |
 | `effect.remove` | `id` | `effect.apply` |
 | `resource.set` | `ref`, `plugin`, `name`, `record` (or `null` to remove) | `resource.set` with the old record |
-| `ext.set` | `scope` (`encounter` \| `scene` \| `token` \| `cell`), `id` / `scene`+`id` (a `"q,r"` key for a cell), `plugin`, `changes` | `ext.set` |
+| `ext.set` | `scope` (`campaign` \| `encounter` \| `scene` \| `token` \| `cell`), `id` / `scene`+`id` (a `"q,r"` key for a cell), `plugin`, `changes` | `ext.set` |
 | `log.add` | `entry` (with `id`, `kind`) [, `index`] | `log.remove` |
 | `log.remove` | `id` | `log.add` at the old index |
 | `track.add` / `track.remove` / `track.set` | `track` / `id` / `id`, `changes` | the usual |
@@ -311,6 +347,10 @@ Events added in version 2 (all invertible, all through `apply()`):
 | `region.remove` | `scene`, `id` | `region.add` |
 | `region.set` | `scene`, `id`, `changes` (paths allowed; not `id`) | `region.set` |
 | `cell.set` | `scene`, `id` (`"q,r"`), `changes` (plain fields; plugin state goes through `ext.set`); a record left empty is dropped | `cell.set` |
+| `checkpoint.mark` | `checkpoint` (`id`, `name`, `when`; the snapshot is taken on apply unless given) [, `index`] | `checkpoint.drop` |
+| `checkpoint.drop` | `id` | `checkpoint.mark` with the record and its snapshot |
+| `checkpoint.restore` | `id`, or `snapshot` inline | `checkpoint.restore` with the previous document as its snapshot |
+| `scene.set` | may set `triggers` (validated) and use paths (`triggers/0/fired`) | `scene.set` |
 
 Every event may carry `reason` (`{by, hook, roll}`) and `audience`; the
 EventLog assigns `seq` and keeps them beside the event.

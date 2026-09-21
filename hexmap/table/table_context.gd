@@ -21,6 +21,10 @@ var host: PluginHost
 var plugin_dirs: Array = ["user://plugins"]
 ## What loading plugins reported (for the status bar / log).
 var plugin_log: PackedStringArray = []
+## The campaign this session belongs to, when the encounter names one
+## (loaded from beside it) or the DM opened one. Its plugin order and
+## settings shape the plugins; sessions start from and bank into it.
+var campaign: Campaign
 var canvas: MapCanvas
 ## View zoom (screen px per canvas px), kept current by TableView.
 var zoom := 1.0
@@ -53,6 +57,14 @@ func set_encounter(e: Encounter) -> void:
 	kernel = RulesKernel.new(state, history)
 	commands = EncounterCommands.new(state, history)
 	commands.kernel = kernel
+	# the campaign the file names, unless one is already open here
+	if campaign == null or (str(e.campaign.get("id", "")) != "" and campaign.id != str(e.campaign.get("id", ""))):
+		var err := []
+		var found := Campaign.for_encounter(e, err)
+		if found != null:
+			campaign = found
+		elif str(e.campaign.get("path", "")) != "":
+			status.emit("campaign: " + "; ".join(PackedStringArray(err)))
 	_load_plugins()
 	selection = []
 	scene_id = e.active_scene_id
@@ -72,9 +84,14 @@ func _load_plugins() -> void:
 	host.plugin_failed.connect(func(id: String, where: String, msg: String) -> void:
 		plugin_log.append("%s: %s: %s" % [id, where, msg])
 		status.emit("%s: %s: %s" % [id, where, msg]))
-	for m in PluginHost.discover(plugin_dirs):
-		var why := host.load_dir(str(m.__dir))
-		plugin_log.append("%s: %s" % [str(m.get("id", "?")), "loaded" if why == "" else why])
+	# the campaign's order and settings, when there is one
+	var order := []
+	if campaign != null:
+		order = campaign.plugin_order()
+		for pid in order:
+			host.settings_overrides[pid] = campaign.plugin_settings(pid)
+	for r in host.load_all(plugin_dirs, order):
+		plugin_log.append("%s: %s" % [str(r.id), "loaded" if r.why == "" else r.why])
 	# the table's own content, layered over what the plugins ship
 	for line in kernel.comp.load_user_packs():
 		plugin_log.append("pack " + line)
@@ -100,6 +117,44 @@ func _on_changed(what: String, p_scene: String) -> void:
 
 func encounter() -> Encounter:
 	return state.encounter
+
+
+## The path the encounter's campaign reference should carry: relative to
+## the encounter file when both are saved, else absolute.
+func campaign_ref_path() -> String:
+	if campaign == null or campaign.path == "":
+		return ""
+	var base := state.encounter.base_dir()
+	if base != "" and campaign.path.begins_with(base + "/"):
+		return campaign.path.substr(base.length() + 1)
+	return campaign.path
+
+
+## Start a session of the open campaign in this encounter. "" or why.
+func start_session() -> String:
+	if campaign == null:
+		return "no campaign is open"
+	var why := kernel.start_session(campaign, campaign_ref_path())
+	if why == "":
+		# the campaign's plugin order and settings may differ from what loaded
+		encounter_changed.emit()
+	return why
+
+
+## Bank this session into the open campaign and save the campaign.
+## The summary, or {error}.
+func bank_session() -> Dictionary:
+	if campaign == null:
+		return {"error": "no campaign is open"}
+	var rel := state.encounter.path
+	if campaign.path != "" and rel.begins_with(campaign.path.get_base_dir() + "/"):
+		rel = rel.substr(campaign.path.get_base_dir().length() + 1)
+	var summary := campaign.bank(state.encounter, rel)
+	if campaign.path != "":
+		var err := campaign.save()
+		if err != OK:
+			summary.error = "could not save the campaign (%s)" % error_string(err)
+	return summary
 
 
 func scene() -> Dictionary:

@@ -5,7 +5,7 @@ the Table only, inside a sandboxed VM, and everything it does becomes
 events in the encounter's log. Players never run plugin code; they
 render what the plugin's data and derived numbers say.
 
-This is the API as of plugin API version 1 (Phases 2–6 of
+This is the API as of plugin API version 1 (Phases 2–7 of
 `docs/plugin-api-plan.md`).
 
 ## Layout
@@ -34,6 +34,7 @@ is `tests/plugins/sample.ordered`: read it first.
   "files": ["main.lua", "tests.lua"],      loaded in order (default: main.lua)
   "packs": ["packs/core"],                 content packs to load, relative to the plugin
   "depends": ["other.plugin"],             must be loaded first; their hooks run first
+  "overrides": {"other.plugin": ["after_roll"]},   layering: replace that plugin's handlers for these hooks ("*": all)
   "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice", "content"],
   "policy": {"status": "best", "circumstance": "best"},
   "settings": {"schema": {…}, "defaults": {"critical_on": 20}},
@@ -49,8 +50,16 @@ is `tests/plugins/sample.ordered`: read it first.
   ruleset's numbers and rolls: `stack` (sum, the default), `best` (the
   largest bonus and the largest penalty of that type count) or
   `override` (last wins).
-- **settings**: a JSON schema and defaults; campaigns override the
-  defaults (Phase 7). Read them with `hm.settings.get(key, default)`.
+- **settings**: a JSON schema and defaults; a campaign's `plugins`
+  list overrides the defaults per plugin. Read them with
+  `hm.settings.get(key, default)`.
+- **depends** and **overrides** are how rulesets layer: a house-rules
+  plugin depends on its base, runs after it (its hooks see what the
+  base's did to the payload), and may declare that for some hooks the
+  base's handlers are not to run at all. The base's `derive` and
+  actions stay; the overriding plugin adds its own. A campaign's
+  `plugins` list fixes the order among what it names (a base always
+  precedes what layers over it); the rest follow in load order.
 
 ## The sandbox
 
@@ -66,6 +75,15 @@ fails with the message. All of it is logged against the plugin id.
 `math.random` is the sandbox's own and is **not** the dice: use
 `hm.dice.roll`, which draws from the encounter's recorded stream so a
 replay reproduces every face.
+
+What crosses to the host — every argument to an `hm.*` call, everything
+a hook, `derive`, an action or a benchmark returns — is copied as plain
+data: no functions, no table keys, no cycles, at most 32 levels deep. A
+value that breaks the rule is a Lua error naming it. Besides the
+instruction and memory budgets, one call into the plugin (an action from
+start to finish, a hook, a derive) has a wall-clock budget (2 s on the
+Table): a loop of commits or rolls that outlives it fails with "ran out
+of time"; what it committed before that stands, undoably.
 
 ## The `hexmap` library
 
@@ -110,7 +128,7 @@ Hooks in API 1:
 | `round_start`, `round_end` | `{round, events}` | ordered shape only |
 | `focus_changed` | `{from, to, by, events}` | asked *before* the focus moves: veto to refuse, add events for a cost |
 | `rest` | `{kind, events}` | after refills and expiries |
-| `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock |
+| `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock; `session_start` also fires when a session starts from a campaign, with campaign state already in |
 | `time_advanced` | `{from, to, minutes, day, events}` | minutes are absolute since day 1 |
 | `track_done` | `{track, roll, events}` | a progress track completed |
 | `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost) |
@@ -127,6 +145,18 @@ hm.actions.register("strike", { label = "Strike", cost = { actions = 1 }, target
 ```
 An action the Table (and, from Phase 4, a Player's intent) can dispatch
 with a context. Everything but `run` is public data the UI reads.
+
+```lua
+hm.improv.register("creature", { label = "Creature by level",
+  params = { level = { type = "integer", minimum = 0, maximum = 20, default = 1 }, role = { type = "string", enum = { "brute", "skirmisher" } } },
+  make = function(p) return { name = "", kind = "npc", ext = { level = p.level, … }, token = { color = "#a83232", size = 1 },
+                              resources = { [hm.id] = { hp = { kind = "pool", current = 20, max = 20, recharge = "rest" } } } } end })
+```
+An improvisation benchmark: "a level-4 brute, now". `params` is a
+JSON-schema `properties` table the Table's Improvise dialog renders;
+`make` returns an actor's data (`ext` is this ruleset's block, or a
+whole `ext` keyed by plugin), token defaults and starting resources. A
+blank `name` gets an invented one. Benchmarks may not prompt.
 
 ```lua
 hm.test("name", function(t) … end)
@@ -278,7 +308,9 @@ hm.dice.pending()
 | `hm.actors()` | actor ids |
 | `hm.derived(id)` | this plugin's derived block for the actor |
 | `hm.token(id)` / `hm.tokens(actor_id)` | a token / the tokens linked to an actor |
-| `hm.state.get(scope [, id])` | this plugin's `ext` at `"encounter"`, `"scene"` or `"token"` scope |
+| `hm.state.get(scope [, id])` | this plugin's `ext` at `"campaign"` (carried between sessions), `"encounter"`, `"scene"`, `"token"` or `"cell"` scope |
+| `hm.campaign()` | `{id, session}` — which campaign this session belongs to |
+| `hm.checkpoint.list()` | the named snapshots in the encounter (needs `state`) |
 | `hm.effects.on(ref [, key])` / `hm.effects.has(ref, key)` | effects on a ref (`"actor:a_1"`, `"token:t_1"`, `"encounter"`) |
 | `hm.resources.get(ref, name)` | a pool or track record, or nil |
 | `hm.settings.get(key [, default])` | a setting |
@@ -307,6 +339,34 @@ Change keys that contain `/` are paths into the record
 never separators.
 
 `hm.log(text [, audience])` puts a note in the encounter log.
+`hm.ruling(text, { rule=, roll=, tags=, audience= })` records a ruling
+("we ruled that…", with the rule it rests on and the roll that prompted
+it): GM audience unless said otherwise, kept in the campaign's journal
+between sessions, searchable from the Table's Campaign pane.
+`hm.checkpoint.mark(name)` → id and `hm.checkpoint.restore(id)` are the
+named snapshots of the whole encounter (needs `state`); a restore is
+one undoable step.
+
+### Bulk
+
+One thing done to many refs as one undo step (a refusal on any target
+undoes all of it):
+
+```lua
+hm.bulk.roll(targets, "1d20", { kind = "save", dc = 12 }, {
+  failure = { { kind = "resource", plugin = hm.id, name = "hp", delta = -8 } },
+  success = { { kind = "resource", plugin = hm.id, name = "hp", delta = -4 } },
+}, "Fireball")
+```
+`hm.bulk.run(targets, op [, label])` takes an op: `{kind="effect",
+effect}`, `{kind="resource", plugin, name, delta}` (spent below zero
+floors at zero), `{kind="set", changes}` / `{kind="move", delta={dx,dy}}`
+/ `{kind="remove"}` on tokens, `{kind="roll", spec, ctx, per={outcome={op…}}}`
+(one roll per target with `ctx.actor` set; the ops under its outcome, or
+`""` for any, follow), `{kind="action", plugin, action, ctx}`,
+`{kind="each", ops={…}}`. `hm.bulk.effect`, `.resource` and `.roll` are
+shorthands. Each kind needs the capability its single form would. The
+result is a list of `{ref, …}` per target (`outcome`, `total` for rolls).
 
 ### The map
 
@@ -400,7 +460,10 @@ Each test runs on a fresh scratch encounter with a fixed dice seed.
 are given to the action's prompts in order), `t.scene([map_path,
 tokens])` → a scene id over a real map (the examples' chapel by default)
 with `tokens = { { id=, actor=, x=, y= }, … }` placed by offset cell, for
-map tests. Tests may not prompt themselves. The Hexmap self-test runs the shipped plugins' tests on every
+map tests, `t.improvise(benchmark, params, scene, "q,r")` → the actor id
+of a creature from one of this plugin's benchmarks placed on the scene.
+Tests may not prompt themselves. A layered plugin's tests run with its
+dependencies loaded. The Hexmap self-test runs the shipped plugins' tests on every
 platform that has the runtime.
 
 ## Conventions

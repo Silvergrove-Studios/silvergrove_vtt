@@ -103,6 +103,14 @@ hm.on("before_roll", function(p)
 	return p
 end)
 
+-- Each session the party's luck grows by one: campaign-scoped state that
+-- outlives the encounter (banked into the .campaign and brought back).
+hm.on("session_start", function(p)
+	local c = hm.state.get("campaign")
+	table.insert(p.events, hm.state.set("campaign", "", { luck = (c.luck or 0) + 1, sessions = p.session }))
+	return p
+end)
+
 -- Success at or above the difficulty; a natural critical_on is a critical.
 hm.on("after_roll", function(p)
 	if p.ctx.dc == nil then return p end

@@ -23,6 +23,9 @@ var plugins: PluginHost
 ## or why not. The Table hands in its commands so history sees it.
 var apply_request: Callable
 var port := 0
+## What a co-GM must give to join: shown on the Table, four digits, new
+## for every hosting. "" refuses co-GMs.
+var cogm_code := ""
 var announcer := Discovery.Announcer.new()
 var _server := TCPServer.new()
 var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
@@ -45,6 +48,7 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true) -> Error:
 		return err
 	port = _server.get_local_port()
 	_listening = true
+	cogm_code = "%04d" % (randi() % 10000)
 	state.applied.connect(_on_applied)
 	if announce:
 		announcer.start(state.encounter.name, port)
@@ -79,7 +83,20 @@ func set_state(p_state: EncounterState) -> void:
 		state.applied.connect(_on_applied)
 		announcer.name = state.encounter.name
 		for c in _clients:
-			_send(c, Protocol.welcome(state.encounter))
+			_send(c, Protocol.welcome(state.encounter, c.role == Views.ROLE_COGM))
+
+
+func _is_gm(c: Dictionary) -> bool:
+	return c.role == Views.ROLE_COGM
+
+
+## The co-GMs joined right now.
+func cogm_count() -> int:
+	var n := 0
+	for c in _clients:
+		if c.joined and _is_gm(c):
+			n += 1
+	return n
 
 
 ## Player ids of clients that have joined.
@@ -139,9 +156,9 @@ func _send(c: Dictionary, msg: Dictionary) -> void:
 	(c.peer as WebSocketPeer).send_text(Protocol.encode(msg))
 
 
-func _broadcast(msg: Dictionary) -> void:
+func _broadcast(msg: Dictionary, gm_only := false) -> void:
 	for c in _clients:
-		if c.hello:
+		if c.hello and (not gm_only or _is_gm(c)):
 			_send(c, msg)
 
 
@@ -150,11 +167,22 @@ func _broadcast(msg: Dictionary) -> void:
 ## poll, however many events a step applied).
 func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 	var t := str(ev.get("t", ""))
+	if t == "checkpoint.restore":
+		# the whole document changed under everyone: start them over
+		for c in _clients:
+			if c.hello:
+				_send(c, Protocol.welcome(state.encounter, _is_gm(c)))
+		_views_dirty = true
+		return
 	if Protocol.SCENE_EVENTS.has(t):
 		_broadcast(Protocol.event(ev))
 	elif Protocol.AUDIENCE_EVENTS.has(t):
+		# co-GMs hold the scene whole: every region and cell event as it is
+		_broadcast(Protocol.event(ev), true)
 		for msg in _audience_events(ev, inv):
-			_broadcast(Protocol.event(msg))
+			for c in _clients:
+				if c.hello and not _is_gm(c):
+					_send(c, Protocol.event(msg))
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
 
@@ -202,6 +230,8 @@ func _audience_events(ev: Dictionary, inv: Dictionary) -> Array:
 func projection(c: Dictionary) -> Dictionary:
 	if kernel == null:
 		return {}
+	if _is_gm(c):
+		return Views.project(kernel, plugins, "", Views.ROLE_GM)
 	return Views.project(kernel, plugins, str(c.player), str(c.role) if c.role != "" else Views.ROLE_PLAYER)
 
 
@@ -235,16 +265,23 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if role == Views.ROLE_PLAYER and state.encounter.player(pid).is_empty():
 				_send(c, Protocol.error("no such player"))
 				return
-			if role == Views.ROLE_DISPLAY:
+			if role == Views.ROLE_COGM and (cogm_code == "" or str(msg.get("code", "")) != cogm_code):
+				_send(c, Protocol.error("co-GMs join with the code shown on the table"))
+				return
+			if role != Views.ROLE_PLAYER:
 				pid = ""
 			if c.player != "":
 				client_left.emit(c.player)
 			c.player = pid
 			c.role = role
 			c.joined = true
+			if role == Views.ROLE_COGM:
+				# the whole scene, now that they may see it
+				_send(c, Protocol.welcome(state.encounter, true))
 			_send(c, {"t": "joined", "player": pid, "role": role})
 			_send_view(c)
-			log.emit("%s joined" % (_player_name(pid) if pid != "" else "a display (%s)" % str(c.get("name", ""))))
+			var who := _player_name(pid) if pid != "" else ("a co-GM (%s)" if role == Views.ROLE_COGM else "a display (%s)") % str(c.get("name", ""))
+			log.emit("%s joined" % who)
 			if pid != "":
 				client_joined.emit(pid)
 		"intent":
@@ -260,15 +297,16 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if not (ev is Dictionary):
 				_send(c, Protocol.refused({}, "not an event"))
 				return
-			if c.player == "" or c.role != Views.ROLE_PLAYER:
+			if not _is_gm(c) and (c.player == "" or c.role != Views.ROLE_PLAYER):
 				_send(c, Protocol.refused(ev, "join as a player first"))
 				return
-			if not state.allowed(ev, c.player):
+			# a co-GM may ask for any scene event the Table itself could apply
+			if not _is_gm(c) and not state.allowed(ev, c.player):
 				_send(c, Protocol.refused(ev, "not allowed"))
 				return
 			var why := state.validate(ev)
 			if why == "":
-				why = str(apply_request.call(ev, c.player)) if apply_request.is_valid() else _apply_plain(ev)
+				why = str(apply_request.call(ev, "" if _is_gm(c) else c.player)) if apply_request.is_valid() else _apply_plain(ev)
 			if why != "":
 				_send(c, Protocol.refused(ev, why))
 		"need":
@@ -288,9 +326,10 @@ func _apply_plain(ev: Dictionary) -> String:
 func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 	if kernel == null:
 		return "this table runs no rules"
-	if c.role != Views.ROLE_PLAYER or c.player == "":
+	if not _is_gm(c) and (c.role != Views.ROLE_PLAYER or c.player == ""):
 		return "only players may act"
 	var pid := str(c.player)
+	var gm := _is_gm(c)
 	match str(intent.get("kind", "")):
 		"action":
 			if plugins == null:
@@ -301,9 +340,9 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			var p := plugins.plugin(plugin)
 			if p == null or not p.actions.has(action):
 				return "no action %s/%s" % [plugin, action]
-			if ctx.has("actor") and not _owns_actor(pid, str(ctx.actor)):
+			if not gm and ctx.has("actor") and not _owns_actor(pid, str(ctx.actor)):
 				return "that is not your character"
-			if ctx.has("token") and not _owns_token(pid, str(ctx.token)):
+			if not gm and ctx.has("token") and not _owns_token(pid, str(ctx.token)):
 				return "that is not your token"
 			var pc := plugins.dispatch(plugin, action, ctx)
 			if pc.status == PluginHost.PluginCall.ERROR:
@@ -311,9 +350,12 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			kernel.pending.drive(pc, plugin)
 			return ""
 		"answer":
-			return kernel.pending.answer(str(intent.get("prompt", "")), intent.get("answer", {}), pid)
+			# a co-GM answers on anyone's behalf, as the Table would
+			return kernel.pending.answer(str(intent.get("prompt", "")), intent.get("answer", {}), "" if gm else pid)
 		"focus":
 			var ref := str(intent.get("ref", ""))
+			if gm:
+				return kernel.turns.set_focus(ref, "gm")
 			if ref.begins_with("actor:") and not _owns_actor(pid, ref.substr(6)):
 				return "that is not your character"
 			if ref.begins_with("token:") and not _owns_token(pid, ref.substr(6)):
@@ -321,6 +363,11 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			if not ref.begins_with("actor:") and not ref.begins_with("token:"):
 				return "ask for the focus for one of your tokens or characters"
 			return kernel.turns.request_focus(pid, ref)
+		"gm":
+			# the GM's own verbs, for a co-GM: next turn, checkpoints, triggers, bulk
+			if not gm:
+				return "only the GM does that"
+			return _gm_intent(intent)
 		"contribute":
 			return kernel.pending.contribute(str(intent.get("roll", "")), pid, str(intent.get("name", "")), str(intent.get("expr", "")))
 		"character":
@@ -343,6 +390,20 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				log.emit("%s brought %s" % [_player_name(pid), str(actor.name)])
 			return why
 	return "unknown intent '%s'" % str(intent.get("kind", ""))
+
+
+## What a co-GM may drive besides actions: {op: next|previous|checkpoint|restore|trigger|bulk, …}.
+func _gm_intent(intent: Dictionary) -> String:
+	match str(intent.get("op", "")):
+		"next": return kernel.turns.next()
+		"previous": return kernel.turns.previous()
+		"checkpoint": return "" if kernel.checkpoint(str(intent.get("name", "Checkpoint"))) != "" else "could not mark"
+		"restore": return kernel.restore_checkpoint(str(intent.get("id", "")))
+		"trigger": return kernel.fire_trigger(str(intent.get("scene", state.encounter.active_scene_id)), str(intent.get("trigger", "")))
+		"bulk":
+			var r := Bulk.run(kernel, Array(intent.get("targets", [])), intent.get("op_spec", {}) if intent.get("op_spec") is Dictionary else {}, str(intent.get("label", "")))
+			return r.why
+	return "unknown gm op '%s'" % str(intent.get("op", ""))
 
 
 func _owns_actor(pid: String, actor_id: String) -> bool:

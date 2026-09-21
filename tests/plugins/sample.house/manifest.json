@@ -1,0 +1,18 @@
+{
+  "id": "sample.house",
+  "version": "0.1.0",
+  "api": 1,
+  "name": "Sample: house rules",
+  "description": "House rules layered over sample.ordered: criticals on 19 and 20, a natural 1 fumbles, and an extra part on attack rolls in the dark. Proves plugin layering: it depends on the base ruleset, overrides one of its hooks and adds to another.",
+  "license": "CC0-1.0",
+  "attribution": "Sample rules by Silvergrove Studios, CC0.",
+  "files": ["main.lua", "tests.lua"],
+  "depends": ["sample.ordered"],
+  "overrides": {"sample.ordered": ["after_roll"]},
+  "capabilities": ["log", "dice", "actions"],
+  "settings": {
+    "schema": {"type": "object", "properties": {"critical_from": {"type": "integer", "minimum": 1, "maximum": 20}}},
+    "defaults": {"critical_from": 19}
+  },
+  "tests": true
+}

@@ -31,7 +31,7 @@ func _init(p_tree: SceneTree) -> void:
 ## tests/suites/ whose test_* methods are the tests. An explicit list, not
 ## a directory scan: exported builds do not list res:// reliably.
 const SUITES := ["hex_grid", "document", "json_schema", "expr", "pdf", "exporters", "packs_tools", "layers_lighting",
-	"ui", "ui_views", "shell", "encounter", "table", "player", "net", "fuzz", "rules_kernel", "rules_lua", "rules_plugins", "rules_turns", "rules_views", "rules_content", "rules_map"]
+	"ui", "ui_views", "shell", "encounter", "table", "player", "net", "fuzz", "rules_kernel", "rules_lua", "rules_plugins", "rules_turns", "rules_views", "rules_content", "rules_map", "rules_campaign", "rules_perf", "rules_sandbox"]
 
 
 ## Run every test_* method of every suite (or those whose names contain

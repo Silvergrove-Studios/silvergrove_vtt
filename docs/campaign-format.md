@@ -1,4 +1,4 @@
-# The `.campaign` format (draft, v1)
+# The `.campaign` format (v1)
 
 A campaign is what a group keeps between sessions: the players, their
 characters, the rulesets in play, the packs of content they have added,
@@ -9,8 +9,7 @@ is the thing those encounters belong to.
 
 Same conventions as `.hexmap` and `.encounter`: one JSON document, plain
 text, stable key order, no image data, meant to live in git next to the
-adventure. Status: **draft** — Phase 1 of `docs/plugin-api-plan.md`
-implements it; until then nothing reads it.
+adventure. `hexmap/encounter/campaign.gd` reads and writes it.
 
 ## Document
 
@@ -20,40 +19,76 @@ implements it; until then nothing reads it.
   "version": 1,
   "id": "c_9b1e…",
   "name": "The Sunken Reach",
-  "plugins": [ { "id": "sample.ordered", "version": "0.1.0", "settings": {} } ],
+  "plugins": [ { "id": "sample.ordered", "version": "0.1.0", "settings": { "critical_on": 19 } },
+               { "id": "sample.house" } ],
   "packs": [ { "id": "homebrew.reach", "path": "packs/reach", "version": "3" } ],
   "players": [ { "id": "pl_a1", "name": "Ana", "color": "#4f9cf6" } ],
-  "actors": { "a_hero": { …actor… } },
-  "state": { "ext": { "sample.ordered": { "party_luck": 2 } } },
-  "clock": { "day": 12, "time": "14:30", "session": 4 },
-  "tracks": [ { …progress track… } ],
-  "journal": [ { "id": "j_1", "when": "…", "title": "…", "text": "…", "audience": "gm" } ],
+  "actors": { "a_hero": { …actor, without derived… } },
+  "resources": { "actor:a_hero": { "sample.ordered": { "hp": { "kind": "pool", "current": 6, "max": 10, "recharge": "rest" } } } },
+  "state": { "ext": { "sample.ordered": { "luck": 2 } } },
+  "clock": { "session": 4, "day": 12, "minute": 870 },
+  "tracks": { "k_doom": { …progress track… } },
+  "journal": [ { "id": "j_1", "kind": "ruling", "session": 3, "encounter": "The chapel", "text": "…", "rule": "cover", "tags": ["cover"], "audience": "gm" } ],
   "encounters": [ "sessions/chapel_ambush.encounter" ],
   "meta": { "author": "", "description": "", "created": "…", "modified": "…" },
   "ext": {}
 }
 ```
 
-- `plugins`: the rulesets this campaign runs, in load order (later ones
-  may override earlier ones' hooks). `settings` is what the plugin's
-  declared settings schema allows: rules variants, automation levels.
+- `plugins`: the rulesets this campaign runs, in order. The Table loads
+  what it names first, in that order (a base always before what layers
+  over it, whatever the list says), then the rest of the installed
+  plugins; `settings` are paths into the plugin's declared settings,
+  over its defaults: rules variants, automation levels.
 - `packs`: content packs beyond what the plugins ship, by path relative
   to the campaign file. Layered over shipped packs by id.
-- `players`: moved up from the encounter (v1 encounters keep theirs; a v2
-  encounter references the campaign's).
-- `actors`: the persistent ones — player characters, recurring NPCs,
-  companions. Encounter-local actors (the goblins of one fight) live in
-  the encounter.
-- `state.ext.<plugin>`: campaign-scoped plugin state. Changed only by
-  `ext.set` events with `scope: "campaign"`.
-- `clock`: in-game date and time and the session counter, advanced by
-  `clock.set` events. Plugins subscribe (`on_time_advanced`,
-  `on_session_start`).
+- `players`: the group. A session's encounter gets them on start and
+  gives back any it added.
+- `actors`: the persistent ones — player characters, companions,
+  recurring NPCs — without their `derived` blocks (the kernel recomputes
+  those in every session). Encounter-local actors (the goblins of one
+  fight) live in the encounter. At the end of a session every actor the
+  campaign already had, plus any of kind `pc` or `companion` new to it
+  (a character a player brought), comes back.
+- `resources`: the persistent actors' pools and tracks, `"actor:<id>"`
+  → plugin → name → record, exactly as the encounter holds them: the
+  hurt hero is still hurt next week.
+- `state.ext.<plugin>`: campaign-scoped plugin state. During a session
+  it lives in the encounter's `campaign.ext` and is changed by `ext.set`
+  events with `scope: "campaign"`; banking copies it back.
+- `clock`: the session counter and the in-game day and minute the last
+  session ended on. Starting a session sets the encounter's clock to
+  the next session with that day and minute; `session_start` fires.
 - `tracks`: progress tracks that outlive an encounter (a faction's goal,
-  a long project). Same shape as encounter tracks.
-- `journal`: notes and handouts with an audience.
-- `encounters`: the sessions, by path. Informational; an encounter
-  carries its own campaign reference.
+  a long project), by id, same shape as encounter tracks. They enter
+  the encounter flagged `campaign: true`; any track so flagged, or one
+  the campaign already had, comes back.
+- `journal`: what the sessions left worth keeping — rulings, handouts,
+  notes marked `journal: true` — each stamped with its `session` and the
+  encounter's name; the Table searches it.
+- `encounters`: the sessions, by path relative to the campaign file.
+  Informational; an encounter carries its own campaign reference.
+
+## Sessions
+
+A campaign is not event-sourced. It is read once when a session starts
+and written once when it ends; in between, everything happens in the
+encounter through the kernel, where it is undoable and replicated.
+
+**Start** (`Campaign.begin_session(encounter)` → events, committed by
+`RulesKernel.start_session()` as one step): players the encounter
+lacks are added; every campaign actor is added (or its data refreshed
+if the encounter already has it) with its resources; campaign tracks
+the encounter lacks are added; the clock moves to the next session;
+the encounter's `campaign` block is set (`id`, `path`, `ext`). Then the
+rules hear `session_start` (session refills, expiries, the hook) and a
+checkpoint named `Session N start` is marked, which is what the recap
+measures from.
+
+**End** (`Campaign.bank(encounter, path)`): players, persistent actors
+and their resources, campaign tracks, the clock, campaign state and
+journal-worthy log entries are written back; the encounter's path is
+listed. The Table's Campaign pane does both, and saves the file.
 
 ## Actor
 
@@ -112,23 +147,7 @@ record back.
 
 ## Events
 
-Campaign-scoped events, applied by the same `apply → inverse` machinery:
-
-| event | fields | inverse |
-|---|---|---|
-| `campaign.set` | `changes` | `campaign.set` |
-| `player.add/remove/set` | as today | as today |
-| `actor.add` | `actor` | `actor.remove` |
-| `actor.remove` | `id` | `actor.add` |
-| `actor.set` | `id`, `changes` (paths under `ext`, `name`, `owner`, `token`, `audience`) | `actor.set` |
-| `actor.overlay.push` | `id`, `overlay` | `actor.overlay.pop` |
-| `actor.overlay.pop` | `id`, `overlay_id` | `actor.overlay.push` at the old position |
-| `ext.set` | `scope: "campaign"`, `plugin`, `changes` | `ext.set` |
-| `clock.set` | `changes` | `clock.set` |
-| `track.add/remove/set` | `track` / `id` / `id`, `changes` | the usual |
-| `journal.add/remove/set` | likewise | likewise |
-
-`derived` is never the target of an event; it is recomputed after any
-event that touches its inputs, and the recomputation is itself broadcast
-as `actor.set` with `reason: {derived: true}` so Players update without
-running rules.
+There are none of its own: the campaign is data between sessions, and
+the encounter's events (`actor.*`, `resource.set`, `track.*`,
+`clock.set`, `ext.set` with scope `campaign`, `log.add`) are how it
+changes while one is running — see docs/encounter-format.md.
