@@ -328,8 +328,8 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 | 0 Decisions and spikes | done | Luau runtime + `LuaVm`, `JsonSchema`, `Expr`, suite split, format drafts, decisions |
 | 1 Kernel core | done | v2 document and events, `EventLog`, `TypedNumber`, `HookBus`, `Dice`, `Effects`, `Resources`, `RulesKernel`, fixture ruleset, fuzz |
 | 2 Runtime and plugin host | done | `PluginHost`, manifests, `hm.*` API, prompts as yields, actions, `hm.test`, `sample.ordered` in Lua, `plugintest` |
-| 3 Turns, shared state, clock, prompts | next | `TurnStrategy` (ordered + focus), tracks, prompts, pending rolls, `sample.focus` |
-| 4 Declarative UI, intents, protocol v2 | | views renderer, Player/Display clients, audience filtering |
+| 3 Turns, shared state, clock, prompts | done | `TurnRunner` (ordered + focus), tracks, clock, rests, prompts and open rolls as records, `sample.focus`, Table wiring |
+| 4 Declarative UI, intents, protocol v2 | next | views renderer, Player/Display clients, audience filtering |
 | 5 Compendium, packs, editors | | indexed packs, homebrew editors, `sample.degrees` |
 | 6 Map queries | | distance/bands, templates, LoS/cover, zones, hex state |
 | 7 Campaign, growth, hardening | | `.campaign`, checkpoints UI, recap, prep triggers, bulk ops |
@@ -444,22 +444,42 @@ Decisions taken while building:
 - Every roll totals its parts under the merged policy of the loaded
   rulesets unless the spec names one.
 
-### Phase 3 — Turns, shared state, clock, prompts
+### Phase 3 — Turns, shared state, clock, prompts — **done 2026-09-21**
 
-`TurnStrategy` (`ordered` and `focus`), `SharedState`, `Clock`, `Tracks`,
-`Prompts` with resumable hooks (coroutines across host calls), pending
-rolls with contributions.
+| piece | file | what it does | proven by |
+|---|---|---|---|
+| Turns v2 fields | `encounter/encounter.gd`, `encounter_state.gd` | `strategy`, `plugin`, `focus`, `counters`, `requests`, `history`; `current_turn_token()` knows the focus shape; `turns.set` merges paths | `tests/suites/rules_turns.gd` (129 checks) |
+| `TurnRunner` | `rules/turns.gd` | strategies registered per plugin (initiative from a derived path or a function, tie-break, budgets, labels) plus the DM's list; ordered: `start/next/previous/stop/reorder/consume` with `round_*`/`turn_*` hooks and effect expiry; focus: `set_focus/request_focus/deny_focus` with `focus_changed` asked *before* the move | `test_ordered_turns`, `test_focus_turns` |
+| `Tracks` | `rules/tracks.gd` | countdowns/clocks/meters with advance rules on rolls, outcomes, rests, sessions; links summed into one move; `track_done` | `test_tracks_clock_and_rest` |
+| `Clock` | `rules/clock.gd` | day/minute/session/scene; `advance` ends timed effects, `next_session` refills session pools, `next_scene` ends scene effects | same |
+| `kernel.rest()` | `rules/kernel.gd` | refills, expiries, rest tracks, the `rest` hook | same |
+| `kernel.ask/fire/transaction` | `rules/kernel.gd` | hooks with an `events` list the handlers fill; multi-commit steps that are one undo entry and roll back entirely on a veto | `test_ordered_turns` (vetoed step leaves nothing) |
+| `Pending` | `rules/pending.gd` | prompts and open rolls as encounter records (`pending.prompts/rolls`) with continuations on the Table; `drive()` runs a `PluginCall` through its prompts; `answer` checks who may; deadlines via `tick`; `close_orphans`; `open_roll/contribute/resolve` | `test_pending_prompts_and_rolls` (a prompt survives save + load) |
+| Lua API | `rules/lua_prelude.gd`, `plugin_host.gd` | `hm.turns.*`, `hm.tracks.*`, `hm.clock.*`, `hm.rest`, `hm.dice.open/contribute/resolve/pending` | both reference plugins |
+| `sample.focus` | `tests/plugins/sample.focus/` | no initiative: a spotlight, two named dice with a four-way outcome, a GM pool the `focus_changed` hook charges, cards in a hand and a vault, hit points as a slot track, thresholds with an armour prompt, a countdown on dark outcomes; 8 tests | `plugintest`, conformance in the suite |
+| Table wiring | `table/table_context.gd`, `turns_panel.gd`, `encounter_commands.gd` | the Table owns a kernel and a plugin host (plugins from `user://plugins`), turn commands go through the runner, the panel draws either shape from data (focus: a GM row, requests, "Give focus") | `test_table_turn_panel_both_shapes` |
+| Exact path inverses | `core/json_doc.gd` | a change that created dictionaries inverts to a removal of the topmost one it created | document round-trip tests |
 
-Second reference plugin: **`sample.focus`** — no initiative; a spotlight
-holder; a shared GM pool fed by a two-die roll with a four-way outcome;
-abilities as cards with a hand and a vault; a countdown; hit points as a
-slot track; a damage step that prompts the target's owner. Everything a
-D&D-shaped design would get wrong, in one small original ruleset.
+Exit criterion met: both strategies run under the Table's existing turn
+UI, which draws either shape from data; a prompt is an encounter record
+that survives a save and a load; a fuzz drives both reference plugins
+with random actions, turns in whichever shape is running, rests, the
+clock and tracks — replay reproduces, undo restores, derived never goes
+stale, no prompt is left dangling.
 
-Exit: both strategies run under the Table's existing turn UI (which now
-renders either shape from data); a prompt survives a Player reconnect;
-the fuzz test drives both plugins with random intents and never breaks
-the invariants (log replays, undo inverts, no plugin exception escapes).
+Decisions taken while building:
+- The `focus_changed` hook is *asked* before the focus moves so a plugin
+  can veto (no pool to spend) or charge for it; every other turn hook
+  runs after its moment and contributes events.
+- Turn, clock and rest steps are transactions: many commits, one undo
+  entry, all undone on a veto or a refused event.
+- Effect durations `turn_end`/`turn_start` are relative to a
+  participant ref, so they work in both shapes (the focus leaving a
+  holder ends its turn).
+- Linked tracks are summed before events are made, so a track reached
+  twice in one moment moves once by the total.
+- Prompt continuations are memory on the Table; the records are in the
+  document. A restarted Table answers its orphans with their defaults.
 
 ### Phase 4 — Declarative UI, intents, Protocol v2, three clients
 

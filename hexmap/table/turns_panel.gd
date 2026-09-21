@@ -2,9 +2,12 @@ class_name TurnsPanel
 extends VBoxContainer
 ## Who may move, and in what order. Three modes: Free (anyone moves any
 ## token they can see), DM picks (tick the tokens whose players may move
-## now), Ordered (a turn system — a game plugin, or plain "as listed" —
-## orders the tokens and the table steps through them). The tokens that are
-## "up" get a gold ring on the map.
+## now), Ordered (a turn strategy — a ruleset plugin's, or plain "as
+## listed" — runs the turns). A strategy has one of two shapes, and the
+## panel draws whichever the encounter is in from its data: an ordered
+## list stepped with Next, or a focus that the DM gives to a participant
+## (the GM included) and that players ask for. The tokens that are "up"
+## get a gold ring on the map.
 
 var ctx: TableContext
 var mode_select: OptionButton
@@ -27,7 +30,8 @@ const MODE_LABELS := ["Free: anyone moves", "DM picks who moves", "Ordered turns
 const EXPLAIN := {
 	"free": "Players may move any token they can see. Good for exploration and roleplay.",
 	"dm": "Tick the tokens whose players may move right now. Everyone else waits.",
-	"ordered": "A turn system orders the tokens; Next steps through them. Only the token whose turn it is may be moved by its player.",
+	"ordered": "A turn strategy runs the turns; Next steps through them. Only the token whose turn it is may be moved by its player.",
+	"focus": "No order: whoever holds the focus acts. Select a row and give it the focus; players may ask for it.",
 }
 const COL_NAME := 0
 const COL_INFO := 1
@@ -57,7 +61,7 @@ func _init(p_ctx: TableContext) -> void:
 	system_select.tooltip_text = "What decides the order: a game system plugin, or the list as you arrange it"
 	system_select.item_selected.connect(func(i: int) -> void:
 		if not _syncing:
-			ctx.commands.run({"t": "turns.set", "changes": {"system": str(system_select.get_item_metadata(i))}}, "Turn system"))
+			ctx.commands.run({"t": "turns.set", "changes": {"system": str(system_select.get_item_metadata(i))}}, "Turn strategy"))
 	_system_row.add_child(system_select)
 	add_child(_system_row)
 	_round = Label.new()
@@ -94,7 +98,11 @@ func _init(p_ctx: TableContext) -> void:
 	_next = Button.new()
 	_next.text = "Next turn"
 	_next.theme_type_variation = "AccentButton"
-	_next.pressed.connect(func() -> void: ctx.commands.next_turn())
+	_next.pressed.connect(func() -> void:
+		if _focus_shape():
+			_give_focus()
+		else:
+			ctx.commands.next_turn())
 	_ordered_row.add_child(_next)
 	_end = Button.new()
 	_end.text = "End"
@@ -131,6 +139,39 @@ func mode() -> String:
 	return str(ctx.encounter().turns.get("mode", "free")) if ctx.state != null else "free"
 
 
+func _focus_shape() -> bool:
+	return ctx.state != null and str(ctx.encounter().turns.get("strategy", "ordered")) == "focus"
+
+
+## Focus shape: the selected row gets the focus (the GM row included).
+func _give_focus() -> void:
+	var it := list.get_selected()
+	if it == null or ctx.kernel == null:
+		return
+	var ref := str(it.get_metadata(COL_INFO))
+	if ref == "":
+		return
+	var why := ctx.kernel.turns.set_focus(ref, "gm")
+	if why != "":
+		ctx.status.emit(why)
+
+
+## The strategies the DM may pick: the kernel's (plugins and the list),
+## or, without a kernel, the legacy turn systems.
+func _strategies() -> Array:
+	if ctx.kernel != null:
+		var out := []
+		for id in ctx.kernel.turns.strategies:
+			var sp: Dictionary = ctx.kernel.turns.strategies[id]
+			out.append({"id": str(id), "name": str(sp.get("name", id)), "description": str(sp.get("description", "")) + (" (focus)" if str(sp.get("shape", "")) == "focus" else "")})
+		out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.id < b.id if a.id != "list" and b.id != "list" else a.id == "list")
+		return out
+	var out := []
+	for sys in TurnSystem.all_systems():
+		out.append({"id": (sys as TurnSystem).id, "name": (sys as TurnSystem).name, "description": (sys as TurnSystem).description})
+	return out
+
+
 func _on_check() -> void:
 	var it := list.get_edited()
 	if it == null or list.get_edited_column() != COL_CHECK:
@@ -153,6 +194,17 @@ func _shift(by: int) -> void:
 	ctx.commands.set_turn_order(order)
 
 
+func _holder_name(ref: String) -> String:
+	if ref == "gm":
+		return "the GM"
+	if ref.begins_with("token:"):
+		var tk := ctx.state.find_token(ref.substr(6))
+		return str(tk.get("name", ref)) if not tk.is_empty() else ref
+	if ref.begins_with("actor:"):
+		return str(ctx.encounter().actor(ref.substr(6)).get("name", ref))
+	return "nobody"
+
+
 func refresh() -> void:
 	if ctx.state == null:
 		return
@@ -167,11 +219,11 @@ func refresh() -> void:
 		(a as Button).visible = m == "ordered"
 	system_select.clear()
 	var i := 0
-	for sys in TurnSystem.all_systems():
-		system_select.add_item((sys as TurnSystem).name)
-		system_select.set_item_metadata(i, (sys as TurnSystem).id)
-		system_select.set_item_tooltip(i, (sys as TurnSystem).description)
-		if (sys as TurnSystem).id == str(turns.get("system", "list")):
+	for sp in _strategies():
+		system_select.add_item(str(sp.name))
+		system_select.set_item_metadata(i, str(sp.id))
+		system_select.set_item_tooltip(i, str(sp.description))
+		if str(sp.id) == str(turns.get("system", "list")):
 			system_select.select(i)
 		i += 1
 	list.clear()
@@ -179,7 +231,6 @@ func refresh() -> void:
 	var root := list.create_item()
 	var running := bool(turns.get("running", false))
 	var current := ctx.state.current_turn_token()
-	var sys := TurnSystem.get_system(str(turns.get("system", "list")))
 	match m:
 		"free":
 			_round.text = ""
@@ -198,7 +249,37 @@ func refresh() -> void:
 				it.set_editable(COL_CHECK, true)
 				it.set_checked(COL_CHECK, active.has(str(tk.id)))
 				_items[str(tk.id)] = it
+		"ordered" when _focus_shape() and running:
+			_explain.text = EXPLAIN["focus"]
+			var focus := str(turns.get("focus", ""))
+			var requests := {}
+			for r in turns.get("requests", []):
+				requests[str(r.get("ref", ""))] = str(ctx.encounter().player(str(r.get("player", ""))).get("name", "someone"))
+			_round.text = "Focus: " + _holder_name(focus)
+			var gm := list.create_item(root)
+			gm.set_text(COL_NAME, ("▶ " if focus == "gm" else "   ") + "The GM")
+			gm.set_metadata(COL_NAME, "")
+			gm.set_metadata(COL_INFO, "gm")
+			for tk in ctx.state.tokens(ctx.scene_id):
+				var ref := "token:" + str(tk.id)
+				var it := list.create_item(root)
+				it.set_text(COL_NAME, ("▶ " if focus == ref else "   ") + str(tk.get("name", "")))
+				it.set_metadata(COL_NAME, str(tk.id))
+				it.set_metadata(COL_INFO, ref)
+				it.set_text(COL_INFO, "asks" if requests.has(ref) else "")
+				if requests.has(ref):
+					it.set_tooltip_text(COL_INFO, "%s asks for the focus" % requests[ref])
+				if bool(tk.get("hidden", false)):
+					it.set_custom_color(COL_NAME, Color(0.6, 0.6, 0.6))
+				_items[str(tk.id)] = it
+			_next.text = "Give focus"
+			_next.disabled = false
+			_prev.visible = false
+			_end.disabled = false
+			_start.text = "Restart"
 		"ordered":
+			_next.text = "Next turn"
+			_prev.visible = true
 			var order: Array = turns.get("order", [])
 			_round.text = "Round %d" % int(turns.get("round", 1)) if running else ("Press Start to order the tokens" if order.is_empty() else "Paused")
 			for id in order:
@@ -207,7 +288,7 @@ func refresh() -> void:
 				var p_name := str(tk.get("name", "")) if not tk.is_empty() else "(on another scene)"
 				it.set_text(COL_NAME, ("▶ " if str(id) == current else "   ") + p_name)
 				it.set_metadata(COL_NAME, str(id))
-				it.set_text(COL_INFO, sys.label(turns, str(id)))
+				it.set_text(COL_INFO, str(turns.get("data", {}).get("labels", {}).get(str(id), "")))
 				if not tk.is_empty() and bool(tk.get("hidden", false)):
 					it.set_custom_color(COL_NAME, Color(0.6, 0.6, 0.6))
 				_items[str(id)] = it

@@ -59,6 +59,14 @@ hm.derive(function(view)
 	}
 end)
 
+-- ----------------------------------------------------------------- turns --
+-- Ordered turns from the derived initiative, highest first, one action a
+-- turn; a strike spends it.
+hm.turns.register({
+	shape = "ordered", name = "Initiative", description = "Highest initiative first; one action a turn.",
+	initiative = "initiative", tie_break = "highest", budgets = { actions = 1 },
+})
+
 -- ----------------------------------------------------------------- hooks --
 -- Attack rolls carry the attacker's attack parts and every condition that
 -- bears on rolls.
@@ -97,6 +105,16 @@ hm.actions.register("strike", {
 	run = function(ctx)
 		local target = hm.actor(ctx.target)
 		if target == nil then error("strike needs a target actor") end
+		-- in ordered turns, a strike costs the action
+		local turns = hm.turns.current()
+		if turns.running and turns.strategy == "ordered" then
+			local ref = "token:" .. (ctx.token or "")
+			if ctx.token and turns.counters[ref] then
+				local spend = hm.turns.consume(ref, "actions", 1)
+				if spend == nil then error("no action left this turn") end
+				hm.commit(spend, "Action")
+			end
+		end
 		local dc = hm.value((hm.derived(ctx.target) or {}).defence)
 		local attack = hm.dice.roll("1d20", { actor = ctx.actor, kind = "attack", dc = dc }, "Strike")
 		local out = { outcome = attack.result.outcome, damage = 0 }

@@ -136,7 +136,7 @@ func test_dice() -> void:
 	check(half.draw.count == 1 and half.dice[0].face == 6, "partial typed-in faces draw the rest")
 	check(not Dice.roll({"named": {}}, 1, 0).ok and not Dice.roll("2d6+x", 1, 0).ok, "bad specs fail softly")
 	# pending
-	var pend := Dice.Pending.new({"expr": "1d20", "parts": [{"label": "trait", "value": 1}]})
+	var pend := Dice.PendingRoll.new({"expr": "1d20", "parts": [{"label": "trait", "value": 1}]})
 	check(pend.contribute("pl_b", "help", "1d6") == "" and pend.contribute("pl_c", "help", "1d6") != "" and pend.contribute("pl_c", "rally", "1dx") != "", "contributions are named and checked")
 	var res := pend.resolve(7, 100)
 	check(res.ok and res.groups.has("help") and res.contributions.size() == 1 and res.total == float(res.groups.main.total + res.groups.help.total) + 1.0, "a pending roll resolves with its contributions")

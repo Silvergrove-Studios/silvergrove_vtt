@@ -14,6 +14,13 @@ var app: App
 var state: EncounterState
 var history := EventLog.new()
 var commands: EncounterCommands
+## The rules engine over the state and the plugins loaded into it. Made
+## fresh with every encounter; plugins come from `plugin_dirs`.
+var kernel: RulesKernel
+var host: PluginHost
+var plugin_dirs: Array = ["user://plugins"]
+## What loading plugins reported (for the status bar / log).
+var plugin_log: PackedStringArray = []
 var canvas: MapCanvas
 ## View zoom (screen px per canvas px), kept current by TableView.
 var zoom := 1.0
@@ -43,12 +50,32 @@ func set_encounter(e: Encounter) -> void:
 	state.encounter.changed.connect(_on_changed)
 	history.clear()
 	history.state = state
+	kernel = RulesKernel.new(state, history)
 	commands = EncounterCommands.new(state, history)
+	commands.kernel = kernel
+	_load_plugins()
 	selection = []
 	scene_id = e.active_scene_id
 	if scene_id == "" and not e.scenes.is_empty():
 		scene_id = str(e.scenes[0].id)
 	encounter_changed.emit()
+
+
+## Load every plugin found under plugin_dirs into a fresh host. Failures
+## are logged, never fatal: the Table works with no rules at all.
+func _load_plugins() -> void:
+	host = null
+	plugin_log = PackedStringArray()
+	if not PluginHost.available():
+		return
+	host = PluginHost.new(kernel)
+	host.plugin_failed.connect(func(id: String, where: String, msg: String) -> void:
+		plugin_log.append("%s: %s: %s" % [id, where, msg])
+		status.emit("%s: %s: %s" % [id, where, msg]))
+	for m in PluginHost.discover(plugin_dirs):
+		var why := host.load_dir(str(m.__dir))
+		plugin_log.append("%s: %s" % [str(m.get("id", "?")), "loaded" if why == "" else why])
+	kernel.pending.close_orphans()
 
 
 func _on_changed(what: String, p_scene: String) -> void:

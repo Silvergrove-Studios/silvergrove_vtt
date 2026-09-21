@@ -22,6 +22,9 @@ signal ruleset_failed(ruleset_id: String, message: String)
 var state: EncounterState
 var log: EventLog
 var hooks := HookBus.new()
+var turns: TurnRunner
+var clock: Clock
+var pending: Pending
 ## id -> {derive: Callable(view) -> Dictionary, fields: {name: expr},
 ##        policy: {type: stack|best|override}, order, depends_on_state}
 var rulesets: Dictionary = {}
@@ -36,6 +39,9 @@ func _init(p_state: EncounterState, p_log: EventLog = null) -> void:
 	log = p_log if p_log != null else EventLog.new(p_state)
 	if log.state == null:
 		log.state = p_state
+	turns = TurnRunner.new(self)
+	clock = Clock.new(self)
+	pending = Pending.new(self)
 	# Through a weak reference: the log must not keep the kernel alive.
 	var me: WeakRef = weakref(self)
 	log.changed.connect(func() -> void:
@@ -61,6 +67,7 @@ func register_ruleset(id: String, spec: Dictionary) -> void:
 func unregister_ruleset(id: String) -> void:
 	rulesets.erase(id)
 	hooks.off(id)
+	turns.unregister(id)
 	rederive_all()
 
 
@@ -148,6 +155,53 @@ func _on_history_changed() -> void:
 		rederive_all()
 
 
+## Run a hook synchronously with an `events` list the handlers may append
+## to. {ok, why, events, payload}: the events are not committed.
+func ask(hook: String, payload: Dictionary) -> Dictionary:
+	var p: Dictionary = payload.duplicate()
+	p.events = []
+	var out := hooks.run_sync(hook, p)
+	if out.has("veto") and out.veto != null and str(out.veto) != "":
+		return {"ok": false, "why": str(out.veto), "events": [], "payload": out}
+	var events: Array = out.get("events", []) if out.get("events") is Array else []
+	return {"ok": true, "why": "", "events": events, "payload": out}
+
+
+## ask(), then commit what the handlers gathered. "" or the veto / refusal.
+func fire(hook: String, payload: Dictionary, label: String) -> String:
+	var a := ask(hook, payload)
+	if not a.ok:
+		return a.why
+	return commit(a.events, label, {"hook": hook})
+
+
+## Several commits as one undo step that either all happen or none do:
+## `fn` returns "" or why it stopped, and on a refusal the step is undone.
+func transaction(label: String, fn: Callable) -> String:
+	var depth := log.undo_depth()
+	log.begin_group()
+	var why: String = fn.call()
+	log.end_group(label)
+	if why != "" and log.undo_depth() > depth:
+		log.undo()
+		log._redo.clear()   # a step that never happened is not there to redo
+		log.changed.emit()
+	return why
+
+
+## A rest of some kind ("rest", "long_rest", or whatever the ruleset
+## names): refills, expiries, tracks, the `rest` hook, the clock's count.
+func rest(kind := "rest", label := "") -> String:
+	var lbl := label if label != "" else kind.capitalize()
+	return transaction(lbl, func() -> String:
+		var why := commit([{"t": "clock.set", "changes": {"rests": int(state.encounter.clock.get("rests", 0)) + 1}}], lbl)
+		if why == "":
+			why = commit(Effects.expire(state, {"kind": kind}) + Resources.refill(state, kind) + Tracks.on_trigger(state, kind), lbl)
+		if why == "":
+			why = fire("rest", {"kind": kind}, lbl)
+		return why)
+
+
 # ------------------------------------------------------------------ rolls --
 
 ## Roll with the rulesets consulted: `before_roll` may add parts, change
@@ -182,6 +236,13 @@ func roll(spec: Variant, ctx: Dictionary = {}, label := "Roll", reason: Dictiona
 	if why != "":
 		last_veto = why
 		return {}
+	# tracks that move on rolls, then the ruleset hears about any that finished
+	var moved := Tracks.on_roll(state, entry)
+	if not moved.is_empty():
+		var done := Tracks.completed_by(state, moved)
+		commit(moved, "Tracks", {"roll": entry.id})
+		for id in done:
+			fire("track_done", {"track": id, "roll": entry.id}, "Track done")
 	return entry
 
 

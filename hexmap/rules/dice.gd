@@ -247,7 +247,7 @@ static func faces_of(result: Dictionary) -> Dictionary:
 
 ## A roll that gathers contributions (help dice, a joined action) before
 ## it resolves. Contributions are named groups from other participants.
-class Pending:
+class PendingRoll:
 	var spec: Dictionary
 	var contributions: Array = []   # [{by, name, expr}]
 	var resolved: Dictionary = {}

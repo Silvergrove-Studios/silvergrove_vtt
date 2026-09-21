@@ -1,6 +1,13 @@
 {
   "active_scene": "s_b10e8ea8",
   "actors": {},
+  "clock": {
+    "day": 1,
+    "minute": 0,
+    "rests": 0,
+    "scene": 1,
+    "session": 1
+  },
   "effects": {},
   "ext": {},
   "format": "silvergrove.encounter",
@@ -20,6 +27,10 @@
       "title": "If the party lights the braziers"
     }
   ],
+  "pending": {
+    "prompts": {},
+    "rolls": {}
+  },
   "players": [
     {
       "color": "#4f9cf6",
@@ -314,9 +325,13 @@
   "state": {
     "ext": {}
   },
+  "tracks": {},
   "turns": {
     "active": [],
+    "counters": {},
     "data": {},
+    "focus": "",
+    "history": [],
     "mode": "ordered",
     "order": [
       "t_bdb237f2",
@@ -326,8 +341,11 @@
       "t_e23e7c17",
       "t_a166e022"
     ],
+    "plugin": "",
+    "requests": [],
     "round": 1,
     "running": false,
+    "strategy": "ordered",
     "system": "list",
     "turn": 0
   },

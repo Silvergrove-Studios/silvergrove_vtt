@@ -34,7 +34,7 @@ func test_plugin_manifests() -> void:
 	host.unload("t.ok")
 	check(not host.plugins.has("t.ok") and host.kernel.rulesets.is_empty(), "unload drops it from the kernel")
 	var found := PluginHost.discover(["res://tests/plugins"])
-	check(found.size() >= 1 and str(found[0].id) == "sample.ordered", "discover() finds the sample plugin: %s" % [found.map(func(m): return m.id)])
+	check(found.size() >= 2 and str(found[0].id) == "sample.focus" and str(found[1].id) == "sample.ordered", "discover() finds the sample plugins, sorted: %s" % [found.map(func(m): return m.id)])
 
 
 func test_plugin_api_from_lua() -> void:

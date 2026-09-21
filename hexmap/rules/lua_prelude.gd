@@ -22,6 +22,8 @@ local handlers = {}
 local derive_fn = nil
 local actions = {}
 local tests = {}
+local turn_initiative_fn = nil
+local turn_label_fn = nil
 
 -- A host call that failed hands back { __error = message }; raise it here,
 -- on the Lua side, where an error is safe.
@@ -70,6 +72,69 @@ end
 function hm.test(name, fn)
 	table.insert(tests, { name = name, fn = fn })
 end
+
+-- ---------------------------------------------------------------- turns --
+
+hm.turns = {}
+-- Register this ruleset's turn strategy: { shape = "ordered" | "focus",
+-- name, description, initiative = function(view, token) | "derived path",
+-- tie_break = "highest" | "lowest", budgets = { actions = 3 }, label = function(view, init) }
+function hm.turns.register(spec)
+	if type(spec) ~= "table" then error("hm.turns.register(spec)", 2) end
+	local public = {}
+	for k, v in pairs(spec) do
+		if type(v) == "function" then
+			if k == "initiative" then turn_initiative_fn = v end
+			if k == "label" then turn_label_fn = v end
+		else
+			public[k] = v
+		end
+	end
+	public.has_initiative_fn = turn_initiative_fn ~= nil
+	public.has_label_fn = turn_label_fn ~= nil
+	call(host.turns_register, public)
+end
+function hm.turns.current() return call(host.turns_get) end
+function hm.turns.focus() return call(host.turns_get).focus end
+function hm.turns.holder_actor()
+	local f = call(host.turns_get).focus or ""
+	if f:sub(1, 6) == "actor:" then return f:sub(7) end
+	if f:sub(1, 6) == "token:" then
+		local tk = hm.token(f:sub(7))
+		return tk and tk.actor or nil
+	end
+	return nil
+end
+function hm.turns.set_focus(holder, by) return call(host.turns_op, "set_focus", holder, by or hm.id) end
+function hm.turns.request(player, ref) return call(host.turns_op, "request", ref, player) end
+function hm.turns.deny(ref) return call(host.turns_op, "deny", ref, "") end
+function hm.turns.start(scene, strategy) return call(host.turns_op, "start", scene, strategy or hm.id) end
+function hm.turns.next() return call(host.turns_op, "next", "", "") end
+function hm.turns.stop() return call(host.turns_op, "stop", "", "") end
+function hm.turns.counters(ref) return (call(host.turns_get).counters or {})[ref] or {} end
+function hm.turns.consume(ref, counter, n) return call(host.turns_consume, ref, counter, n or 1) end
+
+-- --------------------------------------------------------------- tracks --
+
+hm.tracks = {}
+function hm.tracks.make(name, max, kind, advance, audience, on_done)
+	return call(host.track_make, name, max, kind or "countdown", advance or {}, audience or "all", on_done or "")
+end
+function hm.tracks.add(track) return { t = "track.add", track = track } end
+function hm.tracks.remove(id) return { t = "track.remove", id = id } end
+function hm.tracks.advance(id, n) return call(host.track_advance, id, n or 1) end
+function hm.tracks.get(id) return call(host.track_get, id) end
+function hm.tracks.all() return call(host.track_all) end
+
+-- ---------------------------------------------------------------- clock --
+
+hm.clock = {}
+function hm.clock.get() return call(host.clock_get) end
+function hm.clock.advance(minutes, label) return call(host.clock_op, "advance", minutes or 0, label or "") end
+function hm.clock.next_session() return call(host.clock_op, "session", 0, "") end
+function hm.clock.next_scene() return call(host.clock_op, "scene", 0, "") end
+
+function hm.rest(kind, label) return call(host.rest, kind or "rest", label or "") end
 
 -- ------------------------------------------------------------- helpers --
 
@@ -132,6 +197,15 @@ function hm.dice.roll(spec, ctx, label)
 	return call(host.roll, spec, ctx or {}, label or "Roll")
 end
 function hm.dice.parse(expr) return call(host.dice_parse, expr) end
+-- A roll that waits for contributions (help dice, joined actions) before
+-- it resolves: open it, let others contribute, resolve it.
+function hm.dice.open(spec, ctx, label, open_to, deadline)
+	if type(spec) == "string" then spec = { expr = spec } end
+	return call(host.roll_open, spec, ctx or {}, label or "Roll", open_to or "all", deadline or 30)
+end
+function hm.dice.contribute(id, who, name, expr) return call(host.roll_contribute, id, who or "", name, expr) end
+function hm.dice.resolve(id) return call(host.roll_resolve, id) end
+function hm.dice.pending() return call(host.roll_pending) end
 
 -- -------------------------------------------------------------- effects --
 
@@ -189,6 +263,16 @@ function __run_hook(hook, payload)
 	return payload
 end
 
+function __turn_initiative(view, token)
+	if turn_initiative_fn == nil then return nil end
+	return turn_initiative_fn(view, token)
+end
+
+function __turn_label(view, init)
+	if turn_label_fn == nil then return tostring(init) end
+	return tostring(turn_label_fn(view, init))
+end
+
 function __run_action(name, ctx)
 	local a = actions[name]
 	if a == nil then error("no action '" .. tostring(name) .. "'") end
@@ -219,6 +303,7 @@ function __run_test(index, helpers)
 	end
 	function h.commit(events, label) return hm.commit(events, label or "test") end
 	function h.dispatch(action, ctx, answers) return call(host.test_dispatch, action, ctx or {}, answers or {}) end
+	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
 	for k, v in pairs(helpers or {}) do h[k] = v end
 	return t.fn(h)
 end

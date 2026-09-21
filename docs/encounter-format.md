@@ -239,6 +239,30 @@ below puts rules in the map or numbers on tokens; it puts them in
   function, so a roll records `{seed, index, count}` and moving `index`
   past it is part of applying the `log.add`; a replay reads the recorded
   faces and lands on the same index.
+- **turns** (version 2 fields, beside the version 1 ones): `strategy`
+  is the *shape* — `ordered` (an order stepped with Next, rounds) or
+  `focus` (a holder that moves; no order, no rounds); `plugin` names the
+  ruleset whose strategy runs it (`""` for the DM's list); `focus` is
+  the holder in the focus shape: `token:<id>`, `actor:<id>`, `gm` or
+  `""`; `counters` is per-participant budgets for the current turn
+  (`{"token:t_7f": {"actions": 2}}`); `requests` are Players asking for
+  the focus (`[{player, ref}]`); `history` the last holders. `mode` keeps
+  its three values: it says who may move tokens; `strategy` says how
+  turns are shaped. Clients draw either shape from these fields alone.
+- **tracks**: progress tracks by id — countdowns, clocks and meters:
+  `{id, plugin, name, kind, value, max, direction, advance: {on, outcomes,
+  amount, actor}, audience, on_done, done, linked}`. `advance.on` is
+  `manual`, `roll`, `roll_outcome`, `rest`, `long_rest`, `session` or
+  `turn`; the kernel moves them after rolls and rests.
+- **pending**: what the Table is waiting on, so a reconnecting client is
+  shown it again. `prompts` by id: `{id, to (player id or "gm"), form,
+  default, deadline, by (plugin), title, opened (log seq), context}`;
+  `rolls` by id: `{id, spec, ctx, label, by, open_to, contributions:
+  [{by, name, expr}], deadline, opened}`. The continuation that resumes
+  a paused action lives on the Table, not in the file: a Table that
+  restarts closes its prompts with their defaults.
+- **clock**: `{session, scene, day, minute, rests}` — the second clock,
+  for durations longer than a fight.
 
 Events added in version 2 (all invertible, all through `apply()`):
 
@@ -246,7 +270,7 @@ Events added in version 2 (all invertible, all through `apply()`):
 |---|---|---|
 | `actor.add` | `actor` | `actor.remove` |
 | `actor.remove` | `id` | `actor.add` |
-| `actor.set` | `id`, `changes` — keys may be paths (`ext/sample/stats/agi`; slash-separated, since plugin ids contain dots); `null` removes and prunes emptied parents; `id`, `derived` and `overlays` are not settable | `actor.set` |
+| `actor.set` | `id`, `changes` — keys may be paths (`ext/sample/stats/agi`; slash-separated, since plugin ids contain dots); `null` removes; a set that created dictionaries on the way inverts to a removal of the topmost one it created; `id`, `derived` and `overlays` are not settable | `actor.set` |
 | `actor.overlay.push` | `id`, `overlay` [, `index`] | `actor.overlay.pop` |
 | `actor.overlay.pop` | `id`, `overlay_id` | `actor.overlay.push` at the old index |
 | `effect.apply` | `effect` (with `id`, `on`, `key`) | `effect.remove` |
@@ -256,6 +280,11 @@ Events added in version 2 (all invertible, all through `apply()`):
 | `ext.set` | `scope` (`encounter` \| `scene` \| `token`), `id` / `scene`+`id`, `plugin`, `changes` | `ext.set` |
 | `log.add` | `entry` (with `id`, `kind`) [, `index`] | `log.remove` |
 | `log.remove` | `id` | `log.add` at the old index |
+| `track.add` / `track.remove` / `track.set` | `track` / `id` / `id`, `changes` | the usual |
+| `pending.open` | `kind` (`prompts` \| `rolls`), `record` | `pending.close` |
+| `pending.close` | `kind`, `id` | `pending.open` |
+| `pending.set` | `kind`, `id`, `changes` | `pending.set` |
+| `clock.set` | `changes` (numbers for the clock's fields) | `clock.set` |
 
 Every event may carry `reason` (`{by, hook, roll}`) and `audience`; the
 EventLog assigns `seq` and keeps them beside the event.

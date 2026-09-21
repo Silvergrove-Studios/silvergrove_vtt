@@ -13,7 +13,13 @@ const VERSION := 2
 ## move: `active`) | ordered (a turn system orders them: `order`, `turn`,
 ## `round`; `system` names it, `data` is its own state).
 const TURN_MODES := ["free", "dm", "ordered"]
-const DEFAULT_TURNS := {"mode": "free", "order": [], "turn": 0, "round": 1, "running": false, "active": [], "system": "list", "data": {}}
+const DEFAULT_TURNS := {"mode": "free", "order": [], "turn": 0, "round": 1, "running": false, "active": [], "system": "list", "data": {},
+	# version 2: the shape of turns (ordered | focus), the plugin whose
+	# strategy runs them, the focus holder ("token:id", "actor:id", "gm"
+	# or ""), per-participant counters, focus requests and history
+	"strategy": "ordered", "plugin": "", "focus": "", "counters": {}, "requests": [], "history": []}
+const TURN_STRATEGIES := ["ordered", "focus"]
+const DEFAULT_CLOCK := {"session": 1, "scene": 1, "day": 1, "minute": 0, "rests": 0}
 
 var doc: Dictionary = {}
 ## Where it was loaded from / last saved to. Empty for a new encounter.
@@ -38,6 +44,9 @@ static func create(p_name: String) -> Encounter:
 		"effects": {},
 		"resources": {},
 		"state": {"ext": {}},
+		"tracks": {},
+		"pending": {"prompts": {}, "rolls": {}},
+		"clock": DEFAULT_CLOCK.duplicate(),
 		"log": [],
 		"rng": {"seed": int(randi()) & 0x7fffffff, "index": 0},
 		"meta": {"author": "", "description": "", "created": now, "modified": now},
@@ -108,6 +117,15 @@ var effects: Dictionary:
 ## "<ref>" -> plugin id -> name -> pool or track.
 var resources: Dictionary:
 	get: return doc.resources
+## Progress tracks (countdowns, clocks, subsystems) by id.
+var tracks: Dictionary:
+	get: return doc.tracks
+## Open prompts and pending rolls: {"prompts": {id: …}, "rolls": {id: …}}.
+var pending: Dictionary:
+	get: return doc.pending
+## In-game time: session, scene, day, minute of the day, rests taken.
+var clock: Dictionary:
+	get: return doc.clock
 ## Informational entries (rolls, notes) in order.
 var log: Array:
 	get: return doc.log
@@ -226,11 +244,17 @@ func _upgrade(_from_version: int) -> void:
 	for k in ["scenes", "players", "notes", "log"]:
 		if not doc.has(k):
 			doc[k] = []
-	for k in ["meta", "ext", "actors", "effects", "resources", "state"]:
+	for k in ["meta", "ext", "actors", "effects", "resources", "state", "tracks", "pending", "clock"]:
 		if not doc.has(k):
 			doc[k] = {}
 	if not doc["state"].has("ext"):
 		doc["state"]["ext"] = {}
+	for k in ["prompts", "rolls"]:
+		if not doc["pending"].has(k):
+			doc["pending"][k] = {}
+	for k in DEFAULT_CLOCK:
+		if not doc["clock"].has(k):
+			doc["clock"][k] = DEFAULT_CLOCK[k]
 	if not (doc.get("rng") is Dictionary):
 		doc["rng"] = {"seed": int(randi()) & 0x7fffffff, "index": 0}
 	doc["version"] = VERSION
@@ -247,6 +271,8 @@ func _upgrade(_from_version: int) -> void:
 			turns[k] = JsonDoc.deep(DEFAULT_TURNS[k])
 	if not TURN_MODES.has(str(turns.mode)):
 		turns.mode = "free"
+	if not TURN_STRATEGIES.has(str(turns.strategy)):
+		turns.strategy = "ordered"
 	for s in doc["scenes"]:
 		if not s.has("overrides"):
 			s["overrides"] = {}

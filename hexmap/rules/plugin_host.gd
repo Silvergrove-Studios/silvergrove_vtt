@@ -61,6 +61,7 @@ class Plugin:
 	var errors: Array = []
 	var capabilities: Array = []
 	var bridge: RefCounted
+	var turn_strategy: Dictionary = {}
 
 	func can(cap: String) -> bool:
 		return capabilities.has(cap)
@@ -337,6 +338,8 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 		kernel = RulesKernel.new(scratch)
 		kernel.validators = real_kernel.validators.duplicate()
 		kernel.register_ruleset(id, real_kernel.rulesets[id])
+		if not p.turn_strategy.is_empty():
+			kernel.turns.register(id, p.turn_strategy)
 		_attach_hooks(p, kernel)
 		_test_counts = [0, 0]
 		_test_failures = []
@@ -370,7 +373,9 @@ func _host_table(p: Plugin) -> Dictionary:
 	var t := {"id": p.id, "version": str(p.manifest.get("version", ""))}
 	for m in ["hook_registered", "action_registered", "schema_define", "actor", "actors", "derived", "token", "tokens",
 			"state_get", "commit", "note", "setting", "roll", "dice_parse", "effects_apply", "effects_remove", "effects_on",
-			"effects_expire", "resource_get", "resource_op", "resource_refill", "test_check", "test_actor", "test_dispatch"]:
+			"effects_expire", "resource_get", "resource_op", "resource_refill", "test_check", "test_actor", "test_dispatch",
+			"turns_register", "turns_get", "turns_op", "turns_consume", "track_make", "track_advance", "track_get", "track_all",
+			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -512,6 +517,115 @@ class Bridge:
 
 	func resource_refill(kind: String) -> Array:
 		return Resources.refill(_k().state, str(kind), plugin_id)
+
+	# --- turns
+	func turns_register(public: Variant) -> Variant:
+		var spec := PluginHost._as_dict(public)
+		var p := _p()
+		if bool(spec.get("has_initiative_fn", false)):
+			spec.initiative = Callable(self, "turn_initiative")
+		if bool(spec.get("has_label_fn", false)):
+			spec.order_label = Callable(self, "turn_label")
+		spec.erase("has_initiative_fn")
+		spec.erase("has_label_fn")
+		_k().turns.register(plugin_id, spec)
+		p.turn_strategy = spec
+		return true
+
+	func turn_initiative(view: Dictionary, token: Dictionary) -> Variant:
+		var p := _p()
+		if p == null:
+			return null
+		var c := p.vm.call_function("__turn_initiative", [view, token])
+		if c.status != LuaVm.Call.OK:
+			_h()._fail(p, "initiative", c.error)
+			return null
+		return c.value
+
+	func turn_label(view: Dictionary, init: Variant) -> String:
+		var p := _p()
+		if p == null:
+			return str(init)
+		var c := p.vm.call_function("__turn_label", [view, init])
+		return str(c.value) if c.status == LuaVm.Call.OK else str(init)
+
+	func turns_get() -> Dictionary:
+		return JsonDoc.deep(_k().state.encounter.turns)
+
+	func turns_op(op: String, a: String, b: String) -> Variant:
+		var why := ""
+		var t := _k().turns
+		match str(op):
+			"set_focus": why = t.set_focus(a, b)
+			"request": why = t.request_focus(b, a)
+			"deny": why = t.deny_focus(a)
+			"start": why = t.start(a, b)
+			"next": why = t.next()
+			"stop": why = t.stop()
+			_: why = "unknown turns op " + op
+		return true if why == "" else {"__error": why}
+
+	func turns_consume(ref: String, counter: String, n: Variant) -> Variant:
+		var ev := _k().turns.consume_event(str(ref), str(counter), int(n))
+		return ev if not ev.is_empty() else null
+
+	# --- tracks
+	func track_make(name: String, max_value: Variant, kind: String, advance: Variant, audience: String, on_done: String) -> Dictionary:
+		return Tracks.make(plugin_id, str(name), int(max_value), str(kind), PluginHost._as_dict(advance), str(audience), str(on_done))
+
+	func track_advance(id: String, n: Variant) -> Array:
+		return Tracks.advance(_k().state, str(id), int(n))
+
+	func track_get(id: String) -> Variant:
+		var tr: Dictionary = _k().state.encounter.tracks.get(str(id), {})
+		return JsonDoc.deep(tr) if not tr.is_empty() else null
+
+	func track_all() -> Array:
+		var out := []
+		var ids := _k().state.encounter.tracks.keys()
+		ids.sort()
+		for id in ids:
+			out.append(JsonDoc.deep(_k().state.encounter.tracks[id]))
+		return out
+
+	# --- clock and rests
+	func clock_get() -> Dictionary:
+		return JsonDoc.deep(_k().state.encounter.clock)
+
+	func clock_op(op: String, minutes: Variant, label: String) -> Variant:
+		var why := ""
+		match str(op):
+			"advance": why = _k().clock.advance(float(minutes), str(label) if str(label) != "" else "Time passes")
+			"session": why = _k().clock.next_session()
+			"scene": why = _k().clock.next_scene()
+			_: why = "unknown clock op " + op
+		return true if why == "" else {"__error": why}
+
+	func rest(kind: String, label: String) -> Variant:
+		var why := _k().rest(str(kind), str(label))
+		return true if why == "" else {"__error": why}
+
+	# --- open rolls
+	func roll_open(spec: Variant, ctx: Variant, label: String, open_to: Variant, deadline: Variant) -> Variant:
+		var id := _k().pending.open_roll(PluginHost._as_dict(spec), PluginHost._as_dict(ctx), plugin_id, str(label), open_to, float(deadline))
+		return id if id != "" else {"__error": "could not open the roll"}
+
+	func roll_contribute(id: String, who: String, name: String, expr: String) -> Variant:
+		var why := _k().pending.contribute(str(id), str(who), str(name), str(expr))
+		return true if why == "" else {"__error": why}
+
+	func roll_resolve(id: String) -> Variant:
+		var k := _k()
+		var entry := k.pending.resolve(str(id))
+		return entry if not entry.is_empty() else {"__error": k.last_veto}
+
+	func roll_pending() -> Array:
+		var out := []
+		var ids := _k().pending.rolls().keys()
+		ids.sort()
+		for id in ids:
+			out.append(JsonDoc.deep(_k().pending.rolls()[id]))
+		return out
 
 	func test_check(cond: bool, msg: String) -> void:
 		var h := _h()

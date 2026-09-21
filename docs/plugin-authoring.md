@@ -5,10 +5,10 @@ the Table only, inside a sandboxed VM, and everything it does becomes
 events in the encounter's log. Players never run plugin code; they
 render what the plugin's data and derived numbers say.
 
-This is the API as of plugin API version 1 (Phase 2 of
-`docs/plugin-api-plan.md`). Turn strategies, prompts delivered to real
-Players, compendium queries, map queries and declarative UI arrive in
-later phases and will be added here.
+This is the API as of plugin API version 1 (Phases 2–3 of
+`docs/plugin-api-plan.md`). Prompts delivered to real Players, compendium
+queries, map queries and declarative UI arrive in later phases and will
+be added here.
 
 ## Layout
 
@@ -99,10 +99,24 @@ A hook handler. It receives the payload, may change it, and returns it
 Handlers of one plugin run in registration order; plugins run in load
 order. A handler may `hm.prompt` (see below); the run pauses and resumes.
 
-Hooks in API 1: `before_roll` (`{spec, ctx}` — add `spec.parts`, change
-`spec.expr`, veto), `after_roll` (`{spec, result, ctx}` — set
-`result.outcome` and anything else the log should show). Later phases add
-turn, damage, rest, move and time hooks.
+Hooks in API 1:
+
+| hook | payload | what a handler does |
+|---|---|---|
+| `before_roll` | `{spec, ctx}` | add `spec.parts`, change `spec.expr`, veto |
+| `after_roll` | `{spec, result, ctx}` | set `result.outcome` and anything else the log should show |
+| `turn_start`, `turn_end` | `{ref, actor, events}` | the participant gaining / losing the turn *or the focus* |
+| `round_start`, `round_end` | `{round, events}` | ordered shape only |
+| `focus_changed` | `{from, to, by, events}` | asked *before* the focus moves: veto to refuse, add events for a cost |
+| `rest` | `{kind, events}` | after refills and expiries |
+| `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock |
+| `time_advanced` | `{from, to, minutes, day, events}` | minutes are absolute since day 1 |
+| `track_done` | `{track, roll, events}` | a progress track completed |
+
+Handlers of the turn, clock and rest hooks run synchronously and may not
+prompt; they append events to `payload.events` and the kernel commits
+them with the step — the whole step is one undo entry, and a veto or a
+refused event undoes all of it.
 
 ```lua
 hm.actions.register("strike", { label = "Strike", cost = { actions = 1 }, target = "actor",
@@ -115,6 +129,56 @@ with a context. Everything but `run` is public data the UI reads.
 hm.test("name", function(t) … end)
 ```
 See *Tests* below.
+
+### Turns
+
+```lua
+hm.turns.register({ shape = "ordered", name = "Initiative", initiative = "initiative",   -- a derived path…
+                    tie_break = "highest", budgets = { actions = 3, reactions = 1 } })
+hm.turns.register({ shape = "focus", name = "Spotlight" })
+```
+`initiative` may also be a function `(view, token) -> number`, and `label
+= function(view, init) -> string` names what the order shows. The DM
+picks a strategy in the Turns panel; `hm.turns.start(scene, id)`,
+`hm.turns.next()` and `hm.turns.stop()` do what its buttons do.
+
+| call | |
+|---|---|
+| `hm.turns.current()` | the turns block: `strategy`, `running`, `order`, `turn`, `round`, `focus`, `counters`, `requests`, `history` |
+| `hm.turns.focus()` / `hm.turns.holder_actor()` | the focus holder ref / the actor behind it |
+| `hm.turns.set_focus(holder, by)` | move the focus (`"gm"`, `"token:id"`, `"actor:id"`); `focus_changed` may veto |
+| `hm.turns.request(player, ref)` / `hm.turns.deny(ref)` | a Player's request for the focus |
+| `hm.turns.counters(ref)` | this turn's budgets for a participant |
+| `hm.turns.consume(ref, counter, n)` | a `turns.set` event spending from a budget, or nil when there is not enough |
+
+### Tracks, the clock, rests
+
+```lua
+local doom = hm.tracks.make("Doom", 3, "countdown", { on = "roll_outcome", outcomes = { "failure_dark" }, amount = 1 }, "gm", "The gate opens.")
+hm.commit(hm.tracks.add(doom), "Countdown")
+hm.commit(hm.tracks.advance(doom.id, 1), "Tick")     -- links move too
+hm.tracks.get(id)  hm.tracks.all()
+```
+Kinds: `countdown` (starts full, counts down), `clock` (starts empty,
+counts up), `meter`. `advance.on`: `manual`, `roll`, `roll_outcome`,
+`rest`, `long_rest`, `session`, `turn`. The kernel moves tracks after
+rolls and rests and fires `track_done`.
+
+`hm.clock.get()` → `{session, scene, day, minute, rests}`;
+`hm.clock.advance(minutes)` (ends `time` effects, fires `time_advanced`);
+`hm.clock.next_session()` (refills `session` resources, ends `session`
+effects); `hm.clock.next_scene()`. `hm.rest(kind)` refills every
+resource whose `recharge` is `kind`, ends effects of that duration,
+moves `rest` tracks and fires `rest`.
+
+### Rolls that wait
+
+```lua
+local id = hm.dice.open(spec, ctx, "Sneak", { "pl_1", "pl_2" }, 30)   -- who may contribute, deadline
+hm.dice.contribute(id, "pl_2", "help", "1d6")
+local entry = hm.dice.resolve(id)                                     -- named group "help" joins the roll
+hm.dice.pending()
+```
 
 ### Reading
 
@@ -174,10 +238,12 @@ Expressions: `NdS`, `+`/`-`, `kh`/`kl`/`dh`/`dl` N, `rN` (reroll faces
 local answer = hm.prompt(player_id, { title = "Spend armour?", fields = { { key = "spend", type = "bool", label = "…" } } },
                          { default = { spend = false }, deadline = 30 })
 ```
-The only way to wait. The action or hook pauses; the Table shows the
-form to that Player (Phase 4), or answers with the default at the
-deadline, or the GM overrides; the call returns the answer table. Needs
-the `prompts` capability. `derive` may never prompt.
+The only way to wait. The action pauses; the Table records the prompt
+in the encounter (`pending.prompts`, so a Player who reconnects still
+sees it), shows the form to that Player (Phase 4), answers with the
+default at the deadline, or lets the GM override; the call returns the
+answer table. Needs the `prompts` capability. `derive` and the
+turn/clock/rest hooks may never prompt.
 
 ### Typed numbers
 

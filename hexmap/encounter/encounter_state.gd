@@ -22,7 +22,9 @@ const EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "sce
 	# version 2: the rules families (docs/encounter-format.md, "Version 2")
 	"actor.add", "actor.remove", "actor.set", "actor.overlay.push", "actor.overlay.pop",
 	"effect.apply", "effect.set", "effect.remove", "resource.set", "ext.set",
-	"log.add", "log.remove"]
+	"log.add", "log.remove",
+	"track.add", "track.remove", "track.set", "pending.open", "pending.close", "pending.set", "clock.set"]
+const PENDING_KINDS := ["prompts", "rolls"]
 ## Where an `ext.set` may point.
 const EXT_SCOPES := ["encounter", "scene", "token"]
 ## What a reference to a thing that carries effects or resources looks like.
@@ -190,9 +192,15 @@ func validate(ev: Dictionary) -> String:
 				return e
 			if ev.changes.has("mode") and not Encounter.TURN_MODES.has(str(ev.changes.mode)):
 				return "turns.set: mode must be one of %s" % [Encounter.TURN_MODES]
-			for k in ["order", "active"]:
+			if ev.changes.has("strategy") and not Encounter.TURN_STRATEGIES.has(str(ev.changes.strategy)):
+				return "turns.set: strategy must be one of %s" % [Encounter.TURN_STRATEGIES]
+			for k in ["order", "active", "requests", "history"]:
 				if ev.changes.has(k) and not (ev.changes[k] is Array):
-					return "turns.set: '%s' must be a list of token ids" % k
+					return "turns.set: '%s' must be a list" % k
+			if ev.changes.has("counters") and not (ev.changes.counters is Dictionary):
+				return "turns.set: 'counters' must be an object"
+			if ev.changes.has("focus") and not (ev.changes.focus is String):
+				return "turns.set: 'focus' must be a ref or \"gm\" or \"\""
 		"scene.add":
 			if not (ev.get("scene") is Dictionary) or str(ev.scene.get("id", "")) == "":
 				return "scene.add needs a scene with an id"
@@ -355,6 +363,47 @@ func validate(ev: Dictionary) -> String:
 		"log.remove":
 			if _log_index(str(ev.get("id", ""))) < 0:
 				return "no log entry '%s'" % str(ev.get("id", ""))
+		"track.add":
+			if not (ev.get("track") is Dictionary) or str(ev.track.get("id", "")) == "":
+				return "track.add needs a track with an id"
+			if encounter.tracks.has(str(ev.track.id)):
+				return "track '%s' already exists" % str(ev.track.id)
+		"track.remove":
+			if not encounter.tracks.has(str(ev.get("id", ""))):
+				return "no track '%s'" % str(ev.get("id", ""))
+		"track.set":
+			if not encounter.tracks.has(str(ev.get("id", ""))):
+				return "no track '%s'" % str(ev.get("id", ""))
+			var e := _need_dict(ev, "changes")
+			if e != "":
+				return e
+			if ev.changes.has("id"):
+				return "track.set cannot change 'id'"
+		"pending.open":
+			if not PENDING_KINDS.has(str(ev.get("kind", ""))):
+				return "pending.open: kind must be one of %s" % [PENDING_KINDS]
+			if not (ev.get("record") is Dictionary) or str(ev.record.get("id", "")) == "":
+				return "pending.open needs a record with an id"
+			if encounter.pending[str(ev.kind)].has(str(ev.record.id)):
+				return "pending %s '%s' already exists" % [str(ev.kind), str(ev.record.id)]
+		"pending.close":
+			if not PENDING_KINDS.has(str(ev.get("kind", ""))) or not encounter.pending[str(ev.kind)].has(str(ev.get("id", ""))):
+				return "no pending %s '%s'" % [str(ev.get("kind", "")), str(ev.get("id", ""))]
+		"pending.set":
+			if not PENDING_KINDS.has(str(ev.get("kind", ""))) or not encounter.pending[str(ev.kind)].has(str(ev.get("id", ""))):
+				return "no pending %s '%s'" % [str(ev.get("kind", "")), str(ev.get("id", ""))]
+			var e := _need_dict(ev, "changes")
+			if e != "":
+				return e
+			if ev.changes.has("id"):
+				return "pending.set cannot change 'id'"
+		"clock.set":
+			var e := _need_dict(ev, "changes")
+			if e != "":
+				return e
+			for k in ev.changes:
+				if not Encounter.DEFAULT_CLOCK.has(str(k)) or not (ev.changes[k] is float or ev.changes[k] is int):
+					return "clock.set: '%s' is not a clock field or not a number" % str(k)
 	return ""
 
 
@@ -471,9 +520,15 @@ static func _owns(tk: Dictionary, player_id: String) -> bool:
 	return tk.get("owner", null) != null and str(tk.owner) == player_id
 
 
-## The token whose turn it is in ordered mode, or "".
+## The token whose turn it is in ordered mode, or "". In the focus shape
+## it is the focus holder when that is a token.
 func current_turn_token() -> String:
 	var turns := encounter.turns
+	if str(turns.get("strategy", "ordered")) == "focus":
+		var f := str(turns.get("focus", ""))
+		if bool(turns.get("running", false)) and f.begins_with("token:") and not find_token(f.substr(6)).is_empty():
+			return f.substr(6)
+		return ""
 	if str(turns.get("mode", "free")) != "ordered" or not bool(turns.get("running", false)):
 		return ""
 	var order: Array = turns.get("order", [])
@@ -610,7 +665,7 @@ func apply(ev: Dictionary) -> Dictionary:
 			inv = {"t": "fog.reveal", "scene": scene_id, "cells": removed}
 			what = "fog"
 		"turns.set":
-			inv = {"t": t, "changes": JsonDoc.merge(doc.turns, ev.changes)}
+			inv = {"t": t, "changes": JsonDoc.merge_paths(doc.turns, ev.changes)}
 			what = "turns"
 		"player.add":
 			(doc.players as Array).append(JsonDoc.deep(ev.player))
@@ -728,6 +783,35 @@ func apply(ev: Dictionary) -> Dictionary:
 			if ev.has("rng_index"):
 				doc.rng.index = int(ev.rng_index)
 			what = "log"
+		"track.add":
+			var tr: Dictionary = JsonDoc.deep(ev.track)
+			doc.tracks[str(tr.id)] = tr
+			inv = {"t": "track.remove", "id": str(tr.id)}
+			what = "tracks"
+		"track.remove":
+			var gone: Dictionary = doc.tracks[str(ev.id)]
+			doc.tracks.erase(str(ev.id))
+			inv = {"t": "track.add", "track": JsonDoc.deep(gone)}
+			what = "tracks"
+		"track.set":
+			inv = {"t": t, "id": str(ev.id), "changes": JsonDoc.merge_paths(doc.tracks[str(ev.id)], ev.changes)}
+			what = "tracks"
+		"pending.open":
+			var rec: Dictionary = JsonDoc.deep(ev.record)
+			doc.pending[str(ev.kind)][str(rec.id)] = rec
+			inv = {"t": "pending.close", "kind": str(ev.kind), "id": str(rec.id)}
+			what = "pending"
+		"pending.close":
+			var gone: Dictionary = doc.pending[str(ev.kind)][str(ev.id)]
+			doc.pending[str(ev.kind)].erase(str(ev.id))
+			inv = {"t": "pending.open", "kind": str(ev.kind), "record": JsonDoc.deep(gone)}
+			what = "pending"
+		"pending.set":
+			inv = {"t": t, "kind": str(ev.kind), "id": str(ev.id), "changes": JsonDoc.merge_paths(doc.pending[str(ev.kind)][str(ev.id)], ev.changes)}
+			what = "pending"
+		"clock.set":
+			inv = {"t": t, "changes": JsonDoc.merge(doc.clock, ev.changes)}
+			what = "clock"
 	if t == "scene.add" and bool(ev.get("activate", false)):
 		doc.active_scene = str(ev.scene.id)
 	encounter.touch(what, scene_id)

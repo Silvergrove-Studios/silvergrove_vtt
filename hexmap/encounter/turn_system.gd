@@ -80,6 +80,8 @@ static var _systems: Dictionary = {}
 
 
 static func register(system: TurnSystem) -> void:
+	if _systems.is_empty() and system.id != "list":
+		_systems["list"] = TurnSystem.new()
 	_systems[system.id] = system
 
 

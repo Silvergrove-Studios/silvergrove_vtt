@@ -9,6 +9,9 @@ extends RefCounted
 
 var state: EncounterState
 var history: EventLog
+## When set, turns go through the kernel's runner (hooks, expiry, both
+## shapes); without one the built-in list system steps the stored order.
+var kernel: RulesKernel
 
 
 func _init(p_state: EncounterState, p_history: EventLog) -> void:
@@ -173,6 +176,9 @@ func toggle_active_token(id: String) -> String:
 
 ## ordered mode: let the turn system order the scene's tokens and begin.
 func start_turns(scene_id: String, system_id := "") -> String:
+	if kernel != null:
+		var sid := system_id if system_id != "" else str(state.encounter.turns.get("system", "list"))
+		return kernel.turns.start(scene_id, sid if kernel.turns.strategies.has(sid) else "list")
 	var turns := state.encounter.turns
 	var sid := system_id if system_id != "" else str(turns.get("system", "list"))
 	var sys := TurnSystem.get_system(sid)
@@ -186,10 +192,14 @@ func set_turn_order(order: Array) -> String:
 
 
 func stop_turns() -> String:
+	if kernel != null:
+		return kernel.turns.stop()
 	return run({"t": "turns.set", "changes": {"running": false}}, "End turns")
 
 
 func next_turn() -> String:
+	if kernel != null:
+		return kernel.turns.next()
 	var turns := state.encounter.turns
 	var changes := TurnSystem.get_system(str(turns.get("system", "list"))).next(turns)
 	if changes.is_empty():
@@ -198,6 +208,8 @@ func next_turn() -> String:
 
 
 func previous_turn() -> String:
+	if kernel != null:
+		return kernel.turns.previous()
 	var turns := state.encounter.turns
 	var changes := TurnSystem.get_system(str(turns.get("system", "list"))).previous(turns)
 	if changes.is_empty():

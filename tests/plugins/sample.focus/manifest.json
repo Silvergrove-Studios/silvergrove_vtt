@@ -1,0 +1,14 @@
+{
+  "id": "sample.focus",
+  "version": "0.1.0",
+  "api": 1,
+  "name": "Sample: focus",
+  "description": "An original, deliberately small ruleset with no initiative: a spotlight that moves by fiction and by dice, a GM pool fed by rolls, abilities as cards, hit points as a slot track, countdowns. The reference plugin that proves nothing turn-list-shaped is baked in.",
+  "license": "CC0-1.0",
+  "attribution": "Sample rules by Silvergrove Studios, CC0.",
+  "files": ["main.lua", "tests.lua"],
+  "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice"],
+  "policy": {"status": "best"},
+  "settings": {"defaults": {"pool_max": 12, "hand_size": 3}},
+  "tests": true
+}

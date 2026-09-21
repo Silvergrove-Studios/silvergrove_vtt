@@ -104,45 +104,53 @@ static func at_path(target: Variant, path: String, default: Variant = null) -> V
 	return v
 
 
-## Set (or, with null, remove) the value at a path, creating
-## intermediate dictionaries on the way in and pruning ones left empty on
-## the way out, so setting then removing leaves the document as it was.
-## Returns the previous value (null if none).
+## Set (or, with null, remove) the value at a path, creating intermediate
+## dictionaries on the way in. Returns the previous value (null if none).
 static func set_at_path(target: Dictionary, path: String, value: Variant) -> Variant:
+	return set_at_path_ex(target, path, value).before
+
+
+## set_at_path with the bookkeeping an exact inverse needs: `created` is
+## the path of the topmost dictionary this call made (or ""), so undoing
+## the set removes that, not just the leaf, and leaves no empty shells.
+static func set_at_path_ex(target: Dictionary, path: String, value: Variant) -> Dictionary:
 	var parts := path.split(PATH_SEP)
-	var chain: Array = [target]
 	var d: Dictionary = target
+	var created := ""
 	for i in parts.size() - 1:
 		var k := parts[i]
 		if not (d.get(k) is Dictionary):
 			if value == null:
-				return null
+				return {"before": null, "created": ""}
 			d[k] = {}
+			if created == "":
+				created = PATH_SEP.join(parts.slice(0, i + 1))
 		d = d[k]
-		chain.append(d)
 	var last := parts[parts.size() - 1]
 	var before: Variant = deep(d[last]) if d.has(last) else null
 	if value == null:
 		d.erase(last)
-		for i in range(chain.size() - 1, 0, -1):
-			if (chain[i] as Dictionary).is_empty():
-				(chain[i - 1] as Dictionary).erase(parts[i - 1])
-			else:
-				break
 	else:
 		d[last] = deep(value)
-	return before
+	return {"before": before, "created": created}
 
 
 ## merge() for change sets whose keys may be paths: "a/b/c": 1 sets deep
-## inside; a null removes. Returns the inverse change set with the same
-## keys.
+## inside; a null removes. Returns the inverse change set: the previous
+## value under the same key, or, where the set created dictionaries on the
+## way, a removal of the topmost one it created.
 static func merge_paths(target: Dictionary, changes: Dictionary) -> Dictionary:
 	var before := {}
 	for k in changes:
 		var key := str(k)
-		before[key] = set_at_path(target, key, changes[k]) if key.contains(PATH_SEP) else (deep(target[key]) if target.has(key) else null)
-		if not key.contains(PATH_SEP):
+		if key.contains(PATH_SEP):
+			var r := set_at_path_ex(target, key, changes[k])
+			if r.created != "":
+				before[r.created] = null
+			else:
+				before[key] = r.before
+		else:
+			before[key] = deep(target[key]) if target.has(key) else null
 			if changes[k] == null:
 				target.erase(key)
 			else:
