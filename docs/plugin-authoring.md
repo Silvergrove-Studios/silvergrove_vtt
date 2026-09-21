@@ -371,9 +371,11 @@ result is a list of `{ref, …}` per target (`outcome`, `total` for rolls).
 ### The map
 
 The map is read-only and the kernel does the geometry; a ruleset asks
-questions and gets answers in **hex units** (one cell across = 1). A
-*place* is `"token:<id>"`, a `"q,r"` cell key, or `{x, y}` / `{x, y}`
-as a two-element list in hex units. Every call takes the scene id first.
+questions and gets answers in **hex units** (one cell across = 1, on a
+hex grid or a square one — the map says which, and the answers are in
+the same terms either way). A *place* is `"token:<id>"`, a `"q,r"` cell
+key (column, row on squares), or `{x, y}` / `{x, y}` as a two-element
+list in hex units. Every call takes the scene id first.
 
 ```lua
 hm.map.bands({ { name = "melee", max = 0.5 }, { name = "close", max = 5.5 }, { name = "far", max = 1e9 } })
@@ -385,14 +387,14 @@ in Hexmap knows what "close" means.
 
 | call | returns |
 |---|---|
-| `hm.map.distance(scene, a, b)` | `{units, edge, cells, band}` — centre to centre, edge to edge, axial steps, and this ruleset's band |
+| `hm.map.distance(scene, a, b)` | `{units, edge, cells, diagonals, band}` — centre to centre, edge to edge, cell steps (hex steps, or Chebyshev on squares with `diagonals` saying how many of them were diagonal, so a ruleset can charge 5-10-5 or whatever it likes), and this ruleset's band |
 | `hm.map.band(scene, a, b)` | just the band name |
 | `hm.map.within(scene, origin, r)` | token ids whose edge is within `r` of the origin |
 | `hm.map.template(scene, spec)` | `{cells, tokens, origin}` for `{shape="circle", at, radius}`, `{shape="cone", at, direction, length, angle}`, `{shape="line", at, direction, length, width}` or `{shape="band", at, band}`; `origin="edge"` starts cones and lines at the token's edge, `blocked_by_walls=true` drops what the origin cannot see |
 | `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens |
 | `hm.map.light_at(scene, p)` | `{level="bright" \| "dim" \| "dark", sources}` |
 | `hm.map.can_see(scene, viewer, target)` | within vision, sight clear, target lit (or the viewer sees in the dark) |
-| `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys |
+| `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys (six neighbours and a hex of hexes, or four and a square block) |
 | `hm.map.cell(scene, key)` | the cell's record (`revealed`, plain fields, `ext`) with the map's `terrain` for it |
 | `hm.map.regions_at(scene, cell)` / `hm.map.tags_at(scene, cell)` | the regions covering a cell / the union of their tags |
 | `hm.map.token(scene, id)` / `hm.map.tokens(scene)` | a token / all of them |

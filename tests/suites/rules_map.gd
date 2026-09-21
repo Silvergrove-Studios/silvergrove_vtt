@@ -117,7 +117,7 @@ func test_map_regions_cells_and_moves() -> void:
 	var g := mq.grid(sid)
 	# regions
 	var here := g.offset_to_axial(6, 7)   # three hexes east of the hero, so walking in is a change
-	var fire := MapQuery.region("r_fire", HexGrid.spiral(here, 1), ["fire", "hazard"], {"label": "Fire", "duration": {"kind": "rounds", "rounds": 2}})
+	var fire := MapQuery.region("r_fire", g.spiral(here, 1), ["fire", "hazard"], {"label": "Fire", "duration": {"kind": "rounds", "rounds": 2}})
 	var secret := MapQuery.region("r_secret", [g.offset_to_axial(8, 3)], ["trap"], {"audience": "gm"})
 	check(k.commit([{"t": "region.add", "scene": sid, "region": fire}, {"t": "region.add", "scene": sid, "region": secret}], "Regions") == "", "regions added")
 	check(st.validate({"t": "region.add", "scene": sid, "region": fire}) != "" and st.validate({"t": "region.set", "scene": sid, "id": "r_fire", "changes": {"id": "x"}}) != "", "duplicates and id changes refused")
@@ -173,6 +173,101 @@ func test_map_regions_cells_and_moves() -> void:
 	check(not doc.scenes[0].cells.has("5,5") and doc.scenes[0].cells.has("6,6"), "nor unrevealed cells")
 
 
+## The cellar (a square grid) with a kernel: the same questions, square
+## answers. Hero in the storeroom's doorway (7,2), a guard by the crates
+## (7,7), a thief in the vault (17,6).
+func _cellar_kernel() -> Array:
+	var m := HexMap.load_file(example("cellar.hexmap"))
+	var st := EncounterState.new(Encounter.create("Cellar"))
+	st.encounter.doc.rng = {"seed": 7, "index": 0}
+	st.attach_map(m)
+	var k := RulesKernel.new(st)
+	var rules := SampleRules.new()
+	rules.install(k)
+	var sc := Encounter.new_scene(m, "ground", "Cellar", "cellar.hexmap")
+	var g := m.grid
+	k.commit([{"t": "scene.add", "scene": sc},
+		{"t": "actor.add", "actor": {"id": "a_h", "name": "Hero", "owner": "pl_1", "ext": {"sample": {"level": 1, "stats": {"agi": 2, "str": 1, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_g", "name": "Guard", "ext": {"sample": {"level": 1, "stats": {"agi": 1, "str": 0, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_t", "name": "Thief", "ext": {"sample": {"level": 1, "stats": {"agi": 3, "str": 0, "wit": 0}}}}},
+		{"t": "token.add", "scene": sc.id, "token": Encounter.new_token("Hero", g.cell_center(Vector2i(7, 2)), {"id": "t_h", "actor": "a_h", "owner": "pl_1", "vision": {"radius": 6}})},
+		{"t": "token.add", "scene": sc.id, "token": Encounter.new_token("Guard", g.cell_center(Vector2i(7, 7)), {"id": "t_g", "actor": "a_g"})},
+		{"t": "token.add", "scene": sc.id, "token": Encounter.new_token("Thief", g.cell_center(Vector2i(17, 6)), {"id": "t_t", "actor": "a_t", "hidden": true})}], "Setup")
+	return [k, str(sc.id), rules]
+
+
+func test_square_map_distances_templates_sight_and_moves() -> void:
+	var parts := _cellar_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	var mq := k.map
+	var st := k.state
+	var g := mq.grid(sid)
+	check(g.is_square(), "the cellar is a square grid")
+	# distances: Chebyshev steps with the diagonal count, Euclidean units
+	var d := mq.distance(sid, "token:t_h", "token:t_g")
+	check(d.cells == 5 and d.diagonals == 0 and is_equal_approx(d.units, 5.0) and is_equal_approx(d.edge, 4.0), "five squares straight down: %s" % [d])
+	var diag := mq.distance(sid, "token:t_h", "token:t_t")
+	check(diag.cells == 10 and diag.diagonals == 4 and is_equal_approx(diag.units, sqrt(100.0 + 16.0)), "ten steps, four of them diagonal, Euclidean units: %s" % [diag])
+	mq.register_bands("p", [{"name": "adjacent", "max": 0.5}, {"name": "near", "max": 3}, {"name": "beyond"}])
+	check(mq.distance(sid, "token:t_h", "token:t_g", "p").band == "beyond", "bands work in edge units on squares too")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_g", "changes": {"size": 2}}], "Big")
+	check(is_equal_approx(mq.distance(sid, "token:t_h", "token:t_g").edge, 3.5), "a size-2 token is half a square closer at the edge")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_g", "changes": {"size": 1}}], "Small")
+	check(mq.within(sid, "token:t_h", 4).has("t_g") and not mq.within(sid, "token:t_h", 3).has("t_g"), "within by edge distance")
+	# templates: a radius-1 circle is the 3×3 block minus the middle
+	var circle := mq.template(sid, {"shape": "circle", "at": "token:t_g", "radius": 1})
+	check(circle.cells.size() == 9 and circle.tokens.is_empty(), "a radius-1 circle around a square token: its cell and eight neighbours, not itself (%d)" % circle.cells.size())
+	var cube := mq.template(sid, {"shape": "circle", "at": "token:t_g", "radius": 2, "include_self": true})
+	check(cube.cells.size() == 21 and cube.tokens == ["t_g"], "radius 2: the cells whose centres lie within 2 (%d)" % cube.cells.size())
+	var cone := mq.template(sid, {"shape": "cone", "at": "token:t_h", "direction": 90, "length": 4, "angle": 60})
+	check(cone.cells.size() >= 4 and not cone.cells.has("7,1") and cone.cells.has("7,4"), "a cone south of the hero reaches south, not north: %d cells" % cone.cells.size())
+	var line := mq.template(sid, {"shape": "line", "at": "token:t_h", "direction": 90, "length": 6, "width": 1})
+	check(line.cells.has("7,5") and line.tokens.has("t_g"), "a line south of the hero runs to the guard: %d cells" % line.cells.size())
+	var blocked := mq.template(sid, {"shape": "circle", "at": "token:t_h", "radius": 6, "blocked_by_walls": true})
+	var open := mq.template(sid, {"shape": "circle", "at": "token:t_h", "radius": 6})
+	check(blocked.cells.size() < open.cells.size(), "the storeroom's walls cut a template down (%d of %d cells)" % [blocked.cells.size(), open.cells.size()])
+	# cells
+	check(mq.neighbors(sid, "token:t_h").size() == 4 and mq.cells_within(sid, "token:t_g", 1).size() == 9, "four neighbours, a 3×3 ring")
+	var between := mq.cells_between(sid, "token:t_h", "token:t_t")
+	check(between.size() == 11 and between[0] == "7,2" and between[-1] == "17,6", "a line of cells between two tokens: %s" % [between])
+	check(mq.cell(sid, "token:t_h").has("terrain") and mq.cell(sid, "token:t_h").key == "7,2", "a cell record with the map's terrain")
+	# sight and light: the vault's secret door hides the thief; a torch lights squares
+	var closed := mq.line_of_sight(sid, "token:t_g", "token:t_t")
+	check(not closed.clear and closed.cover == "total", "the vault wall blocks sight to the thief: %s" % [closed])
+	var down := mq.line_of_sight(sid, "token:t_h", "token:t_g")
+	check(down.clear, "the hero sees the guard down the storeroom: %s" % [down])
+	check(not mq.can_see(sid, "token:t_h", "token:t_g").sees and mq.can_see(sid, "token:t_h", "token:t_g").why == "dark", "the guard stands in the dark between the lights")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"light": {"bright": 2, "dim": 6}}}], "Torch")
+	check(mq.light_at(sid, "6,3").level == "bright" and mq.light_at(sid, "7,5").level == "dim", "a torch lights bright then dim on squares")
+	check(mq.can_see(sid, "token:t_h", "token:t_g").sees, "the guard is seen once the hero's torch reaches him")
+	# regions and a move with diagonals
+	var pit := MapQuery.region("r_pit", g.spiral(Vector2i(7, 5), 0), ["pit"], {"label": "Pit"})
+	check(k.commit([{"t": "region.add", "scene": sid, "region": pit}], "Pit") == "", "a one-square region")
+	var seen := []
+	k.hooks.on("token_moved", func(p: Dictionary) -> Dictionary: seen.append([p.cells, p.entered]); return p, "test")
+	check(k.move_token(sid, "t_h", g.cell_center(Vector2i(7, 5)), "pl_1") == "" and seen[0] == [3, ["r_pit"]], "three squares down into the pit: %s" % [seen])
+	check(mq.move(sid, "t_h", g.cell_center(Vector2i(9, 7))).cells == 2, "a diagonal-ish move counts Chebyshev steps")
+	# the drawing code takes four corners in its stride: terrain, grid,
+	# fog, a region and a highlight, for the GM and for a player
+	k.commit([{"t": "scene.set", "id": sid, "changes": {"highlight": {"cells": ["7,5", "8,5"], "color": "#ffffff", "label": "Pit"}}},
+		{"t": "fog.set", "scene": sid, "enabled": true}], "Show")
+	var canvas := MapCanvas.new()
+	canvas.packs = PackLibrary.new()
+	root.add_child(canvas)
+	canvas.set_scene(st, sid)
+	canvas.show_grid = true
+	canvas.viewpoint = ""
+	canvas.refresh()
+	await tree.process_frame
+	canvas.viewpoint = "pl_1"
+	canvas.refresh()
+	await tree.process_frame
+	check(canvas._regions != null and canvas.get_children().has(canvas._regions), "the cellar drew for both viewpoints")
+	canvas.queue_free()
+	await tree.process_frame
+
+
 func test_map_events_over_the_wire_and_drawing() -> void:
 	var st := EncounterState.new(Encounter.load_file(example("chapel_ambush.encounter")))
 	st.resolve_maps()
@@ -208,7 +303,7 @@ func test_map_events_over_the_wire_and_drawing() -> void:
 	var canvas := MapCanvas.new()
 	canvas.packs = PackLibrary.new()
 	root.add_child(canvas)
-	st.apply({"t": "region.add", "scene": sid, "region": MapQuery.region("r_zone", HexGrid.spiral(g.offset_to_axial(5, 5), 1), ["fire"], {"label": "Fire", "color": "#ff4500"})})
+	st.apply({"t": "region.add", "scene": sid, "region": MapQuery.region("r_zone", g.spiral(g.offset_to_axial(5, 5), 1), ["fire"], {"label": "Fire", "color": "#ff4500"})})
 	st.apply({"t": "scene.set", "id": sid, "changes": {"highlight": {"cells": [HexMap.cell_key(g.offset_to_axial(3, 3))], "color": "#ffffff", "label": "Burst"}}})
 	canvas.set_scene(st, sid)
 	canvas.viewpoint = ""

@@ -71,9 +71,9 @@ static func tiled(map: HexMap, packs: PackLibrary, path: String, ppx: int, level
 		return FileAccess.get_open_error()
 	f.store_string(r.json)
 	f.close()
-	var pointy := map.grid.orientation == HexGrid.Orient.POINTY
-	var tile_w := ppx if pointy else roundi(2.0 * HexGrid.R * ppx)
-	var tile_h := roundi(2.0 * HexGrid.R * ppx) if pointy else ppx
+	var size := TiledExport.tile_size(map.grid, ppx)
+	var tile_w := size.x
+	var tile_h := size.y
 	for t in r.tiles:
 		var out := path.get_base_dir().path_join(t.file)
 		_ensure_dir(out)

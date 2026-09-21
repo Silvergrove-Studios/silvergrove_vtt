@@ -106,8 +106,11 @@ func distance(scene_id: String, a: Variant, b: Variant, plugin := "") -> Diction
 		return {"units": INF, "edge": INF, "cells": -1, "band": "", "error": "unknown place"}
 	var units := pa.distance_to(pb)
 	var edge := maxf(0.0, units - (size_of(scene_id, a) + size_of(scene_id, b)) * 0.5)
-	var cells := HexGrid.axial_distance(cell_of(scene_id, a), cell_of(scene_id, b))
-	return {"units": units, "edge": edge, "cells": cells, "band": band_of(plugin, edge)}
+	var g := grid(scene_id)
+	var ca := cell_of(scene_id, a)
+	var cb := cell_of(scene_id, b)
+	var cells := g.steps(ca, cb) if g != null else -1
+	return {"units": units, "edge": edge, "cells": cells, "diagonals": g.diagonals(ca, cb) if g != null else 0, "band": band_of(plugin, edge)}
 
 
 ## The band an edge distance falls in, "" without a table.
@@ -165,7 +168,7 @@ func template(scene_id: String, spec: Dictionary) -> Dictionary:
 	var segs: Array = Lighting.blocking_segments(kernel.state.effective_level(scene_id), {}, "sight") if bool(spec.get("blocked_by_walls", false)) else []
 	var cells := []
 	var center_cell := g.world_to_axial(origin)
-	for c in HexGrid.spiral(center_cell, int(ceil(reach)) + 1):
+	for c in g.spiral(center_cell, int(ceil(reach)) + 1):
 		if not g.in_bounds(c):
 			continue
 		var p := g.cell_center(c)
@@ -427,7 +430,7 @@ func move(scene_id: String, id: String, to: Vector2) -> Dictionary:
 			left.append(rid)
 	entered.sort()
 	left.sort()
-	return {"events": events, "entered": entered, "left": left, "from": [from.x, from.y], "to": [to.x, to.y], "cells": HexGrid.axial_distance(cell_of(scene_id, from), cell_of(scene_id, to))}
+	return {"events": events, "entered": entered, "left": left, "from": [from.x, from.y], "to": [to.x, to.y], "cells": grid(scene_id).steps(cell_of(scene_id, from), cell_of(scene_id, to))}
 
 
 # ------------------------------------------------------------------ cells --
@@ -448,7 +451,7 @@ func cells_within(scene_id: String, cell: Variant, r: int) -> Array:
 	var out := []
 	if g == null:
 		return out
-	for c in HexGrid.spiral(cell_of(scene_id, cell), r):
+	for c in g.spiral(cell_of(scene_id, cell), r):
 		if g.in_bounds(c):
 			out.append(HexMap.cell_key(c))
 	return out
@@ -456,7 +459,10 @@ func cells_within(scene_id: String, cell: Variant, r: int) -> Array:
 
 func cells_between(scene_id: String, a: Variant, b: Variant) -> Array:
 	var out := []
-	for c in HexGrid.line(cell_of(scene_id, a), cell_of(scene_id, b)):
+	var g := grid(scene_id)
+	if g == null:
+		return out
+	for c in g.line(cell_of(scene_id, a), cell_of(scene_id, b)):
 		out.append(HexMap.cell_key(c))
 	return out
 

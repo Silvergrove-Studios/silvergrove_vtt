@@ -551,7 +551,7 @@ class TerrainTool extends Tool:
 		var cell := grid().world_to_axial(p)
 		if cell == _last_cell:
 			return
-		for c in HexGrid.line(_last_cell, cell):
+		for c in grid().line(_last_cell, cell):
 			_paint_at(c)
 		_last_cell = cell
 
@@ -562,7 +562,7 @@ class TerrainTool extends Tool:
 
 	func _paint_at(center: Vector2i) -> void:
 		var changes := {}
-		for c in HexGrid.spiral(center, ctx.brush_radius):
+		for c in grid().spiral(center, ctx.brush_radius):
 			if not grid().in_bounds(c):
 				continue
 			var k := HexMap.cell_key(c)
@@ -589,7 +589,7 @@ class TerrainTool extends Tool:
 	func draw_overlay(c: Node2D) -> void:
 		var center := grid().world_to_axial(ctx.mouse_hex())
 		var col := Color(1, 0.4, 0.4, 0.8) if _erasing and _painting else Color(1, 1, 1, 0.7)
-		for cell in HexGrid.spiral(center, ctx.brush_radius):
+		for cell in grid().spiral(center, ctx.brush_radius):
 			if grid().in_bounds(cell):
 				outline_cell(c, cell, col, 2.0)
 

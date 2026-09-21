@@ -13,9 +13,9 @@ extends RefCounted
 static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles") -> Dictionary:
 	var grid := map.grid
 	var lvl := map.level(level_index)
-	var pointy := grid.orientation == HexGrid.Orient.POINTY
-	var tile_w := ppx if pointy else roundi(2.0 * HexGrid.R * ppx)
-	var tile_h := roundi(2.0 * HexGrid.R * ppx) if pointy else ppx
+	var size := tile_size(grid, ppx)
+	var tile_w := size.x
+	var tile_h := size.y
 	var side := roundi(HexGrid.R * ppx)
 
 	# One tile id per (terrain, variant) actually used.
@@ -152,9 +152,7 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 		})
 	var doc := {
 		"type": "map", "version": "1.10", "tiledversion": "1.11.0",
-		"orientation": "hexagonal", "renderorder": "right-down",
-		"staggeraxis": stagger.staggeraxis, "staggerindex": stagger.staggerindex,
-		"hexsidelength": side,
+		"orientation": "orthogonal" if grid.is_square() else "hexagonal", "renderorder": "right-down",
 		"width": grid.columns, "height": grid.rows,
 		"tilewidth": tile_w, "tileheight": tile_h,
 		"infinite": false, "compressionlevel": -1,
@@ -165,7 +163,19 @@ static func build(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles")
 		"tilesets": [tileset],
 		"layers": layers,
 	}
+	if not grid.is_square():
+		doc.staggeraxis = stagger.staggeraxis
+		doc.staggerindex = stagger.staggerindex
+		doc.hexsidelength = side
 	return {"map": doc, "tiles": tile_files}
+
+
+## The pixel size of one tile image: a hex's bounding box, or the square.
+static func tile_size(grid: HexGrid, ppx: int) -> Vector2i:
+	if grid.is_square():
+		return Vector2i(ppx, ppx)
+	var pointy := grid.orientation == HexGrid.Orient.POINTY
+	return Vector2i(ppx if pointy else roundi(2.0 * HexGrid.R * ppx), roundi(2.0 * HexGrid.R * ppx) if pointy else ppx)
 
 
 static func to_json(map: HexMap, level_index: int, ppx: int, tiles_dir := "tiles") -> Dictionary:

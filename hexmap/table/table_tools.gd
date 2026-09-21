@@ -341,7 +341,7 @@ class FogTool extends Tool:
 
 	func _cells(p: Vector2) -> Array:
 		var out := []
-		for c in HexGrid.spiral(grid().world_to_axial(p), ctx.fog_brush - 1):
+		for c in grid().spiral(grid().world_to_axial(p), ctx.fog_brush - 1):
 			if grid().in_bounds(c):
 				out.append(c)
 		return out

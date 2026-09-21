@@ -98,6 +98,32 @@ func test_player_tool() -> void:
 	canvas.free()
 
 
+func test_player_tool_on_a_square_map() -> void:
+	var s := LocalSession.new(example("chapel_ambush.encounter"), "")
+	s.open()
+	s.player_id = str(s.state.encounter.players[0].id)
+	var cellar := HexMap.load_file(example("cellar.hexmap"))
+	s.state.attach_map(cellar)
+	var sc := Encounter.new_scene(cellar, "ground", "The cellar", "cellar.hexmap")
+	s.state.apply({"t": "scene.add", "scene": sc})
+	s.state.apply({"t": "scene.activate", "id": sc.id})
+	s.state.apply({"t": "turns.set", "changes": {"mode": "free"}})
+	var sid := s.scene_id()
+	check(sid == str(sc.id), "the player is on the cellar")
+	s.state.apply({"t": "token.add", "scene": sid, "token": Encounter.new_token("Fighter", cellar.grid.cell_center(Vector2i(7, 3)), {"id": "t_sq", "owner": s.player_id})})
+	var canvas := MapCanvas.new()
+	canvas.packs = PackLibrary.new()
+	canvas.set_scene(s.state, sid)
+	var tool := PlayerTools.MoveTool.new(s, canvas)
+	var from := Vector2(7.5, 3.5)
+	check(tool.token_at(from).id == "t_sq", "my token on the square")
+	tool.press(from, MOUSE_BUTTON_LEFT, {})
+	tool.drag(Vector2(8.8, 4.7), MOUSE_BUTTON_LEFT, {})
+	tool.release(Vector2(8.8, 4.7), MOUSE_BUTTON_LEFT, {})
+	check(Vision.token_pos(s.state.token(sid, "t_sq")) == Vector2(8.5, 4.5), "a diagonal drag lands on the square's centre")
+	canvas.free()
+
+
 func test_player_window() -> void:
 	var app := App.new("user://test_prefs_player.json")
 	var win := PlayerWindow.new()

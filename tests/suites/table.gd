@@ -237,6 +237,51 @@ func test_table_tools() -> void:
 	ctx.canvas.free()
 
 
+func test_table_on_a_square_map() -> void:
+	# The chapel's encounter gains a scene on the cellar (square cells):
+	# tokens move and snap to square centres, the fog brush paints blocks,
+	# the canvas draws it for the GM and a player.
+	var ctx := _table_ctx()
+	var st := ctx.state
+	var cellar := HexMap.load_file(example("cellar.hexmap"))
+	st.attach_map(cellar)
+	var sc := Encounter.new_scene(cellar, "ground", "The cellar", "cellar.hexmap")
+	check(ctx.commands.add_scene(sc) == "", "a scene on the cellar")
+	ctx.set_scene(str(sc.id))
+	var sid := ctx.scene_id
+	check(sid == str(sc.id) and ctx.map().grid.is_square(), "the Table is on the square scene")
+	var g := ctx.map().grid
+	var ana: Dictionary = st.encounter.players[0]
+	ctx.commands.add_token(sid, Encounter.new_token("Fighter", g.cell_center(Vector2i(7, 3)), {"owner": str(ana.id), "vision": {"radius": 5}}))
+	var fighter: Dictionary = st.tokens(sid)[0]
+	var fpos := Vision.token_pos(fighter)
+	check(fpos == Vector2(7.5, 3.5), "placed at a square centre")
+	var mods := {"shift": false, "ctrl": false, "alt": false}
+	var sel := TableTools.make("select", ctx) as TableTools.SelectTool
+	sel.press(fpos, MOUSE_BUTTON_LEFT, mods)
+	var to := Vector2(9.7, 5.2)
+	sel.drag(to, MOUSE_BUTTON_LEFT, mods)
+	sel.release(to, MOUSE_BUTTON_LEFT, mods)
+	check(Vision.token_pos(st.token(sid, fighter.id)) == Vector2(9.5, 5.5), "released on a snapped square centre: %s" % [st.token(sid, fighter.id).pos])
+	ctx.history.undo()
+	var fog := TableTools.make("fog", ctx) as TableTools.FogTool
+	ctx.fog_brush = 2
+	fog.press(Vector2(4.5, 4.5), MOUSE_BUTTON_LEFT, mods)
+	fog.release(Vector2(4.5, 4.5), MOUSE_BUTTON_LEFT, mods)
+	var explored: Array = st.encounter.scene(sid).fog.explored
+	check(explored.size() == 9 and explored.has("3,3") and explored.has("5,5"), "a brush of 2 reveals a 3×3 block (%d)" % explored.size())
+	ctx.canvas.set_scene(st, sid)
+	ctx.canvas.viewpoint = ""
+	ctx.canvas.refresh()
+	await tree.process_frame
+	ctx.canvas.viewpoint = str(ana.id)
+	ctx.canvas.refresh()
+	await tree.process_frame
+	check(ctx.canvas.fog_of(Vector2i(7, 3)) == 0 and ctx.canvas.fog_of(Vector2i(0, 13)) == 2, "the fighter sees its own square; the far corner is unseen")
+	ctx.canvas.queue_free()
+	await tree.process_frame
+
+
 func test_table_window() -> void:
 	var app := App.new("user://test_prefs_table_win.json")
 	var win := TableWindow.new()

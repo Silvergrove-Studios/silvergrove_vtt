@@ -1,0 +1,2422 @@
+{
+  "ext": {},
+  "format": "silvergrove.hexmap",
+  "grid": {
+    "columns": 20,
+    "distance": 5,
+    "offset": "odd",
+    "orientation": "pointy",
+    "rows": 14,
+    "shape": "square",
+    "units": "ft"
+  },
+  "id": "f3f11e6f-e3f4-44e6-92b7-dcd76ec4b7fc",
+  "levels": [
+    {
+      "elevation_range": [
+        0,
+        1
+      ],
+      "id": "ground",
+      "lights": [
+        {
+          "angle": 360,
+          "animation": "torch",
+          "bright": 1,
+          "color": "#ffa040",
+          "dim": 2,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_e0d59d7b",
+          "intensity": 1,
+          "pos": [
+            7.5,
+            3.1
+          ],
+          "shadows": true,
+          "z": 0.5
+        },
+        {
+          "angle": 360,
+          "animation": "flicker",
+          "bright": 0.5,
+          "color": "#ffe0a0",
+          "dim": 1.5,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_f6396ff9",
+          "intensity": 1,
+          "pos": [
+            10.5,
+            10.5
+          ],
+          "shadows": true,
+          "z": 0.5
+        }
+      ],
+      "name": "Ground floor",
+      "notes": [
+        {
+          "gm_only": true,
+          "id": "n_8eb94634",
+          "pos": [
+            14.5,
+            6.5
+          ],
+          "text": "Hidden behind the empty wine rack; DC 14 to notice the draught.",
+          "title": "Secret door"
+        },
+        {
+          "gm_only": true,
+          "id": "n_ef681f2c",
+          "pos": [
+            17.5,
+            6.5
+          ],
+          "text": "Ledgers, and the deed the merchant was killed for.",
+          "title": "The strongbox"
+        }
+      ],
+      "props": [
+        {
+          "asset": "dungeons_and_castles:crate",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_a0b3fddc",
+          "pos": [
+            3.5,
+            3.5
+          ],
+          "rot": 0,
+          "scale": 0.9,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:crate",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_4ac3e6b8",
+          "pos": [
+            3.5,
+            5.5
+          ],
+          "rot": 0,
+          "scale": 0.9,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:crate",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_e2c4eac1",
+          "pos": [
+            3.5,
+            7.5
+          ],
+          "rot": 0,
+          "scale": 0.9,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:crate",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_39ef9160",
+          "pos": [
+            3.5,
+            9.5
+          ],
+          "rot": 0,
+          "scale": 0.9,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:crate",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_671b48e2",
+          "pos": [
+            6.5,
+            7.5
+          ],
+          "rot": 9.36492919921875,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:chest",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_ec8556c3",
+          "pos": [
+            7.5,
+            7.5
+          ],
+          "rot": -13.4507341384888,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:crate",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_b2a15806",
+          "pos": [
+            8.5,
+            7.5
+          ],
+          "rot": 13.8683567047119,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:table",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_a8a8ff73",
+          "pos": [
+            10.5,
+            3.5
+          ],
+          "rot": 90,
+          "scale": 0.8,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:torch_sconce",
+          "flip": true,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_a70c89d4",
+          "pos": [
+            7.5,
+            3.1
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:candelabra",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_d022a304",
+          "pos": [
+            10.5,
+            10.5
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:chest",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_97d5dc36",
+          "pos": [
+            17.5,
+            6.5
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "dungeons_and_castles:bones",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_636503fe",
+          "pos": [
+            16.5,
+            8.5
+          ],
+          "rot": 20,
+          "scale": 1,
+          "z": 0
+        }
+      ],
+      "terrain": {
+        "0,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "0,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "0,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "0,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "0,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "0,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "0,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "0,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "0,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "0,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "0,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "0,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "0,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "0,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "1,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "1,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "1,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "1,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "1,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "10,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "10,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "10,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "10,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "10,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "10,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "10,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "10,3": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "10,4": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "10,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "10,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "10,7": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "10,8": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "10,9": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "11,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "11,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "11,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "11,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "11,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "11,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "11,2": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "11,3": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "11,4": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "11,5": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "11,6": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "11,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "11,8": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "11,9": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "12,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "12,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "12,10": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "12,11": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "12,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "12,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "12,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "12,3": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "12,4": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "12,5": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "12,6": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "12,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "12,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "12,9": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "13,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "13,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "13,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "13,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "13,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "13,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "13,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "14,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "14,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "14,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "14,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "14,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "14,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "14,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "14,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "14,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "14,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "14,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "14,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "14,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "14,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "15,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "15,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "15,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "15,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "15,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "15,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "15,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "15,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "15,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "15,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "15,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "15,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "15,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "15,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "16,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "16,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "16,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "16,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "16,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "16,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "16,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "16,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "16,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "16,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "16,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "16,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "16,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "16,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "17,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "17,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "17,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "17,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "17,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "17,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "17,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "17,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "17,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "17,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "17,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "17,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "17,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "17,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "18,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "18,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "18,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "18,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "18,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "18,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "18,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "18,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "18,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "18,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "18,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "18,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "18,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 0,
+          "z": 0
+        },
+        "18,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:dirt_floor",
+          "v": 1,
+          "z": 0
+        },
+        "19,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "19,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "19,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "19,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "19,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "19,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "19,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "19,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "19,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "19,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "19,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "19,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "19,8": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "19,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "2,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "2,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "2,10": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "2,11": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "2,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "2,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "2,2": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "2,3": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "2,4": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "2,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "2,6": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "2,7": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "2,8": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "2,9": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "3,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "3,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "3,10": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "3,11": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "3,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "3,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "3,2": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "3,3": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "3,4": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "3,5": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "3,6": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "3,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "3,8": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "3,9": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "4,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "4,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "4,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "4,11": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "4,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "4,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "4,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "4,3": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "4,4": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "4,5": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "4,6": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "4,7": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "4,8": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "4,9": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "5,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "5,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "5,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "5,11": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "5,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "5,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "5,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "5,3": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "5,4": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "5,5": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "5,6": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "5,7": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "5,8": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "5,9": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "6,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "6,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "6,10": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "6,11": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "6,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "6,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "6,2": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "6,3": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "6,4": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "6,5": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "6,6": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "6,7": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "6,8": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "6,9": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "7,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "7,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "7,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "7,11": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "7,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "7,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "7,2": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "7,3": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "7,4": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "7,5": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "7,6": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "7,7": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "7,8": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "7,9": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "8,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "8,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "8,10": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "8,11": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "8,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "8,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "8,2": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "8,3": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "8,4": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "8,5": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "8,6": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "8,7": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "8,8": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "8,9": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "9,0": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "9,1": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "9,10": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "9,11": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "9,12": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 0,
+          "z": 0
+        },
+        "9,13": {
+          "rot": 0,
+          "t": "dungeons_and_castles:rough_stone",
+          "v": 1,
+          "z": 0
+        },
+        "9,2": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "9,3": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "9,4": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 0,
+          "z": 0
+        },
+        "9,5": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "9,6": {
+          "rot": 0,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 1,
+          "z": 0
+        },
+        "9,7": {
+          "rot": 2,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "9,8": {
+          "rot": 1,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        },
+        "9,9": {
+          "rot": 3,
+          "t": "dungeons_and_castles:flagstone",
+          "v": 2,
+          "z": 0
+        }
+      },
+      "tree": [
+        {
+          "children": [
+            {
+              "ref": "props:p_636503fe"
+            }
+          ],
+          "id": "f_ground",
+          "locked": false,
+          "name": "Ground",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "props:p_a0b3fddc"
+            },
+            {
+              "ref": "props:p_4ac3e6b8"
+            },
+            {
+              "ref": "props:p_e2c4eac1"
+            },
+            {
+              "ref": "props:p_39ef9160"
+            },
+            {
+              "ref": "props:p_671b48e2"
+            },
+            {
+              "ref": "props:p_ec8556c3"
+            },
+            {
+              "ref": "props:p_b2a15806"
+            },
+            {
+              "ref": "props:p_a8a8ff73"
+            },
+            {
+              "ref": "props:p_a70c89d4"
+            },
+            {
+              "ref": "props:p_d022a304"
+            },
+            {
+              "ref": "props:p_97d5dc36"
+            }
+          ],
+          "id": "f_props",
+          "locked": false,
+          "name": "Props",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [],
+          "id": "f_overhead",
+          "locked": false,
+          "name": "Overhead",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "walls:w_edea9e09"
+            },
+            {
+              "ref": "walls:w_393433c6"
+            },
+            {
+              "ref": "walls:w_78033964"
+            },
+            {
+              "ref": "walls:w_32cb7c00"
+            }
+          ],
+          "id": "f_walls",
+          "locked": false,
+          "name": "Walls & doors",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "lights:l_e0d59d7b"
+            },
+            {
+              "ref": "lights:l_f6396ff9"
+            }
+          ],
+          "id": "f_lights",
+          "locked": false,
+          "name": "Lights",
+          "open": true,
+          "visible": true
+        },
+        {
+          "children": [
+            {
+              "ref": "notes:n_8eb94634"
+            },
+            {
+              "ref": "notes:n_ef681f2c"
+            }
+          ],
+          "id": "f_notes",
+          "locked": false,
+          "name": "Notes",
+          "open": true,
+          "visible": true
+        }
+      ],
+      "walls": [
+        {
+          "blocks": {
+            "light": true,
+            "move": true,
+            "sight": true,
+            "sound": true
+          },
+          "door": "none",
+          "hidden": false,
+          "id": "w_edea9e09",
+          "one_way": null,
+          "points": [
+            [
+              8,
+              2
+            ],
+            [
+              9,
+              2
+            ],
+            [
+              10,
+              2
+            ],
+            [
+              11,
+              2
+            ],
+            [
+              12,
+              2
+            ],
+            [
+              13,
+              2
+            ],
+            [
+              13,
+              3
+            ],
+            [
+              13,
+              4
+            ],
+            [
+              13,
+              5
+            ],
+            [
+              13,
+              6
+            ],
+            [
+              13,
+              7
+            ],
+            [
+              13,
+              8
+            ],
+            [
+              13,
+              9
+            ],
+            [
+              13,
+              10
+            ],
+            [
+              13,
+              11
+            ],
+            [
+              13,
+              12
+            ],
+            [
+              12,
+              12
+            ],
+            [
+              11,
+              12
+            ],
+            [
+              10,
+              12
+            ],
+            [
+              9,
+              12
+            ],
+            [
+              8,
+              12
+            ],
+            [
+              7,
+              12
+            ],
+            [
+              6,
+              12
+            ],
+            [
+              5,
+              12
+            ],
+            [
+              4,
+              12
+            ],
+            [
+              3,
+              12
+            ],
+            [
+              2,
+              12
+            ],
+            [
+              2,
+              11
+            ],
+            [
+              2,
+              10
+            ],
+            [
+              2,
+              9
+            ],
+            [
+              2,
+              8
+            ],
+            [
+              2,
+              7
+            ],
+            [
+              2,
+              6
+            ],
+            [
+              2,
+              5
+            ],
+            [
+              2,
+              4
+            ],
+            [
+              2,
+              3
+            ],
+            [
+              2,
+              2
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              4,
+              2
+            ],
+            [
+              5,
+              2
+            ],
+            [
+              6,
+              2
+            ],
+            [
+              7,
+              2
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "style": "dungeons_and_castles:stone_wall",
+          "z": [
+            0,
+            1
+          ]
+        },
+        {
+          "blocks": {
+            "light": true,
+            "move": true,
+            "sight": true,
+            "sound": true
+          },
+          "door": "door",
+          "hidden": false,
+          "id": "w_393433c6",
+          "one_way": null,
+          "points": [
+            [
+              7,
+              2
+            ],
+            [
+              8,
+              2
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "z": [
+            0,
+            1
+          ]
+        },
+        {
+          "blocks": {
+            "light": true,
+            "move": true,
+            "sight": true,
+            "sound": true
+          },
+          "door": "none",
+          "hidden": false,
+          "id": "w_78033964",
+          "one_way": null,
+          "points": [
+            [
+              14,
+              6
+            ],
+            [
+              14,
+              5
+            ],
+            [
+              14,
+              4
+            ],
+            [
+              15,
+              4
+            ],
+            [
+              16,
+              4
+            ],
+            [
+              17,
+              4
+            ],
+            [
+              18,
+              4
+            ],
+            [
+              19,
+              4
+            ],
+            [
+              19,
+              5
+            ],
+            [
+              19,
+              6
+            ],
+            [
+              19,
+              7
+            ],
+            [
+              19,
+              8
+            ],
+            [
+              19,
+              9
+            ],
+            [
+              19,
+              10
+            ],
+            [
+              18,
+              10
+            ],
+            [
+              17,
+              10
+            ],
+            [
+              16,
+              10
+            ],
+            [
+              15,
+              10
+            ],
+            [
+              14,
+              10
+            ],
+            [
+              14,
+              9
+            ],
+            [
+              14,
+              8
+            ],
+            [
+              14,
+              7
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "style": "dungeons_and_castles:brick_wall",
+          "z": [
+            0,
+            1
+          ]
+        },
+        {
+          "blocks": {
+            "light": true,
+            "move": true,
+            "sight": true,
+            "sound": true
+          },
+          "door": "secret",
+          "hidden": false,
+          "id": "w_32cb7c00",
+          "one_way": null,
+          "points": [
+            [
+              14,
+              6
+            ],
+            [
+              14,
+              7
+            ]
+          ],
+          "sight_mode": "normal",
+          "state": "closed",
+          "z": [
+            0,
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "author": "Silvergrove Studios",
+    "created": "2026-09-19T00:00:00",
+    "description": "A merchant's cellar: storeroom, wine racks and a walled-off vault. Square cells.",
+    "modified": "2026-09-19T00:00:00"
+  },
+  "name": "Cellar",
+  "packs": {
+    "dungeons_and_castles": "0.1.0"
+  },
+  "reference_ppx": 256,
+  "style": {
+    "background": "#1c1a17",
+    "grid_color": "#00000066",
+    "grid_width": 0.012
+  },
+  "version": 2
+}

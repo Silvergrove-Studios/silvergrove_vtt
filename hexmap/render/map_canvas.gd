@@ -286,7 +286,13 @@ func _draw_terrain(c: Node2D) -> void:
 	var terrain: Dictionary = lvl.get("terrain", {})
 	var grid := map.grid
 	var pointy := grid.orientation == HexGrid.Orient.POINTY
-	var colors := PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
+	var square := grid.is_square()
+	var n := grid.corner_count()
+	var colors := PackedColorArray()
+	colors.resize(n)
+	colors.fill(Color.WHITE)
+	# `rot` is stored in sixths of a turn on hexes, quarters on squares.
+	var rot_step := PI / 2.0 if square else PI / 3.0
 	for key in terrain:
 		var cell := HexMap.key_cell(key)
 		var t: Dictionary = terrain[key]
@@ -295,27 +301,32 @@ func _draw_terrain(c: Node2D) -> void:
 		var center := grid.cell_center(cell)
 		var corners := grid.corners_at(center)
 		var pts := PackedVector2Array()
-		pts.resize(6)
-		for i in 6:
+		pts.resize(n)
+		for i in n:
 			pts[i] = corners[i] * ppx
 		if def.is_empty():
 			c.draw_colored_polygon(pts, Color.MAGENTA.darkened(0.3))
 			continue
 		var tex := packs.terrain_texture(ref, int(t.get("v", 0)), texture_ppx)
 		var uvs := PackedVector2Array()
-		uvs.resize(6)
+		uvs.resize(n)
 		var fit := str(def.get("fit", "hex"))
-		var rot_sixths := int(t.get("rot", 0))
-		if fit == "square":
+		var ang := int(t.get("rot", 0)) * rot_step
+		if square:
+			# One texture per cell: square art fills it, hex art's bounding
+			# box is stretched over it.
+			for i in n:
+				var d := (corners[i] - center).rotated(ang)
+				uvs[i] = Vector2(d.x + 0.5, d.y + 0.5)
+		elif fit == "square":
 			# Cut the cell out of a texture that repeats every 2 hexes.
-			var ang := rot_sixths * PI / 3.0
-			for i in 6:
+			for i in n:
 				var d := (corners[i] - center).rotated(ang)
 				uvs[i] = (center + d) * 0.5
 		else:
 			# Map the hex's bounding box (in pointy-top space) to the image.
-			var ang := rot_sixths * PI / 3.0 + (0.0 if pointy else -PI / 6.0)
-			for i in 6:
+			ang += 0.0 if pointy else -PI / 6.0
+			for i in n:
 				var d := (corners[i] - center).rotated(ang)
 				uvs[i] = Vector2(d.x + 0.5, (d.y + HexGrid.R) / (2.0 * HexGrid.R))
 		c.draw_polygon(pts, colors, uvs, tex)
@@ -495,7 +506,7 @@ func _draw_cells(c: Node2D, grid: HexGrid, cells: Array, color: Color, alpha: fl
 		var cell := HexMap.key_cell(key)
 		var corners := grid.cell_corners(cell)
 		var pts := PackedVector2Array()
-		for i in 6:
+		for i in corners.size():
 			pts.append(corners[i] * ppx)
 		c.draw_colored_polygon(pts, Color(color, alpha))
 		var outline := pts.duplicate()
@@ -515,13 +526,14 @@ func _draw_grid(c: Node2D) -> void:
 	var color := grid_color_override if grid_color_override.a > 0.0 else Color(str(map.style.get("grid_color", "#00000066")))
 	var width := float(map.style.get("grid_width", 0.012)) * ppx
 	width = maxf(width, 1.0)
+	var n := grid.corner_count()
 	for cell in grid.all_cells():
 		var corners := grid.cell_corners(cell)
 		var pts := PackedVector2Array()
-		pts.resize(7)
-		for i in 6:
+		pts.resize(n + 1)
+		for i in n:
 			pts[i] = corners[i] * ppx
-		pts[6] = pts[0]
+		pts[n] = pts[0]
 		c.draw_polyline(pts, color, width, true)
 
 
@@ -733,13 +745,14 @@ func _draw_fog(c: Node2D) -> void:
 		if f == 0:
 			continue
 		var corners := grid.cell_corners(cell)
+		var n := corners.size()
 		var pts := PackedVector2Array()
-		pts.resize(6)
-		for i in 6:
+		pts.resize(n)
+		for i in n:
 			pts[i] = corners[i] * ppx
 		# Overdraw a hair so neighbouring cells leave no seam.
 		var center := grid.cell_center(cell) * ppx
-		for i in 6:
+		for i in n:
 			pts[i] = center + (pts[i] - center) * 1.02
 		c.draw_colored_polygon(pts, unseen if f == 2 else dim)
 

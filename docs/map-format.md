@@ -8,12 +8,14 @@ is plain text, stable in key order, and never embeds image data.
 ## Two coordinate systems
 
 **Canvas** — continuous, Cartesian, in *hex units*. One hex unit is the grid
-size: the flat-to-flat width of a hex. The origin is the top-left corner of
+size: the flat-to-flat width of a hex, or the side of a square (the name
+predates square grids; "cell unit" would be as true). The origin is the top-left corner of
 the bounding box of the top-left cell, x right, y down. Props, walls, lights,
 notes and everything an artist positions by hand live here. A position is a
 pair of floats and is never tied to a cell.
 
-**Cells** — discrete, axial `(q, r)`. Terrain lives here. `HexGrid`
+**Cells** — discrete, axial `(q, r)`; on a square grid `q` is the column
+and `r` the row. Terrain lives here. `HexGrid` (the grid, whichever shape)
 converts between the two (`hexmap/core/hex_grid.gd`), and is the only code
 that knows how.
 
@@ -36,6 +38,7 @@ units.
   "id": "6f1c0e2a-…",
   "name": "Ruined Chapel",
   "grid": {
+    "shape": "hex",
     "orientation": "pointy",
     "offset": "odd",
     "columns": 24,
@@ -61,10 +64,15 @@ units.
 }
 ```
 
+- `grid.shape`: `hex` (the default when absent — every file written before
+  the key existed is a hex map) or `square`. A square cell `(c, r)` is the
+  unit square with its top-left corner at `(c, r)`; `orientation` and
+  `offset` are kept in the file but mean nothing to it.
 - `grid.orientation`: `pointy` (horizontal rows, alternate rows shifted
   right) or `flat` (vertical columns, alternate columns shifted down).
 - `grid.offset`: `odd` or `even` — which rows/columns are the shifted ones.
-  Together these are Foundry's HEXODDR / HEXEVENR / HEXODDQ / HEXEVENQ.
+  Together these are Foundry's HEXODDR / HEXEVENR / HEXODDQ / HEXEVENQ; a
+  square grid is Foundry's SQUARE and Tiled's orthogonal orientation.
 - `grid.distance`, `grid.units`: what one hex means in the game. Display and
   export only; the map holds no rules.
 - `style.grid_width` is in hex units (0.012 hex ≈ 3 px at 256 ppx).
@@ -133,7 +141,7 @@ Keyed by `"q,r"` (axial). Missing cells are bare background.
 |---|---|---|
 | `t` | `pack:terrain` | terrain asset |
 | `v` | int | variant index into the asset's texture list |
-| `rot` | int 0–5 | rotation in sixths of a turn |
+| `rot` | int 0–5 | rotation in sixths of a turn (quarters, 0–3, on a square grid) |
 | `z` | number | elevation of this cell's floor, hex units (default 0) |
 
 ### Prop

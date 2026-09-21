@@ -7,6 +7,7 @@
     "offset": "odd",
     "orientation": "pointy",
     "rows": 16,
+    "shape": "hex",
     "units": "ft"
   },
   "id": "15d5f6e8-193c-4f1e-be4b-2173cf9a6c11",

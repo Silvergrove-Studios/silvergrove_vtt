@@ -183,7 +183,7 @@ func test_prep_triggers() -> void:
 	# validation
 	check(st.validate({"t": "scene.set", "id": sid, "changes": {"triggers": [{"id": "x", "on": "sometime", "do": []}]}}) != "" and st.validate({"t": "scene.set", "id": sid, "changes": {"triggers": [{"id": "x", "on": "manual", "do": [{"text": "no kind"}]}]}}) != "", "malformed triggers are refused")
 	# a region with an enter trigger: read-aloud, a light on, a countdown
-	var zone := MapQuery.region("r_altar", HexGrid.spiral(g.offset_to_axial(9, 7), 1), ["altar"], {"label": "Altar"})
+	var zone := MapQuery.region("r_altar", g.spiral(g.offset_to_axial(9, 7), 1), ["altar"], {"label": "Altar"})
 	var light_id := str(m.level_by_id("ground").lights[0].id) if not m.level_by_id("ground").lights.is_empty() else ""
 	var steps := [
 		{"kind": "read", "title": "The altar", "text": "Something stirs.", "audience": "all"},

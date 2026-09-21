@@ -19,6 +19,8 @@ func _init() -> void:
 	var chapel := _ruined_chapel()
 	_save(chapel, dir.path_join("ruined_chapel.hexmap"))
 	_save_encounter(_chapel_ambush(chapel), dir.path_join("chapel_ambush.encounter"))
+	# Last, so the older examples keep their random draws.
+	_save(_cellar(), dir.path_join("cellar.hexmap"))
 	print("examples written")
 	quit(0)
 
@@ -143,9 +145,10 @@ func _boundary(grid: HexGrid, cells: Dictionary) -> Array:
 		var nbs := grid.neighbors(cell)
 		# Neighbour k lies across the edge from corner k to k+1 for pointy
 		# grids with our corner ordering; check by midpoint instead to be safe.
-		for i in 6:
+		var n := corners.size()
+		for i in n:
 			var a := corners[i]
-			var b := corners[(i + 1) % 6]
+			var b := corners[(i + 1) % n]
 			var mid := (a + b) / 2.0
 			var outward := mid + (mid - grid.cell_center(cell)) * 0.5
 			var other := grid.world_to_axial(outward)
@@ -186,7 +189,7 @@ func _boundary(grid: HexGrid, cells: Dictionary) -> Array:
 func _line_cells(grid: HexGrid, pts: Array) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	for i in pts.size() - 1:
-		for c in HexGrid.line(grid.world_to_axial(pts[i]), grid.world_to_axial(pts[i + 1])):
+		for c in grid.line(grid.world_to_axial(pts[i]), grid.world_to_axial(pts[i + 1])):
 			out.append(c)
 	return out
 
@@ -299,7 +302,7 @@ func _bog_crossing() -> HexMap:
 	_wall(lvl, rail, "fence", "swamp:boardwalk_rail")
 	# Hut walls
 	var hut_cells := {}
-	for c in HexGrid.spiral(g.world_to_axial(hut), 1):
+	for c in g.spiral(g.world_to_axial(hut), 1):
 		hut_cells[HexMap.cell_key(c)] = true
 	_room(lvl, g, hut_cells, "swamp:palisade", [g.snap_to_corner(hut + Vector2(-1.0, 0.5)), g.snap_to_corner(hut + Vector2(-1.0, -0.5))])
 	_note(lvl, hut, "The hut", "Mother Sedge is home. She wants the frog totem back before she talks.")
@@ -396,6 +399,46 @@ func _ruined_chapel() -> HexMap:
 	_prop(crypt, "dungeons_and_castles:torch_sconce", g.cell_center(g.offset_to_axial(11, 8)) + Vector2(0, -1.2))
 	_light(crypt, g.cell_center(g.offset_to_axial(11, 8)) + Vector2(0, -1.2), 1.0, 2.0, "#ffa040", "torch")
 	_note(crypt, g.cell_center(g.offset_to_axial(9, 8)) + Vector2(-1.0, 0), "Secret door", "Leads to a collapsed tunnel heading west.")
+	return m
+
+
+## A square-grid map: a merchant's cellar. The same packs, a square grid.
+func _cellar() -> HexMap:
+	var m := HexMap.create("Cellar", HexGrid.square(20, 14))
+	m.doc.meta.description = "A merchant's cellar: storeroom, wine racks and a walled-off vault. Square cells."
+	m.note_pack("dungeons_and_castles", "0.1.0")
+	var lvl := m.level(0)
+	var g := m.grid
+	_fill(m, lvl, "dungeons_and_castles:rough_stone", 2)
+	# The storeroom, the vault beside it
+	var store := {}
+	var vault := {}
+	for c in g.all_cells():
+		if c.x >= 2 and c.x <= 12 and c.y >= 2 and c.y <= 11:
+			store[HexMap.cell_key(c)] = true
+			_cell(m, lvl, c, "dungeons_and_castles:flagstone", 3, rng.randi() % 4)
+		elif c.x >= 14 and c.x <= 18 and c.y >= 4 and c.y <= 9:
+			vault[HexMap.cell_key(c)] = true
+			_cell(m, lvl, c, "dungeons_and_castles:dirt_floor", 2)
+	# Doors: the store's on its north wall, the vault's through the shared wall
+	var north := g.cell_center(Vector2i(7, 2))
+	_room(lvl, g, store, "dungeons_and_castles:stone_wall", [north + Vector2(-0.5, -0.5), north + Vector2(0.5, -0.5)])
+	var shared := g.cell_center(Vector2i(14, 6))
+	_room(lvl, g, vault, "dungeons_and_castles:brick_wall", [shared + Vector2(-0.5, -0.5), shared + Vector2(-0.5, 0.5)], "secret")
+	# Racks along the west wall, crates in the middle, a table by the door
+	for y in [3, 5, 7, 9]:
+		_prop(lvl, "dungeons_and_castles:crate", g.cell_center(Vector2i(3, y)), 0, 0.9)
+	for x in [6, 7, 8]:
+		_prop(lvl, "dungeons_and_castles:crate" if x != 7 else "dungeons_and_castles:chest", g.cell_center(Vector2i(x, 7)), rng.randf_range(-15, 15))
+	_prop(lvl, "dungeons_and_castles:table", g.cell_center(Vector2i(10, 3)), 90, 0.8)
+	_prop(lvl, "dungeons_and_castles:torch_sconce", g.cell_center(Vector2i(7, 3)) + Vector2(0, -0.4))
+	_light(lvl, g.cell_center(Vector2i(7, 3)) + Vector2(0, -0.4), 1.0, 2.0, "#ffa040", "torch")
+	_prop(lvl, "dungeons_and_castles:candelabra", g.cell_center(Vector2i(10, 10)))
+	_light(lvl, g.cell_center(Vector2i(10, 10)), 0.5, 1.5, "#ffe0a0", "flicker")
+	_prop(lvl, "dungeons_and_castles:chest", g.cell_center(Vector2i(17, 6)), 0, 1.0)
+	_prop(lvl, "dungeons_and_castles:bones", g.cell_center(Vector2i(16, 8)), 20, 1.0, "ground")
+	_note(lvl, g.cell_center(Vector2i(14, 6)), "Secret door", "Hidden behind the empty wine rack; DC 14 to notice the draught.")
+	_note(lvl, g.cell_center(Vector2i(17, 6)), "The strongbox", "Ledgers, and the deed the merchant was killed for.")
 	return m
 
 

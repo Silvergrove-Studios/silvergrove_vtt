@@ -1,5 +1,5 @@
 extends TestCase
-## Hex grid maths.
+## Grid maths: hex (both orientations and offsets) and square.
 
 
 func test_axial_world_roundtrip() -> void:
@@ -65,11 +65,58 @@ func test_corners_are_unit_hex() -> void:
 
 
 func test_distance_and_line() -> void:
+	var g := HexGrid.new()
 	check(HexGrid.axial_distance(Vector2i(0, 0), Vector2i(3, -1)) == 3, "distance")
-	var l := HexGrid.line(Vector2i(0, 0), Vector2i(3, -1))
+	check(g.steps(Vector2i(0, 0), Vector2i(3, -1)) == 3, "steps is the hex distance")
+	check(g.diagonals(Vector2i(0, 0), Vector2i(3, -1)) == 0, "a hex grid has no diagonals")
+	var l := g.line(Vector2i(0, 0), Vector2i(3, -1))
 	check(l.size() == 4 and l[0] == Vector2i(0, 0) and l[-1] == Vector2i(3, -1), "line endpoints %s" % [l])
-	check(HexGrid.spiral(Vector2i.ZERO, 1).size() == 7, "radius-1 spiral has 7 cells")
-	check(HexGrid.spiral(Vector2i.ZERO, 2).size() == 19, "radius-2 spiral has 19 cells")
+	check(g.spiral(Vector2i.ZERO, 1).size() == 7, "radius-1 spiral has 7 cells")
+	check(g.spiral(Vector2i.ZERO, 2).size() == 19, "radius-2 spiral has 19 cells")
+	check(g.neighbors(Vector2i.ZERO).size() == 6, "six neighbours")
+	check(g.corner_count() == 6 and not g.is_square(), "a hex grid")
+
+
+func test_square_grid() -> void:
+	var g := HexGrid.square(12, 9)
+	check(g.is_square() and g.corner_count() == 4, "a square grid")
+	# Serialisation: shape round-trips; a file without one is a hex grid.
+	check(g.to_dict().shape == "square", "shape written")
+	check(HexGrid.from_dict(g.to_dict()).is_square(), "shape read")
+	check(not HexGrid.from_dict({"columns": 3, "rows": 3}).is_square(), "no shape means hex")
+	# Geometry: cell (c, r) is the unit square at (c, r); axial == offset.
+	for cell in g.all_cells():
+		var c := g.cell_center(cell)
+		check(near(c.x, cell.x + 0.5) and near(c.y, cell.y + 0.5), "centre of %s at %s" % [cell, c])
+		check(g.world_to_axial(c) == cell, "centre roundtrip %s" % cell)
+		check(g.axial_to_offset(cell) == cell and g.offset_to_axial(cell.x, cell.y) == cell, "axial is offset on squares")
+		var corners := g.cell_corners(cell)
+		check(corners.size() == 4, "four corners")
+		for k in corners:
+			var p: Vector2 = c.lerp(k, 0.9)
+			check(g.world_to_axial(p) == cell, "near-corner roundtrip %s" % cell)
+			check(near(absf(k.x - c.x), 0.5) and near(absf(k.y - c.y), 0.5), "corner half a cell from the centre")
+	check(g.all_cells().size() == 12 * 9, "every cell once")
+	check(g.in_bounds(Vector2i(11, 8)) and not g.in_bounds(Vector2i(12, 8)) and not g.in_bounds(Vector2i(0, -1)), "bounds")
+	var s := g.map_size()
+	check(near(s.x, 12.0) and near(s.y, 9.0), "map size is columns × rows: %s" % s)
+	# Steps are Chebyshev, with the diagonal count reported.
+	check(g.steps(Vector2i(0, 0), Vector2i(3, 1)) == 3, "Chebyshev steps")
+	check(g.diagonals(Vector2i(0, 0), Vector2i(3, 1)) == 1, "one diagonal step")
+	check(g.diagonals(Vector2i(2, 2), Vector2i(5, 5)) == 3, "all diagonal")
+	check(g.neighbors(Vector2i(4, 4)).size() == 4, "four edge neighbours")
+	check(g.neighbors(Vector2i(4, 4), true).size() == 8, "eight with diagonals")
+	check(g.spiral(Vector2i.ZERO, 1).size() == 9, "radius-1 block has 9 cells")
+	check(g.spiral(Vector2i.ZERO, 2).size() == 25, "radius-2 block has 25 cells")
+	var l := g.line(Vector2i(0, 0), Vector2i(4, 2))
+	check(l.size() == 5 and l[0] == Vector2i(0, 0) and l[-1] == Vector2i(4, 2), "line endpoints %s" % [l])
+	for i in l.size() - 1:
+		check(g.steps(l[i], l[i + 1]) == 1, "line steps one cell at a time")
+	var corner := g.cell_corners(Vector2i(2, 1))[2]
+	check(g.snap_to_corner(corner + Vector2(0.03, -0.02)).distance_to(corner) < 1e-6, "snaps to a square corner")
+	check(g.snap_to_center(Vector2(3.2, 1.9)) == Vector2(3.5, 1.5), "snaps to a square centre")
+	check(g.foundry_grid_type() == 1, "Foundry SQUARE")
+	check(g.tiled_stagger().is_empty(), "no stagger on squares")
 
 
 func test_snap_to_corner() -> void:

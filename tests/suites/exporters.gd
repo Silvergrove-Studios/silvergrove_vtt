@@ -96,6 +96,33 @@ func test_tiled_export() -> void:
 	check(tf.staggeraxis == "x" and tf.tilewidth == 115 and tf.tileheight == 100, "flat-top tile dims")
 
 
+func test_square_grid_exports() -> void:
+	var m := _sample_map()
+	m.grid = HexGrid.square(6, 4)
+	m.doc.grid = m.grid.to_dict()
+	# Foundry: a SQUARE scene whose pixel size is columns × rows × size
+	var s := FoundryExport.build(m, 0, 100, "sample.webp")
+	check(s.grid.type == 1 and s.width == 600 and s.height == 400, "Foundry SQUARE scene %s %dx%d" % [s.grid.type, s.width, s.height])
+	# Tiled: orthogonal, square tiles, no stagger keys
+	var t: Dictionary = TiledExport.build(m, 0, 100).map
+	check(t.orientation == "orthogonal" and t.tilewidth == 100 and t.tileheight == 100, "Tiled orthogonal %s %dx%d" % [t.orientation, t.tilewidth, t.tileheight])
+	check(not t.has("staggeraxis") and not t.has("hexsidelength"), "no hex keys on an orthogonal map")
+	check(t.layers[0].data.size() == 24 and t.layers[0].data[0] == 1 and t.layers[0].data[1] == 2 and t.layers[0].data[6] == 3, "cells in row-major order: %s" % [t.layers[0].data.slice(0, 8)])
+	# UVTT: the format is square-native; the map size is exact
+	var u := UvttExport.build(m, 0, 200, "PNG".to_utf8_buffer())
+	check(u.resolution.map_size.x == 6 and u.resolution.map_size.y == 4 and u.hexmap_grid.shape == "square", "UVTT map size %s" % [u.resolution.map_size])
+	# SVG: four-cornered polygons, one per cell
+	var svg := SvgExport.overlay(m, 0, 100.0)
+	check(svg.count("<polygon") == 24, "one polygon per cell: %d" % svg.count("<polygon"))
+	var first := svg.substr(svg.find("<polygon"), 120)
+	check(first.substr(0, first.find("/>")).count(",") == 4, "a square has four corners: %s" % first)
+	var probe := Image.new()
+	check(probe.load_svg_from_string(svg) == OK and probe.get_width() == 600, "Godot's SVG loader accepts it (%d px wide)" % probe.get_width())
+	# PDF layout: 6 × 4 squares at 1" is one letter sheet
+	var lay := PdfExport.layout(m.grid.map_size(), {"paper": "letter", "hex_size_in": 1.0})
+	check(lay.pages.size() == 1 and lay.pages[0].region_pt.size == Vector2(6 * 72, 4 * 72), "one sheet, exact size")
+
+
 func test_pdf_layout() -> void:
 	# 24 x 16 pointy map at 1" hexes on letter, 0.5" margins, 0.25" overlap.
 	var size := HexGrid.new(HexGrid.Orient.POINTY, HexGrid.Offset.ODD, 24, 16).map_size()

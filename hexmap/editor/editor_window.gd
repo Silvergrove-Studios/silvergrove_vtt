@@ -670,12 +670,13 @@ func _new_map_dialog() -> void:
 		{"key": "name", "label": "Name", "type": "string"},
 		{"key": "columns", "label": "Columns", "type": "int", "min": 1, "max": 400},
 		{"key": "rows", "label": "Rows", "type": "int", "min": 1, "max": 400},
+		{"key": "shape", "label": "Cells", "type": "enum", "options": ["hex", "square"], "tooltip": "Hexes or squares. Orientation and shifted rows apply to hexes only."},
 		{"key": "orientation", "label": "Hex orientation", "type": "enum", "options": ["pointy", "flat"], "tooltip": "pointy: rows of hexes; flat: columns"},
 		{"key": "offset", "label": "Shifted rows/columns", "type": "enum", "options": ["odd", "even"]},
-		{"key": "distance", "label": "One hex is", "type": "float", "min": 0.01, "step": 0.5},
+		{"key": "distance", "label": "One cell is", "type": "float", "min": 0.01, "step": 0.5},
 		{"key": "units", "label": "Units", "type": "string"},
-		{"key": "reference_ppx", "label": "Authoring pixels per hex", "type": "int", "min": 16, "max": 2048},
-	], {"name": "Untitled", "columns": 20, "rows": 14, "orientation": "pointy", "offset": "odd", "distance": 5.0, "units": "ft", "reference_ppx": 256})
+		{"key": "reference_ppx", "label": "Authoring pixels per cell", "type": "int", "min": 16, "max": 2048},
+	], {"name": "Untitled", "columns": 20, "rows": 14, "shape": "hex", "orientation": "pointy", "offset": "odd", "distance": 5.0, "units": "ft", "reference_ppx": 256})
 	_form_dialog("New map", form, func(v: Dictionary) -> void:
 		_guard_unsaved(func() -> void:
 			var g := HexGrid.from_dict(v)
@@ -694,16 +695,17 @@ func _map_settings_dialog() -> void:
 		{"key": "description", "label": "Description", "type": "text"},
 		{"key": "columns", "label": "Columns", "type": "int", "min": 1, "max": 400},
 		{"key": "rows", "label": "Rows", "type": "int", "min": 1, "max": 400},
+		{"key": "shape", "label": "Cells", "type": "enum", "options": ["hex", "square"], "tooltip": "Changing this reinterprets painted cells; expect to repaint."},
 		{"key": "orientation", "label": "Hex orientation", "type": "enum", "options": ["pointy", "flat"], "tooltip": "Changing this reinterprets painted cells; expect to repaint."},
 		{"key": "offset", "label": "Shifted rows/columns", "type": "enum", "options": ["odd", "even"]},
-		{"key": "distance", "label": "One hex is", "type": "float", "min": 0.01, "step": 0.5},
+		{"key": "distance", "label": "One cell is", "type": "float", "min": 0.01, "step": 0.5},
 		{"key": "units", "label": "Units", "type": "string"},
-		{"key": "reference_ppx", "label": "Authoring pixels per hex", "type": "int", "min": 16, "max": 2048},
+		{"key": "reference_ppx", "label": "Authoring pixels per cell", "type": "int", "min": 16, "max": 2048},
 		{"key": "background", "label": "Background", "type": "color", "alpha": false},
 		{"key": "grid_color", "label": "Grid colour", "type": "color"},
 		{"key": "grid_width", "label": "Grid width", "type": "float", "min": 0.0, "max": 0.2, "step": 0.002, "suffix": " hex"},
 	], {"name": ctx.map.name, "author": ctx.map.doc.meta.get("author", ""), "description": ctx.map.doc.meta.get("description", ""),
-		"columns": g.columns, "rows": g.rows, "orientation": g.orientation, "offset": g.offset, "distance": g.distance, "units": g.units,
+		"columns": g.columns, "rows": g.rows, "shape": g.shape, "orientation": g.orientation, "offset": g.offset, "distance": g.distance, "units": g.units,
 		"reference_ppx": ctx.map.reference_ppx, "background": s.get("background", "#1c1a17"), "grid_color": s.get("grid_color", "#00000066"), "grid_width": s.get("grid_width", 0.012)})
 	_form_dialog("Map settings", form, func(v: Dictionary) -> void:
 		var meta: Dictionary = ctx.map.doc.meta.duplicate()
@@ -711,7 +713,7 @@ func _map_settings_dialog() -> void:
 		meta.description = v.description
 		ctx.commands.update_map({
 			"name": v.name, "meta": meta, "reference_ppx": int(v.reference_ppx),
-			"grid": {"orientation": v.orientation, "offset": v.offset, "columns": int(v.columns), "rows": int(v.rows), "distance": v.distance, "units": v.units},
+			"grid": {"shape": v.shape, "orientation": v.orientation, "offset": v.offset, "columns": int(v.columns), "rows": int(v.rows), "distance": v.distance, "units": v.units},
 			"style": {"background": v.background, "grid_color": v.grid_color, "grid_width": v.grid_width},
 		}))
 
@@ -836,7 +838,7 @@ func _exit_tree() -> void:
 func _export_png_dialog() -> void:
 	var form := PropertyForm.new()
 	form.build([
-		{"key": "ppx", "label": "Pixels per hex", "type": "int", "min": 16, "max": 2048},
+		{"key": "ppx", "label": "Pixels per cell", "type": "int", "min": 16, "max": 2048},
 		{"key": "show_grid", "label": "Grid", "type": "bool"},
 		{"key": "gm", "label": "Walls, lights, notes", "type": "bool"},
 	], {"ppx": ctx.map.reference_ppx, "show_grid": true, "gm": false})
@@ -852,7 +854,7 @@ func _export_png_dialog() -> void:
 func _export_simple(kind: String) -> void:
 	var form := PropertyForm.new()
 	var default_ppx: int = {"uvtt": 140, "foundry": 140, "tiled": ctx.map.reference_ppx}[kind]
-	form.build([{"key": "ppx", "label": "Pixels per hex", "type": "int", "min": 16, "max": 2048,
+	form.build([{"key": "ppx", "label": "Pixels per cell", "type": "int", "min": 16, "max": 2048,
 		"tooltip": "VTTs are comfortable around 100–200. Foundry's grid.size becomes this number."}], {"ppx": default_ppx})
 	var titles := {"uvtt": "Export Universal VTT", "foundry": "Export Foundry VTT scene", "tiled": "Export Tiled map"}
 	var filters := {"uvtt": ["*.dd2vtt ; Universal VTT", "*.uvtt ; Universal VTT"], "foundry": ["*.json ; Foundry scene"], "tiled": ["*.tmj ; Tiled JSON map"]}

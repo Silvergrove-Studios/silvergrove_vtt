@@ -6,7 +6,7 @@ drawing); `./run.sh export` opens a small one for the duration.
 
 | Target | Menu | CLI | Carries |
 |---|---|---|---|
-| PNG | Export → PNG image | `png <out.png> [ppx] [grid\|nogrid] [gm]` | Terrain, props, optional grid and GM layers. Transparent outside the hexes. |
+| PNG | Export → PNG image | `png <out.png> [ppx] [grid\|nogrid] [gm]` | Terrain, props, optional grid and GM layers. Transparent outside the cells. |
 | Universal VTT | Export → Universal VTT | `uvtt <out.dd2vtt> [ppx] [level]` | Image, sight-blocking walls, doors as portals, lights. |
 | Foundry VTT | Export → Foundry VTT scene | `foundry <out.json> [ppx]` | Scene JSON per level + WebP background. Hex grid type, walls with full semantics and heights, lights, level range, notes in flags. |
 | Tiled | Export → Tiled map | `tiled <out.tmj> [ppx] [level]` | Hex tile layer + tile images, objects for props/walls/lights/notes. |
@@ -18,12 +18,13 @@ export, like hidden layers in an image editor. GM-only (`hidden: true`)
 elements are a different thing: they are exported as GM data where the
 target has such a notion and drawn into images only when GM layers are on.
 
-`ppx` is pixels per hex (flat-to-flat). VTTs are happy around 100–200;
+`ppx` is pixels per cell (flat-to-flat for a hex, the side for a square). VTTs are happy around 100–200;
 Foundry uses it directly as `grid.size`.
 
 ## Universal VTT
 
 - 1 grid unit = 1 hex unit, so wall and light positions are exact. The
+  format is square-native: a square map imports as is. For a hex map the
   receiving VTT must be told the grid is hexagonal (and which orientation);
   the format has no field for it. `hexmap_grid` in the file says what to pick.
 - `map_size` is in whole grid units, so the image is padded to the next
@@ -51,6 +52,7 @@ What maps where:
 
 | Ours | Foundry |
 |---|---|
+| `shape: square` | `grid.type` 1 |
 | orientation pointy/flat × offset odd/even | `grid.type` 2 / 3 / 4 / 5 |
 | hex unit | `grid.size` (px), `grid.distance` + `grid.units` |
 | wall `blocks.move/sight/light/sound` | `move`, `sight`, `light`, `sound` sense types |
@@ -72,9 +74,10 @@ left out, which is what you want for a player-facing scene.
 
 ## Tiled
 
-`orientation: hexagonal`; `staggeraxis` is `y` for pointy, `x` for flat;
-`staggerindex` is our offset. `tilewidth`/`tileheight`/`hexsidelength` are
-derived from `ppx`. Terrain rotation is dropped (Tiled only flips). Props,
+`orientation: hexagonal` (or `orthogonal` for a square grid, with
+`ppx`-square tiles and no stagger keys); `staggeraxis` is `y` for pointy,
+`x` for flat; `staggerindex` is our offset. `tilewidth`/`tileheight`/
+`hexsidelength` are derived from `ppx`. Terrain rotation is dropped (Tiled only flips). Props,
 walls, lights and notes are object layers with typed properties; nothing
 is lost there.
 

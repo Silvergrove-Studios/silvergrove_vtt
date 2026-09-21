@@ -7,6 +7,7 @@
     "offset": "odd",
     "orientation": "flat",
     "rows": 14,
+    "shape": "hex",
     "units": "m"
   },
   "id": "5902d4fd-9c01-45e4-becf-5b71bf9decb5",
