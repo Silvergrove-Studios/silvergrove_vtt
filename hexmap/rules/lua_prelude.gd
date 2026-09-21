@@ -483,6 +483,8 @@ function __run_test(index, helpers)
 	-- move a token the way the Table does (token_moved, regions, prep, after_move)
 	function h.move(scene, token, to) return call(host.test_move, scene, token, to) end
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
+	-- a campaign setting for this test (the manifest's defaults come back for the next)
+	function h.setting(key, value) return call(host.test_setting, key, value) end
 	-- a scene over a map file (the examples' chapel by default), with tokens = { {id, actor, x, y}, … }
 	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end
 	-- a creature from one of this plugin's benchmarks, placed on a scene at a "q,r" cell: its actor id

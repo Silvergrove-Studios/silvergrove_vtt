@@ -254,7 +254,10 @@ static func pick_target(st: EncounterState, sid: String, spec: Dictionary, p: Ve
 
 ## Sight from a to b: rays from a's centre to b's centre and the corners
 ## of b's cell against walls (doors as they are) and, optionally, other
-## tokens' cells. {clear, cover: none | partial | total, blocked_by: [ids]}.
+## tokens' cells. {clear, cover: none | partial | total, blocked_by: [ids
+## of the tokens in the way], walls: how many of the rays a wall stopped,
+## seen, of} — so a ruleset can price cover from walls and from creatures
+## differently with one call.
 func line_of_sight(scene_id: String, a: Variant, b: Variant, tokens_block := true) -> Dictionary:
 	var g := grid(scene_id)
 	var pa := point_of(scene_id, a)
@@ -275,6 +278,7 @@ func line_of_sight(scene_id: String, a: Variant, b: Variant, tokens_block := tru
 			blockers.append({"id": str(tk.id), "pos": Vision.token_pos(tk), "r": float(tk.get("size", 1)) * 0.45})
 	var seen := 0
 	var by := {}
+	var walls := 0
 	for t in targets:
 		var v: Vector2 = t - pa
 		var dist: float = v.length()
@@ -283,6 +287,7 @@ func line_of_sight(scene_id: String, a: Variant, b: Variant, tokens_block := tru
 			continue
 		var hit := Lighting.ray_hit(pa, v / dist, segs, dist)
 		if hit < dist:
+			walls += 1
 			continue
 		var blocked := false
 		for bl in blockers:
@@ -292,7 +297,7 @@ func line_of_sight(scene_id: String, a: Variant, b: Variant, tokens_block := tru
 		if not blocked:
 			seen += 1
 	var cover := "none" if seen == targets.size() else ("total" if seen == 0 else "partial")
-	return {"clear": seen > 0, "cover": cover, "blocked_by": by.keys(), "seen": seen, "of": targets.size()}
+	return {"clear": seen > 0, "cover": cover, "blocked_by": by.keys(), "walls": walls, "seen": seen, "of": targets.size()}
 
 
 static func _segment_hits_circle(a: Vector2, b: Vector2, c: Vector2, r: float) -> bool:

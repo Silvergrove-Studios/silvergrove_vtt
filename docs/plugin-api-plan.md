@@ -739,12 +739,14 @@ desirement was blocked; the host changes it produced are small:
 | the sheet's `versatile ? … : …` | `Expr.truthy` no longer compares a String to `false` | `8b8b6bc` |
 | a requested-roll prompt on the phone | `PropertyForm.set_values` reads a null bool as unchecked | `db14401` |
 | a 25 s plugin test run | `run_tests` indexes the plugin's packs once and shares them across tests (rebuilt after a test writes to a user pack): 28.7 s → 4.1 s for srd5e | this commit |
-| H11 | the Rules panel shows each plugin's manifest `attribution` | this commit |
+| H11 | the Rules panel shows each plugin's manifest `attribution` | `499ffc4` |
+| a Roll initiative button on the GM panel (G3) | `hm.scene()` and `scene` in the status/gm view data | `3b69f73` |
+| half cover from a creature vs a wall (G7) | `hm.map.los` counts the rays a wall stopped (`walls`) beside the tokens in the way | this commit |
+| the 2014 paths untestable (G15) | `t.setting(key, value)` in the test harness, restored after each test | this commit |
+| a monster's opportunity attack (G11) | `hm.prompt("gm", …)` already worked; documented | this commit |
 
-Still open from `GAPS.md`, all small and none blocking: the active scene
-for a plugin action from the GM panel (`hm.scene()`, G3), per-setting
-packs (G5), which kind of thing blocked a line of sight (G7), a `picker`
-field inside forms and wizard steps (G9), prompting the GM (G11), one
+Still open from `GAPS.md`, all small and none blocking: per-setting
+packs (G5), a `picker` field inside forms and wizard steps (G9), one
 rule for numeric-string Dictionary keys across the bridge (G13). H10
 (cues) stays out.
 

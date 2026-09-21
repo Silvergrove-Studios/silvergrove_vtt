@@ -76,12 +76,14 @@ func test_map_sight_and_light() -> void:
 	say.call("  sight through the door: closed %s/%s, open %s/%s" % [closed.seen, closed.of, opened.seen, opened.of])
 	check(opened.seen >= closed.seen, "opening a door never hides more")
 	check(closed.cover in ["none", "partial", "total"] and opened.has("blocked_by"), "cover is one of three words")
+	check(closed.walls >= opened.walls and closed.walls + closed.seen <= closed.of, "the rays a wall stopped are counted: closed %d, open %d" % [closed.walls, opened.walls])
 	# a token in between gives partial cover
 	var g := mq.grid(sid)
 	k.commit([{"t": "token.add", "scene": sid, "token": Encounter.new_token("Wall of goblins", g.cell_center(g.offset_to_axial(6, 7)), {"id": "t_mid", "size": 1})}], "Mid")
 	var covered := mq.line_of_sight(sid, "token:t_h", "token:t_g")
 	var ignoring := mq.line_of_sight(sid, "token:t_h", "token:t_g", false)
 	check(covered.seen <= ignoring.seen and (covered.blocked_by.has("t_mid") or covered.seen == ignoring.seen), "a token between gives cover when tokens block: %s vs %s" % [covered.seen, ignoring.seen])
+	check(covered.walls == ignoring.walls, "a creature in the way is not a wall")
 	k.commit([{"t": "token.remove", "scene": sid, "id": "t_mid"}], "Gone")
 	# light: the map's lights, a torch on a token
 	var dark_spot := g.cell_center(g.offset_to_axial(1, 1))

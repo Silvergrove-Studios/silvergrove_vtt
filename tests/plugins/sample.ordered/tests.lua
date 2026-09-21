@@ -48,6 +48,14 @@ hm.test("rolls go through the hooks", function(t)
 	t.eq(r.result.outcome, "failure", "and now a miss")
 	r = t.roll_with_faces({ main = { 20 } }, "1d20", { actor = id, kind = "attack", dc = 30 })
 	t.eq(r.result.outcome, "critical", "a natural 20 is a critical whatever the difficulty")
+	-- a campaign setting for this test only
+	t.setting("critical_on", 19)
+	r = t.roll_with_faces({ main = { 19 } }, "1d20", { actor = id, kind = "attack", dc = 30 })
+	t.eq(r.result.outcome, "critical", "with critical_on 19, a 19 is a critical")
+end)
+
+hm.test("settings set by a test do not leak into the next", function(t)
+	t.eq(hm.settings.get("critical_on", 20), 20, "the manifest's default is back")
 end)
 
 hm.test("strike: a hit spends the target's hit points, armour asks first", function(t)

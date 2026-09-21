@@ -472,7 +472,7 @@ in Hexmap knows what "close" means.
 | `hm.map.band(scene, a, b)` | just the band name |
 | `hm.map.within(scene, origin, r)` | token ids whose edge is within `r` of the origin |
 | `hm.map.template(scene, spec)` | `{cells, tokens, origin}` for `{shape="circle", at, radius}`, `{shape="cone", at, direction, length, angle}`, `{shape="line", at, direction, length, width}` or `{shape="band", at, band}`; `origin="edge"` starts cones and lines at the token's edge, `blocked_by_walls=true` drops what the origin cannot see |
-| `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens |
+| `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by, walls, seen, of}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens; `blocked_by` lists the tokens in the way and `walls` how many rays a wall stopped, so cover from walls and from creatures can be priced apart |
 | `hm.map.light_at(scene, p)` | `{level="bright" \| "dim" \| "dark", sources}` |
 | `hm.map.can_see(scene, viewer, target)` | within vision, sight clear, target lit — or within the viewer's `vision.dark_radius` (darkvision with a range; `dark_sight = true` in the answer) or the viewer's `vision.mode` is `"dark"`. A ruleset sets those with `token.set` from the sheet's senses |
 | `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys (six neighbours and a hex of hexes, or four and a square block) |
@@ -513,7 +513,8 @@ Expressions: `NdS`, `+`/`-`, `kh`/`kl`/`dh`/`dl` N, `rN` (reroll faces
 local answer = hm.prompt(player_id, { title = "Spend armour?", fields = { { key = "spend", type = "bool", label = "…" } } },
                          { default = { spend = false }, deadline = 30 })
 ```
-The only way to wait. The action pauses; the Table records the prompt
+The only way to wait. `to` is a player id, or `"gm"` for a question the
+Table answers (a monster's reaction, a ruling). The action pauses; the Table records the prompt
 in the encounter (`pending.prompts`, so a Player who reconnects still
 sees it), shows the form to that Player (Phase 4), answers with the
 default at the deadline, or lets the GM override; the call returns the
@@ -555,7 +556,8 @@ end)
 Each test runs on a fresh scratch encounter with a fixed dice seed.
 `t.ok(cond, msg)`, `t.eq(a, b, msg)`, `t.actor(data)` → id,
 `t.roll_with_faces(faces, spec, ctx)` (typed-in faces, nothing drawn),
-`t.commit(events, label)`, `t.dispatch(action, ctx, answers)` (answers
+`t.commit(events, label)`, `t.setting(key, value)` (a campaign setting
+for this test; the defaults come back for the next), `t.dispatch(action, ctx, answers)` (answers
 are given to the action's prompts in order), `t.scene([map_path,
 tokens])` → a scene id over a real map (the examples' chapel by default)
 with `tokens = { { id=, actor=, x=, y= }, … }` placed by offset cell, for

@@ -522,7 +522,9 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 			_attach_to(kernel, real_kernel, str(pid), false)
 		_test_counts = [0, 0]
 		_test_failures = []
+		var settings_before: Dictionary = JsonDoc.deep(p.settings)
 		var c := p.vm.call_function("__run_test", [i + 1, {}])
+		p.settings = settings_before
 		if c.status != LuaVm.Call.OK:
 			_test_failures.append("the test %s: %s" % ["yielded — tests may not prompt; use t.dispatch(action, ctx, answers)" if c.status == LuaVm.Call.YIELD else "failed", c.error])
 			_test_counts[1] += 1
@@ -595,7 +597,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get"]:
+			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -737,6 +739,11 @@ class Bridge:
 
 	func setting(key: String) -> Variant:
 		return JsonDoc.at_path(_p().settings, str(key))
+
+	## A test's setting; run_tests restores the plugin's settings after each test.
+	func test_setting(key: String, value: Variant) -> bool:
+		JsonDoc.set_at_path(_p().settings, str(key), value)
+		return true
 
 	## A ruling in the log (kind "ruling"): what was decided, the rule it
 	## rests on, the roll that prompted it, tags to find it by. GM audience
