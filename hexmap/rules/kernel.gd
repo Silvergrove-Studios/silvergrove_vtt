@@ -98,6 +98,35 @@ func move_token(scene_id: String, id: String, to: Vector2, by := "gm") -> String
 	var mv := map.move(scene_id, id, to)
 	if mv.has("error"):
 		return str(mv.error)
+	var why := _move_token(scene_id, id, mv, by)
+	if why == "" and _commit_depth == 0:
+		after_move({"scene": scene_id, "token": id, "actor": actor_of_ref("token:" + id), "from": mv.from, "to": mv.to,
+			"cells": mv.cells, "entered": mv.entered, "left": mv.left, "by": by})
+	return why
+
+
+## After a move is done and its prep has fired: a hook that may pause on
+## a prompt (an opportunity attack offered to the other side's owner) and
+## commit; what its handlers append to `events` is committed as its own
+## step. A veto here changes nothing — the move already happened. Driven
+## like an action, so it runs on while the Table goes on.
+func after_move(payload: Dictionary) -> void:
+	if hooks.handlers("after_move").is_empty():
+		return
+	var p: Dictionary = payload.duplicate()
+	p.events = []
+	var run := hooks.run("after_move", p)
+	var me: WeakRef = weakref(self)
+	pending.drive(run, "host", func(r: HookBus.HookRun) -> void:
+		var k: RulesKernel = me.get_ref()
+		if k == null or r.status != HookBus.HookRun.DONE:
+			return
+		var events: Array = r.payload.get("events", []) if r.payload.get("events") is Array else []
+		if not events.is_empty():
+			k.commit(events, "After move", {"hook": "after_move"}))
+
+
+func _move_token(scene_id: String, id: String, mv: Dictionary, by: String) -> String:
 	return transaction("Move", func() -> String:
 		var asked := ask("token_moved", {"scene": scene_id, "token": id, "actor": actor_of_ref("token:" + id), "from": mv.from, "to": mv.to,
 			"cells": mv.cells, "entered": mv.entered, "left": mv.left, "by": by})

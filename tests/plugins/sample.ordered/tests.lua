@@ -161,3 +161,28 @@ hm.test("the order from Lua: reorder, insert, remove, a group of goblins", funct
 	local ok = pcall(hm.turns.ungroup, "gobs")
 	t.ok(not ok, "no such group is an error")
 end)
+
+hm.test("after a move, the guard's owner is offered an opportunity strike", function(t)
+	t.actor({ id = "a_run", name = "Runner", owner = "pl_1", ext = { [hm.id] = { level = 1, stats = { agi = 2, str = 0, wit = 0 } } } })
+	t.actor({ id = "a_grd", name = "Guard", owner = "pl_2", ext = { [hm.id] = { level = 1, stats = { agi = 1, str = 0, wit = 0 } } } })
+	local sc = t.scene(nil, { { id = "t_run", actor = "a_run", x = 6, y = 7 }, { id = "t_grd", actor = "a_grd", x = 7, y = 7 } })
+	-- a step that stays in reach asks nothing
+	local far = hm.map.token(sc, "t_grd").pos
+	t.ok(t.move(sc, "t_run", { far[1] - 0.5, far[2] + 0.9 }), "a short step to the next hex over")
+	t.eq(#t.prompts(), 0, "still adjacent: no question")
+	-- walking away asks the guard's owner; the move itself is already done
+	t.ok(t.move(sc, "t_run", { far[1] - 4, far[2] }), "the runner walks off")
+	local open = t.prompts()
+	t.eq(#open, 1, "one question")
+	t.eq(open[1].to, "pl_2", "for the guard's owner")
+	t.ok(hm.map.distance(sc, "token:t_run", "token:t_grd").cells > 1, "the move happened before the answer")
+	t.ok(t.answer(open[1].id, { strike = true }, "pl_2"), "strike!")
+	t.ok(hm.effects.has("actor:a_run", "shaken"), "the runner is shaken by the opportunity strike")
+	-- declining changes nothing
+	t.ok(t.move(sc, "t_run", { far[1] - 1, far[2] }), "back beside the guard")
+	t.ok(t.move(sc, "t_run", { far[1] - 4, far[2] }), "and off again")
+	open = t.prompts()
+	t.eq(#open, 1, "asked again")
+	t.ok(t.answer(open[1].id, { strike = false }, "pl_2"), "no")
+	t.eq(#hm.effects.on("actor:a_run", "shaken"), 1, "still just the one")
+end)

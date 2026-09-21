@@ -580,7 +580,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order"]:
+			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -1145,6 +1145,14 @@ class Bridge:
 		for id in ids:
 			out.append(JsonDoc.deep(_k().pending.prompts()[id]))
 		return out
+
+	func test_move(scene: String, token: String, to: Variant) -> Variant:
+		var k := _k()
+		var p := k.map.point_of(str(scene), to)
+		if p == Vector2.INF:
+			return {"__error": "unknown place"}
+		var why := k.move_token(str(scene), str(token).trim_prefix("token:"), p, "gm")
+		return true if why == "" else {"__error": why}
 
 	func test_tick(seconds: Variant) -> bool:
 		_k().pending.tick(float(seconds))

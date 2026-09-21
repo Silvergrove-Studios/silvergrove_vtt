@@ -131,8 +131,9 @@ Hooks in API 1:
 | `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock; `session_start` also fires when a session starts from a campaign, with campaign state already in |
 | `time_advanced` | `{from, to, minutes, day, events}` | minutes are absolute since day 1 |
 | `track_done` | `{track, roll, events}` | a progress track completed |
-| `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost) |
+| `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost); synchronous |
 | `region_entered`, `region_left` | `{scene, token, actor, region, record, events}` | after a move, once per region crossed |
+| `after_move` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | once a move is done and its prep has fired. The one move hook that **may prompt** (an opportunity attack offered to the other side's owner): the move stands whatever happens, a veto changes nothing, and `events` land as their own step once the last handler is through |
 | `prompt_answered` | `{prompt, answer, by, timed_out, plugin, context, events}` | a prompt opened with `hm.prompt_open` was answered (or timed out: the default, `timed_out = true`); `plugin` is whose prompt it was, `context` what it was opened with |
 
 Handlers of the turn, clock and rest hooks run synchronously and may not

@@ -112,6 +112,29 @@ end)
 
 -- Each session the party's luck grows by one: campaign-scoped state that
 -- outlives the encounter (banked into the .campaign and brought back).
+-- Leaving an enemy's reach: its owner may take an opportunity strike.
+-- after_move runs once the move is done and may wait on a prompt; a
+-- "yes" shakes the mover (a stand-in for the strike itself).
+hm.on("after_move", function(p)
+	local mover = hm.actor(p.actor or "")
+	if mover == nil then return p end
+	for _, tk in ipairs(hm.map.tokens(p.scene)) do
+		if tk.id ~= p.token and tk.actor and tk.actor ~= "" then
+			local other = hm.actor(tk.actor)
+			local before = hm.map.distance(p.scene, "token:" .. tk.id, p.from).cells
+			local after = hm.map.distance(p.scene, "token:" .. tk.id, p.to).cells
+			if other and other.owner and other.owner ~= "" and other.owner ~= mover.owner and before <= 1 and after > 1 then
+				local a = hm.prompt(other.owner, { title = other.name .. ": opportunity strike on " .. mover.name .. "?",
+					fields = { { key = "strike", type = "bool", label = "Strike as they leave" } } }, { default = { strike = false }, deadline = 20 })
+				if a and a.strike then
+					table.insert(p.events, (condition("shaken", "actor:" .. mover.id, 1))[1])
+				end
+			end
+		end
+	end
+	return p
+end)
+
 hm.on("session_start", function(p)
 	local c = hm.state.get("campaign")
 	table.insert(p.events, hm.state.set("campaign", "", { luck = (c.luck or 0) + 1, sessions = p.session }))

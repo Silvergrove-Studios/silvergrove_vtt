@@ -182,6 +182,25 @@ func test_map_regions_cells_and_moves() -> void:
 	seen.clear()
 	var why_cmd := cmds.move_token(sid, "t_h", g.cell_center(here))
 	check(why_cmd == "" and seen.size() >= 2, "EncounterCommands.move_token runs the hooks: '%s' %s" % [why_cmd, seen])
+	# after_move: runs once the move is done, may wait on a prompt, and its
+	# events land as their own step once the answer is in
+	var after := []
+	k.hooks.on("after_move", func(p: Dictionary) -> Variant:
+		after.append([p.token, p.cells])
+		return HookBus.Wait.make({"kind": "prompt", "to": "pl_1", "form": {"title": "React?"}, "opts": {"default": {"react": false}, "deadline": 30}},
+			func(payload: Dictionary, answer: Variant) -> Dictionary:
+				if answer is Dictionary and bool(answer.get("react", false)):
+					payload.events.append({"t": "log.add", "entry": {"id": JsonDoc.new_id("n_react"), "kind": "note", "text": "reacted"}})
+				return payload), "after")
+	var log_before := st.encounter.log.size()
+	var back := g.cell_center(g.offset_to_axial(3, 7))
+	check(k.move_token(sid, "t_h", back, "pl_1") == "" and Vision.token_pos(st.token(sid, "t_h")) == back, "the move is done at once")
+	check(after == [["t_h", 3]] and k.pending.prompts().size() == 1 and str(k.pending.prompts().values()[0].to) == "pl_1", "after_move ran and is waiting on pl_1: %s" % [after])
+	check(k.log.undo_label() == "Prompt", "the open question is its own step after the move's")
+	var prompt_id := str(k.pending.prompts().keys()[0])
+	check(k.pending.answer(prompt_id, {"react": true}, "pl_1") == "" and st.encounter.log.size() == log_before + 1 and st.encounter.log[-1].text == "reacted", "the answer's events were committed after the move")
+	check(k.log.undo_label() == "After move", "as their own step")
+	k.hooks.off("after")
 	# cells: plugin state and revealing
 	check(k.commit([{"t": "ext.set", "scope": "cell", "scene": sid, "id": "4,7", "plugin": "sample", "changes": {"searched": true}}], "Searched") == "", "cell plugin state")
 	check(st.encounter.scene(sid).cells["4,7"].ext.sample.searched == true and mq.cell(sid, "4,7").ext.sample.searched == true, "stored on the scene's cell")

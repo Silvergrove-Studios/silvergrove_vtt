@@ -477,6 +477,8 @@ function __run_test(index, helpers)
 	function h.answer(prompt, answer, who) return call(host.test_answer, prompt, answer, who or "") end
 	function h.prompts() return call(host.test_prompts) end
 	function h.tick(seconds) return call(host.test_tick, seconds or 0) end
+	-- move a token the way the Table does (token_moved, regions, prep, after_move)
+	function h.move(scene, token, to) return call(host.test_move, scene, token, to) end
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
 	-- a scene over a map file (the examples' chapel by default), with tokens = { {id, actor, x, y}, … }
 	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end
