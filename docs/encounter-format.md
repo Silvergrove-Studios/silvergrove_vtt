@@ -163,6 +163,10 @@ A scene is one map level with its overlay, tokens and fog.
   fog: a visible token in an unexplored cell is still unseen.
 - `vision.radius` in hex units: how far the token sees, walls permitting
   (`blocks.sight`, open doors don't block). `0` sees nothing on its own.
+  `vision.dark_radius`: how far of that it sees unlit (darkvision);
+  `vision.mode: "dark"` sees unlit everywhere. Clients lift the darkness
+  in grey within an owned token's dark radius; `MapQuery.can_see` says
+  `dark_sight` when that is how a target was seen.
   `light`: a light the token carries — same fields as a map light
   (`bright`, `dim`, `color`) — or absent. Readers treat a stored `null` as
   absent; writers leave the key out, because in an event `null` means

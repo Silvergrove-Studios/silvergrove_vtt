@@ -404,6 +404,30 @@ func _draw_lights(c: Node2D) -> void:
 				if not l.has("shadows"):
 					l["shadows"] = true
 				draw_light(c, l, 1.0)
+		# Sight in the dark: a player's own tokens with a dark radius lift
+		# the darkness around them, in grey — seen, not lit.
+		if darkness > 0.0 and viewpoint != "":
+			for t in state.tokens_owned_by(scene_id, viewpoint):
+				draw_dark_sight(c, t)
+
+
+## The grey reach of a token's darkvision (`vision.dark_radius`), clipped
+## by walls like a light.
+func draw_dark_sight(c: Node2D, tk: Dictionary) -> void:
+	var radius := float(tk.get("vision", {}).get("dark_radius", 0))
+	if radius <= 0.0:
+		return
+	var origin := from_list(tk.get("pos", [0, 0]))
+	var key := "dark|%s|%s|%d" % [origin, radius, _segments.size()]
+	var poly: PackedVector2Array
+	if _poly_cache.has(key):
+		poly = _poly_cache[key]
+	else:
+		poly = Lighting.visibility_polygon(origin, radius, _segments, 64, 360.0, 0.0)
+		_poly_cache[key] = poly
+	if poly.size() < 3:
+		return
+	_draw_fan(c, origin, radius, poly, Color(0.62, 0.66, 0.74, 0.30 * darkness))
 
 
 ## Lights are drawn as the radial gradient mapped onto the polygon the light

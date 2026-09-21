@@ -94,12 +94,13 @@ func refresh() -> void:
 			{"key": "owner", "label": "Owner", "type": "enum", "options": _player_options(), "tooltip": "The player who may move it and sees through it"},
 			{"key": "hidden", "label": "Hidden", "type": "bool", "tooltip": "Players cannot see it"},
 			{"key": "vision", "label": "Vision", "type": "float", "min": 0, "max": 60, "step": 0.5, "suffix": " hex"},
+			{"key": "dark_radius", "label": "Sees in the dark", "type": "float", "min": 0, "max": 60, "step": 0.5, "suffix": " hex", "tooltip": "Darkvision: how far it sees unlit space (0: needs light)"},
 			{"key": "art", "label": "Art", "type": "string", "tooltip": "pack:token from a pack's tokens, or blank for a plain disc"},
 			{"key": "tags", "label": "Tags", "type": "string", "tooltip": "Comma-separated, shown on the token"},
 		], {
 			"name": tk.get("name", ""), "label": tk.get("label", ""), "color": tk.get("color", "#c0392b"), "size": tk.get("size", 1),
 			"owner": _player_name(tk.get("owner", null)), "hidden": tk.get("hidden", false),
-			"vision": tk.get("vision", {}).get("radius", 0), "art": tk.get("art", ""), "tags": ", ".join(PackedStringArray(tk.get("tags", []))),
+			"vision": tk.get("vision", {}).get("radius", 0), "dark_radius": tk.get("vision", {}).get("dark_radius", 0), "art": tk.get("art", ""), "tags": ", ".join(PackedStringArray(tk.get("tags", []))),
 		})
 		_hint.text = "Drag on the map to move. H hides or reveals; Delete removes."
 		return
@@ -149,8 +150,10 @@ func _on_value(key: String, value: Variant) -> void:
 			"owner":
 				var pid = _player_id(str(value))
 				ctx.commands.update_token(ctx.scene_id, id, {"owner": pid}, "Assign token")
-			"vision":
-				ctx.commands.update_token(ctx.scene_id, id, {"vision": {"radius": float(value)}}, "Vision")
+			"vision", "dark_radius":
+				var vision: Dictionary = JsonDoc.deep(ctx.state.token(ctx.scene_id, id).get("vision", {}))
+				vision["radius" if key == "vision" else "dark_radius"] = float(value)
+				ctx.commands.update_token(ctx.scene_id, id, {"vision": vision}, "Vision" if key == "vision" else "Darkvision")
 			"tags":
 				var tags := []
 				for t in str(value).split(","):

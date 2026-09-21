@@ -105,6 +105,33 @@ func test_map_sight_and_light() -> void:
 	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 10, "mode": "dark"}, "light": null}}], "Darkvision")
 	var dv := mq.can_see(sid, "token:t_h", "token:t_g")
 	check(dv.why != "dark" if not dv.sees else true, "dark vision does not fail for darkness: %s" % [dv])
+	# darkvision with a range: the goblin is five hexes off at the edge
+	k.commit([{"t": "element.set", "scene": sid, "ref": "walls:" + str(door.id), "changes": {"state": "open"}}], "Open")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 10, "dark_radius": 4}}}], "Short darkvision")
+	var near_dark := mq.can_see(sid, "token:t_h", "token:t_g")
+	check(mq.light_at(sid, "token:t_g").level == "dark", "the goblin stands in the dark")
+	check(not near_dark.sees and near_dark.why == "dark", "four hexes of darkvision do not reach a goblin five away: %s" % [near_dark])
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 10, "dark_radius": 6}}}], "Darkvision 6")
+	var in_dark := mq.can_see(sid, "token:t_h", "token:t_g")
+	check(in_dark.sees and bool(in_dark.get("dark_sight", false)), "six hexes of darkvision see the goblin, marked as dark sight: %s" % [in_dark])
+	# and the canvas lifts the darkness around a player's darkvision
+	var canvas := MapCanvas.new()
+	canvas.packs = PackLibrary.new()
+	root.add_child(canvas)
+	canvas.set_scene(st, sid)
+	canvas.darkness = 1.0
+	canvas.viewpoint = "pl_1"
+	canvas.refresh()
+	await tree.process_frame
+	canvas._draw_lights(canvas._lights)
+	check(canvas._poly_cache.keys().any(func(k: String) -> bool: return k.begins_with("dark|")), "a dark-sight fan was drawn for the hero")
+	canvas.viewpoint = ""
+	canvas._poly_cache.clear()
+	canvas.refresh()
+	canvas._draw_lights(canvas._lights)
+	check(not canvas._poly_cache.keys().any(func(k: String) -> bool: return k.begins_with("dark|")), "not for the GM's view")
+	canvas.queue_free()
+	await tree.process_frame
 	check(not mq.can_see(sid, "token:t_h", "token:t_none").sees, "unknown target")
 
 

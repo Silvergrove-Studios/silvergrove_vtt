@@ -448,7 +448,7 @@ in Hexmap knows what "close" means.
 | `hm.map.template(scene, spec)` | `{cells, tokens, origin}` for `{shape="circle", at, radius}`, `{shape="cone", at, direction, length, angle}`, `{shape="line", at, direction, length, width}` or `{shape="band", at, band}`; `origin="edge"` starts cones and lines at the token's edge, `blocked_by_walls=true` drops what the origin cannot see |
 | `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens |
 | `hm.map.light_at(scene, p)` | `{level="bright" \| "dim" \| "dark", sources}` |
-| `hm.map.can_see(scene, viewer, target)` | within vision, sight clear, target lit (or the viewer sees in the dark) |
+| `hm.map.can_see(scene, viewer, target)` | within vision, sight clear, target lit — or within the viewer's `vision.dark_radius` (darkvision with a range; `dark_sight = true` in the answer) or the viewer's `vision.mode` is `"dark"`. A ruleset sets those with `token.set` from the sheet's senses |
 | `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys (six neighbours and a hex of hexes, or four and a square block) |
 | `hm.map.cell(scene, key)` | the cell's record (`revealed`, plain fields, `ext`) with the map's `terrain` for it |
 | `hm.map.regions_at(scene, cell)` / `hm.map.tags_at(scene, cell)` | the regions covering a cell / the union of their tags |

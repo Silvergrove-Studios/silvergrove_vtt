@@ -332,7 +332,9 @@ func light_at(scene_id: String, p: Variant) -> Dictionary:
 
 
 ## Whether a token sees another: within its vision, line of sight clear,
-## and the target lit unless the viewer's vision mode is "dark".
+## and the target lit — unless the viewer sees in the dark: everywhere
+## (`vision.mode = "dark"`) or within `vision.dark_radius` of itself
+## (darkvision with a range), in which case `dark_sight` says so.
 func can_see(scene_id: String, viewer: String, target: String) -> Dictionary:
 	var v := token(scene_id, viewer.trim_prefix("token:"))
 	var t := token(scene_id, target.trim_prefix("token:"))
@@ -348,6 +350,9 @@ func can_see(scene_id: String, viewer: String, target: String) -> Dictionary:
 	var mode := str(v.get("vision", {}).get("mode", "normal"))
 	var light := light_at(scene_id, "token:" + str(t.id))
 	if light.level == "dark" and mode != "dark":
+		var dark_radius := float(v.get("vision", {}).get("dark_radius", 0))
+		if d.edge <= dark_radius:
+			return {"sees": true, "distance": d, "cover": los.cover, "light": light, "dark_sight": true}
 		return {"sees": false, "why": "dark", "distance": d, "light": light}
 	return {"sees": true, "distance": d, "cover": los.cover, "light": light}
 
