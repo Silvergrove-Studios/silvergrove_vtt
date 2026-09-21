@@ -113,8 +113,7 @@ func _variant() -> void:
 func _fill_variants(ob: OptionButton) -> void:
 	ob.clear()
 	ob.add_item("Random")
-	var def := ctx.packs.terrain(ctx.terrain_ref)
-	for v in (def.get("textures", []) as Array).size():
+	for v in (ctx.packs.terrain_art(ctx.terrain_ref, ctx.cell_shape()).files as Array).size():
 		ob.add_item("Variant %d" % (v + 1))
 	ob.select(clampi(ctx.terrain_variant + 1, 0, ob.item_count - 1))
 

@@ -63,7 +63,7 @@ func refresh() -> void:
 		var off := ctx.map.grid.axial_to_offset(cell)
 		_title.text = "Cell col %d, row %d" % [off.x, off.y]
 		var def := ctx.packs.terrain(str(t.get("t", "")))
-		var variants: int = maxi(1, (def.get("textures", []) as Array).size())
+		var variants := ctx.packs.terrain_variants(str(t.get("t", "")), ctx.cell_shape())
 		var opts := []
 		for v in variants:
 			opts.append(str(v + 1))

@@ -307,34 +307,35 @@ func _draw_terrain(c: Node2D) -> void:
 		if def.is_empty():
 			c.draw_colored_polygon(pts, Color.MAGENTA.darkened(0.3))
 			continue
-		var tex := packs.terrain_texture(ref, int(t.get("v", 0)), texture_ppx, "square" if square else "hex")
+		var shape_name := "square" if square else "hex"
+		var tex := packs.terrain_texture(ref, int(t.get("v", 0)), texture_ppx, shape_name)
 		var uvs := PackedVector2Array()
 		uvs.resize(n)
-		var fit := str(def.get("fit", "hex"))
 		var ang := int(t.get("rot", 0)) * rot_step
-		if fit == "square":
-			# Cut the cell out of a texture that repeats every 2 cells.
-			for i in n:
-				var d := (corners[i] - center).rotated(ang)
-				uvs[i] = (center + d) * 0.5
-		elif square and packs.terrain_has_square_art(ref):
-			# Art drawn for a square cell fills it edge to edge.
-			for i in n:
-				var d := (corners[i] - center).rotated(ang)
-				uvs[i] = Vector2(0.5 + d.x, 0.5 + d.y)
-		elif square:
-			# Hex-shaped art on a square cell: show the square inside the
-			# hexagon, so its transparent corners never reach the cell.
-			var k := HexGrid.INSCRIBED_SQUARE
-			for i in n:
-				var d := (corners[i] - center).rotated(ang)
-				uvs[i] = Vector2(0.5 + d.x * k, 0.5 + d.y * k / (2.0 * HexGrid.R))
-		else:
-			# Map the hex's bounding box (in pointy-top space) to the image.
-			ang += 0.0 if pointy else -PI / 6.0
-			for i in n:
-				var d := (corners[i] - center).rotated(ang)
-				uvs[i] = Vector2(d.x + 0.5, (d.y + HexGrid.R) / (2.0 * HexGrid.R))
+		match str(packs.terrain_art(ref, shape_name).lay):
+			"tile":
+				# Cut the cell out of a texture that repeats every 2 cells.
+				for i in n:
+					var d := (corners[i] - center).rotated(ang)
+					uvs[i] = (center + d) * 0.5
+			"square_box":
+				# The image is the square cell, edge to edge.
+				for i in n:
+					var d := (corners[i] - center).rotated(ang)
+					uvs[i] = Vector2(0.5 + d.x, 0.5 + d.y)
+			"hex_crop":
+				# Hex-shaped art on a square cell: the square inside the
+				# hexagon, so its transparent corners never reach the cell.
+				var k := HexGrid.INSCRIBED_SQUARE
+				for i in n:
+					var d := (corners[i] - center).rotated(ang)
+					uvs[i] = Vector2(0.5 + d.x * k, 0.5 + d.y * k / (2.0 * HexGrid.R))
+			_:
+				# Map the hex's bounding box (in pointy-top space) to the image.
+				ang += 0.0 if pointy else -PI / 6.0
+				for i in n:
+					var d := (corners[i] - center).rotated(ang)
+					uvs[i] = Vector2(d.x + 0.5, (d.y + HexGrid.R) / (2.0 * HexGrid.R))
 		c.draw_polygon(pts, colors, uvs, tex)
 
 

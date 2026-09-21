@@ -183,7 +183,7 @@ func _t(id: String, name: String, color: String, deco: String, variants: int, ta
 	for v in variants:
 		files.append("terrain/%s_%d.svg" % [id, v + 1])
 		square.append("terrain/%s_sq_%d.svg" % [id, v + 1])
-	return {"id": id, "name": name, "color": color, "textures": files, "textures_square": square, "fit": "hex", "tags": tags, "_deco": deco}
+	return {"id": id, "name": name, "color": color, "textures_hex": files, "textures_square": square, "tags": tags, "_deco": deco}
 
 
 func _p(id: String, name: String, kind: String, size: Array, anchor: Array, layer: String, colors: Dictionary, blocks: Dictionary, height: float, light = null) -> Dictionary:
@@ -213,8 +213,8 @@ func _write_pack(pack: Dictionary) -> void:
 		"terrains": [], "props": [], "walls": pack.walls, "lights": pack.lights,
 	}
 	for t in pack.terrains:
-		for v in t.textures.size():
-			_save(dir.path_join(t.textures[v]), _terrain_svg(t.color, t._deco, "%s/%s/%d" % [pack.id, t.id, v]))
+		for v in t.textures_hex.size():
+			_save(dir.path_join(t.textures_hex[v]), _terrain_svg(t.color, t._deco, "%s/%s/%d" % [pack.id, t.id, v]))
 		for v in t.get("textures_square", []).size():
 			# the same scatter, seeded alike, framed as a square
 			_save(dir.path_join(t.textures_square[v]), _terrain_svg(t.color, t._deco, "%s/%s/%d" % [pack.id, t.id, v], true))

@@ -14,7 +14,7 @@
       "id": "flagstone",
       "name": "Flagstone",
       "color": "#6e6a63",
-      "textures": [
+      "textures_hex": [
         "terrain/flagstone_1.svg",
         "terrain/flagstone_2.svg",
         "terrain/flagstone_3.svg"
@@ -24,14 +24,13 @@
         "terrain/flagstone_sq_2.svg",
         "terrain/flagstone_sq_3.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "cobblestone",
       "name": "Cobblestone",
       "color": "#75716a",
-      "textures": [
+      "textures_hex": [
         "terrain/cobblestone_1.svg",
         "terrain/cobblestone_2.svg"
       ],
@@ -39,14 +38,13 @@
         "terrain/cobblestone_sq_1.svg",
         "terrain/cobblestone_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "rough_stone",
       "name": "Rough stone",
       "color": "#5a5652",
-      "textures": [
+      "textures_hex": [
         "terrain/rough_stone_1.svg",
         "terrain/rough_stone_2.svg"
       ],
@@ -54,14 +52,13 @@
         "terrain/rough_stone_sq_1.svg",
         "terrain/rough_stone_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "dirt_floor",
       "name": "Dirt floor",
       "color": "#6b5a45",
-      "textures": [
+      "textures_hex": [
         "terrain/dirt_floor_1.svg",
         "terrain/dirt_floor_2.svg"
       ],
@@ -69,14 +66,13 @@
         "terrain/dirt_floor_sq_1.svg",
         "terrain/dirt_floor_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "wooden_floor",
       "name": "Wooden floor",
       "color": "#7a5a3a",
-      "textures": [
+      "textures_hex": [
         "terrain/wooden_floor_1.svg",
         "terrain/wooden_floor_2.svg"
       ],
@@ -84,14 +80,13 @@
         "terrain/wooden_floor_sq_1.svg",
         "terrain/wooden_floor_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "rubble",
       "name": "Rubble",
       "color": "#6b655c",
-      "textures": [
+      "textures_hex": [
         "terrain/rubble_1.svg",
         "terrain/rubble_2.svg"
       ],
@@ -99,7 +94,6 @@
         "terrain/rubble_sq_1.svg",
         "terrain/rubble_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": [
         "difficult"
       ]
@@ -108,13 +102,12 @@
       "id": "pit",
       "name": "Pit",
       "color": "#141414",
-      "textures": [
+      "textures_hex": [
         "terrain/pit_1.svg"
       ],
       "textures_square": [
         "terrain/pit_sq_1.svg"
       ],
-      "fit": "hex",
       "tags": [
         "hazard"
       ]
@@ -123,33 +116,31 @@
       "id": "stairs",
       "name": "Stairs",
       "color": "#6e6a63",
-      "textures": [
+      "textures_hex": [
         "terrain/stairs_1.svg"
       ],
       "textures_square": [
         "terrain/stairs_sq_1.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "carpet_red",
       "name": "Red carpet",
       "color": "#7a2a2a",
-      "textures": [
+      "textures_hex": [
         "terrain/carpet_red_1.svg"
       ],
       "textures_square": [
         "terrain/carpet_red_sq_1.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "moat_water",
       "name": "Moat water",
       "color": "#3f5f7a",
-      "textures": [
+      "textures_hex": [
         "terrain/moat_water_1.svg",
         "terrain/moat_water_2.svg"
       ],
@@ -157,7 +148,6 @@
         "terrain/moat_water_sq_1.svg",
         "terrain/moat_water_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": [
         "water"
       ]
@@ -166,7 +156,7 @@
       "id": "grass_courtyard",
       "name": "Courtyard grass",
       "color": "#5b8c3a",
-      "textures": [
+      "textures_hex": [
         "terrain/grass_courtyard_1.svg",
         "terrain/grass_courtyard_2.svg"
       ],
@@ -174,7 +164,6 @@
         "terrain/grass_courtyard_sq_1.svg",
         "terrain/grass_courtyard_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     }
   ],

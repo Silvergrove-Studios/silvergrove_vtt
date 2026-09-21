@@ -157,7 +157,11 @@ func new_terrain_cell() -> Dictionary:
 	var parts := PackLibrary.split_ref(terrain_ref)
 	if parts.size() == 2:
 		map.note_pack(parts[0], packs.pack_version(parts[0]))
-	var def := packs.terrain(terrain_ref)
-	var variants: int = maxi(1, (def.get("textures", []) as Array).size())
+	var variants := packs.terrain_variants(terrain_ref, cell_shape())
 	var v := terrain_variant if terrain_variant >= 0 else randi() % variants
 	return {"t": terrain_ref, "v": v, "rot": 0, "z": 0}
+
+
+## "hex" or "square": the shape of the cells of the map being edited.
+func cell_shape() -> String:
+	return "square" if map != null and map.grid.is_square() else "hex"

@@ -18,8 +18,12 @@ func _init() -> void:
 		return
 	var items: Array = []
 	for t in lib.packs[args[0]].terrains:
-		for v in t.textures.size():
-			items.append({"tex": lib.terrain_texture("%s:%s" % [args[0], t.id], v, cell), "label": "%s %d" % [t.id, v + 1]})
+		for shape in ["hex", "square"]:
+			var art := lib.terrain_art("%s:%s" % [args[0], t.id], shape)
+			if str(art.set) != ("textures_square" if shape == "square" else "textures_hex") and shape == "square":
+				continue   # no square art of its own: the hex sheet shows it
+			for v in (art.files as Array).size():
+				items.append({"tex": lib.terrain_texture("%s:%s" % [args[0], t.id], v, cell, shape), "label": "%s %s %d" % [t.id, shape, v + 1]})
 	for p in lib.packs[args[0]].props:
 		items.append({"tex": lib.prop_texture("%s:%s" % [args[0], p.id], cell / maxf(1.0, float(p.size[0]))), "label": p.id})
 	var cols := 8

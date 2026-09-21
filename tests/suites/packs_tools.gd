@@ -8,7 +8,7 @@ func test_pack_library() -> void:
 	check(lib.warnings.is_empty(), "no pack warnings: %s" % [lib.warnings])
 	check(lib.pack_ids() == PackedStringArray(["dungeons_and_castles", "swamp", "woodland"]), "three example packs: %s" % [lib.pack_ids()])
 	var grass := lib.terrain("woodland:grass")
-	check(grass.get("id") == "grass" and grass.textures.size() == 3, "terrain lookup")
+	check(grass.get("id") == "grass" and grass.textures_hex.size() == 3, "terrain lookup")
 	check(lib.prop("dungeons_and_castles:end_table").size == [0.4, 0.4], "prop lookup")
 	check(lib.prop("woodland:campfire").light.bright == 1.5, "prop carries a light")
 	check(lib.wall_style("dungeons_and_castles:iron_bars").preset == "window", "wall style lookup")
@@ -22,8 +22,10 @@ func test_pack_library() -> void:
 	check(big.get_width() == 1024, "prop texture sized by footprint (2.2 hex × 256 → 1024 bucket): %d" % big.get_width())
 	var missing := lib.terrain_texture("nope:x", 0, 64)
 	check(missing != null, "missing texture gives a placeholder")
-	# square-cell art: its own variants, square, opaque to the corners
-	check(grass.textures_square.size() == 3 and lib.terrain_has_square_art("woodland:grass"), "grass ships square variants")
+	# three sets of art: hex-shaped, square-shaped, raw
+	check(grass.textures_square.size() == 3 and lib.terrain_art("woodland:grass", "hex").set == "textures_hex" and lib.terrain_art("woodland:grass", "hex").lay == "hex_box", "grass on a hex cell: its hex art, laid over the hexagon's box")
+	var sq_art := lib.terrain_art("woodland:grass", "square")
+	check(sq_art.set == "textures_square" and sq_art.lay == "square_box", "on a square cell: its square art, edge to edge")
 	var sq := lib.terrain_texture("woodland:grass", 1, 100, "square")
 	check(sq != tex and sq.get_width() == sq.get_height(), "a square texture for square cells: %dx%d" % [sq.get_width(), sq.get_height()])
 	var sq_img: Image = sq.get_image()
@@ -31,16 +33,33 @@ func test_pack_library() -> void:
 	sq_img.convert(Image.FORMAT_RGBA8)
 	check(sq_img.get_pixel(1, 1).a > 0.9 and sq_img.get_pixel(sq_img.get_width() - 2, sq_img.get_height() - 2).a > 0.9, "opaque to its corners")
 	check(lib.terrain_texture("woodland:grass", 1, 100, "hex") == tex, "hex asks get the hex art")
-	var only_hex := {"id": "solo", "name": "Solo", "color": "#123456", "textures": ["terrain/grass_1.svg"], "fit": "hex"}
-	lib.packs.woodland.terrains.append(only_hex)
-	check(not lib.terrain_has_square_art("woodland:solo") and lib.terrain_texture("woodland:solo", 0, 100, "square") == lib.terrain_texture("woodland:solo", 0, 100, "hex"), "a terrain without square art falls back to its hex art (the renderer crops it)")
-	lib.packs.woodland.terrains.erase(only_hex)
+	var extras := [
+		{"id": "hexonly", "name": "H", "color": "#123456", "textures_hex": ["terrain/grass_1.svg"]},
+		{"id": "sqonly", "name": "S", "color": "#123456", "textures_square": ["terrain/grass_sq_1.svg"]},
+		{"id": "raw", "name": "R", "color": "#123456", "textures": ["terrain/grass_sq_1.svg"]},
+		{"id": "seamless", "name": "T", "color": "#123456", "textures": ["terrain/grass_sq_1.svg"], "fit": "tile"},
+		{"id": "both", "name": "B", "color": "#123456", "textures": ["terrain/grass_sq_1.svg"], "textures_hex": ["terrain/grass_1.svg"], "textures_square": ["terrain/grass_sq_2.svg"]},
+		{"id": "old_hex", "name": "O", "color": "#123456", "textures": ["terrain/grass_1.svg"], "fit": "hex"},
+		{"id": "old_tile", "name": "O2", "color": "#123456", "textures": ["terrain/grass_sq_1.svg"], "fit": "square"},
+	]
+	for e in extras:
+		lib.packs.woodland.terrains.append(e)
+	check(lib.terrain_art("woodland:hexonly", "square").lay == "hex_crop" and lib.terrain_art("woodland:hexonly", "square").set == "textures_hex", "hex art alone on a square cell: the square inside the hexagon")
+	check(lib.terrain_art("woodland:sqonly", "hex").lay == "hex_box" and lib.terrain_art("woodland:sqonly", "hex").set == "textures_square", "square art alone on a hex cell: stretched over the hexagon's box")
+	check(lib.terrain_art("woodland:raw", "hex").lay == "hex_box" and lib.terrain_art("woodland:raw", "square").lay == "square_box" and lib.terrain_art("woodland:raw", "square").set == "textures", "a raw image with the default fit is the cell's box on either grid")
+	check(lib.terrain_art("woodland:seamless", "hex").lay == "tile" and lib.terrain_art("woodland:seamless", "square").lay == "tile", "fit: tile is cut in place on either grid")
+	check(lib.terrain_art("woodland:both", "hex").set == "textures_hex" and lib.terrain_art("woodland:both", "square").set == "textures_square", "the shape's own set comes before the raw images")
+	check(lib.terrain_art("woodland:old_hex", "hex").set == "textures_hex" and lib.terrain_art("woodland:old_hex", "hex").lay == "hex_box" and lib.terrain_art("woodland:old_hex", "square").lay == "hex_crop", "an old manifest's textures + fit: hex reads as hex art")
+	check(lib.terrain_art("woodland:old_tile", "square").lay == "tile" and lib.terrain_art("woodland:old_tile", "hex").lay == "tile", "an old manifest's fit: square reads as tile")
+	check(lib.terrain_art("woodland:nope", "hex").files.is_empty() and lib.terrain_texture("woodland:nope", 0, 64, "square") != null, "nothing declared: a placeholder")
+	for e in extras:
+		lib.packs.woodland.terrains.erase(e)
 	# Every texture in every manifest exists and rasterises.
 	var bad := 0
 	for pid in lib.pack_ids():
 		var p: Dictionary = lib.packs[pid]
 		for t in p.terrains:
-			for f in t.textures + t.get("textures_square", []):
+			for f in PackLibrary.terrain_files(t):
 				if not FileAccess.file_exists(str(p._dir).path_join(f)):
 					bad += 1
 		for pr in p.props:

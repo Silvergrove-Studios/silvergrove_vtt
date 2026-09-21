@@ -268,7 +268,7 @@ func _show_preview() -> void:
 	row.add_theme_constant_override("separation", 8)
 	match kind:
 		"terrain":
-			var n: int = maxi(1, (a.get("textures", []) as Array).size())
+			var n := ctx.packs.terrain_variants(ref, _shape())
 			for v in mini(n, 4):
 				row.add_child(_tex_rect(ctx.packs.terrain_texture(ref, v, 160, _shape()), 160))
 		"props":

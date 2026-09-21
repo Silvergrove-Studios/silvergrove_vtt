@@ -14,7 +14,7 @@
       "id": "marsh_grass",
       "name": "Marsh grass",
       "color": "#5f7a3a",
-      "textures": [
+      "textures_hex": [
         "terrain/marsh_grass_1.svg",
         "terrain/marsh_grass_2.svg",
         "terrain/marsh_grass_3.svg"
@@ -24,14 +24,13 @@
         "terrain/marsh_grass_sq_2.svg",
         "terrain/marsh_grass_sq_3.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "reeds",
       "name": "Reeds",
       "color": "#6c8a3e",
-      "textures": [
+      "textures_hex": [
         "terrain/reeds_1.svg",
         "terrain/reeds_2.svg"
       ],
@@ -39,7 +38,6 @@
         "terrain/reeds_sq_1.svg",
         "terrain/reeds_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": [
         "dense"
       ]
@@ -48,7 +46,7 @@
       "id": "murky_water",
       "name": "Murky water",
       "color": "#3f5f4f",
-      "textures": [
+      "textures_hex": [
         "terrain/murky_water_1.svg",
         "terrain/murky_water_2.svg"
       ],
@@ -56,7 +54,6 @@
         "terrain/murky_water_sq_1.svg",
         "terrain/murky_water_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": [
         "water"
       ]
@@ -65,7 +62,7 @@
       "id": "deep_water",
       "name": "Deep water",
       "color": "#2b4a48",
-      "textures": [
+      "textures_hex": [
         "terrain/deep_water_1.svg",
         "terrain/deep_water_2.svg"
       ],
@@ -73,7 +70,6 @@
         "terrain/deep_water_sq_1.svg",
         "terrain/deep_water_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": [
         "water",
         "deep"
@@ -83,7 +79,7 @@
       "id": "mud",
       "name": "Mud",
       "color": "#5e4a35",
-      "textures": [
+      "textures_hex": [
         "terrain/mud_1.svg",
         "terrain/mud_2.svg"
       ],
@@ -91,14 +87,13 @@
         "terrain/mud_sq_1.svg",
         "terrain/mud_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "peat",
       "name": "Peat",
       "color": "#4c3d2e",
-      "textures": [
+      "textures_hex": [
         "terrain/peat_1.svg",
         "terrain/peat_2.svg"
       ],
@@ -106,14 +101,13 @@
         "terrain/peat_sq_1.svg",
         "terrain/peat_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "moss_stone",
       "name": "Mossy stone",
       "color": "#58705a",
-      "textures": [
+      "textures_hex": [
         "terrain/moss_stone_1.svg",
         "terrain/moss_stone_2.svg"
       ],
@@ -121,14 +115,13 @@
         "terrain/moss_stone_sq_1.svg",
         "terrain/moss_stone_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "rotting_boardwalk",
       "name": "Rotting boardwalk",
       "color": "#6b563d",
-      "textures": [
+      "textures_hex": [
         "terrain/rotting_boardwalk_1.svg",
         "terrain/rotting_boardwalk_2.svg"
       ],
@@ -136,7 +129,6 @@
         "terrain/rotting_boardwalk_sq_1.svg",
         "terrain/rotting_boardwalk_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     }
   ],

@@ -187,27 +187,74 @@ static func bucket_for(ppx: float) -> int:
 	return DENSITY_BUCKETS[-1]
 
 
+## Which of a terrain's art goes on a cell of `shape`, and how it is laid:
+##   {files, set, lay}. `set` is the manifest key the files came from and
+##   `lay` says what the renderer does with an image:
+##     hex_box    the image is the cell's bounding box, hex-shaped art
+##                (or a raw image stretched over a hex)
+##     square_box the image is the square cell, edge to edge
+##     tile       a seamless raw image; the cell is cut out of it in place
+##     hex_crop   hex-shaped art on a square cell: the square inside the
+##                hexagon (the fallback when a terrain has no square art)
+## Order: the shape's own set (`textures_hex` / `textures_square`), then
+## the raw `textures` laid by `fit` ("cell" over the cell's box, "tile"
+## seamless), then the other shape's set. Older manifests that put hex
+## art in `textures` with `fit: "hex"` (or seamless art with `fit:
+## "square"`) still read the same.
+func terrain_art(ref: String, shape := "hex") -> Dictionary:
+	var t := terrain(ref)
+	var hex_set: Array = t.get("textures_hex", [])
+	var square_set: Array = t.get("textures_square", [])
+	var raw: Array = t.get("textures", [])
+	var fit := str(t.get("fit", "cell"))
+	if fit == "hex" and hex_set.is_empty():
+		hex_set = raw   # the old way of saying "this is hex art"
+		raw = []
+	if fit == "square":
+		fit = "tile"    # the old name for a seamless texture
+	if shape == "square":
+		if not square_set.is_empty():
+			return {"files": square_set, "set": "textures_square", "lay": "square_box"}
+		if not raw.is_empty():
+			return {"files": raw, "set": "textures", "lay": "tile" if fit == "tile" else "square_box"}
+		if not hex_set.is_empty():
+			return {"files": hex_set, "set": "textures_hex", "lay": "hex_crop"}
+	else:
+		if not hex_set.is_empty():
+			return {"files": hex_set, "set": "textures_hex", "lay": "hex_box"}
+		if not raw.is_empty():
+			return {"files": raw, "set": "textures", "lay": "tile" if fit == "tile" else "hex_box"}
+		if not square_set.is_empty():
+			return {"files": square_set, "set": "textures_square", "lay": "hex_box"}
+	return {"files": [], "set": "", "lay": "hex_box"}
+
+
 ## Texture for a terrain variant at roughly `ppx` pixels per cell, for
-## cells of `shape` ("hex" or "square"). Square cells get the terrain's
-## `textures_square` when it has them; otherwise its hex art, which the
-## renderer then crops to the square inside the hexagon.
+## cells of `shape` ("hex" or "square"): the art `terrain_art` picks.
 func terrain_texture(ref: String, variant: int, ppx: float, shape := "hex") -> Texture2D:
 	var t := terrain(ref)
-	var square := shape == "square" and terrain_has_square_art(ref)
-	var files: Array = t.get("textures_square", []) if square else t.get("textures", [])
+	var art := terrain_art(ref, shape)
+	var files: Array = art.files
 	if files.is_empty():
 		return placeholder(Color(t.get("color", "#ff00ff")))
 	var file: String = files[posmod(variant, files.size())]
-	# A hex-fit texture is about one hex wide; a square one tiles, so
-	# rasterise it around one hex too.
-	return _texture(split_ref(ref)[0], file, 1.25 * ppx, "%s@%d%s" % [ref, variant, "@sq" if square else ""])
+	# A cell-shaped texture is about one cell wide; a seamless one tiles,
+	# so rasterise it around one cell too.
+	return _texture(split_ref(ref)[0], file, 1.25 * ppx, "%s@%d@%s" % [ref, variant, art.set])
 
 
-## Whether a terrain ships art drawn for square cells (`textures_square`).
-## Seamless `fit: square` textures count: they tile either way.
-func terrain_has_square_art(ref: String) -> bool:
-	var t := terrain(ref)
-	return not (t.get("textures_square", []) as Array).is_empty() or str(t.get("fit", "hex")) == "square"
+## How many variants a terrain has on cells of `shape` (at least 1, so a
+## missing terrain still paints a placeholder).
+func terrain_variants(ref: String, shape := "hex") -> int:
+	return maxi(1, (terrain_art(ref, shape).files as Array).size())
+
+
+## Every texture file a terrain declares, across its three sets.
+static func terrain_files(t: Dictionary) -> Array:
+	var out := []
+	for key in ["textures", "textures_hex", "textures_square"]:
+		out.append_array(t.get(key, []))
+	return out
 
 
 ## Texture for a prop at roughly `ppx` pixels per hex; sized by its footprint.

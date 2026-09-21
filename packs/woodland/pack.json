@@ -14,7 +14,7 @@
       "id": "grass",
       "name": "Grass",
       "color": "#5b8c3a",
-      "textures": [
+      "textures_hex": [
         "terrain/grass_1.svg",
         "terrain/grass_2.svg",
         "terrain/grass_3.svg"
@@ -24,14 +24,13 @@
         "terrain/grass_sq_2.svg",
         "terrain/grass_sq_3.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "tall_grass",
       "name": "Tall grass",
       "color": "#6f9a3c",
-      "textures": [
+      "textures_hex": [
         "terrain/tall_grass_1.svg",
         "terrain/tall_grass_2.svg"
       ],
@@ -39,14 +38,13 @@
         "terrain/tall_grass_sq_1.svg",
         "terrain/tall_grass_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "forest_floor",
       "name": "Forest floor",
       "color": "#4a5a2c",
-      "textures": [
+      "textures_hex": [
         "terrain/forest_floor_1.svg",
         "terrain/forest_floor_2.svg",
         "terrain/forest_floor_3.svg"
@@ -56,14 +54,13 @@
         "terrain/forest_floor_sq_2.svg",
         "terrain/forest_floor_sq_3.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "undergrowth",
       "name": "Undergrowth",
       "color": "#3f6b2e",
-      "textures": [
+      "textures_hex": [
         "terrain/undergrowth_1.svg",
         "terrain/undergrowth_2.svg"
       ],
@@ -71,7 +68,6 @@
         "terrain/undergrowth_sq_1.svg",
         "terrain/undergrowth_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": [
         "dense"
       ]
@@ -80,7 +76,7 @@
       "id": "dirt_path",
       "name": "Dirt path",
       "color": "#8b6b45",
-      "textures": [
+      "textures_hex": [
         "terrain/dirt_path_1.svg",
         "terrain/dirt_path_2.svg"
       ],
@@ -88,14 +84,13 @@
         "terrain/dirt_path_sq_1.svg",
         "terrain/dirt_path_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "rocky_ground",
       "name": "Rocky ground",
       "color": "#7d7a70",
-      "textures": [
+      "textures_hex": [
         "terrain/rocky_ground_1.svg",
         "terrain/rocky_ground_2.svg"
       ],
@@ -103,14 +98,13 @@
         "terrain/rocky_ground_sq_1.svg",
         "terrain/rocky_ground_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     },
     {
       "id": "shallow_stream",
       "name": "Shallow stream",
       "color": "#4f86a8",
-      "textures": [
+      "textures_hex": [
         "terrain/shallow_stream_1.svg",
         "terrain/shallow_stream_2.svg"
       ],
@@ -118,7 +112,6 @@
         "terrain/shallow_stream_sq_1.svg",
         "terrain/shallow_stream_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": [
         "water"
       ]
@@ -127,7 +120,7 @@
       "id": "clearing_flowers",
       "name": "Flower clearing",
       "color": "#6e9a48",
-      "textures": [
+      "textures_hex": [
         "terrain/clearing_flowers_1.svg",
         "terrain/clearing_flowers_2.svg"
       ],
@@ -135,7 +128,6 @@
         "terrain/clearing_flowers_sq_1.svg",
         "terrain/clearing_flowers_sq_2.svg"
       ],
-      "fit": "hex",
       "tags": []
     }
   ],
