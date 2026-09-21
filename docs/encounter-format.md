@@ -19,6 +19,12 @@ Tokens, like maps, carry no rules: no hit points, no speed, no stats. Names,
 art, position, size, who owns it, what it can see, what light it carries.
 Whatever system is being played keeps its numbers elsewhere.
 
+Since campaigns became the Table's document (docs/campaign-plan.md), an
+encounter is usually the campaign's **runtime** — the same document,
+kept inside the `.campaign` file's `runtime` block and autosaved with
+it — and a standalone `.encounter` file is what an older session left,
+or an export. Everything below holds for both.
+
 ## Document
 
 ```json

@@ -57,6 +57,13 @@ in Godot's Controls so the canvas and the panels are one app.
 Ordered by payoff. P1 changes how it feels; P2 changes how it works; P3 is
 polish.
 
+### P0 — the campaign panes (September 2026)
+0. **Party, NPCs, Notes, Maps, Session** are plain Godot controls over
+   the ruleset's sheet renderer. Places and the party marker draw as
+   tokens (a ◆ and a ★ label): they want a glyph and a hover card of
+   their own; the Maps pane wants thumbnails; the picker wants the
+   campaign's name and party on each card.
+
 ### P1 — look
 1. **One theme.** ThemeGen-style tokens: neutral dark palette (canvas
    darker than panels), 8px spacing scale, 6px radii, hairline borders,

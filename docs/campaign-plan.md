@@ -136,6 +136,15 @@ opened from a v1 file is upgraded in memory and written as v2 on save.
 
 ## 5. Steps
 
+**Status 2026-09-21: C1–C8 built** (Hexmap `acbc8f0` … `9f3555b`); C9 is
+this note and the docs beside it. Proven by `tests/suites/table.gd`
+(`test_campaign_first`), `rules_campaign.gd`, `rules_views.gd`, `net.gd`,
+and the 5e ruleset's `tools/campaign_journey.gd`, which plays §1 end to
+end over the wire (45 checks). Left for later, deliberately: a glyph of
+its own for place and party markers (they draw as tokens), a headless
+runner for the journey scripts, and a phone that edits between sessions
+(§6 says no).
+
 Each step ends with `check` and `test` green, the four workflows green
 at the milestone commits, and the docs changed with it. The plugin's
 session tools (`ruleset-dnd5e/tools/*.gd`) run against each step, and

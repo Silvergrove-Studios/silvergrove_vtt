@@ -7,8 +7,10 @@ application, three modes:
   walls and doors, put down lights, then export to the virtual tabletops
   people actually use (Universal VTT, Foundry VTT, Tiled) or to a
   print-ready PDF with hexes at a real physical size.
-- **Table** — run an encounter on those maps: tokens, doors, lights, fog,
-  turn order, and a look at the scene through each player's eyes.
+- **Table** — run a campaign: the party's sheets, the NPCs, notes and
+  handouts, a library of maps with prepared fights and a regional map
+  that leads to them; sessions on those maps with tokens, doors, lights,
+  fog, turn order, and a look at the scene through each player's eyes.
 - **Player** — see the map from your tokens' eyes and move them, on a
   laptop, tablet or phone. Joins a Table on the same wifi (it finds them
   by itself, or you type the address the Table shows), or opens an
@@ -108,14 +110,23 @@ Space+drag or middle-drag pans, the wheel zooms, Ctrl/Cmd+0 fits.
 
 ## Using the table
 
-`./run.sh table examples/chapel_ambush.encounter`, or pick Table on the
-home screen. Add a map level as a scene (Ctrl/Cmd+M), place tokens with
-the Token tool, click doors to open them and lights to put them out, brush
-fog away as the party explores — or leave fog on and let their tokens'
-vision reveal it as they move. "See as" shows the scene the way a player
-will get it. Turns are **free**, **DM picks**, or **ordered** by a turn
-system; `docs/encounter-format.md` has the model, and nothing in it edits
-the map.
+Pick Table on the home screen and start a campaign (or
+`./run.sh table reach.campaign`). The campaign is the document: its
+**Party** and **NPCs** panes show every character's sheet as the rules
+plugin draws it, editable by the DM between sessions; **Notes** holds
+what you write ahead and hands it to the players' phones when the moment
+comes; **Maps** is the library — maps drawn in the Editor, never changed
+here — with prepared fights (creatures, counts, cells) to *Launch* and
+*Return* from, and places on a regional map that lead to them;
+**Session** starts and ends the session, hosts for the phones and keeps
+the clock. On a scene, place tokens with the Token tool, click doors to
+open them and lights to put them out, brush fog away as the party
+explores — or leave fog on and let their tokens' vision reveal it. "See
+as" shows the scene the way a player will get it. Turns are **free**,
+**DM picks**, or **ordered** by a turn system. An old `.encounter` file
+opens as a campaign of its own. `docs/campaign-plan.md` is the design,
+`docs/campaign-format.md` and `docs/encounter-format.md` the formats, and
+nothing in them edits a map.
 
 ## Using the player
 
