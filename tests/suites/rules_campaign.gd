@@ -500,9 +500,13 @@ func test_table_campaign_panel_and_dialogs() -> void:
 	var r := table.ctx.bank_session()
 	check(not r.has("error") and table.ctx.campaign.clock.session == 1 and table.ctx.campaign.encounters.size() == 1, "banked and saved: %s" % [r])
 	# the campaign's plugin order and settings shape the plugins on reload
+	# (where there is a runtime to load them into: phones have none)
 	table._set_encounter(table.ctx.encounter())
-	check(table.ctx.host != null and table.ctx.host.plugin("sample.house") != null and table.ctx.host.plugin("sample.house").settings.critical_from == 17, "the campaign's settings reached the plugin")
-	check(table.ctx.kernel.ruleset_order("sample.ordered") < table.ctx.kernel.ruleset_order("sample.house") and table.ctx.kernel.ruleset_order("sample.house") < table.ctx.kernel.ruleset_order("sample.focus"), "the campaign's plugins come first, base before house")
+	if PluginHost.available():
+		check(table.ctx.host != null and table.ctx.host.plugin("sample.house") != null and table.ctx.host.plugin("sample.house").settings.critical_from == 17, "the campaign's settings reached the plugin")
+		check(table.ctx.kernel.ruleset_order("sample.ordered") < table.ctx.kernel.ruleset_order("sample.house") and table.ctx.kernel.ruleset_order("sample.house") < table.ctx.kernel.ruleset_order("sample.focus"), "the campaign's plugins come first, base before house")
+	else:
+		check(table.ctx.host == null and table.ctx.plugin_log.is_empty(), "no runtime: the table runs the campaign without plugins")
 	# the players pane shows the co-GM code while hosting
 	table._set_hosting(true)
 	check(table.players._cogm.visible and table.players._cogm.text.contains(table.host.cogm_code), "the Players pane shows the co-GM code")
