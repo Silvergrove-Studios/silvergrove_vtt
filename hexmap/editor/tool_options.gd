@@ -43,7 +43,7 @@ func show_for(tool_name: String) -> void:
 					ob.select(ob.item_count - 1)
 			ob.item_selected.connect(func(i: int) -> void: ctx.wall_preset = str(ob.get_item_metadata(i)))
 			_labelled("Type", ob, "type")
-			_check("snap_walls", "Snap to hex corners", ctx.snap_walls, func(v: bool) -> void: ctx.snap_walls = v)
+			_check("snap_walls", "Snap to cell corners", ctx.snap_walls, func(v: bool) -> void: ctx.snap_walls = v)
 		"light":
 			_spin("bright", "Bright", 0, 50, 0.25, float(ctx.light_preset.get("bright", 1.0)), func(v: float) -> void: ctx.light_preset["bright"] = v, " hex")
 			_spin("dim", "Dim", 0, 50, 0.25, float(ctx.light_preset.get("dim", 2.0)), func(v: float) -> void: ctx.light_preset["dim"] = v, " hex")
@@ -95,7 +95,7 @@ func _check(key: String, label: String, value: bool, on_change: Callable) -> voi
 
 func _snap() -> void:
 	var ob := OptionButton.new()
-	for o in ["Snap off", "Snap to hex centre", "Snap to hex corner"]:
+	for o in ["Snap off", "Snap to cell centre", "Snap to cell corner"]:
 		ob.add_item(o)
 	ob.select(ctx.snap)
 	ob.item_selected.connect(func(i: int) -> void: ctx.snap = i as EditorContext.Snap)

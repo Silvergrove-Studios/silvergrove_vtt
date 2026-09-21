@@ -118,6 +118,22 @@ func test_square_grid_exports() -> void:
 	check(first.substr(0, first.find("/>")).count(",") == 4, "a square has four corners: %s" % first)
 	var probe := Image.new()
 	check(probe.load_svg_from_string(svg) == OK and probe.get_width() == 600, "Godot's SVG loader accepts it (%d px wide)" % probe.get_width())
+	# Tiled tile images on a square grid crop hex-shaped art to the square
+	# inside the hexagon: no transparent corners on a square tile
+	var packs := PackLibrary.new()
+	packs.reload()
+	var tex := packs.terrain_texture("woodland:grass", 0, 64.0)
+	if tex != null:
+		var img: Image = tex.get_image().duplicate()
+		img.convert(Image.FORMAT_RGBA8)
+		check(img.get_pixel(1, 1).a < 0.5, "hex art is transparent at its bounding box's corner")
+		var k := HexGrid.INSCRIBED_SQUARE
+		var w: int = img.get_width()
+		var h: int = img.get_height()
+		var cw := int(w * k)
+		var ch := int(h * k / (2.0 * HexGrid.R))
+		var inner := img.get_region(Rect2i((w - cw) / 2, (h - ch) / 2, cw, ch))
+		check(inner.get_pixel(0, 0).a > 0.5 and inner.get_pixel(cw - 1, ch - 1).a > 0.5 and inner.get_pixel(cw - 1, 0).a > 0.5, "the inscribed square is opaque at every corner")
 	# PDF layout: 6 × 4 squares at 1" is one letter sheet
 	var lay := PdfExport.layout(m.grid.map_size(), {"paper": "letter", "hex_size_in": 1.0})
 	check(lay.pages.size() == 1 and lay.pages[0].region_pt.size == Vector2(6 * 72, 4 * 72), "one sheet, exact size")

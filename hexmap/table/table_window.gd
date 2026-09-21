@@ -438,7 +438,7 @@ func _build_tool_options() -> Control:
 		{"key": "size", "label": "Size", "type": "int", "min": 1, "max": 6},
 		{"key": "owner", "label": "Owner", "type": "enum", "options": ["(the DM)"]},
 		{"key": "hidden", "label": "Hidden", "type": "bool"},
-		{"key": "snap", "label": "Snap to hex", "type": "bool"},
+		{"key": "snap", "label": "Snap to cells", "type": "bool"},
 	], {"name": ctx.token_name, "color": ctx.token_color, "size": ctx.token_size, "owner": "(the DM)", "hidden": ctx.token_hidden, "snap": ctx.snap_tokens})
 	(_token_form.control("name") as LineEdit).custom_minimum_size.x = 140
 	_token_form.value_changed.connect(func(k: String, v: Variant) -> void:

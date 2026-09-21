@@ -37,6 +37,10 @@ const R := 1.0 / SQRT3
 ## Inradius (half the flat-to-flat width).
 const I := 0.5
 
+## The side of the largest square that fits inside a hex of width 1
+## (pointy or flat alike): what a square cell shows of hex-shaped art.
+const INSCRIBED_SQUARE := 0.7320508075688772
+
 const AXIAL_DIRECTIONS: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(1, -1), Vector2i(0, -1),
 	Vector2i(-1, 0), Vector2i(-1, 1), Vector2i(0, 1),
@@ -78,6 +82,13 @@ func is_square() -> bool:
 ## How many corners a cell has.
 func corner_count() -> int:
 	return 4 if shape == Shape.SQUARE else 6
+
+
+## The word for a cell in labels: "hex" or "square" (plural with `many`).
+func cell_word(many := false) -> String:
+	if shape == Shape.SQUARE:
+		return "squares" if many else "square"
+	return "hexes" if many else "hex"
 
 
 # ------------------------------------------------------------- serialisation --

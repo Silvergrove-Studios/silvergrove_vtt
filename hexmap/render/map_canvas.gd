@@ -312,17 +312,18 @@ func _draw_terrain(c: Node2D) -> void:
 		uvs.resize(n)
 		var fit := str(def.get("fit", "hex"))
 		var ang := int(t.get("rot", 0)) * rot_step
-		if square:
-			# One texture per cell: square art fills it, hex art's bounding
-			# box is stretched over it.
-			for i in n:
-				var d := (corners[i] - center).rotated(ang)
-				uvs[i] = Vector2(d.x + 0.5, d.y + 0.5)
-		elif fit == "square":
-			# Cut the cell out of a texture that repeats every 2 hexes.
+		if fit == "square":
+			# Cut the cell out of a texture that repeats every 2 cells.
 			for i in n:
 				var d := (corners[i] - center).rotated(ang)
 				uvs[i] = (center + d) * 0.5
+		elif square:
+			# Hex-shaped art on a square cell: show the square inside the
+			# hexagon, so its transparent corners never reach the cell.
+			var k := HexGrid.INSCRIBED_SQUARE
+			for i in n:
+				var d := (corners[i] - center).rotated(ang)
+				uvs[i] = Vector2(0.5 + d.x * k, 0.5 + d.y * k / (2.0 * HexGrid.R))
 		else:
 			# Map the hex's bounding box (in pointy-top space) to the image.
 			ang += 0.0 if pointy else -PI / 6.0

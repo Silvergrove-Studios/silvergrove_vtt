@@ -81,6 +81,14 @@ static func tiled(map: HexMap, packs: PackLibrary, path: String, ppx: int, level
 		var img := tex.get_image()
 		img = img.duplicate()
 		img.convert(Image.FORMAT_RGBA8)
+		if map.grid.is_square() and str(packs.terrain(t.ref).get("fit", "hex")) == "hex":
+			# hex-shaped art on square tiles: the square inside the hexagon
+			var k := HexGrid.INSCRIBED_SQUARE
+			var w := img.get_width()
+			var h := img.get_height()
+			var cw := int(w * k)
+			var ch := int(h * k / (2.0 * HexGrid.R))
+			img = img.get_region(Rect2i((w - cw) / 2, (h - ch) / 2, cw, ch))
 		img.resize(tile_w, tile_h, Image.INTERPOLATE_LANCZOS)
 		var err := img.save_png(out)
 		if err != OK:
@@ -94,7 +102,7 @@ static func pdf(host: Node, map: HexMap, packs: PackLibrary, path: String, opts:
 	_ensure_dir(path)
 	var lay := PdfExport.layout(map.grid.map_size(), opts)
 	var err := await PdfExport.export(host, map, packs, path, opts)
-	last_message = "wrote %s (%d page%s, %s\" hexes)" % [path, lay.pages.size() + (1 if lay.pages.size() > 1 and lay.options.labels else 0), "" if lay.pages.size() == 1 else "s", PdfWriter.n(snappedf(float(lay.hex_pt) / 72.0, 0.01))]
+	last_message = "wrote %s (%d page%s, %s\" %s)" % [path, lay.pages.size() + (1 if lay.pages.size() > 1 and lay.options.labels else 0), "" if lay.pages.size() == 1 else "s", PdfWriter.n(snappedf(float(lay.hex_pt) / 72.0, 0.01)), map.grid.cell_word(true)]
 	return err
 
 

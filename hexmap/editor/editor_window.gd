@@ -875,11 +875,13 @@ func _export_kind_to(kind: String, ppx: int, p: String) -> void:
 
 func _export_pdf_dialog() -> void:
 	var form := PropertyForm.new()
+	var cells := ctx.map.grid.cell_word(true)
+	var cell := ctx.map.grid.cell_word()
 	form.build([
-		{"key": "mode", "label": "Layout", "type": "enum", "options": ["tiled", "fit"], "tooltip": "tiled: real-size hexes across many sheets; fit: whole map on one page"},
+		{"key": "mode", "label": "Layout", "type": "enum", "options": ["tiled", "fit"], "tooltip": "tiled: real-size %s across many sheets; fit: whole map on one page" % cells},
 		{"key": "paper", "label": "Paper", "type": "enum", "options": ["letter", "legal", "tabloid", "a4", "a3", "a2"]},
 		{"key": "landscape", "label": "Landscape", "type": "bool"},
-		{"key": "hex_size_in", "label": "Hex size (tiled)", "type": "float", "min": 0.25, "max": 4, "step": 0.05, "suffix": " in", "tooltip": "Flat-to-flat. 1\" suits 28mm minis; 1.25\" for large bases."},
+		{"key": "hex_size_in", "label": "%s size (tiled)" % cell.capitalize(), "type": "float", "min": 0.25, "max": 4, "step": 0.05, "suffix": " in", "tooltip": "%s. 1\" suits 28mm minis; 1.25\" for large bases." % ("Side" if ctx.map.grid.is_square() else "Flat-to-flat")},
 		{"key": "margin_in", "label": "Margin", "type": "float", "min": 0, "max": 2, "step": 0.05, "suffix": " in"},
 		{"key": "overlap_in", "label": "Sheet overlap", "type": "float", "min": 0, "max": 2, "step": 0.05, "suffix": " in"},
 		{"key": "dpi", "label": "Raster DPI", "type": "int", "min": 72, "max": 600},
@@ -888,7 +890,7 @@ func _export_pdf_dialog() -> void:
 		{"key": "gm_layers", "label": "Walls, lights, notes", "type": "bool"},
 		{"key": "crop_marks", "label": "Crop marks", "type": "bool"},
 		{"key": "labels", "label": "Labels and assembly page", "type": "bool"},
-		{"key": "background", "label": "Outside the hexes", "type": "enum", "options": ["map", "white"], "tooltip": "map: the map's background colour; white: paper"},
+		{"key": "background", "label": "Outside the %s" % cells, "type": "enum", "options": ["map", "white"], "tooltip": "map: the map's background colour; white: paper"},
 	], PdfExport.DEFAULTS)
 	_form_dialog("Print PDF", form, func(v: Dictionary) -> void:
 		v["level"] = ctx.level_index
@@ -902,7 +904,7 @@ func _export_bundle_dialog() -> void:
 	var form := PropertyForm.new()
 	form.build([
 		{"key": "dpi", "label": "DPI", "type": "int", "min": 72, "max": 600},
-		{"key": "hex_size_in", "label": "Hex size", "type": "float", "min": 0.25, "max": 4, "step": 0.05, "suffix": " in"},
+		{"key": "hex_size_in", "label": "%s size" % ctx.map.grid.cell_word().capitalize(), "type": "float", "min": 0.25, "max": 4, "step": 0.05, "suffix": " in"},
 	], {"dpi": 300, "hex_size_in": 1.0})
 	_form_dialog("Print bundle", form, func(v: Dictionary) -> void:
 		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_DIR, [])

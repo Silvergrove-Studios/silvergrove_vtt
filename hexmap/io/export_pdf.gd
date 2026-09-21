@@ -82,7 +82,7 @@ static func export(host: Node, map: HexMap, packs: PackLibrary, path: String, op
 	var pdf := PdfWriter.new()
 	pdf.title = map.name
 	pdf.author = str(map.doc.get("meta", {}).get("author", ""))
-	pdf.subject = "Hex map, %s\" hexes = %s %s" % [_inches(lay.hex_pt), PdfWriter.n(map.grid.distance), map.grid.units]
+	pdf.subject = "%s map, %s\" %s = %s %s" % [map.grid.cell_word().capitalize(), _inches(lay.hex_pt), map.grid.cell_word(true), PdfWriter.n(map.grid.distance), map.grid.units]
 	var hex_pt: float = lay.hex_pt
 	var ppx := float(o.dpi) * hex_pt / PdfWriter.PT_PER_INCH
 	var level := int(o.level)
@@ -134,7 +134,7 @@ static func export(host: Node, map: HexMap, packs: PackLibrary, path: String, op
 			var label := map.name
 			if lay.pages.size() > 1:
 				label += "  —  row %d / %d, column %d / %d" % [pg.row + 1, lay.rows, pg.col + 1, lay.cols]
-			label += "  —  %s\" hexes, 1 hex = %s %s" % [_inches(hex_pt), PdfWriter.n(map.grid.distance), map.grid.units]
+			label += "  —  %s\" %s, 1 %s = %s %s" % [_inches(hex_pt), map.grid.cell_word(true), map.grid.cell_word(), PdfWriter.n(map.grid.distance), map.grid.units]
 			pdf.text(page, label, Vector2(printable.position.x, lay.page.y - printable.position.y + font_pt * 1.6), font_pt, Color(0.25, 0.25, 0.25))
 	return pdf.save(path)
 
@@ -241,8 +241,8 @@ static func _assembly_page(pdf: PdfWriter, map: HexMap, lay: Dictionary) -> void
 	var page := pdf.add_page(lay.page.x, lay.page.y)
 	var printable: Rect2 = lay.printable
 	pdf.text(page, map.name, Vector2(printable.position.x, printable.position.y + 20.0), 20.0, Color.BLACK)
-	var info := "%d sheets (%d across × %d down) — %s\" hexes — trim on the hairline, overlap %s\" and tape from the top-left sheet." % [
-		lay.pages.size(), lay.cols, lay.rows, _inches(lay.hex_pt), PdfWriter.n(float(lay.options.overlap_in))]
+	var info := "%d sheets (%d across × %d down) — %s\" %s — trim on the hairline, overlap %s\" and tape from the top-left sheet." % [
+		lay.pages.size(), lay.cols, lay.rows, _inches(lay.hex_pt), map.grid.cell_word(true), PdfWriter.n(float(lay.options.overlap_in))]
 	pdf.text(page, info, Vector2(printable.position.x, printable.position.y + 40.0), 10.0, Color(0.25, 0.25, 0.25))
 	# Sheet diagram
 	var map_pt := map.grid.map_size() * float(lay.hex_pt)
