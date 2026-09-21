@@ -193,4 +193,14 @@ it. The API is 1.0 when a ruleset ships with that list empty.
 
 ## 7. Results of the re-runs
 
-(filled in below as the workflows finish)
+On `6dcfc1c` (the audit commit, with the fix in §5):
+
+| workflow | result |
+|---|---|
+| `ci` | success — 9,395 checks |
+| `android-test` | success — 9,068 checks in the phone build, 7 in the join test (a first attempt failed on the runner itself: the emulator SDK download was a corrupt archive; the re-run went through) |
+| `ios-test` | success — 9,068 checks in the simulator; the first iOS run since Phase 3, so Phases 4–7 are now verified there |
+| `desktop-test` | success on 82eabc9 (unchanged by the audit commit) |
+
+All four targets are green on the same commit for the first time
+since Phase 3, which is the state Phase 8 starts from.
