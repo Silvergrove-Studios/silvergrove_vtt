@@ -5,7 +5,7 @@ the Table only, inside a sandboxed VM, and everything it does becomes
 events in the encounter's log. Players never run plugin code; they
 render what the plugin's data and derived numbers say.
 
-This is the API as of plugin API version 1 (Phases 2–7 of
+This is the API as of plugin API version 1 (Phases 2–7b of
 `docs/plugin-api-plan.md`).
 
 ## Layout
@@ -104,9 +104,10 @@ hm.derive(function(view) return { defence = hm.num({…}), hp_max = 12, label = 
 The pure function from an actor's view to this plugin's derived block
 (`actor.derived[hm.id]`). Called after anything about the actor changes;
 must not commit, roll or prompt. The view has `id`, `kind`, `name`,
-`owner`, `ext` (with overlays merged in), `effects` (on the actor and on
-its tokens), `resources` (name → record, this plugin's), `tokens`, and
-`state` (the encounter's plugin state). Effects' `changes` are applied
+`owner`, `ext` (the actor's whole `ext`, keyed by plugin id — this
+plugin's data is `view.ext[hm.id]` — with overlays merged in),
+`effects` (on the actor and on its tokens), `resources` (name → record,
+this plugin's), `tokens`, and `state` (the encounter's plugin state). Effects' `changes` are applied
 by the kernel to what derive returns, and typed numbers are re-totalled
 under the policy.
 
@@ -386,7 +387,7 @@ hm.dice.pending()
 | `hm.actor(id)` | the actor's view (see derive), or nil |
 | `hm.actors()` | actor ids |
 | `hm.derived(id)` | this plugin's derived block for the actor |
-| `hm.token(id)` / `hm.tokens(actor_id)` | a token / the tokens linked to an actor |
+| `hm.token(id)` / `hm.tokens(actor_id)` | a token (a bare id or `token:<id>`) / the tokens linked to an actor — each with the `scene` it is on |
 | `hm.state.get(scope [, id])` | this plugin's `ext` at `"campaign"` (carried between sessions), `"encounter"`, `"scene"`, `"token"` or `"cell"` scope |
 | `hm.campaign()` | `{id, session}` — which campaign this session belongs to |
 | `hm.checkpoint.list()` | the named snapshots in the encounter (needs `state`) |
@@ -476,7 +477,7 @@ in Hexmap knows what "close" means.
 | `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys (six neighbours and a hex of hexes, or four and a square block) |
 | `hm.map.cell(scene, key)` | the cell's record (`revealed`, plain fields, `ext`) with the map's `terrain` for it |
 | `hm.map.regions_at(scene, cell)` / `hm.map.tags_at(scene, cell)` | the regions covering a cell / the union of their tags |
-| `hm.map.token(scene, id)` / `hm.map.tokens(scene)` | a token / all of them |
+| `hm.map.token(scene, id)` / `hm.map.tokens(scene)` | a token (a bare id or `token:<id>`) / all of them |
 | `hm.map.move(scene, token, to)` | `{events, entered, left, from, to, cells}` — nothing applied; the Table's own moves go through the kernel and the `token_moved` hooks |
 
 What a ruleset may put on the map, as events for `hm.commit`:

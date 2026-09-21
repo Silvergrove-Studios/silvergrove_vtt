@@ -122,3 +122,49 @@ func test_lua_hook_round_trip_budget() -> void:
 	var median: float = samples[samples.size() / 2]
 	say.call("  a hook round-trip into Lua: median %.3f ms, worst %.3f ms" % [median, samples[samples.size() - 1]])
 	check(median < _budget(0.5), "a hook round-trip into Lua stays under 0.5 ms median (%.3f)" % median)
+
+
+func test_phase_7b_budgets() -> void:
+	if OS.has_feature("mobile"):
+		skip("budgets are for desktops")
+		return
+	# a template on a square map, and picking a target among a crowd
+	var st := EncounterState.new(Encounter.create("Perf sq"))
+	var k := RulesKernel.new(st)
+	SampleRules.new().install(k)
+	var m := HexMap.load_file(example("cellar.hexmap"))
+	st.attach_map(m)
+	var sc := Encounter.new_scene(m, "ground", "C", "cellar.hexmap")
+	var events := [{"t": "scene.add", "scene": sc}]
+	for i in 60:
+		events.append({"t": "token.add", "scene": sc.id, "token": Encounter.new_token("T%d" % i, m.grid.cell_center(Vector2i(2 + i % 10, 2 + i / 10)), {"id": "t_%d" % i})})
+	k.commit(events, "Crowd")
+	var t0 := Time.get_ticks_usec()
+	var circle := k.map.template(sc.id, {"shape": "circle", "at": "token:t_25", "radius": 4, "blocked_by_walls": true})
+	var cone := k.map.template(sc.id, {"shape": "cone", "at": "token:t_25", "direction": 45, "length": 8, "angle": 90})
+	var ms := (Time.get_ticks_usec() - t0) / 1000.0
+	check(circle.cells.size() > 10 and cone.cells.size() > 5 and ms < _budget(8.0), "two wall-clipped templates on a square map stay under 8 ms (%.2f)" % ms)
+	t0 = Time.get_ticks_usec()
+	for i in 200:
+		MapQuery.pick_target(st, sc.id, {"kind": "token"}, m.grid.cell_center(Vector2i(2 + i % 10, 2 + (i / 10) % 6)), false)
+	ms = (Time.get_ticks_usec() - t0) / 1000.0
+	check(ms < _budget(20.0), "200 target picks among 60 tokens stay under 20 ms (%.2f)" % ms)
+	# a client's compendium page over 1,000 entries, and a picker over them
+	var c := Compendium.new()
+	var up := c.user_pack("big", "Big", "p")
+	for i in 1000:
+		c.put("spells", {"id": "s%d" % i, "name": "Spell %d" % i, "level": i % 10, "school": ["fire", "ice", "air"][i % 3], "text": "words " + str(i)}, "big")
+	t0 = Time.get_ticks_usec()
+	var page := c.query_for("spells", {"filter": {"level": {"min": 2, "max": 4}, "school": "fire"}, "text": "spell", "sort": "name", "per_page": 25}, false)
+	ms = (Time.get_ticks_usec() - t0) / 1000.0
+	check(page.total == 100 and page.entries.size() == 25 and ms < _budget(15.0), "a player's page of a 1,000-entry collection stays under 15 ms (%.2f)" % ms)
+	var r := ViewRenderer.new()
+	r.comp_source = func(collection: String, req: Dictionary, on_reply: Callable) -> void:
+		on_reply.call({"collection": collection, "page": c.query_for(collection, req.get("query", {}), false)})
+	root.add_child(r)
+	t0 = Time.get_ticks_usec()
+	r.render({"type": "picker", "collection": "spells", "per_page": 50, "on_pick": {}}, {})
+	ms = (Time.get_ticks_usec() - t0) / 1000.0
+	check(ms < _budget(25.0), "a picker's first page over 1,000 entries renders under 25 ms (%.2f)" % ms)
+	r.queue_free()
+	await tree.process_frame

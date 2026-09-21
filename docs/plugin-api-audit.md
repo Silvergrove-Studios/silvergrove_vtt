@@ -204,3 +204,13 @@ On `6dcfc1c` (the audit commit, with the fix in §5):
 
 All four targets are green on the same commit for the first time
 since Phase 3, which is the state Phase 8 starts from.
+
+## 8. Phase 7b (2026-09-21)
+
+The 5e desirements audit (`ruleset-dnd5e/API-AUDIT.md`) found twelve
+host gaps; Phase 7b closed H1–H9 and H12 and added square grids. It is
+recorded in the plan (§Phase 7b) and its results are in the closing
+commit's workflow runs, which the plan's exit criterion required on all
+four targets. The recommendations of §6 stand unchanged: golden logs, a
+compat fixture and the rules path on a phone in CI are still the things
+to do before the second real ruleset.

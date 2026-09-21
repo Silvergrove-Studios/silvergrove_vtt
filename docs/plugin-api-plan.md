@@ -333,7 +333,7 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 | 5 Compendium, packs, editors | done | `Compendium` index and packs, `hm.comp`, `SchemaForm`, the Compendium panel, character files, `sample.degrees` |
 | 6 Map queries | done | `MapQuery` (distance/bands, templates, LoS/cover, light, sight), regions with durations and hooks, cell state, `hm.map`, the regions layer, audience-filtered map events |
 | 7 Campaign, growth, hardening | done | `Campaign` and sessions, checkpoints in the document, `Recap`, `Triggers`, `Bulk`, `Improv`, rulings journal, co-GM role, plugin layering, perf budgets and the sandbox red-team in CI |
-| 7b API completion and square grids | in progress | the host changes the 5e audit found (H1–H9), square grids beside hex through the whole stack |
+| 7b API completion and square grids | done | the host changes the 5e audit found (H1–H9), square grids beside hex through the whole stack |
 | 8 Real rulesets | next | in their own repositories, licensing decided then |
 
 Each phase ends with: its tests green in CI on all four platforms where
@@ -631,7 +631,7 @@ Decisions taken while building:
   depth limit; a self-referencing table is an error, not a stack
   overflow in the extension.
 
-### Phase 7b — API completion and square grids — **in progress (started 2026-09-21)**
+### Phase 7b — API completion and square grids — **done 2026-09-21**
 
 The 5e desirements audit (`ruleset-dnd5e/API-AUDIT.md`) checked all 33
 items against API 1. Every Must item is reachable on the Table today; the
@@ -675,6 +675,40 @@ pack acts as one slot, a darkvision token sees in the dark, a move past
 a guard prompts the guard's owner, and the phone picks a feat from a
 searchable list served by the Table — all green on desktop, Android and
 iOS.
+
+Delivered, step by step (one commit each, `51d20bf` … the closing
+commit): the grid's `shape` with the cellar example and both shapes
+under every test that touches geometry; `ctx.player`/`ctx.gm`;
+`target = token | cell | area` with `MapQuery.pick_target`,
+`PluginHost.check_target`, the Table's `PickTool` and the phone's pick;
+`hm.prompt_all` and `hm.prompt_open` + `prompt_answered`;
+`hm.hooks.run`; groups and `hm.turns.reorder/insert/remove/group/
+ungroup`; range/not/path filters; `vision.dark_radius`; `after_move`;
+`need {kind: comp}` and `Session.comp`; the `picker`, `wizard`, `image`
+and `field` widgets and the `list` repeater. The reference plugins
+gained `shove`, `throw_oil`, `volley`, `dare`, the opportunity strike,
+`sign`, `learn` and the house rules' `after_damage`; the test count
+went from 10,716 to 10,880.
+
+Decisions taken while building:
+- The grid class keeps its name. `HexGrid` with `shape = "square"` is
+  the grid; renaming it would have churned thirty files for a word.
+- A square cell's key is `col,row` in the same `q,r` slot, so nothing
+  that stores cells (terrain, fog, regions, cell state) knows the shape.
+- A picked target is checked by the host, not the plugin: a Player's
+  phone can only name what it can see, so an action may trust
+  `ctx.target` the way it trusts `ctx.player`.
+- Prompts nothing waits on are not orphans: they survive a restore and
+  their answers arrive as a hook, so a question can outlive the action
+  that asked it.
+- A ruleset's own hooks are synchronous, like the kernel's step hooks;
+  a base ruleset that wants to ask someone inside one uses
+  `hm.prompt_open`.
+- `after_move` is the one move hook that may pause, and it runs after
+  the move is a fact: an opportunity attack cannot un-move anyone.
+- The compendium goes to clients a page at a time, never whole, and
+  only what the viewer's audience allows; GM secrets are a pack (or an
+  entry) marked `audience: gm`.
 
 ### Phase 8 — Real rulesets
 
