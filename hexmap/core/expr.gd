@@ -83,7 +83,8 @@ func eval(ctx: Dictionary = {}) -> Variant:
 
 ## Truthiness as the language sees it.
 static func truthy(v: Variant) -> bool:
-	return not (v == null or v == false)
+	# a String compared to a bool is a GDScript error, not false
+	return not (v == null or (v is bool and not v))
 
 
 # ------------------------------------------------------------------- eval --
