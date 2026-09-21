@@ -54,6 +54,7 @@ func test_projection_audience() -> void:
 	check(texts == ["for all"], "log entries by audience: %s" % [texts])
 	check(ana.tracks.size() == 1 and ana.tracks[0].id == "k_all", "tracks by audience")
 	check(ana.status.size() == 1 and ana.status[0].plugin == "sample.focus" and ana.status[0].data.actors.size() == 2, "the status view with the actors she sees")
+	check(ana.status[0].data.scene == "s_1", "and the scene the table shows")
 	check(ana.actions.has("sample.focus") and ana.actions["sample.focus"].has("act") and not ana.actions["sample.focus"].act.has("run"), "public action specs")
 	# Ben's
 	var ben := Views.project(k, host, "pl_2", Views.ROLE_PLAYER)

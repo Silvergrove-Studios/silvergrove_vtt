@@ -595,7 +595,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move"]:
+			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -804,6 +804,14 @@ class Bridge:
 	func campaign_get() -> Dictionary:
 		var e := _k().state.encounter
 		return {"id": str(e.campaign.get("id", "")), "session": int(e.clock.get("session", 1))}
+
+	## The scene the Table shows (the encounter's active scene), "" when none.
+	func scene_get() -> String:
+		var e := _k().state.encounter
+		var id := str(e.active_scene_id)
+		if id == "" and not e.scenes.is_empty():
+			id = str(e.scenes[0].id)
+		return id
 
 	func roll(spec: Variant, ctx: Variant, label: String) -> Variant:
 		var late: Variant = _timed_out()

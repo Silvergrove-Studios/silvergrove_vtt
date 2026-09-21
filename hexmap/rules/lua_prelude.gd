@@ -343,6 +343,9 @@ function hm.checkpoint.restore(id) return call(host.checkpoint_op, "restore", to
 -- The campaign this session belongs to: { id, session }. Campaign-scoped
 -- state is hm.state.get("campaign") / hm.state.set("campaign", "", changes).
 function hm.campaign() return call(host.campaign_get) end
+-- The scene the Table shows ("" when the encounter has none): where an
+-- action started from a panel, not from a pick on the map, should act.
+function hm.scene() return call(host.scene_get) end
 
 hm.settings = {}
 function hm.settings.get(key, default)

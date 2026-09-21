@@ -135,7 +135,7 @@ static func status_data(kernel: RulesKernel, projection: Dictionary, plugin: Str
 		if str(tr.get("plugin", plugin)) == plugin:
 			tracks.append(tr)
 	return {"me": player_id, "role": role, "turns": projection.turns, "clock": projection.clock, "actors": actors, "tracks": tracks,
-		"prompts": projection.prompts, "rolls": projection.rolls, "log": projection.log,
+		"prompts": projection.prompts, "rolls": projection.rolls, "log": projection.log, "scene": str(kernel.state.encounter.active_scene_id),
 		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {}))}
 
 

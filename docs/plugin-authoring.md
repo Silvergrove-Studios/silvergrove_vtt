@@ -390,6 +390,7 @@ hm.dice.pending()
 | `hm.token(id)` / `hm.tokens(actor_id)` | a token (a bare id or `token:<id>`) / the tokens linked to an actor — each with the `scene` it is on |
 | `hm.state.get(scope [, id])` | this plugin's `ext` at `"campaign"` (carried between sessions), `"encounter"`, `"scene"`, `"token"` or `"cell"` scope |
 | `hm.campaign()` | `{id, session}` — which campaign this session belongs to |
+| `hm.scene()` | the scene the Table shows (`""` when the encounter has none): where an action started from a panel rather than a pick on the map should act. The `status` and `gm` views' data carries it as `scene` too |
 | `hm.checkpoint.list()` | the named snapshots in the encounter (needs `state`) |
 | `hm.effects.on(ref [, key])` / `hm.effects.has(ref, key)` | effects on a ref (`"actor:a_1"`, `"token:t_1"`, `"encounter"`) |
 | `hm.resources.get(ref, name)` | a pool or track record, or nil |

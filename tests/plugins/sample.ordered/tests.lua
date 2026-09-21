@@ -89,6 +89,7 @@ hm.test("targets picked on the map: a shove pushes a token, oil splashes an area
 	local c = t.actor({ id = "a_gob2", ext = { [hm.id] = { level = 1, stats = { agi = 1, str = 0, wit = 0 } } } })
 	local sc = t.scene(nil, { { id = "t_hero", actor = "a_hero", x = 6, y = 7 }, { id = "t_gob", actor = "a_gob", x = 7, y = 7 }, { id = "t_gob2", actor = "a_gob2", x = 9, y = 7 } })
 	t.eq(hm.token("token:t_gob").scene, sc, "hm.token takes a token: ref and says which scene")
+	t.eq(hm.scene(), sc, "hm.scene() is the scene the table shows")
 	local before = hm.map.token(sc, "t_gob").pos
 	local r = t.dispatch("shove", { actor = "a_hero", scene = sc, target = "token:t_gob" })
 	t.eq(r.shoved, "t_gob", "shoved")
