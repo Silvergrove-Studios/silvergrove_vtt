@@ -1,6 +1,7 @@
 luau-gdextension 0.6.1 — https://github.com/fernforestgames/luau-gdextension/releases/tag/0.6.1
 Built from source with build/godot-cpp-10.patch applied: godot-cpp 10.0.0-stable, GODOTCPP_API_VERSION 4.7,
-release presets, library target only. The .github/workflows/build-luau.yml workflow reproduces the binaries.
-bin/libgdluau.darwin.arm64.dylib  built 2026-09-20 on this Mac (macOS arm64)
-bin/gdluau.windows.amd64.dll      upstream 0.6.1 release binary — REPLACE with a build-luau artifact
-bin/libgdluau.linux.x86_64.so     upstream 0.6.1 release binary — REPLACE with a build-luau artifact
+release presets, library target only, by the build-luau workflow (run 35546073725, 2026-09-20).
+bin/libgdluau.darwin.arm64.dylib  macos-14 runner
+bin/libgdluau.linux.x86_64.so     ubuntu-22.04 runner
+bin/gdluau.windows.amd64.dll      windows-2022 runner
+Rebuild: Actions → build-luau → Run workflow; download the three artifacts into bin/.
