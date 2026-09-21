@@ -688,7 +688,10 @@ ungroup`; range/not/path filters; `vision.dark_radius`; `after_move`;
 and `field` widgets and the `list` repeater. The reference plugins
 gained `shove`, `throw_oil`, `volley`, `dare`, the opportunity strike,
 `sign`, `learn` and the house rules' `after_damage`; the test count
-went from 10,716 to 10,880.
+went from 10,716 to 10,880. On the closing commit `8d79d5d` all four
+workflows were green: `ci` 10,882 checks, `desktop-test` 10,876 on each
+OS, `android-test` 10,494 in the phone build and 7 in the join test,
+`ios-test` 10,494.
 
 Decisions taken while building:
 - The grid class keeps its name. `HexGrid` with `shape = "square"` is
