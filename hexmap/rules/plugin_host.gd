@@ -580,7 +580,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of"]:
+			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -883,6 +883,22 @@ class Bridge:
 			"start": why = t.start(a, b)
 			"next": why = t.next()
 			"stop": why = t.stop()
+			_: why = "unknown turns op " + op
+		return true if why == "" else {"__error": why}
+
+	## The order: reorder(list) | insert(entry, index) | remove(entry) |
+	## group(tokens, -1, "id|label") | ungroup(id).
+	func turns_order(op: String, arg: Variant, index: Variant, extra: String) -> Variant:
+		var why := ""
+		var t := _k().turns
+		match str(op):
+			"reorder": why = t.reorder(PluginHost._as_list(arg))
+			"insert": why = t.insert(str(arg), int(index))
+			"remove": why = t.remove(str(arg))
+			"group":
+				var parts := extra.split("|", true, 1)
+				why = t.group(str(parts[0]), PluginHost._as_list(arg), str(parts[1]) if parts.size() > 1 else "")
+			"ungroup": why = t.ungroup(str(arg))
 			_: why = "unknown turns op " + op
 		return true if why == "" else {"__error": why}
 

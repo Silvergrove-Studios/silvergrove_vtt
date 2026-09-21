@@ -124,7 +124,7 @@ Hooks in API 1:
 |---|---|---|
 | `before_roll` | `{spec, ctx}` | add `spec.parts`, change `spec.expr`, veto |
 | `after_roll` | `{spec, result, ctx}` | set `result.outcome` and anything else the log should show |
-| `turn_start`, `turn_end` | `{ref, actor, events}` | the participant gaining / losing the turn *or the focus* |
+| `turn_start`, `turn_end` | `{ref, actor, group, events}` | the participant gaining / losing the turn *or the focus*; `group` names the slot when it is a group's member |
 | `round_start`, `round_end` | `{round, events}` | ordered shape only |
 | `focus_changed` | `{from, to, by, events}` | asked *before* the focus moves: veto to refuse, add events for a cost |
 | `rest` | `{kind, events}` | after refills and expiries |
@@ -320,6 +320,8 @@ picks a strategy in the Turns panel; `hm.turns.start(scene, id)`,
 | `hm.turns.request(player, ref)` / `hm.turns.deny(ref)` | a Player's request for the focus |
 | `hm.turns.counters(ref)` | this turn's budgets for a participant |
 | `hm.turns.consume(ref, counter, n)` | a `turns.set` event spending from a budget, or nil when there is not enough |
+| `hm.turns.reorder(order)`, `hm.turns.insert(entry [, index])`, `hm.turns.remove(entry)` | the ordered shape's order itself: a delay, a ready action, a late arrival, a departure. Entries are token ids or `group:<id>`; the participant whose turn it is stays current |
+| `hm.turns.group(id, tokens, label)`, `hm.turns.ungroup(id)` | several tokens on one slot: the order holds `group:<id>`, `turns.data.groups[id]` holds the members, and each member gets its own `turn_start` / `turn_end` (payload `group = id`), budgets and expiries when the slot comes round. A group survives a restart |
 
 ### Tracks, the clock, rests
 

@@ -5,7 +5,10 @@ extends RefCounted
 ##   ordered — an order of participants with rounds: initiative from a
 ##             statistic the plugin names, a tie-break policy, per-turn
 ##             budgets (counters reset when a turn starts), delay and
-##             insertion, hidden entries kept by the host's token flag.
+##             insertion, hidden entries kept by the host's token flag,
+##             and groups: several tokens on one slot ("group:<id>" in
+##             the order, members in data.groups[id]), each member getting
+##             its own turn_start / turn_end, budgets and expiries.
 ##   focus   — no order and no rounds: a holder ("token:id", "actor:id"
 ##             or "gm") that Players may ask for and the GM grants or
 ##             seizes; a history of who held it; counters per participant.
@@ -130,18 +133,24 @@ func _start(scene_id: String, strategy_id: String) -> String:
 	var order := []
 	for e in entries:
 		order.append(e.id)
+	# groups formed before a restart keep their slot, at the first member's place
+	var groups: Dictionary = turns().get("data", {}).get("groups", {}) if turns().get("data") is Dictionary else {}
+	order = _collapse_groups(order, groups)
+	for gid in groups:
+		labels["group:" + str(gid)] = str(groups[gid].get("label", gid))
 	base.order = order
 	base.turn = 0
 	base.round = 1
-	base.data = {"labels": labels}
+	base.data = {"labels": labels, "groups": JsonDoc.deep(groups)}
 	base.counters = {}
-	for id in order:
-		base.counters["token:" + str(id)] = spec.budgets.duplicate()
+	for entry in order:
+		for id in EncounterState.turn_members({"data": {"groups": groups}}, str(entry)):
+			base.counters["token:" + str(id)] = spec.budgets.duplicate()
 	events.append({"t": "turns.set", "changes": base})
 	var why := kernel.commit(events, "Start turns")
 	if why != "":
 		return why
-	var first := "token:" + str(order[0]) if not order.is_empty() else ""
+	var first := _ref_of(str(order[0])) if not order.is_empty() else ""
 	var fired := _fire("round_start", {"round": 1, "scene": scene_id}, "Round 1")
 	if fired != "":
 		return fired
@@ -169,7 +178,7 @@ func _next() -> String:
 		return "no turn order"
 	var turn := int(t.get("turn", 0))
 	var round := int(t.get("round", 1))
-	var cur := "token:" + str(order[turn]) if turn >= 0 and turn < order.size() else ""
+	var cur := _ref_of(str(order[turn])) if turn >= 0 and turn < order.size() else ""
 	if bool(t.get("running", false)) and cur != "":
 		var why := _end_turn(cur)
 		if why != "":
@@ -193,7 +202,7 @@ func _next() -> String:
 		why = _fire("round_start", {"round": round}, "Round %d" % round)
 		if why != "":
 			return why
-	return _begin_turn("token:" + str(order[turn]))
+	return _begin_turn(_ref_of(str(order[turn])))
 
 
 ## Step back one turn without firing anything (a correction, not play).
@@ -212,9 +221,115 @@ func previous() -> String:
 	return kernel.commit([{"t": "turns.set", "changes": {"turn": turn, "round": round}}], "Previous turn")
 
 
-## Move a participant to another position in the order (delay, insert).
+## Replace the order (delay, ready, a late arrival): entries are token
+## ids or "group:<id>". The participant whose turn it is stays current
+## when it is still there.
 func reorder(order: Array) -> String:
-	return kernel.commit([{"t": "turns.set", "changes": {"order": order}}], "Reorder")
+	var t := turns()
+	var old: Array = t.get("order", [])
+	var turn := int(t.get("turn", 0))
+	var cur := str(old[turn]) if turn >= 0 and turn < old.size() else ""
+	var clean := []
+	for e in order:
+		if not clean.has(str(e)):
+			clean.append(str(e))
+	var next_turn := clean.find(cur) if cur != "" else 0
+	if next_turn < 0:
+		next_turn = clampi(turn, 0, maxi(0, clean.size() - 1))
+	return kernel.commit([{"t": "turns.set", "changes": {"order": clean, "turn": next_turn}}], "Reorder")
+
+
+## Put an entry at `index` (the end when -1), taking it out of wherever
+## it was. A token new to the order gets its counters.
+func insert(entry: String, index := -1) -> String:
+	var order: Array = (turns().get("order", []) as Array).duplicate()
+	order.erase(entry)
+	if index < 0 or index > order.size():
+		index = order.size()
+	order.insert(index, entry)
+	var why := reorder(order)
+	if why != "":
+		return why
+	var spec := current()
+	var changes := {}
+	for id in EncounterState.turn_members(turns(), entry):
+		if not turns().get("counters", {}).has("token:" + str(id)) and not spec.budgets.is_empty():
+			changes["counters/token:" + str(id)] = spec.budgets.duplicate()
+	return kernel.commit([{"t": "turns.set", "changes": changes}], "Budgets") if not changes.is_empty() else ""
+
+
+func remove(entry: String) -> String:
+	var order: Array = (turns().get("order", []) as Array).duplicate()
+	if not order.has(entry):
+		return "not in the order"
+	order.erase(entry)
+	return reorder(order)
+
+
+## Several tokens on one slot: "group:<id>" replaces the members in the
+## order (at the first member's place, or the end), and data.groups[id]
+## keeps them with a label.
+func group(id: String, tokens: Array, label := "") -> String:
+	if id == "" or tokens.is_empty():
+		return "a group needs an id and members"
+	var t := turns()
+	var order: Array = (t.get("order", []) as Array).duplicate()
+	var groups: Dictionary = JsonDoc.deep(t.get("data", {}).get("groups", {})) if t.get("data") is Dictionary else {}
+	if groups.has(id):
+		return "group '%s' exists" % id
+	var members := []
+	for tk in tokens:
+		members.append(str(tk))
+	groups[id] = {"tokens": members, "label": label if label != "" else id}
+	var collapsed := _collapse_groups(order, {id: groups[id]})
+	var why := kernel.commit([{"t": "turns.set", "changes": {"data/groups": groups, "data/labels/group:" + id: groups[id].label}}], "Group")
+	if why != "":
+		return why
+	return reorder(collapsed)
+
+
+func ungroup(id: String) -> String:
+	var t := turns()
+	var groups: Dictionary = JsonDoc.deep(t.get("data", {}).get("groups", {})) if t.get("data") is Dictionary else {}
+	if not groups.has(id):
+		return "no group '%s'" % id
+	var order: Array = (t.get("order", []) as Array).duplicate()
+	var at := order.find("group:" + id)
+	if at >= 0:
+		order.remove_at(at)
+		var members: Array = groups[id].get("tokens", [])
+		for i in members.size():
+			order.insert(at + i, str(members[i]))
+	groups.erase(id)
+	var labels: Dictionary = JsonDoc.deep(t.get("data", {}).get("labels", {})) if t.get("data") is Dictionary else {}
+	labels.erase("group:" + id)
+	var why := kernel.commit([{"t": "turns.set", "changes": {"data/groups": groups, "data/labels": labels}}], "Ungroup")
+	if why != "":
+		return why
+	return reorder(order)
+
+
+## Members of `groups` fold into one "group:<id>" entry where the first of
+## them stood; a group with no member in the order goes at the end.
+static func _collapse_groups(order: Array, groups: Dictionary) -> Array:
+	var out := []
+	var placed := {}
+	for e in order:
+		var entry := str(e)
+		var in_group := ""
+		for gid in groups:
+			if (groups[gid].get("tokens", []) as Array).has(entry):
+				in_group = str(gid)
+				break
+		if in_group == "":
+			out.append(entry)
+		elif not placed.has(in_group):
+			placed[in_group] = true
+			out.append("group:" + in_group)
+	for gid in groups:
+		if not placed.has(str(gid)) and not out.has("group:" + str(gid)):
+			out.append("group:" + str(gid))
+	return out
 
 
 # ----------------------------------------------------------------- focus --
@@ -331,24 +446,58 @@ func _fire(hook: String, payload: Dictionary, label: String) -> String:
 	return kernel.fire(hook, payload, label)
 
 
+## The ref of an order entry: "group:<id>" stays, a token id gets its prefix.
+static func _ref_of(entry: String) -> String:
+	return entry if entry.begins_with("group:") else "token:" + entry
+
+
+## The refs a slot stands for: "token:<id>" per member of a group, or the
+## ref itself.
+func _slot_refs(ref: String) -> Array:
+	if ref.begins_with("group:"):
+		var out := []
+		for id in EncounterState.turn_members(turns(), ref):
+			out.append("token:" + str(id))
+		return out
+	return [ref]
+
+
 func _end_turn(ref: String) -> String:
-	var why := _fire("turn_end", {"ref": ref, "actor": kernel.actor_of_ref(ref)}, "Turn ends")
-	if why != "":
-		return why
-	var token := ref.substr(6) if ref.begins_with("token:") else ""
-	return kernel.commit(kernel.expire({"kind": "turn_end", "of": token if token != "" else ref}), "Turn effects")
+	var group := ref.substr(6) if ref.begins_with("group:") else ""
+	for r in _slot_refs(ref):
+		var payload := {"ref": r, "actor": kernel.actor_of_ref(r)}
+		if group != "":
+			payload.group = group
+		var why := _fire("turn_end", payload, "Turn ends")
+		if why != "":
+			return why
+		var token: String = r.substr(6) if r.begins_with("token:") else ""
+		why = kernel.commit(kernel.expire({"kind": "turn_end", "of": token if token != "" else r}), "Turn effects")
+		if why != "":
+			return why
+	return ""
 
 
 func _begin_turn(ref: String) -> String:
 	var spec := current()
+	var group := ref.substr(6) if ref.begins_with("group:") else ""
+	var refs := _slot_refs(ref)
 	var events := []
 	if not spec.budgets.is_empty():
-		events.append({"t": "turns.set", "changes": {"counters/" + ref: spec.budgets.duplicate()}})
+		for r in refs:
+			events.append({"t": "turns.set", "changes": {"counters/" + r: spec.budgets.duplicate()}})
 	var why := kernel.commit(events, "Budgets")
 	if why != "":
 		return why
-	var token := ref.substr(6) if ref.begins_with("token:") else ""
-	why = kernel.commit(kernel.expire({"kind": "turn_start", "of": token if token != "" else ref}), "Turn effects")
-	if why != "":
-		return why
-	return _fire("turn_start", {"ref": ref, "actor": kernel.actor_of_ref(ref)}, "Turn starts")
+	for r in refs:
+		var token: String = r.substr(6) if r.begins_with("token:") else ""
+		why = kernel.commit(kernel.expire({"kind": "turn_start", "of": token if token != "" else r}), "Turn effects")
+		if why != "":
+			return why
+		var payload := {"ref": r, "actor": kernel.actor_of_ref(r)}
+		if group != "":
+			payload.group = group
+		why = _fire("turn_start", payload, "Turn starts")
+		if why != "":
+			return why
+	return ""

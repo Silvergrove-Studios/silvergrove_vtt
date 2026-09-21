@@ -282,9 +282,25 @@ func refresh() -> void:
 			_prev.visible = true
 			var order: Array = turns.get("order", [])
 			_round.text = "Round %d" % int(turns.get("round", 1)) if running else ("Press Start to order the tokens" if order.is_empty() else "Paused")
+			var up := ctx.state.current_turn_tokens()
 			for id in order:
-				var tk := ctx.state.token(ctx.scene_id, str(id))
 				var it := list.create_item(root)
+				if str(id).begins_with("group:"):
+					# a group: its label, then its members as children
+					var members := EncounterState.turn_members(turns, str(id))
+					it.set_text(COL_NAME, ("▶ " if not members.is_empty() and up.has(str(members[0])) else "   ") + str(turns.get("data", {}).get("labels", {}).get(str(id), str(id).substr(6))))
+					it.set_metadata(COL_NAME, str(id))
+					it.set_text(COL_INFO, "%d together" % members.size())
+					for member in members:
+						var mt := ctx.state.token(ctx.scene_id, str(member))
+						var child := list.create_item(it)
+						child.set_text(COL_NAME, "   " + (str(mt.get("name", "")) if not mt.is_empty() else "(on another scene)"))
+						child.set_metadata(COL_NAME, str(member))
+						if not mt.is_empty() and bool(mt.get("hidden", false)):
+							child.set_custom_color(COL_NAME, Color(0.6, 0.6, 0.6))
+					_items[str(id)] = it
+					continue
+				var tk := ctx.state.token(ctx.scene_id, str(id))
 				var p_name := str(tk.get("name", "")) if not tk.is_empty() else "(on another scene)"
 				it.set_text(COL_NAME, ("▶ " if str(id) == current else "   ") + p_name)
 				it.set_metadata(COL_NAME, str(id))

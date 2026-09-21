@@ -231,6 +231,13 @@ function hm.turns.start(scene, strategy) return call(host.turns_op, "start", sce
 function hm.turns.next() return call(host.turns_op, "next", "", "") end
 function hm.turns.stop() return call(host.turns_op, "stop", "", "") end
 function hm.turns.counters(ref) return (call(host.turns_get).counters or {})[ref] or {} end
+-- The order itself (ordered shape): entries are token ids or "group:<id>".
+function hm.turns.reorder(order) return call(host.turns_order, "reorder", order, -1, "") end
+function hm.turns.insert(entry, index) return call(host.turns_order, "insert", entry, index or -1, "") end
+function hm.turns.remove(entry) return call(host.turns_order, "remove", entry, -1, "") end
+-- Several tokens on one slot: each member gets its own turn_start/turn_end and budgets.
+function hm.turns.group(id, tokens, label) return call(host.turns_order, "group", tokens, -1, id .. "|" .. (label or "")) end
+function hm.turns.ungroup(id) return call(host.turns_order, "ungroup", id, -1, "") end
 function hm.turns.consume(ref, counter, n) return call(host.turns_consume, ref, counter, n or 1) end
 
 -- --------------------------------------------------------------- tracks --

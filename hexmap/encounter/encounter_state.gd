@@ -617,7 +617,7 @@ func may_move(tk: Dictionary, player_id: String) -> bool:
 		"dm":
 			return _owns(tk, player_id) and (turns.get("active", []) as Array).has(str(tk.id))
 		"ordered":
-			return _owns(tk, player_id) and current_turn_token() == str(tk.id)
+			return _owns(tk, player_id) and current_turn_tokens().has(str(tk.id))
 	return false
 
 
@@ -628,17 +628,36 @@ static func _owns(tk: Dictionary, player_id: String) -> bool:
 ## The token whose turn it is in ordered mode, or "". In the focus shape
 ## it is the focus holder when that is a token.
 func current_turn_token() -> String:
+	var up := current_turn_tokens()
+	return str(up[0]) if not up.is_empty() else ""
+
+
+## Every token whose turn it is: one, or a group's members (an order
+## entry "group:<id>" stands for turns.data.groups[id].tokens, which act
+## together on one slot).
+func current_turn_tokens() -> Array:
 	var turns := encounter.turns
 	if str(turns.get("strategy", "ordered")) == "focus":
 		var f := str(turns.get("focus", ""))
 		if bool(turns.get("running", false)) and f.begins_with("token:") and not find_token(f.substr(6)).is_empty():
-			return f.substr(6)
-		return ""
+			return [f.substr(6)]
+		return []
 	if str(turns.get("mode", "free")) != "ordered" or not bool(turns.get("running", false)):
-		return ""
+		return []
 	var order: Array = turns.get("order", [])
 	var turn := int(turns.get("turn", 0))
-	return str(order[turn]) if turn >= 0 and turn < order.size() else ""
+	if turn < 0 or turn >= order.size():
+		return []
+	return EncounterState.turn_members(turns, str(order[turn]))
+
+
+## The tokens an order entry stands for: itself, or a group's members.
+static func turn_members(turns: Dictionary, entry: String) -> Array:
+	if entry.begins_with("group:"):
+		var groups: Dictionary = turns.get("data", {}).get("groups", {}) if turns.get("data") is Dictionary else {}
+		var g: Dictionary = groups.get(entry.substr(6), {})
+		return (g.get("tokens", []) as Array).duplicate()
+	return [entry]
 
 
 ## Tokens the table should mark as "up": the DM's picks in dm mode, the
@@ -649,8 +668,7 @@ func highlighted_token_ids() -> Array:
 		"dm":
 			return (turns.get("active", []) as Array).duplicate()
 		"ordered":
-			var cur := current_turn_token()
-			return [cur] if cur != "" else []
+			return current_turn_tokens()
 	return []
 
 

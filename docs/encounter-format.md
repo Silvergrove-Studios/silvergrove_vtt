@@ -120,6 +120,8 @@ A scene is one map level with its overlay, tokens and fog.
   plugin or the DM sets, and `ext.<plugin>` state set through `ext.set`
   with scope `cell`. Players receive a cell's record only once it is
   `revealed`.
+- `turns.order` entries are token ids or `group:<id>`; `turns.data.groups`
+  maps a group id to `{tokens, label}` (several tokens on one slot).
 - `highlight` (version 2, optional): a template being shown —
   `{cells, color, label}` — set by a plugin through `scene.set` and
   cleared with `null`. Transient by nature; it is fine for it to be in

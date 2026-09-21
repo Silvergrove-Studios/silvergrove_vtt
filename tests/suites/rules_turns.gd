@@ -125,6 +125,56 @@ func test_ordered_turns() -> void:
 	check(k.turns.start("s_1", "list") == "" and k.state.encounter.turns.order == ["t_b", "t_a", "t_c"] and k.state.encounter.turns.plugin == "", "the list strategy keeps the order as arranged")
 
 
+func test_order_helpers_and_groups() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	# two goblins join the party's scene
+	k.commit([{"t": "actor.add", "actor": {"id": "a_g1", "name": "Goblin 1", "ext": {"sample": {"level": 1, "stats": {"agi": 0, "str": 0, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_g2", "name": "Goblin 2", "ext": {"sample": {"level": 1, "stats": {"agi": 0, "str": 0, "wit": 0}}}}},
+		{"t": "token.add", "scene": "s_1", "token": Encounter.new_token("Goblin 1", Vector2(5, 1), {"id": "t_g1", "actor": "a_g1"})},
+		{"t": "token.add", "scene": "s_1", "token": Encounter.new_token("Goblin 2", Vector2(6, 1), {"id": "t_g2", "actor": "a_g2"})}], "Goblins")
+	check(k.turns.start("s_1", "sample") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b", "t_g1", "t_g2"], "five in the order: %s" % [st.encounter.turns.order])
+	# reorder keeps the current participant current; insert and remove
+	k.turns.next()
+	check(st.current_turn_token() == "t_c", "C is up")
+	check(k.turns.reorder(["t_b", "t_a", "t_c", "t_g1", "t_g2"]) == "" and st.encounter.turns.turn == 2 and st.current_turn_token() == "t_c", "delaying A past C keeps C's turn current: turn %d" % st.encounter.turns.turn)
+	check(k.turns.remove("t_b") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_g1", "t_g2"] and st.current_turn_token() == "t_c", "removed B")
+	check(k.turns.remove("t_b") != "", "not twice")
+	check(k.turns.insert("t_b", 0) == "" and st.encounter.turns.order[0] == "t_b" and st.current_turn_token() == "t_c", "B back at the front; C still up")
+	check(k.turns.insert("t_a") == "" and st.encounter.turns.order[-1] == "t_a", "insert without an index goes last")
+	check(k.turns.reorder(["t_x", "t_a", "t_a"]) == "" and st.encounter.turns.order == ["t_x", "t_a"] and st.encounter.turns.turn == 1, "duplicates fold; a current entry that vanished leaves the index clamped")
+	k.turns.reorder(["t_a", "t_c", "t_b", "t_g1", "t_g2"])
+	# a group: one slot, each member's own turn
+	var fired := []
+	k.hooks.on("turn_start", func(p: Dictionary) -> Dictionary: fired.append(["start", p.ref, str(p.get("group", ""))]); return p, "test")
+	k.hooks.on("turn_end", func(p: Dictionary) -> Dictionary: fired.append(["end", p.ref, str(p.get("group", ""))]); return p, "test")
+	check(k.turns.group("gobs", ["t_g1", "t_g2"], "The goblins") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b", "group:gobs"], "the goblins fold into one slot: %s" % [st.encounter.turns.order])
+	check(st.encounter.turns.data.groups.gobs.tokens == ["t_g1", "t_g2"] and st.encounter.turns.data.labels["group:gobs"] == "The goblins", "kept in the turns data with a label")
+	check(k.turns.group("gobs", ["t_a"]) != "" and k.turns.group("", ["t_a"]) != "", "a group needs a new id and members")
+	k.commit([{"t": "turns.set", "changes": {"turn": 2}}], "To B")
+	fired.clear()
+	check(k.turns.next() == "" and st.current_turn_tokens() == ["t_g1", "t_g2"] and st.current_turn_token() == "t_g1", "the goblins' slot: both are up")
+	check(fired == [["end", "token:t_b", ""], ["start", "token:t_g1", "gobs"], ["start", "token:t_g2", "gobs"]], "each member got its own turn_start, tagged with the group: %s" % [fired])
+	check(k.turns.counters("token:t_g1").actions == 1 and k.turns.counters("token:t_g2").actions == 1, "budgets per member")
+	k.commit(Effects.apply(st, {"id": "e_g2", "on": "token:t_g2", "plugin": "sample", "key": "shaken", "duration": {"kind": "turn_end", "of": "t_g2", "turns": 1}}), "Shaken")
+	check(st.allowed({"t": "token.set", "scene": "s_1", "id": "t_g2", "changes": {"pos": [1, 1]}}, "pl_a") == false, "a player who owns neither may not move a goblin")
+	check(st.highlighted_token_ids() == ["t_g1", "t_g2"], "both goblins are marked as up")
+	fired.clear()
+	check(k.turns.next() == "" and fired == [["end", "token:t_g1", "gobs"], ["end", "token:t_g2", "gobs"], ["start", "token:t_a", ""]] and st.encounter.turns.round == 2, "both ended, the round wrapped: %s" % [fired])
+	check(st.encounter.effects.is_empty(), "the effect until goblin 2's turn end expired")
+	# undo restores the order and the group
+	var before := st.encounter.to_json()
+	check(k.turns.ungroup("gobs") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b", "t_g1", "t_g2"] and not st.encounter.turns.data.groups.has("gobs"), "ungroup puts the members back where the slot was")
+	k.log.undo()
+	k.log.undo()
+	check(st.encounter.to_json() == before, "undo restores the group")
+	# a restart keeps the group, at the first member's place
+	check(k.turns.start("s_1", "sample") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b", "group:gobs"] and st.encounter.turns.data.groups.has("gobs"), "restarting keeps the group: %s" % [st.encounter.turns.order])
+	check(k.turns.ungroup("nope") != "", "no such group")
+	k.hooks.off("test")
+
+
 # ----------------------------------------------------------------- focus --
 
 func test_focus_turns() -> void:
@@ -319,6 +369,20 @@ func test_table_turn_panel_both_shapes() -> void:
 	panel.refresh()
 	check(ctx.encounter().turns.strategy == "ordered" and panel._round.text == "Round 1" and panel._next.text == "Next turn", "…and the panel draws the ordered shape")
 	check(ctx.commands.next_turn() == "" and ctx.encounter().turns.turn == 1, "Next steps through the runner")
+	# a group draws as one row with its members under it
+	var gobs := []
+	for tk in ctx.state.tokens(ctx.scene_id):
+		if str(tk.get("name", "")).begins_with("Goblin"):
+			gobs.append(str(tk.id))
+	check(gobs.size() >= 2 and ctx.kernel.turns.group("pack", gobs, "The goblin pack") == "", "the goblins grouped")
+	panel.refresh()
+	var group_row: TreeItem = null
+	it = panel.list.get_root().get_first_child()
+	while it != null:
+		if str(it.get_metadata(0)) == "group:pack":
+			group_row = it
+		it = it.get_next()
+	check(group_row != null and group_row.get_text(0).contains("The goblin pack") and group_row.get_text(1) == "%d together" % gobs.size() and group_row.get_child_count() == gobs.size(), "one row for the pack, a child per goblin")
 	panel.queue_free()
 	await tree.process_frame
 

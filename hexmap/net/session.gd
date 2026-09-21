@@ -99,11 +99,20 @@ func turn_summary() -> String:
 		"ordered":
 			if not bool(turns.get("running", false)):
 				return "Waiting to begin"
-			var cur := state.current_turn_token()
-			var tk := state.token(scene_id(), cur)
-			if tk.is_empty():
+			var up := state.current_turn_tokens()
+			var names := PackedStringArray()
+			var mine := false
+			for id in up:
+				var tk := state.token(scene_id(), str(id))
+				if tk.is_empty():
+					continue
+				names.append(str(tk.get("name", "")))
+				if tk.get("owner", null) != null and str(tk.owner) == player_id:
+					mine = true
+			if names.is_empty():
 				return "Round %d" % int(turns.get("round", 1))
-			if tk.get("owner", null) != null and str(tk.owner) == player_id:
-				return "Your turn: %s (round %d)" % [str(tk.get("name", "")), int(turns.get("round", 1))]
-			return "%s's turn (round %d)" % [str(tk.get("name", "")), int(turns.get("round", 1))]
+			var who := ", ".join(names)
+			if mine:
+				return "Your turn: %s (round %d)" % [who, int(turns.get("round", 1))]
+			return "%s's turn (round %d)" % [who, int(turns.get("round", 1))]
 	return ""
