@@ -40,12 +40,18 @@ func _run(dir: String) -> int:
 		if dw != "":
 			print("FAIL load dependency %s: %s" % [str(dep), dw])
 			return 1
+	var t0 := Time.get_ticks_msec()
 	var why := host.load_dir(dir)
+	var load_ms := Time.get_ticks_msec() - t0
 	if why != "":
 		print("FAIL load %s: %s" % [dir, why])
 		return 1
 	var id := str(manifest.get("id", host.plugins.keys()[0]))
-	print("-- %s (%s)" % [id, dir])
+	var entries := 0
+	for coll in host.kernel.comp.collections():
+		entries += host.kernel.comp.count(str(coll))
+	print("-- %s (%s) loaded in %d ms, %d compendium entries" % [id, dir, load_ms, entries])
+	t0 = Time.get_ticks_msec()
 	var r := host.run_tests(id, func(line: String) -> void: print(line))
-	print("%d checks, %d failed" % [r.count, r.fails])
+	print("%d checks, %d failed, %d ms" % [r.count, r.fails, Time.get_ticks_msec() - t0])
 	return int(r.fails)
