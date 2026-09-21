@@ -333,6 +333,7 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 | 5 Compendium, packs, editors | done | `Compendium` index and packs, `hm.comp`, `SchemaForm`, the Compendium panel, character files, `sample.degrees` |
 | 6 Map queries | done | `MapQuery` (distance/bands, templates, LoS/cover, light, sight), regions with durations and hooks, cell state, `hm.map`, the regions layer, audience-filtered map events |
 | 7 Campaign, growth, hardening | done | `Campaign` and sessions, checkpoints in the document, `Recap`, `Triggers`, `Bulk`, `Improv`, rulings journal, co-GM role, plugin layering, perf budgets and the sandbox red-team in CI |
+| 7b API completion and square grids | in progress | the host changes the 5e audit found (H1–H9), square grids beside hex through the whole stack |
 | 8 Real rulesets | next | in their own repositories, licensing decided then |
 
 Each phase ends with: its tests green in CI on all four platforms where
@@ -629,6 +630,51 @@ Decisions taken while building:
 - Everything crossing the Lua bridge is copied as plain data with a
   depth limit; a self-referencing table is an error, not a stack
   overflow in the extension.
+
+### Phase 7b — API completion and square grids — **in progress (started 2026-09-21)**
+
+The 5e desirements audit (`ruleset-dnd5e/API-AUDIT.md`) checked all 33
+items against API 1. Every Must item is reachable on the Table today; the
+gaps are on the phone and in a few kernel corners, numbered H1–H12
+there. Rather than meet them one at a time inside a ruleset, this phase
+adds H1–H9 first, with the docs fix (H12) folded in, and one thing the
+audit filed under "product": **square grids**. 5e, most published
+battle maps and every other VTT default to squares; a "hex-only" VTT
+would be one nobody moves a campaign to. H10 (transient cues, sound and
+VFX assets) and H11 stay out: H10 is a large presentation feature for a
+Could item, H11 is a label.
+
+Order: the grid first, because everything after it (targets picked on
+the map, templates, vision) must be tested on both shapes; then the
+kernel-only changes (small, fast, no client work); then the client and
+protocol work. Every step ends with `check` and `test` green locally
+and the four workflows green at the milestone commits; each step is its
+own commit; the reference plugins and the docs change with the step
+that affects them. Formats stay at their versions: every change to a
+document is additive with a default (`grid.shape` absent = hex).
+
+| step | change | files | proven by |
+|---|---|---|---|
+| **S1 Square grids** | `HexGrid` gains `shape: "hex" \| "square"` (the class name stays; it is *the* grid). Square cells are addressed `col,row` in the same `q,r` keys, centre at `(col + ½, row + ½)`, four corners, four orthogonal neighbours (`neighbors(cell, diagonals := false)`), Chebyshev cell distance with the diagonal count reported so a ruleset can price diagonals (5-10-5, 5-5, Euclidean), `spiral`/`line`/`all_cells`/`map_size`/`in_bounds` per shape. The static geometry helpers become instance methods (`grid.distance`, `grid.spiral`, `grid.line`) and every call site is updated. Renderer draws N-gons (terrain UVs: `fit: square` is 1:1 on squares, hex-fit art is mapped to the cell's box), grid lines, fog, regions, highlights per shape. Editor: Shape in New map and Map settings (orientation/offset hidden for squares), brushes and walls work on squares. Exporters: Foundry `SQUARE` (1), Tiled `orthogonal`, UVTT as is, PDF/SVG/PNG generic. `MapQuery`: `distance` adds `diagonals`; templates, `within`, `cells_within/between`, `neighbors`, vision and light on both shapes. A square example map from `make_examples`. | `core/hex_grid.gd`, `core/hex_map.gd`, `render/map_canvas.gd`, `editor/tools.gd`, `editor/editor_window.gd`, `table/table_tools.gd`, `io/*`, `rules/map_query.gd`, `encounter/vision.gd`, `tools/make_examples.gd`, `docs/map-format.md`, `docs/exports.md` | `tests/suites/hex_grid.gd` → both shapes (centres, rounding, corners, neighbours, distance, spiral, line, bounds, offsets); `rules_map.gd` on a square scene (bands, templates, LoS, light, move); `exporters.gd` square fixtures; `document.gd` a v-current file without `shape` loads as hex; table/player smoke on a square map |
+| **S2 Sender on the context (H1b)** | `HostSession` stamps `ctx.player` (the sender's id, `""` for the GM/co-GM) and `ctx.gm` on every dispatched action; the Table's own dispatch stamps `gm = true`. | `net/host_session.gd`, `table/rules_panel.gd`, `plugin_host.gd`, docs | `net.gd`: a plugin action sees who sent it and a spoofed `ctx.player` is overwritten |
+| **S3 Targets picked on the map (H1)** | Action specs may declare `target = "token" \| "cell" \| "area"` (with `area = {shape, radius/length/angle/width}`). The Table's Rules panel and a sheet `button` with such an action enter a *pick*: the next tap on the map (Table tools, Player tools) supplies `ctx.target` (`token:<id>`, `"q,r"`, or `{at, direction}` for an area, previewed as a highlight while picking) and the intent is sent. The host accepts a token target only if that viewer's projection lists it (visible, not hidden, seen), a cell only if in bounds. The `gm` intent gains `pick` for co-GMs. | `rules/plugin_host.gd` (action schema), `table/table_tools.gd`, `table/rules_panel.gd`, `player/player_tools.gd`, `player/player_window.gd`, `ui/views/view_renderer.gd` (`button.pick`), `net/host_session.gd`, `net/protocol.gd` (docs only), `docs/plugin-authoring.md` | `rules_views.gd` / `table.gd`: a pick fills the ctx; `net.gd`: a hidden token as a target is refused, a visible one accepted, a cell out of bounds refused; `sample.ordered` gains a `throw` action with an area target and tests it with `t.dispatch` |
+| **S4 Prompts without waiting (H2)** | `hm.prompt_open(to, form, opts) → id` (no yield) and a `prompt_answered` hook `{prompt, answer, by, context, timed_out}`; `hm.prompt_all(players, form, opts)` yields once and resumes with `{player → answer}` when all answered or the deadline passed (defaults fill the rest). `Pending` keeps a continuation per group. The GM can still override any of them. | `rules/pending.gd`, `plugin_host.gd`, `lua_prelude.gd`, docs | `rules_turns.gd`/`rules_lua.gd`: three players asked at once, two answer, one times out; `sample.degrees` `burst` asks every target's owner in parallel |
+| **S5 Plugin-defined hooks (H5)** | `hm.hooks.run(name, payload) → payload`: runs `<plugin>.<name>` through every loaded plugin's handlers in load order, with `overrides` honoured; may prompt when called from an action (the run is driven like the action). `hm.on` accepts dotted names. | `rules/hook_bus.gd`, `plugin_host.gd`, `lua_prelude.gd`, docs | `rules_plugins.gd`: `sample.house` handles `sample.ordered.after_damage`; a veto from the layered plugin stops the base |
+| **S6 Turn groups and helpers (H7)** | `hm.turns.reorder(order)`, `insert(ref, index)`, `remove(ref)`; order entries may be `group:<id>` with `turns.data.groups[id] = [token ids]`: one slot in the order, `turn_start`/`turn_end` for each member, budgets per member; Players see the group's label. `hm.turns.group(id, tokens, label)`. | `rules/turns.gd`, `plugin_host.gd`, `lua_prelude.gd`, `rules/views.gd`, `table/turns_panel.gd`, docs | `rules_turns.gd`: three goblins as one slot, hooks fire per member, undo restores the order |
+| **S7 Compendium filters (H9)** | `filter` values may be `{min, max}` ranges, `{not = …}`, and keys may be paths (`stats/level`); facets over paths. | `rules/compendium.gd`, docs | `rules_content.gd` |
+| **S8 Dark radius (H8)** | `vision.dark_radius`: how far the token sees unlit space. `MapQuery.can_see` sees an unlit target within it; `light_at` unchanged; `Vision` (fog reveal) unchanged (radius bounds it); the renderer lifts the darkness within an owned token's dark radius on the Player and the Table. | `rules/map_query.gd`, `render/map_canvas.gd`, `encounter/vision.gd`, `docs/encounter-format.md` | `rules_map.gd`: a target in the dark at 5 is seen with `dark_radius = 6`, not at 8 |
+| **S9 Pausable move hook (H6)** | After a move is applied and its triggers ran, `after_move` runs as a driven hook: handlers may prompt (an opportunity attack offered to the other side's owner) and commit; a veto here does not undo the move (it already happened). | `rules/kernel.gd`, `plugin_host.gd`, `table/table_context.gd`, `net/host_session.gd`, docs | `rules_map.gd`/`rules_lua.gd`: a move past a token prompts its owner and the answer lands as events after the move |
+| **S10 Compendium to clients (H3)** | Protocol `need {kind: comp, plugin, collection, id \| query}` → `comp {plugin, collection, entries \| entry, total}`; served by the host from `Compendium.query/get_entry` under the viewer's audience (entries public unless the pack or entry says `audience: gm`); `NetSession.comp(...)` with a callback; the Player's view renderer resolves `picker` collections through it. | `net/protocol.gd`, `host_session.gd`, `net_session.gd`, `rules/compendium.gd`, docs | `net.gd`: a player queries spells by level and gets a page; a `gm`-audience collection is refused |
+| **S11 View widgets (H4)** | `picker` (search over a bound list or a collection; single/multi; `on_pick` intent with the chosen ids), `wizard` (steps with back/next; the submit intent carries every step's values), `repeater` in `form` (an array of sub-forms), `image` (pack art by ref), `field` (one bound value edited in place; `on_change` intent). Unknown widgets still degrade to text. | `ui/views/view_renderer.gd`, `ui/property_form.gd`, docs | `ui_views.gd`: each widget renders, fills its intent, degrades; `sample.degrees` sheet uses a `picker` for feats |
+| **S12 Docs and closing** | `hm.map.token` accepts `token:<id>`; `view.ext` keyed by plugin id said plainly; `docs/plugin-authoring.md` covers every addition; `plugin-api-audit.md` §7 and `ruleset-dnd5e/API-AUDIT.md` §4 updated to "done"; perf budgets extended (square-grid templates, pickers over 1,000 entries, a compendium page to a client); all four workflows green on the closing commit. | docs, `rules_perf.gd` | CI |
+
+Exit criterion: `sample.ordered` on a square map — a Player picks a
+target by tapping it, throws at an area, three Players answer a save at
+once, a house-rules plugin hooks the base's own `after_damage`, a goblin
+pack acts as one slot, a darkvision token sees in the dark, a move past
+a guard prompts the guard's owner, and the phone picks a feat from a
+searchable list served by the Table — all green on desktop, Android and
+iOS.
 
 ### Phase 8 — Real rulesets
 
