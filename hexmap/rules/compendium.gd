@@ -147,19 +147,28 @@ func _index(coll: String, e: Dictionary, _pack_id: String) -> void:
 	_sorted.erase(coll)
 	for k in e:
 		var key := str(k)
-		var v: Variant = e[k]
 		if NO_FACET.has(key):
 			continue
-		if v is String or v is float or v is int or v is bool:
-			_facet(coll, key, str(v) if not (v is float) else JsonDoc.sorted(v), id)
-		elif v is Array:
-			for item in v:
-				if item is String or item is float or item is int:
-					_facet(coll, key, str(item) if not (item is float) else JsonDoc.sorted(item), id)
+		_index_value(coll, key, e[k], id, 0)
 	for w in _tokens(e):
 		if not _words[coll].has(w):
 			_words[coll][w] = {}
 		_words[coll][w][id] = true
+
+
+## Scalars and lists of scalars become facets under their field; an
+## object's scalars become facets under a path ("stats/level"), three
+## levels down at most.
+func _index_value(coll: String, key: String, v: Variant, id: String, depth: int) -> void:
+	if v is String or v is float or v is int or v is bool:
+		_facet(coll, key, str(v) if not (v is float) else JsonDoc.sorted(v), id)
+	elif v is Array:
+		for item in v:
+			if item is String or item is float or item is int:
+				_facet(coll, key, str(item) if not (item is float) else JsonDoc.sorted(item), id)
+	elif v is Dictionary and depth < 3:
+		for k in v:
+			_index_value(coll, key + "/" + str(k), v[k], id, depth + 1)
 
 
 func _facet(coll: String, field: String, value: Variant, id: String) -> void:
@@ -242,13 +251,7 @@ func query(coll: String, opts: Dictionary = {}) -> Dictionary:
 	# filters narrow through the facet index
 	var filter: Dictionary = opts.get("filter", {}) if opts.get("filter") is Dictionary else {}
 	for field in filter:
-		var wanted: Variant = filter[field]
-		var values: Array = wanted if wanted is Array else [wanted]
-		var hit := {}
-		for v in values:
-			var sv := str(v) if not (v is float) else str(JsonDoc.sorted(v))
-			for id in _facets.get(coll, {}).get(str(field), {}).get(sv, {}):
-				hit[id] = true
+		var hit := _filter_hits(coll, str(field), filter[field], all)
 		ids = hit if not started else _intersect(ids, hit)
 		started = true
 	# text: every word (prefix) must match
@@ -281,7 +284,7 @@ func query(coll: String, opts: Dictionary = {}) -> Dictionary:
 	for field in opts.get("facets", []):
 		var counts := {}
 		for id in list:
-			var v: Variant = all[id].get(str(field))
+			var v: Variant = JsonDoc.at_path(all[id], str(field)) if str(field).contains("/") else all[id].get(str(field))
 			var vals: Array = v if v is Array else [v]
 			for item in vals:
 				if item == null:
@@ -309,12 +312,47 @@ func query(coll: String, opts: Dictionary = {}) -> Dictionary:
 	return {"total": total, "page": page, "per_page": per, "pages": int(ceil(float(total) / per)) if total > 0 else 0, "entries": entries, "facets": facet_out}
 
 
+## The ids a filter value picks out of a field's facets: a value or a
+## list of values (any of), {min, max} (a numeric range, either end
+## optional), or {not: value | [values]} (everything else).
+func _filter_hits(coll: String, field: String, wanted: Variant, all: Dictionary) -> Dictionary:
+	var facets: Dictionary = _facets.get(coll, {}).get(field, {})
+	var hit := {}
+	if wanted is Dictionary and ((wanted as Dictionary).has("min") or (wanted as Dictionary).has("max")):
+		var lo := float(wanted.get("min", -INF))
+		var hi := float(wanted.get("max", INF))
+		for sv in facets:
+			if not str(sv).is_valid_float():
+				continue
+			var n := float(sv)
+			if n >= lo and n <= hi:
+				for id in facets[sv]:
+					hit[id] = true
+		return hit
+	if wanted is Dictionary and (wanted as Dictionary).has("not"):
+		var out := _filter_hits(coll, field, wanted["not"], all)
+		for id in all:
+			if not out.has(id):
+				hit[id] = true
+		return hit
+	var values: Array = wanted if wanted is Array else [wanted]
+	for v in values:
+		var sv := str(v) if not (v is float) else str(JsonDoc.sorted(v))
+		for id in facets.get(sv, {}):
+			hit[id] = true
+	return hit
+
+
 static func _sort(list: Array, all: Dictionary, sort: String) -> void:
 	var desc := sort.begins_with("-")
 	var key := sort.trim_prefix("-")
 	list.sort_custom(func(a, b) -> bool:
-		var x: Variant = all[a].get(key, all[a].get("id"))
-		var y: Variant = all[b].get(key, all[b].get("id"))
+		var x: Variant = JsonDoc.at_path(all[a], key) if key.contains("/") else all[a].get(key, all[a].get("id"))
+		var y: Variant = JsonDoc.at_path(all[b], key) if key.contains("/") else all[b].get(key, all[b].get("id"))
+		if x == null:
+			x = all[a].get("id")
+		if y == null:
+			y = all[b].get("id")
 		var less: bool
 		if (x is float or x is int) and (y is float or y is int):
 			less = float(x) < float(y)

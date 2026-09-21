@@ -36,6 +36,9 @@ conventionally, a `name` and a `text`; every other field is the
 plugin's, described by the schema it declares for the collection
 (`hm.schema.define("creatures", …)`), which is what the Table's editor
 form is generated from and what homebrew entries are checked against.
+Scalars and lists of scalars are indexed as facets, and so are the
+scalars inside nested objects, three levels down, under paths like
+`stats/level` — queries filter, sort and facet on those paths too.
 
 A pack can also be one file — `{"pack": {…}, "collections": {"creatures":
 […]}}` — which is how packs are exported to share.

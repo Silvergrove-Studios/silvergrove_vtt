@@ -34,6 +34,17 @@ func test_compendium_index_and_layers() -> void:
 	check(r.total == 6 and r.pages == 2 and r.entries.size() == 2, "pages")
 	r = c.query("creatures", {"facets": ["kind", "traits"]})
 	check(r.facets.kind.humanoid == 2 and r.facets.traits.goblin == 2 and r.facets.traits.small == 2, "facet counts over the matches")
+	# ranges, negation, paths
+	r = c.query("creatures", {"filter": {"level": {"min": 2, "max": 3}}})
+	check(r.total == 3 and r.entries.map(func(e): return e.id) == ["goblin-chief", "skeleton", "will-o-wisp"], "a range on a number: %s" % [r.entries.map(func(e): return e.id)])
+	check(c.query("creatures", {"filter": {"level": {"min": 4}}}).total == 1 and c.query("creatures", {"filter": {"level": {"max": 1}}}).total == 2, "either end may be open")
+	check(c.query("creatures", {"filter": {"kind": {"not": "humanoid"}}}).total == 4 and c.query("creatures", {"filter": {"kind": {"not": ["humanoid", "fey"]}}}).total == 3, "not one, not any of")
+	r = c.query("creatures", {"filter": {"stats/might": {"min": 2}}, "sort": "-stats/might"})
+	check(r.total == 4 and r.entries[0].id == "ogre" and r.entries[-1].id in ["goblin-chief", "wolf", "skeleton"], "a path into an object filters and sorts: %s" % [r.entries.map(func(e): return e.id)])
+	check(c.query("creatures", {"filter": {"stats/mind": 3}}).total == 1 and c.query("creatures", {"filter": {"stats/mind": {"not": {"min": 0}}}}).total == 3, "paths take values and nested ranges")
+	r = c.query("creatures", {"filter": {"kind": "humanoid", "level": {"min": 2}}, "facets": ["stats/agility"]})
+	check(r.total == 1 and r.facets["stats/agility"]["2"] == 1, "filters combine; facets over a path")
+	check(c.facets("creatures").has("stats/might"), "paths are facet fields")
 	check(c.facets("creatures").has("kind") and c.facets("creatures").has("level") and not c.facets("creatures").has("text"), "facet fields (not free text)")
 	# a user pack layered on top: same id wins, others add
 	var up := c.user_pack("hb", "Homebrew", "sample.degrees")

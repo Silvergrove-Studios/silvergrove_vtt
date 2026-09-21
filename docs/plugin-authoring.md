@@ -218,6 +218,9 @@ See *Tests* below.
 ```lua
 hm.schema.define("creatures", { type = "object", required = {"id", "name", "level"}, properties = { … } })
 local page = hm.comp.query("creatures", { filter = { kind = "humanoid", level = {1, 2, 3} }, text = "gob", sort = "-level", page = 1, per_page = 20, fields = {"name", "level"}, facets = {"kind"} })
+-- filter values: a value, a list (any of), { min = 1, max = 3 } (a range, either end
+-- optional), { ["not"] = value | list }; keys may be paths into an entry's objects
+-- ("stats/level"), and so may sort and facets
 page.total, page.pages, page.entries, page.facets.kind          -- a page, never the whole collection
 hm.comp.get("creatures", "goblin")   hm.comp.count("creatures")   hm.comp.collections()
 hm.comp.put("creatures", entry)      -- into this ruleset's homebrew pack, checked against the schema
