@@ -266,6 +266,20 @@ function hm.prompt(to, form, opts)
 	return coroutine.yield(plain({ kind = "prompt", to = to, form = form, opts = opts or {} }))
 end
 
+-- Ask several players the same question at once; resumes with
+-- { [player] = answer } once every one has answered or timed out.
+function hm.prompt_all(players, form, opts)
+	if type(players) ~= "table" then error("hm.prompt_all(players, form, opts)", 2) end
+	return coroutine.yield(plain({ kind = "prompt_all", to = players, form = form, opts = opts or {} }))
+end
+
+-- Ask without waiting: the answer arrives as the `prompt_answered` hook
+-- ({prompt, answer, by, timed_out, plugin, context}). Returns the prompt id.
+-- opts.context travels to the hook untouched.
+function hm.prompt_open(to, form, opts)
+	return call(host.prompt_open, to, form, opts or {})
+end
+
 -- ---------------------------------------------------------------- state --
 
 function hm.actor(id) return call(host.actor, id) end
@@ -439,6 +453,10 @@ function __run_test(index, helpers)
 	end
 	function h.commit(events, label) return hm.commit(events, label or "test") end
 	function h.dispatch(action, ctx, answers) return call(host.test_dispatch, action, ctx or {}, answers or {}) end
+	-- answer an open prompt as a player ("" for the GM); the open prompts
+	function h.answer(prompt, answer, who) return call(host.test_answer, prompt, answer, who or "") end
+	function h.prompts() return call(host.test_prompts) end
+	function h.tick(seconds) return call(host.test_tick, seconds or 0) end
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
 	-- a scene over a map file (the examples' chapel by default), with tokens = { {id, actor, x, y}, … }
 	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end

@@ -133,6 +133,7 @@ Hooks in API 1:
 | `track_done` | `{track, roll, events}` | a progress track completed |
 | `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost) |
 | `region_entered`, `region_left` | `{scene, token, actor, region, record, events}` | after a move, once per region crossed |
+| `prompt_answered` | `{prompt, answer, by, timed_out, plugin, context, events}` | a prompt opened with `hm.prompt_open` was answered (or timed out: the default, `timed_out = true`); `plugin` is whose prompt it was, `context` what it was opened with |
 
 Handlers of the turn, clock and rest hooks run synchronously and may not
 prompt; they append events to `payload.events` and the kernel commits
@@ -466,6 +467,22 @@ sees it), shows the form to that Player (Phase 4), answers with the
 default at the deadline, or lets the GM override; the call returns the
 answer table. Needs the `prompts` capability. `derive` and the
 turn/clock/rest hooks may never prompt.
+
+Two more shapes of asking:
+
+```lua
+local answers = hm.prompt_all({ "pl_1", "pl_2" }, form, { default = { dodge = false }, deadline = 20 })
+-- answers.pl_1, answers.pl_2 — one prompt per player, open at the same time; the
+-- action resumes once when the last has answered or timed out
+local id = hm.prompt_open("pl_1", form, { default = {…}, deadline = 60, context = { actor = "a_1" } })
+-- nothing waits: the action goes on; the answer arrives as the
+-- `prompt_answered` hook with `context` as given (a synchronous hook:
+-- append events to `p.events`)
+```
+
+A group is how a save is asked of three Players at once with each
+pressing their own button; an unattended prompt is how a question can
+stay open across the rest of the action, or the session.
 
 ### Typed numbers
 

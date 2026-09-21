@@ -174,6 +174,59 @@ hm.actions.register("throw_oil", {
 	end,
 })
 
+-- Volley: everyone with an owner is asked at once whether to dodge; those
+-- who do not are shaken. One question, every player answering in parallel.
+hm.actions.register("volley", {
+	label = "Volley", target = "",
+	run = function(ctx)
+		local owners, by_owner = {}, {}
+		for _, id in ipairs(hm.actors()) do
+			local a = hm.actor(id)
+			if a.owner and a.owner ~= "" and a.ext[ID] then
+				if not by_owner[a.owner] then table.insert(owners, a.owner) end
+				by_owner[a.owner] = by_owner[a.owner] or {}
+				table.insert(by_owner[a.owner], id)
+			end
+		end
+		local answers = hm.prompt_all(owners, { title = "Arrows! Dodge?", fields = { { key = "dodge", type = "bool", label = "Dodge (lose your next action)" } } },
+			{ default = { dodge = false }, deadline = 20 })
+		local shaken, dodged = {}, {}
+		for owner, ids in pairs(by_owner) do
+			local ans = answers[owner] or {}
+			for _, id in ipairs(ids) do
+				if ans.dodge then table.insert(dodged, id) else
+					hm.commit(condition("shaken", "actor:" .. id), "Volley")
+					table.insert(shaken, id)
+				end
+			end
+		end
+		table.sort(shaken); table.sort(dodged)
+		return { shaken = shaken, dodged = dodged, asked = #owners }
+	end,
+})
+
+-- Dare: a question a player answers in their own time; nothing waits.
+hm.actions.register("dare", {
+	label = "Dare", target = "actor",
+	run = function(ctx)
+		local a = hm.actor(ctx.target)
+		if a == nil or not a.owner or a.owner == "" then error("dare a player's character") end
+		local id = hm.prompt_open(a.owner, { title = "Take the dare?", fields = { { key = "take", type = "bool", label = "Take it" } } },
+			{ default = { take = false }, deadline = 60, context = { actor = ctx.target, stake = ctx.stake or 1 } })
+		return { prompt = id }
+	end,
+})
+hm.on("prompt_answered", function(p)
+	if p.plugin ~= ID or not p.context or not p.context.actor then return p end
+	local key = p.answer and p.answer.take and "blessed" or "shaken"
+	local value = p.timed_out and 0 or (p.context.stake or 1)
+	if value > 0 then
+		for _, ev in ipairs(condition(key, "actor:" .. p.context.actor, value)) do table.insert(p.events, ev) end
+	end
+	table.insert(p.events, { t = "log.add", entry = { id = "n_dare_" .. p.prompt.id, kind = "note", text = "dare: " .. key .. (p.timed_out and " (no answer)" or ""), audience = "all" } })
+	return p
+end)
+
 -- Strike: an attack roll against the target's defence; on a hit, damage,
 -- with the target's owner asked whether to spend armour first.
 hm.actions.register("strike", {

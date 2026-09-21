@@ -579,7 +579,8 @@ func _host_table(p: Plugin) -> Dictionary:
 			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated",
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
-			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise"]:
+			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
+			"prompt_open", "test_answer", "test_prompts", "test_tick"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -690,6 +691,15 @@ class Bridge:
 		if why != "":
 			return {"__error": why}
 		return true
+
+	## A prompt nothing waits on (needs "prompts"); its answer fires
+	## prompt_answered.
+	func prompt_open(to: String, form: Variant, opts: Variant) -> Variant:
+		if not _p().can("prompts"):
+			return {"__error": "hm.prompt_open needs the 'prompts' capability"}
+		var o := PluginHost._as_dict(opts)
+		var id := _k().pending.open_prompt_unattended({"to": str(to), "form": PluginHost._as_dict(form), "opts": o}, plugin_id, o.get("context", {}))
+		return id if id != "" else {"__error": "could not open the prompt"}
 
 	func note(text: String, audience: String) -> Variant:
 		if not _p().can("log"):
@@ -1095,11 +1105,28 @@ class Bridge:
 			return {"__error": str(r.error)}
 		return str(r.actor)
 
+	func test_answer(prompt: String, answer: Variant, who: String) -> Variant:
+		var why := _k().pending.answer(str(prompt), answer, str(who))
+		return true if why == "" else {"__error": why}
+
+	func test_prompts() -> Array:
+		var out := []
+		var ids := _k().pending.prompts().keys()
+		ids.sort()
+		for id in ids:
+			out.append(JsonDoc.deep(_k().pending.prompts()[id]))
+		return out
+
+	func test_tick(seconds: Variant) -> bool:
+		_k().pending.tick(float(seconds))
+		return true
+
 	func test_dispatch(action: String, ctx: Variant, answers: Variant) -> Variant:
 		var pc := _h().dispatch(plugin_id, str(action), PluginHost._as_dict(ctx))
 		var list: Array = answers if answers is Array else []
 		var i := 0
 		while pc.status == PluginCall.PENDING and i < list.size():
+			# a prompt_all takes one answer table for all its players
 			pc.resume(list[i])
 			i += 1
 		if pc.status == PluginCall.PENDING:

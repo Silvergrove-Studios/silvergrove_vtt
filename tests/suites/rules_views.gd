@@ -217,6 +217,23 @@ func test_wire_views_intents_and_roles() -> void:
 	player.tool.press(Vision.token_pos(st.token(sid, ben_token)), MOUSE_BUTTON_LEFT, {})
 	check(pump.call(func() -> bool: return st.encounter.effects.values().any(func(fx: Dictionary) -> bool: return fx.key == "oily" and fx.on == "actor:a_ben2")), "the splash reached the table: Ben's ranger is oily")
 	player.set_pane("")
+	# one question to every player at once: Ana on her phone, Ben through the Table
+	var volley := table.ctx.host.dispatch("sample.ordered", "volley", {})
+	table.ctx.kernel.pending.drive(volley, "sample.ordered")
+	check(volley.status == PluginHost.PluginCall.PENDING and table.ctx.kernel.pending.prompts().size() == 2, "the volley waits on two prompts")
+	check(pump.call(func() -> bool: return player.session.view.prompts.size() == 1), "Ana's phone shows hers, not Ben's")
+	var bens := ""
+	for pid in table.ctx.kernel.pending.prompts():
+		if str(table.ctx.kernel.pending.prompts()[pid].to) == ben_id:
+			bens = str(pid)
+	check(table.ctx.kernel.pending.answer(bens, {"dodge": true}, "") == "" and volley.status == PluginHost.PluginCall.PENDING, "Ben's answer alone does not finish it")
+	check(pump.call(func() -> bool: return player.session.view.prompts.size() == 1), "Ana's is still open")
+	player.set_pane("table")
+	await tree.process_frame
+	_button(player._pane_box, "Answer").pressed.emit()
+	check(pump.call(func() -> bool: return volley.status == PluginHost.PluginCall.OK), "Ana's answer (the default: no dodge) finished the volley: %s" % volley.error)
+	check(volley.value.dodged == ["a_ben2"] and volley.value.shaken == ["a_ana"], "Ben dodged, Ana is shaken: %s" % [volley.value])
+	player.set_pane("")
 	# the GM damages Ana: a prompt reaches her phone; she answers from it
 	table.ctx.select_token(ana_token)
 	var pc := table.ctx.host.dispatch("sample.focus", "damage", {"target": "a_ana", "amount": 5})

@@ -8,6 +8,11 @@ extends RefCounted
 ##
 ## A prompt: { id, to: player id | "gm", form, default, deadline (s),
 ##             by (plugin), title, opened (seq), context }
+##   A prompt opened without anything waiting on it (`hm.prompt_open`)
+##   carries `context.hook = true`: its answer fires the `prompt_answered`
+##   hook instead of resuming a continuation. A group of prompts opened
+##   together (`hm.prompt_all`) share `context.group`; the continuation
+##   runs once with every answer when the last of them is in.
 ## A roll:   { id, spec, ctx, label, by, open_to: [player ids] | "all",
 ##             contributions: [{by, name, expr}], deadline }
 ##
@@ -23,6 +28,8 @@ var kernel: RulesKernel
 var _continuations: Dictionary = {}
 ## prompt id -> seconds left (host time; decremented by tick)
 var _deadlines: Dictionary = {}
+## prompt ids answered by their deadline, so the hook can say so
+var _timed_out: Dictionary = {}
 
 
 func _init(p_kernel: RulesKernel) -> void:
@@ -70,12 +77,52 @@ func answer(id: String, p_answer: Variant, who := "") -> String:
 	if why != "":
 		return why
 	var cont: Variant = _continuations.get(id)
+	var timed_out := _timed_out.has(id)
 	_continuations.erase(id)
 	_deadlines.erase(id)
+	_timed_out.erase(id)
 	closed.emit("prompts", id, p_answer)
 	if cont is Callable and (cont as Callable).is_valid():
 		(cont as Callable).call(p_answer)
+	elif bool(rec.get("context", {}).get("hook", false)):
+		# nothing waits: the plugins are told
+		var ctx: Dictionary = rec.get("context", {}) if rec.get("context") is Dictionary else {}
+		kernel.fire("prompt_answered", {"prompt": JsonDoc.deep(rec), "answer": p_answer, "by": who, "timed_out": timed_out,
+			"plugin": str(rec.get("by", "")), "context": ctx.get("context", {})}, "Answered")
 	return ""
+
+
+## Open a prompt nothing waits on: its answer (or its default at the
+## deadline) fires `prompt_answered` to the plugins. Returns the id.
+func open_prompt_unattended(request: Dictionary, by: String, context: Variant = null) -> String:
+	return open_prompt(request, by, Callable(), {"hook": true, "context": context if context != null else {}})
+
+
+## Open one prompt per player in `request.to` (a list) that together
+## answer one question: `continuation` runs once, with {player: answer},
+## when the last has answered or timed out. Returns the prompt ids.
+func open_prompt_group(request: Dictionary, by: String, continuation: Callable, context: Dictionary = {}) -> Array:
+	var players: Array = request.get("to", []) if request.get("to") is Array else [request.get("to", "gm")]
+	var answers := {}
+	var ids := []
+	var group := JsonDoc.new_id("pg")
+	var n := players.size()
+	if n == 0:
+		if continuation.is_valid():
+			continuation.call({})
+		return ids
+	for pl in players:
+		var pid := str(pl)
+		var one: Dictionary = request.duplicate(true)
+		one.to = pid
+		var ctx: Dictionary = context.duplicate()
+		ctx.group = group
+		var id := open_prompt(one, by, func(p_answer: Variant) -> void:
+			answers[pid] = p_answer
+			if answers.size() == n and continuation.is_valid():
+				continuation.call(JsonDoc.deep(answers)), ctx)
+		ids.append(id)
+	return ids
 
 
 ## Answer with the prompt's default (a deadline passed, or the GM waved it on).
@@ -91,14 +138,17 @@ func tick(seconds: float) -> void:
 	for id in _deadlines.keys():
 		_deadlines[id] = float(_deadlines[id]) - seconds
 		if float(_deadlines[id]) <= 0.0:
+			_timed_out[id] = true
 			answer_default(str(id))
 
 
 ## Prompts without a continuation (a Table restarted with them open):
-## close them with their defaults.
+## close them with their defaults. Unattended prompts are not orphans:
+## their answers reach the plugins whenever they come.
 func close_orphans() -> void:
 	for id in prompts().keys():
-		if not _continuations.has(id):
+		var rec: Dictionary = prompts()[id]
+		if not _continuations.has(id) and not bool(rec.get("context", {}).get("hook", false)):
 			answer_default(str(id))
 
 
@@ -118,18 +168,28 @@ func drive(call: Variant, by: String, done: Callable = Callable()) -> void:
 		if done.is_valid():
 			done.call(call)
 		return
-	if str(request.get("kind", "")) != "prompt":
+	var me: WeakRef = weakref(self)
+	var kind := str(request.get("kind", ""))
+	var context := {"action": call.action if call is PluginHost.PluginCall else ""}
+	if kind == "prompt_all":
+		open_prompt_group(request, by, func(p_answers: Variant) -> void:
+			var pd: Pending = me.get_ref()
+			if pd == null:
+				return
+			call.resume(p_answers)
+			pd.drive(call, by, done), context)
+		return
+	if kind != "prompt":
 		# not a prompt: nothing else can wait yet — give it nothing
 		call.resume(null)
 		drive(call, by, done)
 		return
-	var me: WeakRef = weakref(self)
 	open_prompt(request, by, func(p_answer: Variant) -> void:
 		var pd: Pending = me.get_ref()
 		if pd == null:
 			return
 		call.resume(p_answer)
-		pd.drive(call, by, done), {"action": call.action if call is PluginHost.PluginCall else ""})
+		pd.drive(call, by, done), context)
 
 
 # ----------------------------------------------------------------- rolls --
