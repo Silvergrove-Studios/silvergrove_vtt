@@ -173,6 +173,12 @@ func test_wire_views_intents_and_roles() -> void:
 	player.session.status.connect(func(t: String) -> void: told.append(t))
 	player.session.intent({"kind": "action", "plugin": "sample.focus", "action": "act", "ctx": {"actor": "a_ben"}})
 	check(pump.call(func() -> bool: return told.any(func(t: String) -> bool: return t.contains("not your character")), 2000), "acting with someone else's character is refused: %s" % [told])
+	# the host stamps who sent an intent; a claim on the wire is overwritten
+	player.session.intent({"kind": "action", "plugin": "sample.focus", "action": "sign", "ctx": {"player": ben_id, "gm": true}})
+	check(pump.call(func() -> bool: return str(st.encounter.doc.state.ext.get("sample.focus", {}).get("last_sender", "")) == ana_id), "the action saw Ana as the sender, not what her client claimed")
+	check(st.encounter.doc.state.ext["sample.focus"].last_gm == false, "and not the GM")
+	var signed := table.ctx.host.dispatch("sample.focus", "sign", {})
+	check(signed.value.player == "" and signed.value.gm == true, "the Table's own dispatch is the GM's")
 	# the GM damages Ana: a prompt reaches her phone; she answers from it
 	table.ctx.select_token(ana_token)
 	var pc := table.ctx.host.dispatch("sample.focus", "damage", {"target": "a_ana", "amount": 5})

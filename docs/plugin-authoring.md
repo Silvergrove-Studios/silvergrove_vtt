@@ -144,7 +144,13 @@ hm.actions.register("strike", { label = "Strike", cost = { actions = 1 }, target
   run = function(ctx) … return { … } end })
 ```
 An action the Table (and, from Phase 4, a Player's intent) can dispatch
-with a context. Everything but `run` is public data the UI reads.
+with a context. Everything but `run` is public data the UI reads. The
+host stamps two keys on every context before `run` sees it: `ctx.player`
+(the id of the Player who sent the intent, `""` when the Table or a
+co-GM did) and `ctx.gm` (`true` for the Table and its co-GMs). They come
+from the connection, never from the wire, so an action may trust them —
+for a target the sender does not own, check `ctx.gm` or that
+`ctx.player` owns the acting actor.
 
 ```lua
 hm.improv.register("creature", { label = "Creature by level",

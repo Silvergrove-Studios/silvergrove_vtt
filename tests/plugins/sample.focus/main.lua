@@ -281,6 +281,12 @@ hm.actions.register("damage", {
 })
 
 -- Set up an actor's tracks and a scene countdown.
+-- Who asked: the host stamps ctx.player and ctx.gm on every action.
+hm.actions.register("sign", { label = "Sign", run = function(ctx)
+	hm.commit(hm.state.set("encounter", "", { last_sender = ctx.player or "?", last_gm = ctx.gm == true }), "Sign")
+	return { player = ctx.player, gm = ctx.gm }
+end })
+
 hm.actions.register("setup", {
 	label = "Set up", target = "actor",
 	run = function(ctx)

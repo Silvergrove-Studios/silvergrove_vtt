@@ -344,6 +344,10 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				return "that is not your character"
 			if not gm and ctx.has("token") and not _owns_token(pid, str(ctx.token)):
 				return "that is not your token"
+			# who sent it, from the connection — never from the wire
+			ctx = ctx.duplicate()
+			ctx.player = "" if gm else pid
+			ctx.gm = gm
 			var pc := plugins.dispatch(plugin, action, ctx)
 			if pc.status == PluginHost.PluginCall.ERROR:
 				return pc.error

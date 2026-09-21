@@ -374,6 +374,13 @@ func dispatch(id: String, action: String, ctx: Dictionary = {}) -> PluginCall:
 		pc.status = PluginCall.ERROR
 		pc.error = "%s has no action '%s'" % [id, action]
 		return pc
+	# Every action knows who asked: a Player's id (stamped by the host from
+	# the connection) or "" with gm = true for the Table and its co-GMs.
+	if not ctx.has("gm"):
+		ctx = ctx.duplicate()
+		ctx.gm = not ctx.has("player") or str(ctx.player) == ""
+		if not ctx.has("player"):
+			ctx.player = ""
 	_call_started_ms = Time.get_ticks_msec()
 	var c := p.vm.call_function("__run_action", [action, ctx])
 	pc._call = c
