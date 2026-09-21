@@ -234,6 +234,24 @@ func test_wire_views_intents_and_roles() -> void:
 	check(pump.call(func() -> bool: return volley.status == PluginHost.PluginCall.OK), "Ana's answer (the default: no dodge) finished the volley: %s" % volley.error)
 	check(volley.value.dodged == ["a_ben2"] and volley.value.shaken == ["a_ana"], "Ben dodged, Ana is shaken: %s" % [volley.value])
 	player.set_pane("")
+	# the compendium reaches the phone under Ana's audience: a page, an
+	# entry, and nothing of what is the GM's
+	var replies := []
+	player.session.comp("creatures", {"query": {"filter": {"kind": "humanoid"}, "sort": "name", "fields": ["name", "level"]}}, func(r: Dictionary) -> void: replies.append(r))
+	check(pump.call(func() -> bool: return replies.size() == 1), "a page came back")
+	check(replies[0].collection == "creatures" and replies[0].page.total == 2 and replies[0].page.entries[0].name == "Goblin chief" and not replies[0].page.entries[0].has("__pack"), "two humanoids from sample.degrees' pack, without the pack key: %s" % [replies[0]])
+	player.session.comp("creatures", {"id": "wolf"}, func(r: Dictionary) -> void: replies.append(r))
+	check(pump.call(func() -> bool: return replies.size() == 2) and replies[1].entry.name == "Wolf", "an entry by id")
+	player.session.comp("creatures", {"id": "nope"}, func(r: Dictionary) -> void: replies.append(r))
+	check(pump.call(func() -> bool: return replies.size() == 3) and replies[2].has("error"), "no such entry")
+	var hb := table.ctx.kernel.comp.user_pack("secrets", "The GM's notes", "sample.degrees")
+	check(table.ctx.kernel.comp.put("creatures", {"id": "boss", "name": "The Boss", "level": 9, "kind": "humanoid", "audience": "gm"}, "secrets") == "" and table.ctx.kernel.comp.put("creatures", {"id": "bandit", "name": "Bandit", "level": 1, "kind": "humanoid"}, "secrets") == "", "the GM adds a secret boss and a plain bandit")
+	player.session.comp("creatures", {"query": {"filter": {"kind": "humanoid"}}}, func(r: Dictionary) -> void: replies.append(r))
+	check(pump.call(func() -> bool: return replies.size() == 4) and replies[3].page.total == 3 and not replies[3].page.entries.any(func(e: Dictionary) -> bool: return e.id == "boss"), "the bandit is in her page, the boss is not: %d" % replies[3].page.total)
+	player.session.comp("creatures", {"id": "boss"}, func(r: Dictionary) -> void: replies.append(r))
+	check(pump.call(func() -> bool: return replies.size() == 5) and replies[4].has("error"), "nor can she fetch it by id")
+	check(table.ctx.kernel.comp.query_for("creatures", {"filter": {"kind": "humanoid"}}, true).total == 4 and not table.ctx.kernel.comp.entry_for("creatures", "boss", true).is_empty(), "the GM's own query sees it")
+	table.ctx.kernel.comp.unload("secrets")
 	# the GM damages Ana: a prompt reaches her phone; she answers from it
 	table.ctx.select_token(ana_token)
 	var pc := table.ctx.host.dispatch("sample.focus", "damage", {"target": "a_ana", "amount": 5})

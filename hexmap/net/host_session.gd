@@ -444,6 +444,22 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 			_send(c, {"t": "map", "id": id, "doc": m.doc})
 		"packs":
 			_send(c, {"t": "packs", "packs": pack_listing()})
+		"comp":
+			# the compendium, as this viewer may see it: a page or an entry
+			var coll := str(msg.get("collection", ""))
+			var out := {"t": "comp", "req": str(msg.get("req", "")), "collection": coll}
+			if kernel == null or coll == "":
+				out.error = "no compendium here"
+			elif msg.has("id"):
+				var e := kernel.comp.entry_for(coll, str(msg.id), _is_gm(c))
+				if e.is_empty():
+					out.error = "no such entry"
+				else:
+					out.entry = e
+			else:
+				var q: Dictionary = msg.get("query", {}) if msg.get("query") is Dictionary else {}
+				out.page = kernel.comp.query_for(coll, q, _is_gm(c))
+			_send(c, out)
 		"file":
 			var pack := str(msg.get("pack", ""))
 			var file := str(msg.get("file", ""))

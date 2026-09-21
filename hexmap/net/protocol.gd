@@ -18,6 +18,7 @@ extends RefCounted
 ##   request  {ev}                            a scene event the player asks for (a move)
 ##   intent   {intent}                        a rules action: {kind: action|answer|focus|contribute, …}
 ##   need     {kind: map, id} | {kind: packs} | {kind: file, pack, file}
+##            | {kind: comp, req, collection, id | query}   a compendium entry or page
 ##   ping     {}
 ## host → client
 ##   welcome  {version, encounter}            the document without its rules blocks
@@ -28,6 +29,7 @@ extends RefCounted
 ##   map      {id, doc}                       a map document
 ##   packs    {packs: [{id, version, manifest, files}]}
 ##   file     {pack, file, data}              base64 of one pack file
+##   comp     {req, collection, entry | page}   what was asked for, under the viewer's audience
 ##   error    {why}                           then the host closes
 ##   pong     {}
 

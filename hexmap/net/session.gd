@@ -72,6 +72,14 @@ func my_actors() -> Array:
 	return out
 
 
+## Ask the table's compendium for a page (`{query = {…}}`) or an entry
+## (`{id = "…"}`) of a collection; `on_reply` gets {collection, page |
+## entry | error}. Sessions without a table answer with an error.
+func comp(collection: String, req: Dictionary, on_reply: Callable) -> void:
+	if on_reply.is_valid():
+		on_reply.call({"collection": collection, "error": "no compendium here"})
+
+
 ## Called regularly by the UI; transports use it to pump their sockets or
 ## watch their files.
 func poll() -> void:

@@ -71,6 +71,26 @@ func is_gm() -> bool:
 	return role == Views.ROLE_COGM
 
 
+## req id -> callback, for compendium requests in flight
+var _comp_waiting: Dictionary = {}
+var _comp_seq := 0
+
+
+func comp(collection: String, req: Dictionary, on_reply: Callable) -> void:
+	if not is_connected_to_host():
+		super(collection, req, on_reply)
+		return
+	_comp_seq += 1
+	var id := "c%d" % _comp_seq
+	_comp_waiting[id] = on_reply
+	var msg := {"t": "need", "kind": "comp", "req": id, "collection": collection}
+	if req.has("id"):
+		msg.id = str(req.id)
+	else:
+		msg.query = req.get("query", {}) if req.get("query") is Dictionary else {}
+	_send(msg)
+
+
 func request(ev: Dictionary) -> String:
 	if state == null or not is_connected_to_host():
 		return "Not connected"
@@ -159,6 +179,15 @@ func _handle(msg: Dictionary) -> void:
 			_receive_packs(msg.get("packs", []))
 		"file":
 			_receive_file(str(msg.pack), str(msg.file), str(msg.data))
+		"comp":
+			var cb: Variant = _comp_waiting.get(str(msg.get("req", "")))
+			_comp_waiting.erase(str(msg.get("req", "")))
+			if cb is Callable and (cb as Callable).is_valid():
+				var reply := {"collection": str(msg.get("collection", ""))}
+				for k in ["page", "entry", "error"]:
+					if msg.has(k):
+						reply[k] = msg[k]
+				(cb as Callable).call(reply)
 		"error":
 			status.emit(str(msg.get("why", "error")))
 

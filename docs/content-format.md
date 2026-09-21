@@ -26,6 +26,7 @@ my.pack/
   "pack_version": "1",                  bump when entries change; actors record what they were built against
   "plugin": "sample.degrees",           whose collections these are
   "provenance": { "source": "…", "license": "CC0-1.0", "attribution": "…", "url": "…" },
+  "audience": "all",                    or "gm": a pack players never receive
   "collections": { "creatures": "creatures.json", "feats": "feats.json" }
 }
 ```
@@ -39,6 +40,12 @@ form is generated from and what homebrew entries are checked against.
 Scalars and lists of scalars are indexed as facets, and so are the
 scalars inside nested objects, three levels down, under paths like
 `stats/level` — queries filter, sort and facet on those paths too.
+
+Players' devices may ask the Table for a page or an entry of any
+collection (`need {kind: comp}` in the protocol; `Session.comp` on the
+client); they receive what their audience allows — every entry whose
+pack and whose own `audience` field are `"all"` (the default). Put a
+GM's secrets in a pack with `"audience": "gm"`, or on the entry.
 
 A pack can also be one file — `{"pack": {…}, "collections": {"creatures":
 […]}}` — which is how packs are exported to share.

@@ -83,7 +83,8 @@ func load_pack(manifest: Dictionary, collections: Dictionary, dir := "") -> Stri
 		unload(id)
 	_layer += 1
 	packs[id] = {"id": id, "name": str(manifest.get("name", id)), "pack_version": str(manifest.get("pack_version", "1")), "plugin": str(manifest.get("plugin", "")),
-		"provenance": JsonDoc.deep(manifest.get("provenance", {})), "layer": _layer, "dir": dir, "user": bool(manifest.get("user", false)), "collections": collections.keys()}
+		"provenance": JsonDoc.deep(manifest.get("provenance", {})), "layer": _layer, "dir": dir, "user": bool(manifest.get("user", false)), "collections": collections.keys(),
+		"audience": str(manifest.get("audience", "all"))}
 	for name in collections:
 		var list: Variant = collections[name]
 		if not (list is Array):
@@ -229,6 +230,49 @@ func count(coll: String) -> int:
 ## The winning entry, or {}.
 func get_entry(coll: String, id: String) -> Dictionary:
 	return JsonDoc.deep(_entries.get(coll, {}).get(id, {}))
+
+
+## Whether an entry is for players' eyes: its pack's `audience` and its
+## own `audience` field must both be "all" (the default). The GM sees all.
+func visible_to_players(entry: Dictionary) -> bool:
+	if str(entry.get("audience", "all")) == "gm":
+		return false
+	var pack: Dictionary = packs.get(str(entry.get("__pack", "")), {})
+	return str(pack.get("audience", "all")) != "gm"
+
+
+## A query as a client sees it: `gm` false drops entries players may not
+## see (before paging, so the counts are theirs) and the `__pack` key.
+func query_for(coll: String, opts: Dictionary, gm: bool) -> Dictionary:
+	if gm:
+		return query(coll, opts)
+	var o: Dictionary = opts.duplicate(true)
+	# page the visible ones: ask for everything matching, then cut
+	var per := maxi(1, int(o.get("per_page", PAGE)))
+	var page := maxi(1, int(o.get("page", 1)))
+	o.per_page = 100000
+	o.page = 1
+	var r := query(coll, o)
+	var seen := []
+	for e in r.entries:
+		if visible_to_players(e):
+			var slim: Dictionary = e.duplicate()
+			slim.erase("__pack")
+			seen.append(slim)
+	var total := seen.size()
+	var start := (page - 1) * per
+	return {"total": total, "page": page, "per_page": per, "pages": int(ceil(float(total) / per)) if total > 0 else 0,
+		"entries": seen.slice(start, mini(total, start + per)), "facets": r.facets}
+
+
+## An entry as a client sees it, or {} when there is none for them.
+func entry_for(coll: String, id: String, gm: bool) -> Dictionary:
+	var e := get_entry(coll, id)
+	if e.is_empty() or (not gm and not visible_to_players(e)):
+		return {}
+	if not gm:
+		e.erase("__pack")
+	return e
 
 
 ## The facet fields a collection has and how many distinct values each.

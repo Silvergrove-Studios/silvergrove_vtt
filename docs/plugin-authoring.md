@@ -232,7 +232,10 @@ hm.comp.outdated(actor_id)            -- packs that changed since the actor was 
 
 A schema declared for a collection name does three things: it checks
 homebrew entries, it generates the Table's editor form for them, and it
-tells the browser what the fields mean. An action registered with
+tells the browser what the fields mean. Players' devices can read the
+compendium too (a page or an entry at a time, asked of the Table, under
+their audience: packs and entries marked `audience: "gm"` never reach
+them), which is what the `picker` widget draws on. An action registered with
 `target = "entry"` (and optionally `collection = "creatures"`) shows as
 a button on an open entry in the Table's Compendium panel and is
 dispatched with `ctx.entry`, `ctx.collection` and `ctx.scene` — the way
