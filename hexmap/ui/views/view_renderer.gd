@@ -28,7 +28,19 @@ extends VBoxContainer
 ##   tracker {bind}                  a progress track
 ##   prompt {bind}                   a prompt record: its form and a Submit
 ##   form {fields (PropertyForm schema), submit (intent), label}
+##       a field of type "list" with its own `fields` is a repeater
 ##   log {bind, limit}
+##   picker {label, bind | collection, query, fields, search, multi, on_pick, per_page}
+##       a searchable list to choose from: a bound list of strings or
+##       {id, name|label}, or a compendium collection fetched through
+##       `comp_source` a page at a time; the choice sends on_pick with
+##       @pick (the chosen record) or, with multi, @picks (the ids) on Done
+##   wizard {steps: [{title, fields}], submit (intent), label}
+##       one step at a time with Back and Next; submit carries $values
+##       merged from every step
+##   image {bind | src, height}    pack art by ref ("pack:asset") through `packs`
+##   field {label, bind, kind (a PropertyForm type), on_change (intent with $value), options}
+##       one value edited in place; on_change is sent when it changes
 ## Unknown types render as text, so a client of version N shows a plugin
 ## of version N+1 legibly.
 
@@ -40,8 +52,15 @@ signal pick_requested(payload: Dictionary)
 
 var schema: Dictionary = {}
 var data: Dictionary = {}
+## Where a picker over a collection gets its pages: Callable(collection,
+## req, on_reply) shaped like Session.comp. Unset: collection pickers
+## show "no compendium".
+var comp_source: Callable = Callable()
+## Where an image widget finds pack art (a PackLibrary); unset: a label.
+var packs: PackLibrary = null
 ## Widget types this renderer knows; a schema may ask for more.
-const KNOWN := ["column", "row", "section", "tabs", "text", "number", "pool", "track", "effects", "list", "cards", "button", "action_bar", "tracker", "prompt", "form", "log", "spacer"]
+const KNOWN := ["column", "row", "section", "tabs", "text", "number", "pool", "track", "effects", "list", "cards", "button", "action_bar", "tracker", "prompt", "form", "log", "spacer",
+	"picker", "wizard", "image", "field"]
 const MAX_DEPTH := 24
 
 
@@ -215,6 +234,10 @@ func _build(node: Variant, ctx: Dictionary, depth: int) -> Control:
 		"prompt": return _prompt(n, ctx)
 		"form": return _form(n, ctx)
 		"log": return _log(n, ctx)
+		"picker": return _picker(n, ctx)
+		"wizard": return _wizard(n, ctx)
+		"image": return _image(n, ctx)
+		"field": return _field(n, ctx)
 	return _fallback(n)
 
 
@@ -457,12 +480,7 @@ func _form(n: Dictionary, ctx: Dictionary) -> Control:
 	submit.theme_type_variation = "AccentButton"
 	var tpl: Variant = n.get("submit", {})
 	submit.pressed.connect(func() -> void:
-		var payload: Variant = fill_intent(tpl, ctx)
-		if payload is Dictionary:
-			for k in payload:
-				if payload[k] is String and payload[k] == "$values":
-					payload[k] = pf.get_values()
-		intent.emit(payload))
+		intent.emit(_put_value(fill_intent(tpl, ctx), pf.get_values(), "$values")))
 	box.add_child(submit)
 	return box
 
@@ -492,3 +510,249 @@ func _log(n: Dictionary, ctx: Dictionary) -> Control:
 					l.text = JSON.stringify(e)
 			box.add_child(l)
 	return box
+
+
+# ------------------------------------------------------------- pickers --
+
+## A searchable list to choose from. Options come from a bound list or a
+## collection; each is shown by its `name` (or `label`, or the string
+## itself) and picked by its `id`.
+func _picker(n: Dictionary, ctx: Dictionary) -> Control:
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if n.has("label"):
+		var title := Label.new()
+		title.text = str(n.label)
+		title.theme_type_variation = "HeaderLabel"
+		box.add_child(title)
+	var search := LineEdit.new()
+	search.placeholder_text = str(n.get("placeholder", "Search…"))
+	search.name = "search"
+	if bool(n.get("search", true)):
+		box.add_child(search)
+	var list := ItemList.new()
+	list.name = "options"
+	list.custom_minimum_size = Vector2(0, float(n.get("height", 160)))
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var multi := bool(n.get("multi", false))
+	list.select_mode = ItemList.SELECT_MULTI if multi else ItemList.SELECT_SINGLE
+	box.add_child(list)
+	var status := Label.new()
+	status.name = "status"
+	status.theme_type_variation = "DimLabel"
+	box.add_child(status)
+	# each row keeps the record it stands for as its metadata
+	var fill := func(items: Array, total: int) -> void:
+		list.clear()
+		for it in items:
+			list.add_item(_option_label(it))
+			list.set_item_metadata(list.item_count - 1, it)
+		status.text = "" if total <= items.size() else "%d of %d — narrow the search" % [items.size(), total]
+		if items.is_empty():
+			status.text = "Nothing matches" if search.text != "" else str(n.get("empty", "Nothing to pick"))
+	var load := func() -> void:
+		var q := search.text.strip_edges().to_lower()
+		if n.has("collection"):
+			if not comp_source.is_valid():
+				status.text = "No compendium here"
+				return
+			var query: Dictionary = (n.get("query", {}) as Dictionary).duplicate(true) if n.get("query") is Dictionary else {}
+			if q != "":
+				query.text = q
+			query.per_page = int(n.get("per_page", 25))
+			if n.has("fields"):
+				query.fields = n.fields
+			var me: WeakRef = weakref(self)
+			comp_source.call(str(n.collection), {"query": query}, func(reply: Dictionary) -> void:
+				if me.get_ref() == null or not is_instance_valid(list):
+					return
+				if reply.has("error"):
+					status.text = str(reply.error)
+					return
+				var page: Dictionary = reply.get("page", {})
+				fill.call(page.get("entries", []), int(page.get("total", 0))))
+		else:
+			var raw: Variant = value_of(n, ctx)
+			var items := []
+			if raw is Dictionary:
+				for k in raw:
+					var rec: Variant = raw[k]
+					items.append(rec if rec is Dictionary else {"id": str(k), "name": str(rec)})
+			elif raw is Array:
+				items = raw
+			var shown := []
+			for it in items:
+				if q == "" or _option_label(it).to_lower().contains(q):
+					shown.append(it)
+			fill.call(shown, shown.size())
+	search.text_changed.connect(func(_t: String) -> void: load.call())
+	var tpl: Variant = n.get("on_pick", {})
+	var send := func(chosen: Variant) -> void:
+		var sub: Dictionary = ctx.duplicate()
+		if multi:
+			sub.picks = chosen
+		else:
+			sub.pick = chosen
+			sub.pick_id = _option_id(chosen)
+		intent.emit(fill_intent(tpl, sub))
+	if multi:
+		var done := Button.new()
+		done.text = str(n.get("done_label", "Done"))
+		done.theme_type_variation = "AccentButton"
+		done.pressed.connect(func() -> void:
+			var ids := []
+			for i in list.get_selected_items():
+				ids.append(_option_id(list.get_item_metadata(i)))
+			send.call(ids))
+		box.add_child(done)
+	else:
+		list.item_selected.connect(func(i: int) -> void:
+			if i >= 0 and i < list.item_count:
+				send.call(list.get_item_metadata(i)))
+	load.call()
+	return box
+
+
+static func _option_label(it: Variant) -> String:
+	if it is Dictionary:
+		return str(it.get("name", it.get("label", it.get("id", ""))))
+	return str(it)
+
+
+static func _option_id(it: Variant) -> String:
+	if it is Dictionary:
+		return str(it.get("id", it.get("name", "")))
+	return str(it)
+
+
+# -------------------------------------------------------------- wizard --
+
+## One step at a time; Back and Next; Submit sends every step's values.
+func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var steps: Array = n.get("steps", []) if n.get("steps") is Array else []
+	var values := {}
+	var at := [0]
+	var title := Label.new()
+	title.theme_type_variation = "HeaderLabel"
+	box.add_child(title)
+	var holder := VBoxContainer.new()
+	holder.name = "step"
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(holder)
+	var nav := HBoxContainer.new()
+	var back := Button.new()
+	back.text = str(n.get("back_label", "Back"))
+	back.name = "back"
+	var next := Button.new()
+	next.text = str(n.get("next_label", "Next"))
+	next.name = "next"
+	next.theme_type_variation = "AccentButton"
+	nav.add_child(back)
+	nav.add_child(next)
+	box.add_child(nav)
+	var form_ref := [null]
+	var show := func() -> void:
+		for c in holder.get_children():
+			holder.remove_child(c)
+			c.queue_free()
+		if steps.is_empty():
+			title.text = str(n.get("label", ""))
+			next.disabled = true
+			back.disabled = true
+			return
+		var i: int = at[0]
+		var step: Dictionary = steps[i] if steps[i] is Dictionary else {}
+		title.text = "%s%s (%d/%d)" % [(str(n.label) + ": ") if n.has("label") else "", str(step.get("title", "")), i + 1, steps.size()]
+		var pf := PropertyForm.new()
+		var fields: Array = []
+		for f in step.get("fields", []):
+			if f is Dictionary and f.has("key"):
+				fields.append(f)
+		pf.build(fields, values)
+		holder.add_child(pf)
+		form_ref[0] = pf
+		if step.has("text"):
+			var t := Label.new()
+			t.text = str(step.text)
+			t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			holder.add_child(t)
+			holder.move_child(t, 0)
+		back.disabled = i == 0
+		next.text = str(n.get("submit_label", "Submit")) if i == steps.size() - 1 else str(n.get("next_label", "Next"))
+	var keep := func() -> void:
+		if form_ref[0] != null:
+			for k in (form_ref[0] as PropertyForm).get_values():
+				values[k] = (form_ref[0] as PropertyForm).get_values()[k]
+	back.pressed.connect(func() -> void:
+		keep.call()
+		at[0] = maxi(0, at[0] - 1)
+		show.call())
+	var tpl: Variant = n.get("submit", {})
+	next.pressed.connect(func() -> void:
+		keep.call()
+		if at[0] < steps.size() - 1:
+			at[0] += 1
+			show.call()
+			return
+		intent.emit(_put_value(fill_intent(tpl, ctx), values.duplicate(true), "$values")))
+	show.call()
+	return box
+
+
+# --------------------------------------------------------------- image --
+
+func _image(n: Dictionary, ctx: Dictionary) -> Control:
+	var ref := str(value_of(n, ctx, "src"))
+	var tex: Texture2D = null
+	if packs != null and ref != "":
+		tex = packs.token_texture(ref, 128.0)
+	if tex == null:
+		var l := Label.new()
+		l.text = ref if ref != "" else "(no image)"
+		l.theme_type_variation = "DimLabel"
+		return l
+	var tr := TextureRect.new()
+	tr.texture = tex
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.custom_minimum_size = Vector2(0, float(n.get("height", 96)))
+	tr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return tr
+
+
+# --------------------------------------------------------------- field --
+
+## One value edited in place: a PropertyForm with a single row, whose
+## change sends on_change with $value.
+func _field(n: Dictionary, ctx: Dictionary) -> Control:
+	var pf := PropertyForm.new()
+	var item := {"key": "value", "label": str(n.get("label", "")), "type": str(n.get("kind", "string"))}
+	for k in ["min", "max", "step", "options", "suffix", "tooltip", "fields"]:
+		if n.has(k):
+			item[k] = n[k]
+	var raw: Variant = at_pointer(ctx, str(n.get("bind", ""))) if n.has("bind") else n.get("value")
+	pf.build([item], {"value": raw})
+	var tpl: Variant = n.get("on_change", {})
+	pf.value_changed.connect(func(_k: String, v: Variant) -> void:
+		intent.emit(_put_value(fill_intent(tpl, ctx), v, "$value")))
+	return pf
+
+
+## Replace every `token` string ("$value", "$values") in an intent, at
+## any depth, with the value.
+static func _put_value(tpl: Variant, v: Variant, token := "$value") -> Variant:
+	if tpl is String and tpl == token:
+		return v
+	if tpl is Dictionary:
+		var out := {}
+		for k in tpl:
+			out[k] = _put_value(tpl[k], v, token)
+		return out
+	if tpl is Array:
+		var out := []
+		for it in tpl:
+			out.append(_put_value(it, v, token))
+		return out
+	return tpl

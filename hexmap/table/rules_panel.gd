@@ -190,6 +190,8 @@ func refresh() -> void:
 			_gm.add_child(title)
 			var r := ViewRenderer.new()
 			r.intent.connect(_gm_intent)
+			r.comp_source = _comp_for_gm
+			r.packs = ctx.app.packs if ctx.app != null else null
 			_gm.add_child(r)
 			r.render(p.views["gm"], Views.status_data(ctx.kernel, projection, str(pid), "", Views.ROLE_GM))
 			_renderers.append(r)
@@ -232,6 +234,19 @@ func _run(plugin: String, action: String, ctx_d: Dictionary) -> void:
 				bits.append("%s %s" % [str(k), str(c.value[k])])
 			ctx.say("%s: %s" % [action, ", ".join(bits)]))
 	refresh()
+
+
+## The Table's own compendium for the GM views' pickers, shaped like
+## Session.comp.
+func _comp_for_gm(collection: String, req: Dictionary, on_reply: Callable) -> void:
+	if ctx.kernel == null:
+		on_reply.call({"collection": collection, "error": "no compendium here"})
+		return
+	if req.has("id"):
+		var e := ctx.kernel.comp.entry_for(collection, str(req.id), true)
+		on_reply.call({"collection": collection, "entry": e} if not e.is_empty() else {"collection": collection, "error": "no such entry"})
+		return
+	on_reply.call({"collection": collection, "page": ctx.kernel.comp.query_for(collection, req.get("query", {}) if req.get("query") is Dictionary else {}, true)})
 
 
 ## The DM answering a prompt on a player's behalf, or a GM view's button.

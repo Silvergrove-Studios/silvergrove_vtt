@@ -319,6 +319,26 @@ hm.actions.register("setup", {
 	end,
 })
 
+-- Learn a feat from the compendium: the sheet's picker sends the entry's
+-- id; the owner may only teach their own character (ctx.player).
+hm.actions.register("learn", {
+	label = "Learn a feat", target = "",
+	run = function(ctx)
+		local a = hm.actor(ctx.actor)
+		if a == nil then error("no such actor") end
+		if not ctx.gm and a.owner ~= ctx.player then error("not your character") end
+		local feat = hm.comp.get("feats", ctx.feat or "")
+		if feat == nil then error("no such feat: " .. tostring(ctx.feat)) end
+		local have = (a.ext[ID] or {}).feats or {}
+		for _, f in ipairs(have) do if f == feat.id then return { learned = false } end end
+		local feats = {}
+		for _, f in ipairs(have) do table.insert(feats, f) end
+		table.insert(feats, feat.id)
+		hm.commit({ { t = "actor.set", id = a.id, changes = { ["ext/" .. ID .. "/feats"] = feats } } }, "Learn " .. feat.name)
+		return { learned = true, feats = #feats }
+	end,
+})
+
 -- ------------------------------------------------------------------- views --
 hm.ui.register("sheet", {
 	type = "column",
@@ -333,5 +353,7 @@ hm.ui.register("sheet", {
 		{ type = "text", expr = "'Actions left: ' .. ((@turns.counters[\"token:\" .. (@tokens[0].id ?? \"\")].actions) ?? \"—\")", style = "dim" },
 		{ type = "effects", label = "Conditions", bind = "/effects" },
 		{ type = "list", bind = "/derived/feats", item = { type = "text", expr = "'Feat: ' .. @item" }, empty = "no feats" },
+		{ type = "picker", label = "Learn a feat", collection = "feats", fields = { "name", "text" }, per_page = 10,
+			on_pick = { kind = "action", plugin = hm.id, action = "learn", ctx = { actor = "$/actor/id", feat = "$/pick_id" } } },
 	},
 })

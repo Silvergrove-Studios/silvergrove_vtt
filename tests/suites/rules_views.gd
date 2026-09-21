@@ -189,7 +189,7 @@ func test_wire_views_intents_and_roles() -> void:
 	var ben_token := str(st.tokens_owned_by(sid, ben_id)[0].id)
 	var ana_pos := Vision.token_pos(st.token(sid, ana_token))
 	check(table.ctx.kernel.commit([
-		{"t": "actor.set", "id": "a_ana", "changes": {"ext": {"sample.ordered": {"level": 1, "stats": {"agi": 2, "str": 1, "wit": 0}}}}},
+		{"t": "actor.set", "id": "a_ana", "changes": {"ext/sample.ordered": {"level": 1, "stats": {"agi": 2, "str": 1, "wit": 0}}}},
 		{"t": "actor.add", "actor": {"id": "a_ben2", "kind": "pc", "name": "Ben's ranger", "owner": ben_id, "ext": {"sample.ordered": {"level": 1, "stats": {"agi": 1, "str": 0, "wit": 0}}}}},
 		{"t": "token.set", "scene": sid, "id": ben_token, "changes": {"actor": "a_ben2", "pos": [ana_pos.x + 1.0, ana_pos.y]}}], "Neighbours") == "", "Ana knows the ordered rules too; Ben's ranger stands beside her")
 	told.clear()
@@ -252,6 +252,26 @@ func test_wire_views_intents_and_roles() -> void:
 	check(pump.call(func() -> bool: return replies.size() == 5) and replies[4].has("error"), "nor can she fetch it by id")
 	check(table.ctx.kernel.comp.query_for("creatures", {"filter": {"kind": "humanoid"}}, true).total == 4 and not table.ctx.kernel.comp.entry_for("creatures", "boss", true).is_empty(), "the GM's own query sees it")
 	table.ctx.kernel.comp.unload("secrets")
+	# the sheet's picker draws on the compendium over the wire and its pick
+	# becomes an action on the table: Ana learns a feat from her phone
+	check(table.ctx.kernel.commit([{"t": "actor.set", "id": "a_ana", "changes": {"ext/sample.degrees": {"level": 2, "stats": {"might": 1, "agility": 2, "mind": 0}, "feats": []}}}], "Degrees too") == "", "Ana's fighter knows the degrees rules as well")
+	check(pump.call(func() -> bool: return player.session.view.actors.a_ana.sheets.size() == 3), "three sheets on her phone: %s" % [player.session.view.actors.a_ana.sheets.map(func(sh): return sh.plugin)])
+	player.set_pane("sheet")
+	await tree.process_frame
+	var pickers := _all_of(player._pane_box, "ItemList")
+	check(pump.call(func() -> bool:
+		pickers = _all_of(player._pane_box, "ItemList")
+		return not pickers.is_empty() and (pickers[0] as ItemList).item_count > 0), "the feat picker filled from the table's compendium: %d options" % [(pickers[0] as ItemList).item_count if not pickers.is_empty() else 0])
+	var feat_list := pickers[0] as ItemList
+	var keen := -1
+	for i in feat_list.item_count:
+		if str(feat_list.get_item_metadata(i).get("id", "")) == "keen-eyes":
+			keen = i
+	check(keen >= 0, "keen eyes is on offer")
+	feat_list.select(keen)
+	feat_list.item_selected.emit(keen)
+	check(pump.call(func() -> bool: return (st.encounter.actor("a_ana").ext["sample.degrees"].feats as Array).has("keen-eyes")), "the pick reached the table as an action: she has keen eyes")
+	player.set_pane("")
 	# the GM damages Ana: a prompt reaches her phone; she answers from it
 	table.ctx.select_token(ana_token)
 	var pc := table.ctx.host.dispatch("sample.focus", "damage", {"target": "a_ana", "amount": 5})
@@ -329,3 +349,12 @@ func _find_class(root: Node, cls: String) -> Node:
 		if f != null:
 			return f
 	return null
+
+
+func _all_of(node: Node, cls: String) -> Array:
+	var out := []
+	if node.get_class() == cls:
+		out.append(node)
+	for c in node.get_children():
+		out.append_array(_all_of(c, cls))
+	return out

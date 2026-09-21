@@ -2,8 +2,11 @@ class_name PropertyForm
 extends GridContainer
 ## A two-column form built from a schema, used by the inspector and the
 ## export dialogs. Schema entries:
-##   { key, label, type: float|int|bool|enum|color|string|text|vec2,
-##     min, max, step, options: [..] (enum), suffix, tooltip }
+##   { key, label, type: float|int|bool|enum|color|string|text|vec2|list,
+##     min, max, step, options: [..] (enum), suffix, tooltip,
+##     fields: [..] (list: the sub-form each item is edited with) }
+## A `list` is a repeater: its value is an array of records, one sub-form
+## per item with add and remove.
 ## Emits value_changed(key, value) as the user edits; get_values() reads
 ## the whole form.
 
@@ -55,6 +58,12 @@ func _make_control(item: Dictionary) -> Control:
 			sb.select_all_on_focus = true
 			sb.value_changed.connect(func(v: float) -> void: _emit(key, int(v) if item.type == "int" else v))
 			return sb
+		"list":
+			var rep := ListField.new()
+			rep.fields = item.get("fields", []) if item.get("fields") is Array else []
+			rep.add_label = str(item.get("add_label", "Add"))
+			rep.changed.connect(func() -> void: _emit(key, rep.get_values()))
+			return rep
 		"bool":
 			var cb := CheckBox.new()
 			cb.toggled.connect(func(v: bool) -> void: _emit(key, v))
@@ -134,6 +143,8 @@ func set_values(values: Dictionary) -> void:
 				var a: Array = v if v is Array else [0, 0]
 				(ctl.get_node("x") as SpinBox).set_value_no_signal(float(a[0]))
 				(ctl.get_node("y") as SpinBox).set_value_no_signal(float(a[1]))
+			"list":
+				(ctl as ListField).set_values(v if v is Array else [])
 			_:
 				(ctl as LineEdit).text = str(v if v != null else "")
 	_updating = false
@@ -156,9 +167,70 @@ func get_values() -> Dictionary:
 				out[key] = "#" + c.to_html(c.a < 1.0)
 			"text": out[key] = (ctl as TextEdit).text
 			"vec2": out[key] = [(ctl.get_node("x") as SpinBox).value, (ctl.get_node("y") as SpinBox).value]
+			"list": out[key] = (ctl as ListField).get_values()
 			_: out[key] = (ctl as LineEdit).text
 	return out
 
 
 func control(key: String) -> Control:
 	return _controls.get(key)
+
+
+## The repeater behind a `list` field: one PropertyForm per item, add
+## and remove buttons, values as an array of records.
+class ListField extends VBoxContainer:
+	signal changed
+	var fields: Array = []
+	var add_label := "Add"
+	var _rows: Array = []
+
+	func _init() -> void:
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		add_theme_constant_override("separation", 4)
+		var add := Button.new()
+		add.text = add_label
+		add.pressed.connect(func() -> void:
+			_add_row({})
+			changed.emit())
+		add.name = "add"
+		add_child(add)
+
+	func _ready() -> void:
+		(get_node("add") as Button).text = add_label
+
+	func _add_row(values: Dictionary) -> void:
+		var row := HBoxContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var pf := PropertyForm.new()
+		pf.build(fields, values)
+		pf.value_changed.connect(func(_k: String, _v: Variant) -> void: changed.emit())
+		row.add_child(pf)
+		var rm := Button.new()
+		rm.text = "−"
+		rm.tooltip_text = "Remove"
+		rm.pressed.connect(func() -> void:
+			_rows.erase(row)
+			remove_child(row)
+			row.queue_free()
+			changed.emit())
+		row.add_child(rm)
+		add_child(row)
+		move_child(get_node("add"), get_child_count() - 1)
+		_rows.append(row)
+
+	func set_values(values: Array) -> void:
+		for r in _rows:
+			remove_child(r)
+			r.queue_free()
+		_rows.clear()
+		for v in values:
+			_add_row(v if v is Dictionary else {})
+
+	func get_values() -> Array:
+		var out := []
+		for r in _rows:
+			out.append((r.get_child(0) as PropertyForm).get_values())
+		return out
+
+	func count() -> int:
+		return _rows.size()

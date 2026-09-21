@@ -289,7 +289,27 @@ with its breakdown as tooltip), `pool {spend, gain}` (intents for the
 item, empty}` (the item schema sees `@item` and `@index`), `cards
 {on_tap}` (the tap sees `@card` and `@card_id`), `button {label,
 intent, cost, enabled = "<expr>", accent}`, `action_bar {actions}`,
-`tracker`, `prompt`, `form {fields, submit}`, `log {limit}`, `spacer`.
+`tracker`, `prompt`, `form {fields, submit}` (a field of type `list`
+with its own `fields` is a repeater: an array of records, one sub-form
+each), `log {limit}`, `spacer`, and:
+
+- `picker {label, bind | collection, query, fields, per_page, search,
+  multi, on_pick}` — a searchable list to choose from: a bound list of
+  strings or `{id, name}` records, or a compendium collection the
+  client fetches from the Table a page at a time (under its audience).
+  A choice sends `on_pick` with `@pick` (the record) and `@pick_id`; with
+  `multi`, a Done button sends `@picks` (the ids). This is how a Player
+  picks a feat, prepares spells, or an encounter builder lists monsters.
+- `wizard {label, steps = {{title, text, fields}}, submit}` — one step
+  at a time with Back and Next; the last step's Submit sends `submit`
+  with `"$values"` replaced by every step's values merged.
+- `image {bind | src, height}` — pack art by ref (`pack:asset`).
+- `field {label, bind, kind, on_change, options, min, max}` — one value
+  edited in place (`kind` is a form field type); a change sends
+  `on_change` with `"$value"` replaced. Sheets edited on the phone are
+  fields and forms whose intents are actions that commit `actor.set`.
+
+`"$values"` and `"$value"` are replaced wherever they sit in the intent.
 
 Intents are Dictionaries; string values that start with `$/` are
 pointers into the data, filled in when the tap happens. What a client

@@ -121,3 +121,102 @@ func test_view_helpers() -> void:
 	check(_find(r, "Label", "nothing here") != null, "a list with no data shows its empty text")
 	r.queue_free()
 	await tree.process_frame
+
+
+func test_pickers_wizards_repeaters_and_fields() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var sent := []
+	r.intent.connect(func(p: Dictionary) -> void: sent.append(p))
+	# a picker over a bound list, single choice
+	var data := {"actor": {"id": "a_1"}, "feats": [{"id": "alert", "name": "Alert"}, {"id": "tough", "name": "Tough"}, "Lucky"],
+		"spells": {"fb": {"id": "fb", "name": "Fire bolt"}, "mm": "Magic missile"}, "notes": "hi", "items": [{"name": "Sword", "qty": 1}]}
+	r.render({"type": "column", "children": [
+		{"type": "picker", "label": "Feat", "bind": "/feats", "on_pick": {"kind": "action", "action": "take", "ctx": {"actor": "$/actor/id", "feat": "$/pick_id", "name": "$/pick/name"}}},
+		{"type": "picker", "label": "Spells", "bind": "/spells", "multi": true, "on_pick": {"kind": "action", "action": "prepare", "ctx": {"ids": "$/picks"}}},
+	]}, data)
+	await tree.process_frame
+	var lists := _all(r, "ItemList")
+	check(lists.size() == 2 and lists[0].item_count == 3 and lists[0].get_item_text(2) == "Lucky", "options from records and strings")
+	var search: LineEdit = _all(r, "LineEdit")[0]
+	search.text = "tou"
+	search.text_changed.emit("tou")
+	check(lists[0].item_count == 1 and lists[0].get_item_text(0) == "Tough", "the search narrows the list")
+	lists[0].select(0)
+	lists[0].item_selected.emit(0)
+	check(sent.size() == 1 and sent[0].ctx.feat == "tough" and sent[0].ctx.name == "Tough" and sent[0].ctx.actor == "a_1", "a pick sends the intent with the record and its id: %s" % [sent])
+	check(lists[1].item_count == 2, "a dictionary of options lists its values")
+	lists[1].select(0)
+	lists[1].select(1, false)
+	_find(r, "Button", "Done").pressed.emit()
+	check(sent.size() == 2 and sent[1].ctx.ids == ["fb", "mm"], "multi: Done sends the chosen ids: %s" % [sent[1]])
+	# a picker over a collection, through comp_source
+	var asked := []
+	r.comp_source = func(collection: String, req: Dictionary, on_reply: Callable) -> void:
+		asked.append([collection, req])
+		on_reply.call({"collection": collection, "page": {"entries": [{"id": "goblin", "name": "Goblin", "level": 1}], "total": 6}})
+	r.render({"type": "picker", "collection": "creatures", "query": {"filter": {"kind": "humanoid"}}, "fields": ["name", "level"], "per_page": 1,
+		"on_pick": {"kind": "action", "action": "spawn", "ctx": {"entry": "$/pick_id"}}}, data)
+	await tree.process_frame
+	check(asked.size() == 1 and asked[0][0] == "creatures" and asked[0][1].query.filter.kind == "humanoid" and asked[0][1].query.per_page == 1 and asked[0][1].query.fields == ["name", "level"], "the collection was asked with the query: %s" % [asked])
+	var cl: ItemList = _all(r, "ItemList")[0]
+	check(cl.item_count == 1 and _find(r, "Label", "1 of 6 — narrow the search") != null, "a page, with a hint that there is more")
+	var cs: LineEdit = _all(r, "LineEdit")[0]
+	cs.text = "gob"
+	cs.text_changed.emit("gob")
+	check(asked.size() == 2 and asked[1][1].query.text == "gob", "typing asks again with the text")
+	cl.select(0)
+	cl.item_selected.emit(0)
+	check(sent.size() == 3 and sent[2].ctx.entry == "goblin", "picking an entry sends its id")
+	r.comp_source = Callable()
+	r.render({"type": "picker", "collection": "creatures", "on_pick": {}}, data)
+	check(_find(r, "Label", "No compendium here") != null, "without a source, the picker says so")
+	# a wizard: steps, back, submit with every step's values
+	r.render({"type": "wizard", "label": "New hero", "steps": [
+		{"title": "Name", "fields": [{"key": "name", "type": "string"}]},
+		{"title": "Kind", "text": "Pick one", "fields": [{"key": "kind", "type": "enum", "options": ["fighter", "mage"]}]},
+	], "submit": {"kind": "action", "action": "create", "ctx": {"actor": "$/actor/id", "values": "$values"}}}, data)
+	await tree.process_frame
+	check(_find(r, "Label", "New hero: Name (1/2)") != null and _find(r, "Button", "Back").disabled, "the first step, no way back")
+	(_all(r, "LineEdit")[0] as LineEdit).text = "Ana"
+	_find(r, "Button", "Next").pressed.emit()
+	check(_find(r, "Label", "New hero: Kind (2/2)") != null and _find(r, "Label", "Pick one") != null and _find(r, "Button", "Submit") != null, "the second step, with its text and Submit")
+	_find(r, "Button", "Back").pressed.emit()
+	check(_find(r, "Label", "New hero: Name (1/2)") != null and (_all(r, "LineEdit")[0] as LineEdit).text == "Ana", "back keeps what was typed")
+	_find(r, "Button", "Next").pressed.emit()
+	(_all(r, "OptionButton")[0] as OptionButton).select(1)
+	_find(r, "Button", "Submit").pressed.emit()
+	check(sent.size() == 4 and sent[3].ctx.values == {"name": "Ana", "kind": "mage"} and sent[3].ctx.actor == "a_1", "submit carries every step's values: %s" % [sent[3]])
+	# a repeater inside a form
+	r.render({"type": "form", "fields": [{"key": "items", "label": "Items", "type": "list", "fields": [{"key": "name", "type": "string"}, {"key": "qty", "type": "int"}]}],
+		"values": {"items": data.items}, "submit": {"kind": "action", "action": "inventory", "ctx": {"items": "$values"}}}, data)
+	await tree.process_frame
+	var rep: PropertyForm.ListField = null
+	for pf in _all(r, "PropertyForm") + _all(r, "GridContainer"):
+		if pf is PropertyForm and (pf as PropertyForm).control("items") is PropertyForm.ListField:
+			rep = (pf as PropertyForm).control("items")
+	check(rep != null and rep.count() == 1 and rep.get_values()[0].name == "Sword", "the repeater shows the one item")
+	(rep.get_node("add") as Button).pressed.emit()
+	check(rep.count() == 2, "add makes a row")
+	((rep.get_child(1) as HBoxContainer).get_child(0) as PropertyForm).set_values({"name": "Shield", "qty": 2})
+	_find(r, "Button", "Submit").pressed.emit()
+	check(sent.size() == 5 and sent[4].ctx.items.items.size() == 2 and sent[4].ctx.items.items[1].name == "Shield" and sent[4].ctx.items.items[1].qty == 2, "submit carries the rows: %s" % [sent[4]])
+	((rep.get_child(0) as HBoxContainer).get_child(1) as Button).pressed.emit()
+	check(rep.count() == 1 and rep.get_values()[0].name == "Shield", "remove drops a row")
+	# a field edited in place
+	r.render({"type": "field", "label": "Notes", "bind": "/notes", "kind": "string", "on_change": {"kind": "action", "action": "note", "ctx": {"actor": "$/actor/id", "text": "$value"}}}, data)
+	await tree.process_frame
+	var le: LineEdit = _all(r, "LineEdit")[0]
+	check(le.text == "hi", "the bound value")
+	le.text = "hello"
+	le.text_submitted.emit("hello")
+	check(sent.size() == 6 and sent[5].ctx.text == "hello" and sent[5].ctx.actor == "a_1", "a change sends the intent with the value: %s" % [sent[5]])
+	# an image without packs degrades to its ref
+	r.render({"type": "image", "src": "dungeons_and_castles:altar"}, data)
+	check(_find(r, "Label", "dungeons_and_castles:altar") != null, "no packs: the ref as text")
+	r.packs = PackLibrary.new()
+	r.packs.reload()
+	r.render({"type": "image", "bind": "/art"}, {"art": "dungeons_and_castles:goblin"})
+	check(_all(r, "TextureRect").size() == 1 or _find(r, "Label", "dungeons_and_castles:goblin") != null, "with packs: a texture when the art exists")
+	r.queue_free()
+	await tree.process_frame

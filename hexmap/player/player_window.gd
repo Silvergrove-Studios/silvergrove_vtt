@@ -737,6 +737,9 @@ func _pane_render(schema: Dictionary, data: Dictionary) -> void:
 	var r := ViewRenderer.new()
 	r.intent.connect(_send_intent)
 	r.pick_requested.connect(_begin_pick)
+	if session != null:
+		r.comp_source = session.comp
+	r.packs = app.packs if app != null else null
 	_pane_box.add_child(r)
 	r.render(schema, data)
 	_renderers.append(r)
