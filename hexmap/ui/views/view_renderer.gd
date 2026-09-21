@@ -509,6 +509,11 @@ func _log(n: Dictionary, ctx: Dictionary) -> Control:
 				"note":
 					l.text = str(e.get("text", ""))
 					l.theme_type_variation = "DimLabel"
+				"handout":
+					l.text = "%s%s" % [(str(e.get("title", "")) + ": ") if str(e.get("title", "")) != "" else "", str(e.get("text", ""))]
+				"ruling":
+					l.text = "Ruling: " + str(e.get("text", ""))
+					l.theme_type_variation = "DimLabel"
 				_:
 					l.text = JSON.stringify(e)
 			box.add_child(l)

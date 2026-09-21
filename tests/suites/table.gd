@@ -287,7 +287,7 @@ func test_table_window() -> void:
 	var win := TableWindow.new()
 	win.app = app
 	root.add_child(win)
-	check(win.view != null and win.dock != null and win._panes.size() == 11, "table window builds with eleven panes")
+	check(win.view != null and win.dock != null and win._panes.size() == 12, "table window builds with twelve panes")
 	var names := LayoutStore.names(win.dock.layout)
 	for n in LayoutStore.TABLE_PANELS:
 		check(names.has(n), "table layout holds the %s panel: %s" % [n, names])
@@ -429,12 +429,24 @@ func test_campaign_first() -> void:
 	check(npcs._results.item_count >= 1, "the compendium answers the search: %d" % npcs._results.item_count)
 	npcs._add_from_compendium(npcs._results.get_item_metadata(0))
 	check(npcs.actors().size() == 1 and ctx.encounter().actor(npcs.actors()[0]).kind == "npc" and ctx.encounter().scenes.is_empty(), "a wolf in the roster, no token (no scene)")
+	# the Notes pane: a note written ahead, handed out in the session, journaled once
+	var notes := win.notes
+	notes._title.text = "The stone"
+	notes._text.text = "Runes glow faintly."
+	notes._audience.select(1)   # everyone
+	notes._tags.text = "runes, altar"
+	var nid := notes.save()
+	check(nid != "" and ctx.campaign.journal.size() == 1 and ctx.campaign.journal[0].tags == ["runes", "altar"] and ctx.campaign.journal[0].audience == "all", "a note saved to the journal ahead of the session")
+	check(notes._list.item_count == 1 and str(notes._list.get_item_text(0)).begins_with("[N] The stone"), "listed")
 	# a session: start and end from the pane's verbs
 	check(ctx.start_session() == "", "started")
+	notes.selected = nid
+	check(notes.hand_out() == "" and ctx.encounter().log.any(func(x: Dictionary) -> bool: return x.get("kind", "") == "handout" and x.get("id", "") == nid), "handed out: a handout in the log under the note's id")
+	check(int(ctx.campaign.journal[0].handed) == 1, "the note remembers the session it was handed out in")
 	check(ctx.encounter().clock.session == 1 and ctx.encounter().checkpoints.size() == 1 and ctx.campaign.sessions.size() == 1, "session 1: the checkpoint and the entry")
 	ctx.kernel.commit([{"t": "log.add", "entry": {"id": "r_1", "kind": "ruling", "text": "ruled", "audience": "gm"}}], "Ruling")
 	var r := ctx.end_session("# recap")
-	check(not r.has("error") and ctx.campaign.sessions[0].recap == "# recap" and ctx.campaign.journal.size() == 1 and ctx.campaign.journal[0].session == 1, "ended: the recap and the journal, saved")
+	check(not r.has("error") and ctx.campaign.sessions[0].recap == "# recap" and ctx.campaign.journal.size() == 2 and ctx.campaign.journal[1].session == 1, "ended: the recap and the journal (the handout once, the ruling stamped), saved: %s" % [ctx.campaign.journal.map(func(j: Dictionary) -> String: return str(j.kind))])
 	check(win.campaign_panel._campaign.text.contains("between sessions (1 played)"), "the pane says so: %s" % win.campaign_panel._campaign.text)
 	# autosave writes the campaign beside its file
 	ctx.kernel.commit([{"t": "actor.set", "id": "a_h", "changes": {"name": "Hero the Bold"}}], "Rename")

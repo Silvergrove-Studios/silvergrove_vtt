@@ -237,6 +237,13 @@ func test_wire_views_intents_and_roles() -> void:
 	player.set_pane("table")
 	await tree.process_frame
 	check(_find_label(player._pane_box, "GM pool:") != null, "the plugin's status view renders on the phone over its own data (@state)")
+	# a handout from the DM reaches the phone's table pane, for its audience
+	table.ctx.kernel.commit([{"t": "log.add", "entry": {"id": "h_stone", "kind": "handout", "title": "The stone", "text": "Runes glow.", "audience": "all"}},
+		{"t": "log.add", "entry": {"id": "h_ben", "kind": "handout", "title": "Ben's letter", "text": "For Ben.", "audience": "owner:" + ben_id}}], "Handouts")
+	check(pump.call(func() -> bool: return player.session.view.log.any(func(e: Dictionary) -> bool: return e.get("id", "") == "h_stone")), "the handout reached Ana's view")
+	player.set_pane("table")
+	await tree.process_frame
+	check(_find_label(player._pane_box, "The stone") != null and _find_label(player._pane_box, "Ben's letter") == null, "her phone shows the handout for everyone, not Ben's")
 	_button(player._pane_box, "Answer").pressed.emit()
 	check(pump.call(func() -> bool: return volley.status == PluginHost.PluginCall.OK), "Ana's answer (the default: no dodge) finished the volley: %s" % volley.error)
 	check(volley.value.dodged == ["a_ben2"] and volley.value.shaken == ["a_ana"], "Ben dodged, Ana is shaken: %s" % [volley.value])

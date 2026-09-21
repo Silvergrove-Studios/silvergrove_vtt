@@ -800,6 +800,15 @@ func _table_schema(v: Dictionary) -> Dictionary:
 		for i in (v.prompts as Array).size():
 			items.append({"type": "prompt", "bind": "/prompts/%d" % i})
 		children.append({"type": "section", "title": "For you", "children": items})
+	# handouts the DM gave this audience, newest first
+	var handouts := []
+	for e in v.get("log", []):
+		if e is Dictionary and str(e.get("kind", "")) == "handout":
+			handouts.push_front({"type": "column", "children": [
+				{"type": "text", "text": str(e.get("title", "")), "style": "header"},
+				{"type": "text", "text": str(e.get("text", ""))}]})
+	if not handouts.is_empty():
+		children.append({"type": "section", "title": "Handouts", "children": handouts.slice(0, 6)})
 	if not (v.get("rolls", []) as Array).is_empty() and not display_mode:
 		var items := []
 		for i in (v.rolls as Array).size():
