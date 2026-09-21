@@ -217,9 +217,36 @@ move only, not drawn), **ethereal** (blocks sight only).
   game systems; rules belong to the system, or to an encounter document.
 - Tokens. An **encounter** (`.encounter`, not yet built) references a map and
   adds tokens, initiative, and notes. One map serves many encounters.
-- Image data. A map that needs unique art is a **bundle**: a directory
-  `name.hexmap/` holding `map.json`, `thumbnail.png` and `assets/`. Assets
-  are referenced as `local:filename.png`.
+- Image data. A map's own files (a backdrop image) live beside it as
+  `local:` assets — see *Local files* above — never inside the JSON.
+
+### Backdrop
+
+A level may lay an image under its terrain — a published battle map, a
+scan, a photograph — and have the grid drawn over it:
+
+```json
+"backdrop": { "image": "local:cellar.jpg", "pos": [-0.2, 0.0], "size": [22.4, 15.7], "opacity": 1.0, "hidden": false }
+```
+
+- `image`: a `local:` reference to a file that travels with the map
+  (below). PNG, JPEG and WebP.
+- `pos`, `size`: where the image's top-left corner falls and how big it
+  is, in hex units, so lining the image's own grid up with the map's is
+  a matter of pixels-per-cell and an origin offset (the editor's Level ›
+  Backdrop… dialog asks for exactly those two things and can resize the
+  map to cover the image).
+- Painted terrain draws over the backdrop; fog, regions, the grid and
+  everything else over that. Exports that raster the map (PNG, PDF,
+  UVTT, Foundry's background) include it; Tiled does not.
+
+### Local files
+
+`local:<name>` refers to a file kept with the map: in `assets/` inside a
+bundle directory (`name.hexmap/map.json`), or in `<stem>.assets/` beside
+a plain `name.hexmap` file. The editor writes them on save and a Table
+sends them to Players on request; the document itself never embeds
+image data.
 
 ## Versioning
 

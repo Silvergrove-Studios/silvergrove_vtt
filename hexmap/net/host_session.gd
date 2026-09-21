@@ -444,6 +444,19 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 			_send(c, {"t": "map", "id": id, "doc": m.doc})
 		"packs":
 			_send(c, {"t": "packs", "packs": pack_listing()})
+		"asset":
+			# a map's own file: only what the document refers to
+			var mid := str(msg.get("map", ""))
+			var file := str(msg.get("file", ""))
+			var m: HexMap = state.maps.get(mid)
+			if m == null or not m.asset_refs().has(file):
+				_send(c, Protocol.error("no asset %s in map %s" % [file, mid]))
+				return
+			var bytes := m.asset_bytes(file)
+			if bytes.is_empty():
+				_send(c, Protocol.error("asset %s is missing on the table" % file))
+				return
+			_send(c, {"t": "asset", "map": mid, "file": file, "data": Marshalls.raw_to_base64(bytes)})
 		"comp":
 			# the compendium, as this viewer may see it: a page or an entry
 			var coll := str(msg.get("collection", ""))

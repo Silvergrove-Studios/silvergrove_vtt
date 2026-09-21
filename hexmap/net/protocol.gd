@@ -18,6 +18,7 @@ extends RefCounted
 ##   request  {ev}                            a scene event the player asks for (a move)
 ##   intent   {intent}                        a rules action: {kind: action|answer|focus|contribute, …}
 ##   need     {kind: map, id} | {kind: packs} | {kind: file, pack, file}
+##            | {kind: asset, map, file}       a map's own file (a backdrop image)
 ##            | {kind: comp, req, collection, id | query}   a compendium entry or page
 ##   ping     {}
 ## host → client
@@ -29,6 +30,7 @@ extends RefCounted
 ##   map      {id, doc}                       a map document
 ##   packs    {packs: [{id, version, manifest, files}]}
 ##   file     {pack, file, data}              base64 of one pack file
+##   asset    {map, file, data}               base64 of one of a map's files
 ##   comp     {req, collection, entry | page}   what was asked for, under the viewer's audience
 ##   error    {why}                           then the host closes
 ##   pong     {}

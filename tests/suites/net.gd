@@ -189,6 +189,12 @@ func test_table_hosts_player_joins() -> void:
 	root.add_child(table)
 	table._open_path(_example("chapel_ambush.encounter"))
 	table.ctx.commands.set_turn_mode("free")
+	# the chapel gets a backdrop on the table, in memory: the phone must fetch the image
+	var chapel: HexMap = table.ctx.map()
+	var bimg := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	bimg.fill(Color.DARK_GREEN)
+	chapel.add_asset("ground.png", bimg.save_png_to_buffer())
+	chapel.level(0)["backdrop"] = {"image": "local:ground.png", "pos": [0, 0], "size": [22, 16], "opacity": 1.0, "hidden": false}
 	table._set_hosting(true)
 	check(table.host != null and table.host.is_running() and table.host_button.button_pressed, "the table hosts")
 	check(table.host_address().ends_with(":%d" % table.host.port), "and shows an address: %s" % table.host_address())
@@ -230,6 +236,10 @@ func test_table_hosts_player_joins() -> void:
 	check(pump.call(func() -> bool: return player.screen == "play" and player.view.canvas.map != null), "joined as Ana and the map arrived")
 	check(table.players.online.size() == 1 and table.players.list.get_item_text(0).begins_with("●"), "the table shows Ana online")
 	check(player.view.canvas.tokens_in_view().size() == 2, "Ana sees the party")
+	var pmap: HexMap = player.view.canvas.map
+	check(pmap.level(0).get("backdrop", {}).get("image") == "local:ground.png", "the map came with its backdrop record")
+	check(pump.call(func() -> bool: return pmap.asset_texture("local:ground.png") != null), "and the image followed over the wire")
+	check(pmap.asset_texture("local:ground.png").get_width() == 8, "as sent")
 	# Ana moves her fighter; the table applies it as an undoable step and the DM sees it.
 	var sid := player.session.scene_id()
 	var fighter: Dictionary = player.session.my_tokens()[0]

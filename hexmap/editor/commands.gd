@@ -334,9 +334,29 @@ func update_level(index: int, changes: Dictionary) -> void:
 		before[k] = lvl.get(k, null)
 	var apply := func(state: Dictionary) -> void:
 		for k in state:
-			lvl[k] = state[k]
+			if state[k] == null:
+				lvl.erase(k)
+			else:
+				lvl[k] = state[k]
 		map.touch("levels")
 	history.commit("Edit level", apply.bind(_deep(changes)), apply.bind(_deep(before)))
+
+
+## Put an image under a level's terrain (`backdrop`: {image: "local:…",
+## pos, size (hex units), opacity, hidden}) or take it away (null).
+func set_backdrop(index: int, backdrop: Variant, label := "Backdrop") -> void:
+	var lvl := map.level(index)
+	if lvl.is_empty():
+		return
+	var before: Variant = _deep(lvl.backdrop) if lvl.has("backdrop") else null
+	var after: Variant = _deep(backdrop) if backdrop is Dictionary else null
+	var apply := func(state: Variant) -> void:
+		if state == null:
+			lvl.erase("backdrop")
+		else:
+			lvl["backdrop"] = _deep(state)
+		map.touch("backdrop")
+	history.commit(label, apply.bind(after), apply.bind(before))
 
 
 # ------------------------------------------------------------------------- map --

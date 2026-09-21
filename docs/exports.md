@@ -18,6 +18,8 @@ export, like hidden layers in an image editor. GM-only (`hidden: true`)
 elements are a different thing: they are exported as GM data where the
 target has such a notion and drawn into images only when GM layers are on.
 
+A level's backdrop image (`docs/map-format.md`, *Backdrop*) is part of every raster: PNG, the PDF's sheets, the UVTT image and Foundry's background. Tiled gets tiles and objects only.
+
 `ppx` is pixels per cell (flat-to-flat for a hex, the side for a square). VTTs are happy around 100–200;
 Foundry uses it directly as `grid.size`.
 

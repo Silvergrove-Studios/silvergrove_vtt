@@ -40,6 +40,7 @@ var grid_color_override := Color(0, 0, 0, 0)
 ## export renderer leaves it off.
 var shadow_color := Color(0, 0, 0, 0)
 
+var _backdrop := DrawLayer.new()
 var _terrain := DrawLayer.new()
 var _props := DrawLayer.new()
 var _lights := DrawLayer.new()
@@ -87,6 +88,7 @@ class DrawLayer extends Node2D:
 func _init() -> void:
 	texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	_backdrop.fn = _draw_backdrop
 	_terrain.fn = _draw_terrain
 	_props.fn = _draw_props
 	_lights.fn = _draw_lights
@@ -100,7 +102,7 @@ func _init() -> void:
 	var add := CanvasItemMaterial.new()
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_lights.material = add
-	for l in [_terrain, _props, _dark, _lights, _grid, _regions, _walls, _tokens, _notes, _fog, overlay]:
+	for l in [_backdrop, _terrain, _props, _dark, _lights, _grid, _regions, _walls, _tokens, _notes, _fog, overlay]:
 		l.canvas = self
 		add_child(l)
 	if _radial == null:
@@ -275,6 +277,25 @@ func _draw() -> void:
 			draw_rect(Rect2(Vector2(-grow, -grow * 0.6 + spread * 0.25), size + Vector2(grow, grow) * 2.0), Color(shadow_color, a))
 	var bg := Color(str(map.style.get("background", "#1c1a17")))
 	draw_rect(Rect2(Vector2.ZERO, size), bg)
+
+
+# -------------------------------------------------------------------- backdrop --
+
+## A level's backdrop: an image the map brought with it (`local:…`), laid
+## under the terrain at `pos` with `size` in hex units. Nothing is drawn
+## until the image is there (a client may still be receiving it).
+func _draw_backdrop(c: Node2D) -> void:
+	if map == null:
+		return
+	var b: Variant = level().get("backdrop")
+	if not (b is Dictionary) or bool(b.get("hidden", false)):
+		return
+	var tex := map.asset_texture(str(b.get("image", "")))
+	if tex == null:
+		return
+	var pos := from_list(b.get("pos", [0, 0])) * ppx
+	var size := from_list(b.get("size", [map.grid.map_size().x, map.grid.map_size().y])) * ppx
+	c.draw_texture_rect(tex, Rect2(pos, size), false, Color(1, 1, 1, float(b.get("opacity", 1.0))))
 
 
 # --------------------------------------------------------------------- terrain --

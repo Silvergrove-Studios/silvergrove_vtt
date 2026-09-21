@@ -174,7 +174,15 @@ func _handle(msg: Dictionary) -> void:
 				if m != null:
 					state.attach_map(m)
 					_maps_wanted.erase(str(msg.id))
+					# the map's own files (a backdrop) come separately
+					for file in m.asset_refs():
+						_send({"t": "need", "kind": "asset", "map": str(msg.id), "file": str(file)})
 					changed.emit("", "")
+		"asset":
+			var am: HexMap = state.maps.get(str(msg.get("map", ""))) if state != null else null
+			if am != null and not str(msg.get("file", "")).contains(".."):
+				am.add_asset(str(msg.file), Marshalls.base64_to_raw(str(msg.get("data", ""))))
+				changed.emit("", "")
 		"packs":
 			_receive_packs(msg.get("packs", []))
 		"file":

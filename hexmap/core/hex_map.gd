@@ -18,6 +18,12 @@ var grid: HexGrid = HexGrid.new()
 ## Where it was loaded from / last saved to. Empty for a new map.
 var path: String = ""
 var dirty: bool = false
+## Files that travel with the map and are referenced as `local:<name>` —
+## a backdrop image. Held here until saved; on disk in `<stem>.assets/`
+## beside a plain `.hexmap` file, or `assets/` inside a bundle directory
+## (`name.hexmap/map.json`). Loaded from disk on first use.
+var assets: Dictionary = {}
+var _asset_textures: Dictionary = {}
 
 
 static func create(p_name: String, p_grid: HexGrid) -> HexMap:
@@ -186,12 +192,115 @@ func save(p_path: String = "") -> Error:
 		path = p_path
 	if path == "":
 		return ERR_FILE_BAD_PATH
-	var f := FileAccess.open(path, FileAccess.WRITE)
+	var real := path
+	if DirAccess.dir_exists_absolute(path) or path.ends_with("/"):
+		# a bundle directory: map.json inside it
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path))
+		real = path.trim_suffix("/").path_join("map.json")
+	var f := FileAccess.open(real, FileAccess.WRITE)
 	if f == null:
 		return FileAccess.get_open_error()
 	f.store_string(to_json())
 	f.close()
+	var err := _save_assets()
+	if err != OK:
+		return err
 	dirty = false
+	return OK
+
+
+# --------------------------------------------------------------------- assets --
+
+## Where this map's `local:` files live: `assets/` inside a bundle
+## directory, or `<stem>.assets/` beside a plain file. "" for an unsaved map.
+func assets_dir() -> String:
+	if path == "":
+		return ""
+	if DirAccess.dir_exists_absolute(path):
+		return path.path_join("assets")
+	return path.get_basename() + ".assets"
+
+
+## The names every `local:` reference in the document points at.
+func asset_refs() -> Array:
+	var out := []
+	for l in levels:
+		var b: Variant = l.get("backdrop")
+		if b is Dictionary and str(b.get("image", "")).begins_with("local:"):
+			out.append(str(b.image).substr(6))
+	return out
+
+
+## Put a file with the map: kept in memory, written by the next save.
+func add_asset(p_name: String, bytes: PackedByteArray) -> void:
+	assets[p_name] = bytes
+	_asset_textures.erase(p_name)
+
+
+func remove_asset(p_name: String) -> void:
+	assets.erase(p_name)
+	_asset_textures.erase(p_name)
+	var dir := assets_dir()
+	if dir != "" and FileAccess.file_exists(dir.path_join(p_name)):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(dir.path_join(p_name)))
+
+
+## The bytes of an asset: from memory, else from the map's assets dir.
+func asset_bytes(p_name: String) -> PackedByteArray:
+	if assets.has(p_name):
+		return assets[p_name]
+	var dir := assets_dir()
+	if dir == "" or p_name.contains("..") or p_name.contains("/"):
+		return PackedByteArray()
+	var file := dir.path_join(p_name)
+	if not FileAccess.file_exists(file):
+		return PackedByteArray()
+	var bytes := FileAccess.get_file_as_bytes(file)
+	assets[p_name] = bytes
+	return bytes
+
+
+## A texture for `local:<name>` (png, jpg or webp), cached; null when the
+## file is missing or unreadable (a client that has not received it yet).
+func asset_texture(ref: String) -> Texture2D:
+	var p_name := ref.trim_prefix("local:")
+	if _asset_textures.has(p_name):
+		return _asset_textures[p_name]
+	var bytes := asset_bytes(p_name)
+	if bytes.is_empty():
+		return null
+	var img := Image.new()
+	var err := ERR_FILE_UNRECOGNIZED
+	match p_name.get_extension().to_lower():
+		"png": err = img.load_png_from_buffer(bytes)
+		"jpg", "jpeg": err = img.load_jpg_from_buffer(bytes)
+		"webp": err = img.load_webp_from_buffer(bytes)
+	if err != OK:
+		return null
+	var tex := ImageTexture.create_from_image(img)
+	_asset_textures[p_name] = tex
+	return tex
+
+
+## The pixel size of an asset image, or Vector2i.ZERO.
+func asset_size(ref: String) -> Vector2i:
+	var tex := asset_texture(ref)
+	return Vector2i(tex.get_width(), tex.get_height()) if tex != null else Vector2i.ZERO
+
+
+func _save_assets() -> Error:
+	if assets.is_empty():
+		return OK
+	var dir := assets_dir()
+	var err := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
+	if err != OK:
+		return err
+	for p_name in assets:
+		var f := FileAccess.open(dir.path_join(p_name), FileAccess.WRITE)
+		if f == null:
+			return FileAccess.get_open_error()
+		f.store_buffer(assets[p_name])
+		f.close()
 	return OK
 
 

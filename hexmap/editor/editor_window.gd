@@ -43,7 +43,7 @@ var _last_menu := [-1, -1]   # [id, frame] — the same command from both menu b
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_EXPORT_PNG, M_EXPORT_UVTT, M_EXPORT_FOUNDRY, M_EXPORT_TILED, M_EXPORT_PDF, M_EXPORT_BUNDLE, M_HOME, M_QUIT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_GROUP, M_MAP_SETTINGS, M_PREFS,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_HIDDEN, V_DARK, V_FIT, V_100, V_RELOAD_PACKS, V_DOCK, V_SCALE_UP, V_SCALE_DOWN,
-	L_ADD, L_REMOVE, L_RENAME, L_UP, L_DOWN,
+	L_ADD, L_REMOVE, L_RENAME, L_UP, L_DOWN, L_BACKDROP_IMPORT, L_BACKDROP_EDIT, L_BACKDROP_REMOVE,
 	H_SHORTCUTS, H_ABOUT }
 
 
@@ -319,6 +319,10 @@ func _build_menus() -> MenuBar:
 	lvl.add_separator()
 	_item(lvl, "Move level up", L_UP)
 	_item(lvl, "Move level down", L_DOWN)
+	lvl.add_separator()
+	_item(lvl, "Import backdrop image…", L_BACKDROP_IMPORT)
+	_item(lvl, "Backdrop…", L_BACKDROP_EDIT)
+	_item(lvl, "Remove backdrop", L_BACKDROP_REMOVE)
 	lvl.id_pressed.connect(_on_menu)
 	bar.add_child(lvl)
 
@@ -638,6 +642,23 @@ func _on_menu(id: int) -> void:
 		L_RENAME:
 			_prompt("Rename level", "Name", str(ctx.level().get("name", "")), func(n: String) -> void:
 				ctx.commands.update_level(ctx.level_index, {"name": n}))
+		L_BACKDROP_IMPORT:
+			var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.png, *.jpg, *.jpeg, *.webp ; Images"])
+			fd.file_selected.connect(func(p: String) -> void:
+				var why := import_backdrop(p)
+				if why != "":
+					ctx.say(why)
+				else:
+					_backdrop_dialog())
+			fd.popup_centered_ratio(0.7)
+		L_BACKDROP_EDIT:
+			if ctx.level().has("backdrop"):
+				_backdrop_dialog()
+			else:
+				ctx.say("This level has no backdrop. Level › Import backdrop image…")
+		L_BACKDROP_REMOVE:
+			if ctx.level().has("backdrop"):
+				ctx.commands.set_backdrop(ctx.level_index, null, "Remove backdrop")
 		L_REMOVE:
 			if ctx.map.levels.size() > 1:
 				_confirm("Remove level '%s' and everything on it?" % ctx.level().get("name", ""), func() -> void:
@@ -687,6 +708,66 @@ func _new_map_dialog() -> void:
 			var m := HexMap.create(v.name, g)
 			m.doc["reference_ppx"] = int(v.reference_ppx)
 			_set_map(m)))
+
+
+## Bring an image file in as this level's backdrop: it becomes a `local:`
+## asset of the map (written beside it on save) laid under the terrain,
+## fitted to the map's width until the Backdrop dialog says otherwise.
+## "" or why not.
+func import_backdrop(file_path: String) -> String:
+	var bytes := FileAccess.get_file_as_bytes(file_path)
+	if bytes.is_empty():
+		return "could not read " + file_path
+	var p_name := file_path.get_file()
+	ctx.map.add_asset(p_name, bytes)
+	var size := ctx.map.asset_size("local:" + p_name)
+	if size == Vector2i.ZERO:
+		ctx.map.remove_asset(p_name)
+		return "not an image this build reads (png, jpg, webp): " + p_name
+	var g := ctx.map.grid
+	var ppc := float(size.x) / maxf(1.0, float(g.columns))
+	ctx.commands.set_backdrop(ctx.level_index, {"image": "local:" + p_name, "pos": [0.0, 0.0],
+		"size": [size.x / ppc, size.y / ppc], "opacity": 1.0, "hidden": false}, "Import backdrop")
+	ctx.say("Backdrop %s (%d×%d px) laid at %s px per cell; Level › Backdrop… to fit the grid" % [p_name, size.x, size.y, PdfWriter.n(snappedf(ppc, 0.01))])
+	return ""
+
+
+## Fit the backdrop to the grid: how many of its pixels make one cell,
+## where the grid's origin falls on it, its opacity; and, on request,
+## resize the map to cover the whole image.
+func _backdrop_dialog() -> void:
+	var b: Dictionary = ctx.level().get("backdrop", {})
+	if b.is_empty():
+		return
+	var size := ctx.map.asset_size(str(b.get("image", "")))
+	var cur_size: Array = b.get("size", [1, 1])
+	var ppc: float = float(size.x) / maxf(1e-6, float(cur_size[0])) if size.x > 0 else 100.0
+	var pos: Array = b.get("pos", [0, 0])
+	var form := PropertyForm.new()
+	form.build([
+		{"key": "ppc", "label": "Pixels per cell", "type": "float", "min": 1, "max": 4096, "step": 0.5, "tooltip": "How many of the image's pixels make one cell of this map (a 5-ft square on most published maps)"},
+		{"key": "ox", "label": "Grid origin x", "type": "float", "min": -100000, "max": 100000, "step": 1, "suffix": " px", "tooltip": "Where the map's top-left cell corner falls on the image"},
+		{"key": "oy", "label": "Grid origin y", "type": "float", "min": -100000, "max": 100000, "step": 1, "suffix": " px"},
+		{"key": "opacity", "label": "Opacity", "type": "float", "min": 0, "max": 1, "step": 0.05},
+		{"key": "hidden", "label": "Hidden", "type": "bool"},
+		{"key": "resize", "label": "Resize the map to the image", "type": "bool", "tooltip": "Columns and rows become what the image covers at this cell size"},
+	], {"ppc": snappedf(ppc, 0.01), "ox": snappedf(-float(pos[0]) * ppc, 0.1), "oy": snappedf(-float(pos[1]) * ppc, 0.1),
+		"opacity": float(b.get("opacity", 1.0)), "hidden": bool(b.get("hidden", false)), "resize": false})
+	_form_dialog("Backdrop", form, func(v: Dictionary) -> void:
+		var k := maxf(1.0, float(v.ppc))
+		var nb: Dictionary = b.duplicate(true)
+		nb.pos = [snappedf(-float(v.ox) / k, 0.0001), snappedf(-float(v.oy) / k, 0.0001)]
+		nb.size = [snappedf(size.x / k, 0.0001), snappedf(size.y / k, 0.0001)]
+		nb.opacity = float(v.opacity)
+		nb.hidden = bool(v.hidden)
+		ctx.history.begin_group()
+		ctx.commands.set_backdrop(ctx.level_index, nb)
+		if bool(v.resize) and size.x > 0:
+			var g := ctx.map.grid.to_dict()
+			g.columns = maxi(1, int(ceil((size.x - float(v.ox)) / k)))
+			g.rows = maxi(1, int(ceil((size.y - float(v.oy)) / (k if ctx.map.grid.is_square() else k * 1.5 * HexGrid.R))))
+			ctx.commands.update_map({"grid": g})
+		ctx.history.end_group("Backdrop"))
 
 
 func _map_settings_dialog() -> void:
