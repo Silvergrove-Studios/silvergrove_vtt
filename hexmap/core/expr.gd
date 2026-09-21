@@ -10,7 +10,7 @@ extends RefCounted
 ##
 ## Syntax
 ##   literals     12  2.5  "text"  'text'  true  false  null  [1, "a"]
-##   paths        @actor.level  @tags[0]  @stats["dex"]   (null when absent)
+##   paths        @actor.level  @tags[0]  @stats["dex"]  @pools["hp_" .. @id].max   (null when absent)
 ##   arithmetic   + - * / % ^   unary -
 ##   strings      ..  (concatenate; numbers are formatted)
 ##   compare      == != < <= > >=      (== is JSON equality)
@@ -410,6 +410,11 @@ class _Parser:
 				toks.append({"t": "op", "v": c})
 				i += 1
 				continue
+			# a field after a computed index: @a["k" .. @x].total
+			if c == "." and i + 1 < n and _is_ident_start(src[i + 1]):
+				toks.append({"t": "op", "v": "."})
+				i += 1
+				continue
 			error = "unexpected character '%s'" % c
 			return
 
@@ -548,7 +553,14 @@ class _Parser:
 
 	func _postfix() -> Variant:
 		var a: Variant = _primary()
-		while _peek("op", "["):
+		while _peek("op", "[") or _peek("op", "."):
+			if _peek("op", "."):
+				pos += 1
+				if pos >= toks.size() or toks[pos].t != "id":
+					error = "a field name after '.'"
+					return null
+				a = ["index", a, ["lit", str(_take().v)]]
+				continue
 			pos += 1
 			if not _enter():
 				return null

@@ -226,6 +226,9 @@ func _build(node: Variant, ctx: Dictionary, depth: int) -> Control:
 			var flow := HFlowContainer.new()
 			flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			for a in n.get("actions", []):
+				# a button's `if` hides it, as anywhere else
+				if a is Dictionary and a.has("if") and not Expr.truthy(Expr.evaluate(str(a["if"]), ctx)):
+					continue
 				var b := _button(a, ctx)
 				if b != null:
 					flow.add_child(b)

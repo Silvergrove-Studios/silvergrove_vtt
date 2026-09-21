@@ -42,7 +42,8 @@ func test_view_renderer_widgets() -> void:
 		{"type": "track", "label": "Armour", "bind": "/resources/armour", "on_mark": {"kind": "action", "action": "mark", "ctx": {"actor": "$/actor/id"}}},
 		{"type": "effects", "bind": "/effects"},
 		{"type": "cards", "bind": "/derived/hand", "on_tap": {"kind": "action", "action": "play", "ctx": {"card": "$/card_id", "actor": "$/actor/id"}}},
-		{"type": "action_bar", "actions": [{"type": "button", "label": "Act", "cost": {"actions": 1}, "intent": {"kind": "action", "action": "act"}}, {"type": "button", "label": "Never", "enabled": "@actor.mine == false", "intent": {"kind": "x"}}]},
+		{"type": "action_bar", "actions": [{"type": "button", "label": "Act", "cost": {"actions": 1}, "intent": {"kind": "action", "action": "act"}}, {"type": "button", "label": "Never", "enabled": "@actor.mine == false", "intent": {"kind": "x"}},
+			{"type": "button", "label": "Unseen", "if": "@actor.mine == false", "intent": {"kind": "x"}}]},
 		{"type": "list", "bind": "/tracks", "item": {"type": "tracker", "bind": "/item"}},
 		{"type": "prompt", "bind": "/prompts/0"},
 		{"type": "log", "bind": "/log"},
@@ -52,6 +53,7 @@ func test_view_renderer_widgets() -> void:
 	r.render(schema, data)
 	await tree.process_frame
 	check(_find(r, "Label", "Ana") != null, "a bound text")
+	check(_find(r, "Button", "Unseen") == null and _find(r, "Button", "Never") != null, "a button's `if` hides it inside an action bar")
 	# a prompt form whose bool field has no default renders (bool(null) was a GDScript error)
 	var r2 := ViewRenderer.new()
 	root.add_child(r2)
