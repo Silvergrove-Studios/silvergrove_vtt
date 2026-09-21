@@ -233,9 +233,13 @@ scan, a photograph — and have the grid drawn over it:
   (below). PNG, JPEG and WebP.
 - `pos`, `size`: where the image's top-left corner falls and how big it
   is, in hex units, so lining the image's own grid up with the map's is
-  a matter of pixels-per-cell and an origin offset (the editor's Level ›
-  Backdrop… dialog asks for exactly those two things and can resize the
-  map to cover the image).
+  a matter of pixels-per-cell and an origin offset. The editor's Level ›
+  Backdrop… dialog asks for exactly those two things, can resize the
+  map to cover the image, and offers two ways not to type them: *Detect
+  grid* reads a printed grid off the image (`GridDetect`: the period and
+  phase of its line contrast), and *Drag two corners…* lets you drag
+  from one grid corner on the image to another and say how many cells
+  the span covered.
 - Painted terrain draws over the backdrop; fog, regions, the grid and
   everything else over that. Exports that raster the map (PNG, PDF,
   UVTT, Foundry's background) include it; Tiled does not.

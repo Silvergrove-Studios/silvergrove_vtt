@@ -15,6 +15,7 @@ static func make(tool_name: String, ctx: EditorContext) -> Tool:
 		"light": t = LightTool.new()
 		"note": t = NoteTool.new()
 		"erase": t = EraseTool.new()
+		"fit": t = FitTool.new()
 		_: t = SelectTool.new()
 	t.ctx = ctx
 	t.tool_name = tool_name
@@ -803,6 +804,69 @@ class NoteTool extends Tool:
 
 
 # =============================================================================
+
+## Fitting a backdrop's grid by hand: drag from one grid corner on the
+## image to another; the window then asks how many cells the span covers
+## and refits. Not on the toolbar — the Backdrop dialog starts it.
+class FitTool extends Tool:
+	var _from := Vector2.INF
+	var _to := Vector2.INF
+	var _hover := Vector2.INF
+
+	func activate() -> void:
+		ctx.say("Drag from one grid corner on the image to another, some whole cells away (Esc cancels)")
+
+	func press(p: Vector2, button: int, _mods: Dictionary) -> bool:
+		if button != MOUSE_BUTTON_LEFT:
+			return false
+		_from = p
+		_to = p
+		ctx.canvas.overlay.queue_redraw()
+		return true
+
+	func drag(p: Vector2, _button: int, _mods: Dictionary) -> void:
+		if _from != Vector2.INF:
+			_to = p
+			ctx.canvas.overlay.queue_redraw()
+
+	func release(p: Vector2, _button: int, _mods: Dictionary) -> void:
+		if _from == Vector2.INF:
+			return
+		_to = p
+		var a := _from
+		var b := _to
+		_from = Vector2.INF
+		ctx.canvas.overlay.queue_redraw()
+		if (b - a).abs().x < 0.05:
+			ctx.say("Drag across at least part of a cell")
+			return
+		ctx.fit_dragged.emit(a, b)
+
+	func move(p: Vector2) -> void:
+		_hover = p
+		ctx.canvas.overlay.queue_redraw()
+
+	func key(event: InputEventKey) -> bool:
+		if event.keycode == KEY_ESCAPE:
+			_from = Vector2.INF
+			ctx.fit_dragged.emit(Vector2.INF, Vector2.INF)
+			return true
+		return false
+
+	func draw_overlay(c: Node2D) -> void:
+		var col := Color(1.0, 0.85, 0.3, 0.95)
+		if _from == Vector2.INF:
+			if _hover != Vector2.INF:
+				var h := px(_hover)
+				c.draw_line(h - Vector2(12, 0), h + Vector2(12, 0), col, 1.5, true)
+				c.draw_line(h - Vector2(0, 12), h + Vector2(0, 12), col, 1.5, true)
+			return
+		var r := Rect2(px(_from), Vector2.ZERO).expand(px(_to)).abs()
+		c.draw_rect(r, Color(col, 0.12), true)
+		c.draw_rect(r, col, false, 2.0)
+		for corner in [r.position, r.end]:
+			c.draw_circle(corner, 5.0, col)
+
 
 class EraseTool extends Tool:
 	var _down := false

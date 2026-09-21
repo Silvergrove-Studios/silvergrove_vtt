@@ -152,3 +152,127 @@ func _find_form(node: Node) -> PropertyForm:
 		if r != null:
 			return r
 	return null
+
+
+## A battle-map-like image: mottled ground with grid lines every `ppc`
+## pixels, offset by (ox, oy).
+static func _gridded(w: int, h: int, ppc: float, ox: float, oy: float, line := Color(0.1, 0.1, 0.1)) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for y in h:
+		for x in w:
+			var t := rng.randf_range(-0.08, 0.08)
+			img.set_pixel(x, y, Color(0.45 + t, 0.5 + t, 0.35 + t))
+	var x := ox
+	while x < w:
+		for y in h:
+			img.set_pixel(int(x), y, line)
+		x += ppc
+	var y := oy
+	while y < h:
+		for x2 in w:
+			img.set_pixel(x2, int(y), line)
+		y += ppc
+	return img
+
+
+func test_grid_detection() -> void:
+	var r := GridDetect.detect(_gridded(700, 500, 50.0, 12.0, 30.0))
+	check(r.error == "" and absf(r.ppc - 50.0) < 0.6, "the cell size of a 50 px grid: %.2f (confidence %.2f)" % [r.ppc, r.confidence])
+	check(absf(r.ox - 12.0) < 1.5 and absf(r.oy - 30.0) < 1.5, "and where its lines fall: %.1f, %.1f" % [r.ox, r.oy])
+	check(r.confidence > 0.3, "with confidence")
+	r = GridDetect.detect(_gridded(1800, 1200, 70.0, 3.0, 61.0))
+	check(r.error == "" and absf(r.ppc - 70.0) < 1.5 and absf(r.ox - 3.0) < 3.0 and absf(r.oy - 61.0) < 3.0, "a large image is downscaled and scaled back: %.2f at %.1f, %.1f" % [r.ppc, r.ox, r.oy])
+	r = GridDetect.detect(_gridded(400, 300, 25.0, 0.0, 0.0, Color(0.42, 0.47, 0.32)))
+	check(r.confidence < 0.3 or absf(r.ppc - 25.0) < 1.0, "faint lines: either found or admitted unsure (%.2f, %.2f)" % [r.ppc, r.confidence])
+	var flat := Image.create(300, 200, false, Image.FORMAT_RGBA8)
+	flat.fill(Color.GRAY)
+	r = GridDetect.detect(flat)
+	check(r.error != "" or r.confidence < 0.15, "a gridless image has no grid: %s" % [r])
+	check(GridDetect.detect(Image.create(4, 4, false, Image.FORMAT_RGBA8)).error != "", "too small says so")
+
+
+func test_backdrop_fit_by_detection_and_two_corners() -> void:
+	# the arithmetic: pixels → cells, and two corners → a fit
+	var img_size := Vector2i(1000, 700)
+	var bd := {"image": "local:x.png", "pos": [0, 0], "size": [20, 14], "opacity": 1.0, "hidden": false}
+	var f := GridDetect.fit_from_pixels(img_size, bd, 50.0, 50.0, 12.0, 30.0)
+	check(f.size == [20.0, 14.0] and is_equal_approx(float(f.pos[0]), -0.24) and is_equal_approx(float(f.pos[1]), -0.6), "50 px cells with lines through (12, 30): the image starts 0.24 × 0.6 cells up-left of the origin: %s" % [f])
+	f = GridDetect.fit_from_pixels(img_size, bd, 50.0, 50.0, 262.0, 130.0)
+	check(is_equal_approx(float(f.pos[0]), -0.24) and is_equal_approx(float(f.pos[1]), -0.6), "any corner of the same grid gives the same fit")
+	check(GridDetect.to_image_px(bd, img_size, Vector2(10, 7)) == Vector2(500, 350) and GridDetect.current_ppc(bd, img_size) == Vector2(50, 50), "hex units ↔ image pixels on the current fit")
+	# two corners 4 cells apart on an image whose real cells are 40 px, starting at pixel 20
+	var a := Vector2(20.0 / 50.0, 20.0 / 50.0)          # image px (20, 20) under the current 50-px fit
+	var b := Vector2(180.0 / 50.0, 180.0 / 50.0)        # image px (180, 180): 4 cells of 40
+	f = GridDetect.fit_from_corners(img_size, bd, a, b, 4, 4)
+	check(is_equal_approx(float(f.size[0]), 25.0) and is_equal_approx(float(f.size[1]), 17.5), "the span's 160 px over 4 cells makes 40 px cells: %s" % [f.size])
+	check(is_equal_approx(float(f.pos[0]), -0.5) and is_equal_approx(float(f.pos[1]), -0.5), "and the first corner at pixel 20 puts the origin half a cell in: %s" % [f.pos])
+	f = GridDetect.fit_from_corners(img_size, bd, b, a, 4, 0)
+	check(is_equal_approx(float(f.size[0]), 25.0) and is_equal_approx(float(f.size[1]), 17.5), "dragging the other way, with square cells assumed, is the same fit")
+	# the editor: detect from the dialog, then drag two corners with the tool
+	var app := App.new("user://test_prefs_fit.json")
+	var win := EditorWindow.new()
+	win.app = app
+	root.add_child(win)
+	await tree.process_frame
+	win._set_map(HexMap.create("Squares", HexGrid.square(20, 14)))
+	var dir := ProjectSettings.globalize_path("user://backdrop_test")
+	DirAccess.make_dir_recursive_absolute(dir)
+	_gridded(1000, 700, 50.0, 12.0, 30.0).save_png(dir.path_join("gridded.png"))
+	check(win.import_backdrop(dir.path_join("gridded.png")) == "", "a gridded image imports")
+	var ctx := win.ctx
+	win._backdrop_dialog()
+	await tree.process_frame
+	var dlg: ConfirmationDialog = null
+	for c in win.get_children():
+		if c is ConfirmationDialog and (c as ConfirmationDialog).title == "Backdrop":
+			dlg = c
+	var detect: Button = dlg.find_child("detect", true, false)
+	check(detect != null, "the dialog has a Detect grid button")
+	detect.pressed.emit()
+	var form: PropertyForm = _find_form(dlg)
+	var vals := form.get_values()
+	check(absf(float(vals.ppc) - 50.0) < 0.6 and absf(float(vals.ox) - 12.0) < 1.5 and absf(float(vals.oy) - 30.0) < 1.5, "Detect filled the fields from the image: %s" % [vals])
+	vals.resize = true
+	form.set_values(vals)
+	dlg.confirmed.emit()
+	await tree.process_frame
+	var b2: Dictionary = ctx.level().backdrop
+	check(absf(float(b2.size[0]) - 20.0) < 0.3 and ctx.map.grid.columns == 20 and ctx.map.grid.rows == 14, "applied: 20 × 14 cells over the image (%s, %d×%d)" % [b2.size, ctx.map.grid.columns, ctx.map.grid.rows])
+	# drag two corners: the tool takes the canvas and hands back the span
+	win._begin_fit_drag()
+	check(win.view.tool is EditorTools.FitTool, "the fit tool is active")
+	var tool := win.view.tool as EditorTools.FitTool
+	var mods := {"shift": false, "ctrl": false, "alt": false}
+	# on the current fit, image px (12, 30) is a corner; drag to (212, 230): 4 × 4 cells of 50
+	var pa := Vector2(float(b2.pos[0]) + 12.0 / 50.0 * 1.0, float(b2.pos[1]) + 30.0 / 50.0)
+	var pb := pa + Vector2(4, 4)
+	tool.press(pa, MOUSE_BUTTON_LEFT, mods)
+	tool.drag(pb, MOUSE_BUTTON_LEFT, mods)
+	tool.release(pb, MOUSE_BUTTON_LEFT, mods)
+	await tree.process_frame
+	check(not (win.view.tool is EditorTools.FitTool), "after the drag the previous tool is back")
+	var two: ConfirmationDialog = null
+	for c in win.get_children():
+		if c is ConfirmationDialog and (c as ConfirmationDialog).title == "Two corners":
+			two = c
+	check(two != null, "the Two corners dialog asks how many cells")
+	var tf: PropertyForm = _find_form(two)
+	check(int(tf.get_values().cols) == 4 and int(tf.get_values().rows) == 4, "guessing 4 × 4 from the current fit: %s" % [tf.get_values()])
+	tf.set_values({"cols": 2, "rows": 2, "resize": false})   # the user says the span was two cells: cells are 100 px
+	two.confirmed.emit()
+	await tree.process_frame
+	b2 = ctx.level().backdrop
+	check(absf(float(b2.size[0]) - 10.0) < 0.05 and absf(float(b2.size[1]) - 7.0) < 0.05, "two cells over 200 px: 100 px cells, the image is 10 × 7 of them: %s" % [b2.size])
+	check(absf(float(b2.pos[0]) + 0.12) < 0.01 and absf(float(b2.pos[1]) + 0.3) < 0.01, "lines through the dragged corner: %s" % [b2.pos])
+	check(ctx.history.undo_label() == "Backdrop", "one undo step")
+	# Esc cancels a drag
+	win._begin_fit_drag()
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	check((win.view.tool as EditorTools.FitTool).key(esc) and not (win.view.tool is EditorTools.FitTool), "Esc leaves the tool")
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_fit.json"))

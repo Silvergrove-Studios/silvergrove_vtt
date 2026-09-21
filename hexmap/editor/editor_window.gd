@@ -755,19 +755,89 @@ func _backdrop_dialog() -> void:
 		"opacity": float(b.get("opacity", 1.0)), "hidden": bool(b.get("hidden", false)), "resize": false})
 	_form_dialog("Backdrop", form, func(v: Dictionary) -> void:
 		var k := maxf(1.0, float(v.ppc))
-		var nb: Dictionary = b.duplicate(true)
-		nb.pos = [snappedf(-float(v.ox) / k, 0.0001), snappedf(-float(v.oy) / k, 0.0001)]
-		nb.size = [snappedf(size.x / k, 0.0001), snappedf(size.y / k, 0.0001)]
+		var nb := GridDetect.fit_from_pixels(size, b, k, k, float(v.ox), float(v.oy))
 		nb.opacity = float(v.opacity)
 		nb.hidden = bool(v.hidden)
-		ctx.history.begin_group()
-		ctx.commands.set_backdrop(ctx.level_index, nb)
-		if bool(v.resize) and size.x > 0:
-			var g := ctx.map.grid.to_dict()
-			g.columns = maxi(1, int(ceil((size.x - float(v.ox)) / k)))
-			g.rows = maxi(1, int(ceil((size.y - float(v.oy)) / (k if ctx.map.grid.is_square() else k * 1.5 * HexGrid.R))))
-			ctx.commands.update_map({"grid": g})
-		ctx.history.end_group("Backdrop"))
+		_apply_backdrop(nb, bool(v.resize), size, k, float(v.ox), float(v.oy)),
+	[
+		{"label": "Detect grid", "name": "detect", "fn": func(f: PropertyForm, _d: ConfirmationDialog) -> void:
+			var tex := ctx.map.asset_texture(str(b.get("image", "")))
+			if tex == null:
+				ctx.say("No image to look at")
+				return
+			var r := GridDetect.detect(tex.get_image())
+			if str(r.error) != "" or float(r.confidence) < 0.15:
+				ctx.say("No printed grid found on the image (%s); drag two corners instead" % (str(r.error) if str(r.error) != "" else "confidence %.2f" % float(r.confidence)))
+				return
+			var vals := f.get_values()
+			vals.ppc = snappedf(float(r.ppc), 0.01)
+			vals.ox = snappedf(float(r.ox), 0.1)
+			vals.oy = snappedf(float(r.oy), 0.1)
+			f.set_values(vals)
+			ctx.say("Found a grid: %s px per cell, lines through (%s, %s) — confidence %.2f" % [PdfWriter.n(vals.ppc), PdfWriter.n(vals.ox), PdfWriter.n(vals.oy), float(r.confidence)])},
+		{"label": "Drag two corners…", "name": "drag", "fn": func(_f: PropertyForm, d: ConfirmationDialog) -> void:
+			d.hide()
+			d.queue_free()
+			_begin_fit_drag()},
+	])
+
+
+## Apply a fitted backdrop as one undo step, resizing the map to the image
+## when asked: columns and rows become what the image covers at `ppc`
+## from the grid origin.
+func _apply_backdrop(nb: Dictionary, resize: bool, size: Vector2i, ppc: float, ox: float, oy: float) -> void:
+	ctx.history.begin_group()
+	ctx.commands.set_backdrop(ctx.level_index, nb)
+	if resize and size.x > 0:
+		var g := ctx.map.grid.to_dict()
+		var cx := fposmod(ox, ppc)
+		var cy := fposmod(oy, ppc)
+		g.columns = maxi(1, int(ceil((size.x - cx) / ppc)))
+		g.rows = maxi(1, int(ceil((size.y - cy) / (ppc if ctx.map.grid.is_square() else ppc * 1.5 * HexGrid.R))))
+		ctx.commands.update_map({"grid": g})
+	ctx.history.end_group("Backdrop")
+
+
+## Fit the backdrop by dragging: the fit tool takes the canvas until a
+## drag (or Esc) comes back through `fit_dragged`.
+func _begin_fit_drag() -> void:
+	if not ctx.level().has("backdrop"):
+		return
+	_before_fit_tool = view.tool.tool_name if view.tool != null else "select"
+	if not ctx.fit_dragged.is_connected(_on_fit_dragged):
+		ctx.fit_dragged.connect(_on_fit_dragged)
+	view.set_tool(EditorTools.make("fit", ctx))
+
+
+var _before_fit_tool := "select"
+
+
+func _on_fit_dragged(a: Vector2, b: Vector2) -> void:
+	_select_tool(_before_fit_tool)
+	if a == Vector2.INF:
+		ctx.say("Fit cancelled")
+		return
+	var bd: Dictionary = ctx.level().get("backdrop", {})
+	var size := ctx.map.asset_size(str(bd.get("image", "")))
+	if bd.is_empty() or size == Vector2i.ZERO:
+		return
+	# how many cells the span covers, guessed from the current fit
+	var span := (GridDetect.to_image_px(bd, size, b) - GridDetect.to_image_px(bd, size, a)).abs()
+	var ppc := GridDetect.current_ppc(bd, size)
+	var guess_c := maxi(1, int(round(span.x / maxf(1e-6, ppc.x))))
+	var guess_r := maxi(1, int(round(span.y / maxf(1e-6, ppc.y))))
+	var form := PropertyForm.new()
+	form.build([
+		{"key": "cols", "label": "Cells across", "type": "int", "min": 1, "max": 1000, "tooltip": "How many whole cells the drag spanned, left to right"},
+		{"key": "rows", "label": "Cells down", "type": "int", "min": 0, "max": 1000, "tooltip": "…and top to bottom (0: the cells are square)"},
+		{"key": "resize", "label": "Resize the map to the image", "type": "bool"},
+	], {"cols": guess_c, "rows": guess_r if span.y > 1.0 else 0, "resize": true})
+	_form_dialog("Two corners", form, func(v: Dictionary) -> void:
+		var nb := GridDetect.fit_from_corners(size, bd, a, b, int(v.cols), int(v.rows))
+		var k := GridDetect.current_ppc(nb, size)
+		var origin := Vector2(minf(GridDetect.to_image_px(bd, size, a).x, GridDetect.to_image_px(bd, size, b).x), minf(GridDetect.to_image_px(bd, size, a).y, GridDetect.to_image_px(bd, size, b).y))
+		_apply_backdrop(nb, bool(v.resize), size, k.x, origin.x, origin.y)
+		ctx.say("Backdrop fitted: %s px per cell" % PdfWriter.n(snappedf(k.x, 0.01))))
 
 
 func _map_settings_dialog() -> void:
@@ -1029,14 +1099,28 @@ func _file_dialog(mode: FileDialog.FileMode, filters: Array) -> FileDialog:
 	return fd
 
 
-func _form_dialog(title: String, form: PropertyForm, on_ok: Callable) -> void:
+## `buttons`: [{label, fn: Callable(form, dialog)}] added below the form.
+func _form_dialog(title: String, form: PropertyForm, on_ok: Callable, buttons: Array = []) -> void:
 	var d := ConfirmationDialog.new()
 	d.title = title
 	d.min_size = Vector2i(420, 0)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(400, minf(520, 40 + form.get_child_count() * 17))
+	scroll.custom_minimum_size = Vector2(400, minf(520, 40 + form.get_child_count() * 17 + (30 if not buttons.is_empty() else 0)))
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.add_child(form)
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_child(form)
+	if not buttons.is_empty():
+		var row := HBoxContainer.new()
+		for b in buttons:
+			var btn := Button.new()
+			btn.text = str(b.label)
+			btn.name = str(b.get("name", b.label))
+			var fn: Callable = b.fn
+			btn.pressed.connect(func() -> void: fn.call(form, d))
+			row.add_child(btn)
+		column.add_child(row)
+	scroll.add_child(column)
 	d.add_child(scroll)
 	d.confirmed.connect(func() -> void: on_ok.call(form.get_values()))
 	d.confirmed.connect(d.queue_free)

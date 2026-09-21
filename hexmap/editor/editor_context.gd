@@ -7,6 +7,8 @@ extends RefCounted
 signal selection_changed
 signal level_changed
 signal status(text: String)
+## The fit tool dragged from one grid corner to another (hex units).
+signal fit_dragged(a: Vector2, b: Vector2)
 
 var map: HexMap
 var packs: PackLibrary
