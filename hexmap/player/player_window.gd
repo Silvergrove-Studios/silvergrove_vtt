@@ -736,9 +736,21 @@ func _pane_text(text: String, style := "") -> void:
 func _pane_render(schema: Dictionary, data: Dictionary) -> void:
 	var r := ViewRenderer.new()
 	r.intent.connect(_send_intent)
+	r.pick_requested.connect(_begin_pick)
 	_pane_box.add_child(r)
 	r.render(schema, data)
 	_renderers.append(r)
+
+
+## An intent that wants a target on the map: show the map and let the
+## tool take the next tap.
+func _begin_pick(payload: Dictionary) -> void:
+	if session == null or tool == null:
+		_say("This screen cannot pick a target")
+		return
+	if pane_mode != "" and size.x <= 900:
+		set_pane("")
+	tool.begin_pick(payload)
 
 
 func _send_intent(payload: Dictionary) -> void:

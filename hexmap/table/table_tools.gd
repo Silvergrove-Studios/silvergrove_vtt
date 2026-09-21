@@ -11,6 +11,7 @@ static func make(tool_name: String, ctx: TableContext) -> Tool:
 	match tool_name:
 		"token": t = TokenTool.new()
 		"fog": t = FogTool.new()
+		"pick": t = PickTool.new()
 		_: t = SelectTool.new()
 	t.ctx = ctx
 	t.tool_name = tool_name
@@ -131,6 +132,61 @@ class Tool extends RefCounted:
 
 
 # =============================================================================
+
+## Picking a target on the map for an action: the next press resolves the
+## context's pick, Escape cancels, and the overlay previews what the press
+## would pick — the token under the pointer, the cell, or the area's cells.
+class PickTool extends Tool:
+	var _hover := Vector2.INF
+
+	func cursor() -> Control.CursorShape:
+		return Control.CURSOR_CROSS
+
+	func press(p: Vector2, button: int, _mods: Dictionary) -> bool:
+		if button == MOUSE_BUTTON_RIGHT:
+			ctx.cancel_pick()
+			return true
+		if button != MOUSE_BUTTON_LEFT:
+			return false
+		ctx.resolve_pick(p)
+		return true
+
+	func move(p: Vector2) -> void:
+		_hover = p
+		ctx.canvas.overlay.queue_redraw()
+
+	func key(event: InputEventKey) -> bool:
+		if event.keycode == KEY_ESCAPE:
+			ctx.cancel_pick()
+			return true
+		return false
+
+	## The cells the pick would cover at the pointer, for the preview.
+	func preview_cells(p: Vector2) -> Array:
+		if ctx.pick.is_empty() or ctx.map() == null:
+			return []
+		var target: Variant = ctx.pick_target_at(p)
+		if target == null:
+			return []
+		match str(ctx.pick.get("kind", "")):
+			"token":
+				var tk := ctx.state.token(ctx.scene_id, str(target).substr(6))
+				return [HexMap.cell_key(grid().world_to_axial(Vision.token_pos(tk)))] if not tk.is_empty() else []
+			"cell":
+				return [str(target)]
+			"area":
+				if ctx.kernel == null:
+					return [str(target.at)]
+				return ctx.kernel.map.template(ctx.scene_id, target).get("cells", [])
+		return []
+
+	func draw_overlay(c: Node2D) -> void:
+		if _hover == Vector2.INF:
+			return
+		var col := Color(1.0, 0.85, 0.4, 0.9)
+		for key in preview_cells(_hover):
+			outline_cell(c, HexMap.key_cell(str(key)), col, 2.0)
+
 
 class SelectTool extends Tool:
 	## "" | move | box

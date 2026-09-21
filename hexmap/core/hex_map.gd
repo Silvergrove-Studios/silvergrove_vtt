@@ -89,6 +89,12 @@ static func key_cell(key: String) -> Vector2i:
 	return Vector2i(int(parts[0]), int(parts[1]))
 
 
+## Whether a string is a cell key: two integers with a comma between.
+static func is_cell_key(key: String) -> bool:
+	var parts := key.split(",")
+	return parts.size() == 2 and parts[0].is_valid_int() and parts[1].is_valid_int()
+
+
 ## Find an object by id in any collection of a level. Returns {} if absent.
 static func find_in(level: Dictionary, collection: String, id: String) -> Dictionary:
 	for o in level.get(collection, []):

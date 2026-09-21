@@ -202,10 +202,23 @@ func _dispatch(plugin: String, action: String, target_kind: String) -> void:
 	var actor := selected_actor()
 	if actor == "" or ctx.host == null:
 		return
-	var ctx_d := {"actor": actor, "token": selected_token()}
+	var ctx_d := {"actor": actor, "token": selected_token(), "scene": ctx.scene_id}
 	if target_kind == "actor" or target_kind == "ref":
 		var t := str(_target.get_item_metadata(_target.selected)) if _target.selected >= 0 and _target.item_count > 0 else actor
 		ctx_d.target = t if target_kind == "actor" else "actor:" + t
+	elif target_kind in ["token", "cell", "area"]:
+		# picked on the map: the dispatch happens when the DM taps
+		var spec: Dictionary = ctx.host.plugin(plugin).actions.get(action, {})
+		ctx.begin_pick({"kind": target_kind, "area": spec.get("area", {}), "from": selected_token(), "label": str(spec.get("label", action))},
+			func(target: Variant) -> void:
+				ctx_d.target = target
+				_run(plugin, action, ctx_d))
+		return
+	_run(plugin, action, ctx_d)
+
+
+## Dispatch with the context ready, prompts driven to the players.
+func _run(plugin: String, action: String, ctx_d: Dictionary) -> void:
 	var pc := ctx.host.dispatch(plugin, action, ctx_d)
 	if pc.status == PluginHost.PluginCall.ERROR:
 		ctx.say("%s: %s" % [action, pc.error])

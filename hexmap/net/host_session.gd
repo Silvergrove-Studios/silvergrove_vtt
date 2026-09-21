@@ -344,6 +344,15 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				return "that is not your character"
 			if not gm and ctx.has("token") and not _owns_token(pid, str(ctx.token)):
 				return "that is not your token"
+			# a target picked on the map must be one this viewer may pick
+			var kind := str(p.actions[action].get("target", ""))
+			if kind in ["token", "cell", "area"]:
+				var sc := str(ctx.get("scene", state.encounter.active_scene_id))
+				var why_t := PluginHost.check_target(state, sc, kind, ctx.get("target"), gm)
+				if why_t != "":
+					return why_t
+				ctx = ctx.duplicate()
+				ctx.scene = sc
 			# who sent it, from the connection — never from the wire
 			ctx = ctx.duplicate()
 			ctx.player = "" if gm else pid

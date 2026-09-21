@@ -9,6 +9,8 @@ signal selection_changed
 signal scene_changed
 signal encounter_changed
 signal status(text: String)
+## A pick on the map began or ended (`pick` is set or empty).
+signal pick_changed
 
 var app: App
 var state: EncounterState
@@ -45,6 +47,9 @@ var token_art := ""
 var snap_tokens := true
 ## Fog brush radius in cells.
 var fog_brush := 1
+## The pick in flight: {kind: token | cell | area, area: {shape, …},
+## from: token id | "", label, on_done: Callable(target)}; empty when none.
+var pick: Dictionary = {}
 
 
 func set_encounter(e: Encounter) -> void:
@@ -258,3 +263,47 @@ func snapped(p: Vector2) -> Vector2:
 	if not snap_tokens or map() == null:
 		return p
 	return map().grid.snap_to_center(p)
+
+
+# ---------------------------------------------------------------- picks --
+
+## Ask for a target on the map: the next press resolves it (see
+## `resolve_pick`) and `on_done` receives the target — `"token:<id>"`, a
+## `"q,r"` cell, or an area spec ready for `hm.map.template`. `spec`:
+## {kind, area: {shape, radius | length, angle, width}, from: token id,
+## label}.
+func begin_pick(spec: Dictionary, on_done: Callable) -> void:
+	pick = spec.duplicate(true)
+	pick.on_done = on_done
+	pick_changed.emit()
+	say("%s: tap a %s on the map (Esc to cancel)" % [str(spec.get("label", "Pick")), str(spec.get("kind", "target"))])
+
+
+func cancel_pick() -> void:
+	if pick.is_empty():
+		return
+	pick = {}
+	pick_changed.emit()
+	say("Pick cancelled")
+
+
+## The target a point on the map means for the pick in flight, or null
+## when the point picks nothing (a token pick on empty ground).
+func pick_target_at(p: Vector2) -> Variant:
+	return MapQuery.pick_target(state, scene_id, pick, p, true)
+
+
+## Resolve the pick with a press at `p`. False when nothing was picked.
+func resolve_pick(p: Vector2) -> bool:
+	if pick.is_empty():
+		return false
+	var target: Variant = pick_target_at(p)
+	if target == null:
+		say("Nothing to pick there")
+		return false
+	var done: Callable = pick.on_done
+	pick = {}
+	pick_changed.emit()
+	if done.is_valid():
+		done.call(target)
+	return true

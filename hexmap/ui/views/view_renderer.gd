@@ -21,6 +21,9 @@ extends VBoxContainer
 ##   list {bind, item}               a repeater; the item schema sees {item, index, ...data}
 ##   cards {bind, on_tap}            a hand of cards (strings or {id, label, text})
 ##   button {label, intent, enabled (expr), cost}
+##       an intent with pick: token | cell | area (and area: {shape, …})
+##       is not sent at once: the window asks for a target on the map and
+##       sends it with ctx.target filled in
 ##   action_bar {actions: [button…]}
 ##   tracker {bind}                  a progress track
 ##   prompt {bind}                   a prompt record: its form and a Submit
@@ -31,6 +34,9 @@ extends VBoxContainer
 
 ## A control was used: send this to the Table.
 signal intent(payload: Dictionary)
+## An intent that wants a target picked on the map first: {pick, area,
+## …intent}. The window resolves the pick and sends the intent itself.
+signal pick_requested(payload: Dictionary)
 
 var schema: Dictionary = {}
 var data: Dictionary = {}
@@ -383,7 +389,12 @@ func _button(n: Dictionary, ctx: Dictionary) -> Control:
 		b.theme_type_variation = "AccentButton"
 	if n.has("intent"):
 		var tpl: Variant = n.intent
-		b.pressed.connect(func() -> void: intent.emit(fill_intent(tpl, ctx)))
+		b.pressed.connect(func() -> void:
+			var payload: Variant = fill_intent(tpl, ctx)
+			if payload is Dictionary and str((payload as Dictionary).get("pick", "")) != "":
+				pick_requested.emit(payload)
+			else:
+				intent.emit(payload))
 	else:
 		b.disabled = true
 	return b

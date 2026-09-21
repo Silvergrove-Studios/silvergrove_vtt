@@ -442,6 +442,70 @@ func test_every_reference_plugin_passes_its_own_tests() -> void:
 
 # ------------------------------------------------------------------ table --
 
+func test_targets_picked_on_the_table() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var app := App.new("user://test_prefs_pick.json")
+	var table := TableWindow.new()
+	table.app = app
+	root.add_child(table)
+	table.ctx.plugin_dirs = ["res://tests/plugins"]
+	table._open_path(_example("chapel_ambush.encounter"))
+	await tree.process_frame
+	var ctx := table.ctx
+	var st := ctx.state
+	var sid := ctx.scene_id
+	var g := ctx.map().grid
+	var ana_id := str(st.encounter.players[0].id)
+	var hero_tk := str(st.tokens_owned_by(sid, ana_id)[0].id)
+	var gob_tk := ""
+	for tk in st.tokens(sid):
+		if bool(tk.get("hidden", false)):
+			gob_tk = str(tk.id)
+			break
+	check(ctx.kernel.commit([
+		{"t": "actor.add", "actor": {"id": "a_hero", "kind": "pc", "name": "Hero", "owner": ana_id, "ext": {"sample.ordered": {"level": 1, "stats": {"agi": 2, "str": 1, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_gob", "kind": "npc", "name": "Goblin", "ext": {"sample.ordered": {"level": 1, "stats": {"agi": 1, "str": 0, "wit": 0}}}}},
+		{"t": "token.set", "scene": sid, "id": hero_tk, "changes": {"actor": "a_hero"}},
+		{"t": "token.set", "scene": sid, "id": gob_tk, "changes": {"actor": "a_gob", "pos": [Vision.token_pos(st.token(sid, hero_tk)).x + 1.0, Vision.token_pos(st.token(sid, hero_tk)).y]}}], "Actors") == "", "a hero and a goblin beside it")
+	# the Rules panel's Shove button starts a pick instead of dispatching
+	ctx.select_token(hero_tk)
+	table.rules.refresh()
+	await tree.process_frame
+	table.rules._dispatch("sample.ordered", "shove", "token")
+	check(not ctx.pick.is_empty() and ctx.pick.kind == "token" and table.view.tool is TableTools.PickTool, "the table is picking a token: %s" % [ctx.pick.get("kind")])
+	var pick_tool := table.view.tool as TableTools.PickTool
+	pick_tool.move(Vector2(0.2, 0.2))
+	check(pick_tool.preview_cells(Vector2(0.2, 0.2)).is_empty() and pick_tool.preview_cells(Vision.token_pos(st.token(sid, gob_tk))).size() == 1, "the preview outlines the token under the pointer, nothing on empty ground")
+	var gob_before := Vision.token_pos(st.token(sid, gob_tk))
+	check(not ctx.resolve_pick(Vector2(0.2, 0.2)) and not ctx.pick.is_empty(), "a press on nothing picks nothing and keeps waiting")
+	check(ctx.resolve_pick(gob_before) and ctx.pick.is_empty(), "a press on the goblin resolves the pick")
+	check(table.view.tool is TableTools.SelectTool, "and the select tool is back")
+	check(Vision.token_pos(st.token(sid, gob_tk)).distance_to(gob_before) > 0.9, "the goblin was shoved: %s → %s" % [gob_before, st.token(sid, gob_tk).pos])
+	check(ctx.history.undo_label() == "Shove", "one undo step: %s" % ctx.history.undo_label())
+	# an area pick: the preview is the splash, the dispatch gets the template spec
+	table.rules._dispatch("sample.ordered", "throw_oil", "area")
+	check(ctx.pick.kind == "area" and ctx.pick.area.shape == "circle", "picking an area")
+	pick_tool = table.view.tool as TableTools.PickTool
+	var at := Vision.token_pos(st.token(sid, gob_tk))
+	check(pick_tool.preview_cells(at).size() >= 7, "the preview shows the splash's cells (%d)" % pick_tool.preview_cells(at).size())
+	check(ctx.resolve_pick(at) and st.encounter.effects.values().any(func(fx: Dictionary) -> bool: return fx.key == "oily" and fx.on == "actor:a_gob"), "the goblin is oily")
+	# Escape cancels
+	table.rules._dispatch("sample.ordered", "shove", "token")
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	check((table.view.tool as TableTools.PickTool).key(esc) and ctx.pick.is_empty() and table.view.tool is TableTools.SelectTool, "Escape cancels the pick")
+	# the check the host makes on a picked target
+	check(PluginHost.check_target(st, sid, "token", "token:" + gob_tk, false) == "you cannot see that" and PluginHost.check_target(st, sid, "token", "token:" + gob_tk, true) == "", "a hidden token is not a target for a player, but is for the GM")
+	check(PluginHost.check_target(st, sid, "token", "token:nope", true) != "" and PluginHost.check_target(st, sid, "token", "actor:a_gob", true) != "", "no such token; not a token")
+	check(PluginHost.check_target(st, sid, "cell", "3,3", false) == "" and PluginHost.check_target(st, sid, "cell", "300,3", false) != "" and PluginHost.check_target(st, sid, "cell", "x", false) != "", "cells in and out of bounds")
+	check(PluginHost.check_target(st, sid, "area", {"shape": "circle", "at": "3,3", "direction": 0}, false) == "" and PluginHost.check_target(st, sid, "area", {"at": "token:" + gob_tk, "direction": 0}, false) != "" and PluginHost.check_target(st, sid, "area", "3,3", false) != "", "an area's origin is checked like a cell or a token")
+	table.queue_free()
+	await tree.process_frame
+
+
 func test_table_campaign_panel_and_dialogs() -> void:
 	var app := App.new("user://test_prefs_campaign.json")
 	var table := TableWindow.new()

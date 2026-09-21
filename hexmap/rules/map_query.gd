@@ -206,6 +206,50 @@ func _band_max(plugin: String, band: String) -> float:
 	return 0.0
 
 
+# ------------------------------------------------------------------ picks --
+
+## What a press at `p` picks for `spec` on a scene: the token under it
+## (hidden ones only for the GM), the cell under it, or the area spec
+## with its origin and direction filled in — for a circle the tapped
+## cell, for a cone or line the `from` token pointed at the tap. Null
+## when there is nothing to pick.
+static func pick_target(st: EncounterState, sid: String, spec: Dictionary, p: Vector2, gm: bool) -> Variant:
+	var m := st.map_for(sid)
+	if m == null:
+		return null
+	var cell := m.grid.world_to_axial(p)
+	match str(spec.get("kind", "")):
+		"token":
+			var toks: Array = st.tokens(sid)
+			for i in range(toks.size() - 1, -1, -1):
+				var tk: Dictionary = toks[i]
+				if not gm and bool(tk.get("hidden", false)):
+					continue
+				if Vision.token_pos(tk).distance_to(p) <= float(tk.get("size", 1)) * 0.5:
+					return "token:" + str(tk.id)
+			return null
+		"cell":
+			return HexMap.cell_key(cell) if m.grid.in_bounds(cell) else null
+		"area":
+			if not m.grid.in_bounds(cell):
+				return null
+			var area: Dictionary = spec.get("area", {}).duplicate(true) if spec.get("area") is Dictionary else {}
+			var shape := str(area.get("shape", "circle"))
+			var from := str(spec.get("from", ""))
+			var out := area
+			out.shape = shape
+			if shape == "circle" or from == "" or st.token(sid, from).is_empty():
+				out.at = HexMap.cell_key(cell)
+				out.direction = 0.0
+			else:
+				var origin := Vision.token_pos(st.token(sid, from))
+				out.at = "token:" + from
+				out.direction = rad_to_deg((p - origin).angle())
+			out.from = ("token:" + from) if from != "" else ""
+			return out
+	return null
+
+
 # ------------------------------------------------------------------ sight --
 
 ## Sight from a to b: rays from a's centre to b's centre and the corners

@@ -45,6 +45,11 @@ func my_tokens() -> Array:
 	return state.tokens_owned_by(scene_id(), player_id) if state != null else []
 
 
+## Whether this session has the GM's powers (a co-GM's does).
+func is_gm() -> bool:
+	return false
+
+
 ## Ask for an event. Returns "" when it went through, else why not.
 func request(_ev: Dictionary) -> String:
 	return "no session"

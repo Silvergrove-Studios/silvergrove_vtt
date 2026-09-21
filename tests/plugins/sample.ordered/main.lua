@@ -31,6 +31,7 @@ hm.schema.define("actor", {
 -- Data, not code: the kernel applies `changes` to the derived numbers.
 local CONDITIONS = {
 	shaken = { label = "Shaken", stack = "highest", changes = { { path = "defence", mode = "add", value = -2, type = "status" } } },
+	oily = { label = "Oily", stack = "none", changes = { { path = "defence", mode = "add", value = -1, type = "status" } } },
 	prone = { label = "Prone", stack = "none", changes = { { path = "defence", mode = "add", value = -2, type = "status" }, { path = "speed", mode = "multiply", value = 0.5 } } },
 	blessed = { label = "Blessed", stack = "highest", changes = { { path = "attack", mode = "add", expr = "@value", type = "status" } } },
 }
@@ -80,6 +81,12 @@ hm.ui.register("sheet", {
 		{ type = "pool", label = "Hit points", bind = "/resources/hp" },
 		{ type = "track", label = "Armour", bind = "/resources/armour" },
 		{ type = "effects", label = "Conditions", bind = "/effects" },
+		{ type = "action_bar", actions = {
+			{ type = "button", label = "Shove", cost = { actions = 1 },
+				intent = { kind = "action", plugin = hm.id, action = "shove", ctx = { actor = "$/actor/id" }, pick = "token", label = "Shove" } },
+			{ type = "button", label = "Throw oil", cost = { actions = 1 },
+				intent = { kind = "action", plugin = hm.id, action = "throw_oil", ctx = { actor = "$/actor/id" }, pick = "area", area = { shape = "circle", radius = 1 }, label = "Throw oil" } },
+		} },
 		{ type = "glyphs", label = "an unknown widget type, for the test" },
 	},
 })
@@ -123,6 +130,50 @@ hm.on("after_roll", function(p)
 end)
 
 -- --------------------------------------------------------------- actions --
+-- Targets picked on the map (docs/plugin-authoring.md, "Targets"): the
+-- host hands `ctx.target` in as "token:<id>", a "q,r" cell, or an area
+-- spec ready for hm.map.template — and has already checked it is on the
+-- scene and something the sender may see.
+
+-- Shove: push a token one cell straight away from the shover.
+hm.actions.register("shove", {
+	label = "Shove", cost = { actions = 1 }, target = "token",
+	run = function(ctx)
+		local mine = hm.tokens(ctx.actor)
+		if #mine == 0 then error("shove needs the shover on the map") end
+		local scene = ctx.scene or mine[1].scene
+		local them = hm.map.token(scene, ctx.target)
+		if them == nil then error("no such token") end
+		local dx, dy = them.pos[1] - mine[1].pos[1], them.pos[2] - mine[1].pos[2]
+		local len = math.sqrt(dx * dx + dy * dy)
+		if len > 1.6 then error("too far to shove") end
+		local to = { them.pos[1] + dx / len, them.pos[2] + dy / len }
+		local mv = hm.map.move(scene, them.id, to)
+		hm.commit(mv.events, "Shove")
+		return { shoved = them.id, cells = mv.cells }
+	end,
+})
+
+-- Throw oil: a radius-1 splash where the thrower points; everyone in it is oily.
+hm.actions.register("throw_oil", {
+	label = "Throw oil", cost = { actions = 1 }, target = "area", area = { shape = "circle", radius = 1 },
+	run = function(ctx)
+		local scene = ctx.scene or (hm.tokens(ctx.actor)[1] or {}).scene
+		local splash = hm.map.template(scene, ctx.target)
+		local events = { hm.map.highlight(scene, splash.cells, "#aa8844", "Oil") }
+		local hit = {}
+		for _, id in ipairs(splash.tokens) do
+			local tk = hm.map.token(scene, id)
+			if tk and tk.actor and tk.actor ~= "" then
+				for _, ev in ipairs(condition("oily", "actor:" .. tk.actor)) do table.insert(events, ev) end
+				table.insert(hit, tk.actor)
+			end
+		end
+		hm.commit(events, "Throw oil")
+		return { cells = #splash.cells, hit = hit }
+	end,
+})
+
 -- Strike: an attack roll against the target's defence; on a hit, damage,
 -- with the target's owner asked whether to spend armour first.
 hm.actions.register("strike", {

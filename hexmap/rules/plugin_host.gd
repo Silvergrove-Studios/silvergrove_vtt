@@ -388,6 +388,46 @@ func dispatch(id: String, action: String, ctx: Dictionary = {}) -> PluginCall:
 	return pc
 
 
+## Target kinds an action may declare. `actor` and `ref` are chosen from a
+## list; `entry` comes from the Compendium panel; `token`, `cell` and
+## `area` are picked on the map (the Table's and the phone's) and checked
+## by `check_target` before the action runs.
+const TARGET_KINDS := ["", "actor", "ref", "entry", "token", "cell", "area"]
+const AREA_SHAPES := ["circle", "cone", "line"]
+
+
+## Whether `target` is an acceptable pick for an action that declared
+## `kind` on `scene_id`: a token on the scene (and, for a player, one they
+## can see: not hidden), a cell in bounds, or an area whose origin is one
+## of those. "" when it is, else why not.
+static func check_target(state: EncounterState, scene_id: String, kind: String, target: Variant, gm: bool) -> String:
+	match kind:
+		"token":
+			if not (target is String) or not (target as String).begins_with("token:"):
+				return "this action wants a token as its target"
+			var tk := state.token(scene_id, (target as String).substr(6))
+			if tk.is_empty():
+				return "no such token on this scene"
+			if not gm and bool(tk.get("hidden", false)):
+				return "you cannot see that"
+		"cell":
+			if not (target is String) or not HexMap.is_cell_key(str(target)):
+				return "this action wants a cell as its target"
+			var m := state.map_for(scene_id)
+			if m == null or not m.grid.in_bounds(HexMap.key_cell(str(target))):
+				return "that cell is off the map"
+		"area":
+			if not (target is Dictionary):
+				return "this action wants an area as its target"
+			var at: Variant = (target as Dictionary).get("at", "")
+			var why := check_target(state, scene_id, "token" if (at is String and (at as String).begins_with("token:")) else "cell", at, gm)
+			if why != "":
+				return why
+			if not (target.get("direction", 0) is float or target.get("direction", 0) is int):
+				return "an area's direction is a number"
+	return ""
+
+
 ## Whether the call in flight has spent its wall-clock budget.
 func over_time_budget() -> bool:
 	return call_ms_budget > 0 and Time.get_ticks_msec() - _call_started_ms > call_ms_budget
@@ -597,16 +637,27 @@ class Bridge:
 	func derived(aid: String) -> Variant:
 		return _k().state.encounter.actor(str(aid)).get("derived", {}).get(plugin_id, {})
 
+	## A token by id (with or without the "token:" prefix), with the scene
+	## it is on under `scene`.
 	func token(tid: String) -> Variant:
-		var tk := _k().state.find_token(str(tid))
-		return JsonDoc.deep(tk) if not tk.is_empty() else null
+		var id := str(tid).trim_prefix("token:")
+		for sc in _k().state.encounter.scenes:
+			for tk in sc.tokens:
+				if str(tk.id) == id:
+					var out: Dictionary = JsonDoc.deep(tk)
+					out.scene = str(sc.id)
+					return out
+		return null
 
+	## An actor's tokens, each with its `scene`.
 	func tokens(aid: String) -> Array:
 		var out := []
 		for sc in _k().state.encounter.scenes:
 			for tk in sc.tokens:
 				if str(tk.get("actor", "")) == str(aid):
-					out.append(JsonDoc.deep(tk))
+					var rec: Dictionary = JsonDoc.deep(tk)
+					rec.scene = str(sc.id)
+					out.append(rec)
 		return out
 
 	func state_get(scope: String, sid: String) -> Variant:
@@ -949,7 +1000,7 @@ class Bridge:
 	func map_token(scene: String, id: String) -> Variant:
 		if str(id) == "":
 			return JsonDoc.deep(_k().state.tokens(str(scene)))
-		var tk := _k().state.token(str(scene), str(id))
+		var tk := _k().state.token(str(scene), str(id).trim_prefix("token:"))
 		return JsonDoc.deep(tk) if not tk.is_empty() else null
 
 	# --- compendium

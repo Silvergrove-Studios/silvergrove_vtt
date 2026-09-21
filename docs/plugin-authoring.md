@@ -152,6 +152,28 @@ from the connection, never from the wire, so an action may trust them —
 for a target the sender does not own, check `ctx.gm` or that
 `ctx.player` owns the acting actor.
 
+**Targets.** `target` says what the action aims at and how the target is
+chosen: `"actor"` / `"ref"` (from a list of the actors on the scene),
+`"entry"` (a compendium entry, see below), or one *picked on the map* —
+`"token"`, `"cell"` or `"area"`. For those the Table's Rules panel and a
+phone's sheet button wait for a tap on the map, and `ctx.target` arrives
+as `"token:<id>"`, a `"q,r"` cell key, or (for an area) a template spec
+ready for `hm.map.template`: the action's `area = {shape, radius |
+length, angle, width}` with `at` (the tapped cell for a circle, the
+acting token for a cone or line), `direction` (degrees from the acting
+token to the tap) and `from` filled in. `ctx.scene` is set too. The host
+has already checked the target: a token on that scene the sender may
+see (hidden tokens are the GM's alone), a cell in bounds, an area whose
+origin is one of those. A sheet button asks for a pick by putting `pick
+= "token" | "cell" | "area"` (and `area = {…}`) on its intent:
+
+```lua
+{ type = "button", label = "Shove", intent = { kind = "action", plugin = hm.id, action = "shove",
+  ctx = { actor = "$/actor/id" }, pick = "token", label = "Shove" } }
+```
+
+`sample.ordered`'s `shove` and `throw_oil` are the reference.
+
 ```lua
 hm.improv.register("creature", { label = "Creature by level",
   params = { level = { type = "integer", minimum = 0, maximum = 20, default = 1 }, role = { type = "string", enum = { "brute", "skirmisher" } } },

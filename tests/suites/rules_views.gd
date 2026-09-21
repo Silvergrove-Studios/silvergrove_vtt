@@ -179,6 +179,44 @@ func test_wire_views_intents_and_roles() -> void:
 	check(st.encounter.doc.state.ext["sample.focus"].last_gm == false, "and not the GM")
 	var signed := table.ctx.host.dispatch("sample.focus", "sign", {})
 	check(signed.value.player == "" and signed.value.gm == true, "the Table's own dispatch is the GM's")
+	# targets picked on the phone: a hidden token is refused by the table, a
+	# visible one goes through, and the tool's pick fills the intent in
+	var gob_tk := ""
+	for tk in st.tokens(sid):
+		if bool(tk.get("hidden", false)):
+			gob_tk = str(tk.id)
+			break
+	var ben_token := str(st.tokens_owned_by(sid, ben_id)[0].id)
+	var ana_pos := Vision.token_pos(st.token(sid, ana_token))
+	check(table.ctx.kernel.commit([
+		{"t": "actor.set", "id": "a_ana", "changes": {"ext": {"sample.ordered": {"level": 1, "stats": {"agi": 2, "str": 1, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_ben2", "kind": "pc", "name": "Ben's ranger", "owner": ben_id, "ext": {"sample.ordered": {"level": 1, "stats": {"agi": 1, "str": 0, "wit": 0}}}}},
+		{"t": "token.set", "scene": sid, "id": ben_token, "changes": {"actor": "a_ben2", "pos": [ana_pos.x + 1.0, ana_pos.y]}}], "Neighbours") == "", "Ana knows the ordered rules too; Ben's ranger stands beside her")
+	told.clear()
+	player.session.intent({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana", "target": "token:" + gob_tk}})
+	check(pump.call(func() -> bool: return told.any(func(t: String) -> bool: return t.contains("cannot see")), 2000), "a hidden token is not a target: %s" % [told])
+	told.clear()
+	player.session.intent({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana", "target": "actor:a_ben2"}})
+	check(pump.call(func() -> bool: return told.any(func(t: String) -> bool: return t.contains("wants a token")), 2000), "the wrong kind of target is refused: %s" % [told])
+	check(pump.call(func() -> bool: return player.session.state.token(sid, ben_token).get("actor", "") == "a_ben2"), "the phone caught up with the scene")
+	var ben_before := Vision.token_pos(player.session.state.token(sid, ben_token))
+	player.tool.begin_pick({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana"}, "pick": "token", "label": "Shove"})
+	check(not player.tool.pick.is_empty() and player.tool.pick_spec().kind == "token" and player.tool.pick_spec().from == ana_token, "the phone's tool is picking a token from Ana's token")
+	check(player.tool.press(Vision.token_pos(player.session.state.token(sid, gob_tk)), MOUSE_BUTTON_LEFT, {}) and player.tool.pick.is_empty(), "a tap on the hidden goblin's spot is a tap on nothing: the pick is cancelled")
+	player.tool.begin_pick({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana"}, "pick": "token", "label": "Shove"})
+	player.tool.press(ben_before, MOUSE_BUTTON_LEFT, {})
+	check(player.tool.pick.is_empty(), "a tap on Ben's ranger resolves the pick and sends the intent")
+	check(pump.call(func() -> bool: return Vision.token_pos(st.token(sid, ben_token)).distance_to(ben_before) > 0.9), "…and the table shoved him: %s" % [st.token(sid, ben_token).pos])
+	# an area pick from the sheet's button: the renderer asks the window, which asks the tool
+	player.set_pane("sheet")
+	await tree.process_frame
+	var oil := _button(player._pane_box, "Throw oil  [1 actions]")
+	check(oil != null, "the ordered sheet's Throw oil button is on the phone")
+	oil.pressed.emit()
+	check(not player.tool.pick.is_empty() and player.tool.pick_spec().kind == "area", "pressing it started an area pick")
+	player.tool.press(Vision.token_pos(st.token(sid, ben_token)), MOUSE_BUTTON_LEFT, {})
+	check(pump.call(func() -> bool: return st.encounter.effects.values().any(func(fx: Dictionary) -> bool: return fx.key == "oily" and fx.on == "actor:a_ben2")), "the splash reached the table: Ben's ranger is oily")
+	player.set_pane("")
 	# the GM damages Ana: a prompt reaches her phone; she answers from it
 	table.ctx.select_token(ana_token)
 	var pc := table.ctx.host.dispatch("sample.focus", "damage", {"target": "a_ana", "amount": 5})

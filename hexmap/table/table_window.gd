@@ -29,6 +29,8 @@ var compendium: CompendiumPanel
 var players: PlayersPanel
 var campaign_panel: CampaignPanel
 var tool_options: HBoxContainer
+## The tool the DM chose; a pick borrows the view and gives it back.
+var _tool_name := "select"
 var tool_buttons: Dictionary = {}
 var scene_select: OptionButton
 var viewpoint_select: OptionButton
@@ -68,6 +70,9 @@ func _ready() -> void:
 	_restyle()
 	ctx.status.connect(func(t: String) -> void: status_left.text = t)
 	ctx.selection_changed.connect(func() -> void: view.canvas.overlay.queue_redraw(); _update_menus())
+	ctx.pick_changed.connect(func() -> void:
+		view.set_tool(TableTools.make("pick" if not ctx.pick.is_empty() else _tool_name, ctx))
+		view.canvas.overlay.queue_redraw())
 	ctx.scene_changed.connect(_on_scene_changed)
 	ctx.history.changed.connect(_update_menus)
 	_autosave.wait_time = AUTOSAVE_SECONDS
@@ -554,6 +559,9 @@ func _restyle() -> void:
 # ================================================================== tools etc ==
 
 func _select_tool(tool_name: String) -> void:
+	_tool_name = tool_name
+	if not ctx.pick.is_empty():
+		return
 	view.set_tool(TableTools.make(tool_name, ctx))
 	if tool_buttons.has(tool_name):
 		(tool_buttons[tool_name] as Button).button_pressed = true
