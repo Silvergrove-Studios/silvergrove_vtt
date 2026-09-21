@@ -330,8 +330,8 @@ top of `HexGrid`, `Lighting`, `Vision` and `effective_level()`.
 | 2 Runtime and plugin host | done | `PluginHost`, manifests, `hm.*` API, prompts as yields, actions, `hm.test`, `sample.ordered` in Lua, `plugintest` |
 | 3 Turns, shared state, clock, prompts | done | `TurnRunner` (ordered + focus), tracks, clock, rests, prompts and open rolls as records, `sample.focus`, Table wiring |
 | 4 Declarative UI, intents, protocol v2 | done | `ViewRenderer`, `Views` projection by audience, protocol v2 (roles, views, intents), Player panes, Display role, the Rules panel |
-| 5 Compendium, packs, editors | next | indexed packs, homebrew editors, `sample.degrees` |
-| 6 Map queries | | distance/bands, templates, LoS/cover, zones, hex state |
+| 5 Compendium, packs, editors | done | `Compendium` index and packs, `hm.comp`, `SchemaForm`, the Compendium panel, character files, `sample.degrees` |
+| 6 Map queries | next | distance/bands, templates, LoS/cover, zones, hex state |
 | 7 Campaign, growth, hardening | | `.campaign`, checkpoints UI, recap, prep triggers, bulk ops |
 | 8 Real rulesets | | in their own repositories, licensing decided then |
 
@@ -517,22 +517,37 @@ Decisions taken while building:
   plugin's encounter state is visible to all.
 - GDScript lambdas capture strings by value: box them (tests).
 
-### Phase 5 — Compendium, packs, editors
+### Phase 5 — Compendium, packs, editors — **done 2026-09-21**
 
-Pack format; `Compendium` index with paged/faceted/full-text queries served
-to Lua lazily; layering; provenance; `hm.comp`; homebrew editors generated
-from schemas; pack import/export; character file import/export (G12);
-"update instance to latest".
+| piece | file | what it does | proven by |
+|---|---|---|---|
+| `Compendium` | `rules/compendium.gd` | content packs (directory or single file) indexed on load: facets over scalar/list fields, words over strings; layering by id with unload re-resolving; queries filter/text/sort/page/fields/facets, whole-collection sort cached; user packs (`put` validated by schema, `remove`, `save_user_pack`, `export_pack`, `load_user_packs`); pack versions and `outdated()` | `tests/suites/rules_content.gd` (74 checks) |
+| Scale | same | 5,000 generated entries: index ~120 ms, faceted filter ~1.5 ms, text ~14 ms, first page of everything ~85 ms cold then cached | `test_compendium_scale` |
+| `hm.comp` | `rules/lua_prelude.gd`, `plugin_host.gd` | query/get/count/collections host-side; put/remove into `<plugin>.homebrew` (capability `content`); versions/outdated; a plugin's manifest `packs` load with it and reload per scratch test kernel | `sample.degrees` tests |
+| `SchemaForm` | `ui/views/schema_form.gd` | an editor generated from a JSON Schema: sections, spin boxes with bounds, enums, booleans, comma lists, repeaters for arrays of objects, descriptions as tooltips; `validate()` shows problems by path | `test_schema_form` |
+| `CompendiumPanel` | `table/compendium_panel.gd` | collection, search, facet buttons, pages, an entry in its schema form (or JSON), Copy to homebrew / Save / Delete / Export pack, plugin actions with `target = "entry"` | `test_compendium_panel` |
+| `CharacterFile` | `encounter/character_file.gd` | the player-owned character document; make/from_view/to_actor/check/save/load/list | `test_character_files_round_trip` |
+| Bring and keep | `net/host_session.gd`, `player/player_window.gd` | the `character` intent (adopted as the player's, schema-checked, updated if already theirs); the Sheet pane's Bring / Keep buttons; `outdated` shown | same (over the wire) |
+| `sample.degrees` | `tests/plugins/sample.degrees/` | four degrees with the natural 20/1 step, valued conditions ticking at turn end, a three-action budget with a mounting attack penalty, schemas for `creatures` and `feats`, a shipped pack, `spawn` from an entry; 5 tests | `plugintest`, conformance |
+| Table | `table/table_context.gd`, `layout_store.gd` | user packs under `user://content` load with the plugins; the Compendium pane is docked with Turns and Rules | table suite |
 
-Third reference plugin: **`sample.degrees`** — four degrees of success on
-every check with a ±10 rule; valued conditions that decrement on a
-schedule; a three-point action budget with glyphs; a compendium of 5,000
-generated entries to test scale.
+Exit criterion met: a 5,000-entry pack answers a faceted query in
+~1.5 ms on the Table without loading into Lua; a homebrew creature
+made through the schema form (and one put by the plugin) spawns with
+the same derived numbers as a shipped one; a character file brought
+from a Player is adopted, derived, shown on the phone with its sheet,
+updated when brought again, and kept back to the device with the
+table's version.
 
-Exit: a 5,000-entry pack answers a faceted query under 20 ms on the Table
-without loading into Lua; a homebrew entry created in a generated editor
-behaves identically to a shipped one; a character file round-trips
-through a phone.
+Decisions taken while building:
+- Collections are named by their schema: `hm.schema.define("creatures",
+  …)` is both the validator and the editor form.
+- Each plugin has one homebrew pack (`<plugin>.homebrew`); a table
+  without plugins writes `table.homebrew`.
+- A plugin's shipped packs are reloaded for every one of its scratch
+  test kernels, so tests see the content and never write into the real
+  compendium.
+- Words are indexed only from string fields; list fields are facets.
 
 ### Phase 6 — Map queries
 

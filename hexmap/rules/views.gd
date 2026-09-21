@@ -52,7 +52,9 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 		if not visible:
 			continue
 		var pa := {"id": str(aid), "name": str(a.get("name", "")), "kind": str(a.get("kind", "")), "owner": str(a.get("owner", "")), "mine": mine, "sheets": [],
-			"ext": _fields(a, "ext", mine, role), "derived": _fields(a, "derived", mine, role)}
+			"ext": _fields(a, "ext", mine, role), "derived": _fields(a, "derived", mine, role),
+			"packs": JsonDoc.deep(a.get("packs", {})) if (mine or role == ROLE_GM) else {}, "token": JsonDoc.deep(a.get("token", {})),
+			"outdated": kernel.comp.outdated(a) if (mine or role == ROLE_GM) else {}}
 		var effects := []
 		for fx in kernel.effects_on_actor(str(aid)):
 			if can_see(str(fx.get("audience", "all")), player_id, role):

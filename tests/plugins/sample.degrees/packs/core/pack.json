@@ -1,0 +1,10 @@
+{
+  "format": "silvergrove.content",
+  "version": 1,
+  "id": "sample.degrees.core",
+  "name": "Sample degrees: core",
+  "pack_version": "1",
+  "plugin": "sample.degrees",
+  "provenance": {"source": "Silvergrove Studios sample content", "license": "CC0-1.0", "attribution": "Sample content by Silvergrove Studios, CC0."},
+  "collections": {"creatures": "creatures.json", "feats": "feats.json", "conditions": "conditions.json"}
+}

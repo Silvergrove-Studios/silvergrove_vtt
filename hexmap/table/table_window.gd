@@ -25,6 +25,7 @@ var tokens: TokensPanel
 var inspector: TableInspector
 var turns: TurnsPanel
 var rules: RulesPanel
+var compendium: CompendiumPanel
 var players: PlayersPanel
 var tool_options: HBoxContainer
 var tool_buttons: Dictionary = {}
@@ -118,7 +119,7 @@ func _set_encounter(e: Encounter) -> void:
 
 
 func _bind_panels() -> void:
-	for p in [scenes, tokens, inspector, turns, rules, players]:
+	for p in [scenes, tokens, inspector, turns, rules, compendium, players]:
 		p.bind()
 
 
@@ -164,6 +165,7 @@ func _build_ui() -> void:
 	inspector = TableInspector.new(ctx)
 	turns = TurnsPanel.new(ctx)
 	rules = RulesPanel.new(ctx)
+	compendium = CompendiumPanel.new(ctx)
 	players = PlayersPanel.new(ctx)
 	root.add_child(_build_dock_layout())
 	_bind_panels()
@@ -195,6 +197,7 @@ func _build_dock_layout() -> Control:
 		DockPane.new("Inspector", inspector),
 		DockPane.new("Turns", turns, turns.header_actions()),
 		DockPane.new("Rules", rules),
+		DockPane.new("Compendium", compendium),
 		DockPane.new("Players", players, players.header_actions()),
 	]
 	for p in _panes:

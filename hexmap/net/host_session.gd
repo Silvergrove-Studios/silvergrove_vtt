@@ -281,6 +281,25 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			return kernel.turns.request_focus(pid, ref)
 		"contribute":
 			return kernel.pending.contribute(str(intent.get("roll", "")), pid, str(intent.get("name", "")), str(intent.get("expr", "")))
+		"character":
+			# a player brings their own character: adopted as theirs, checked
+			# by the rulesets like any actor
+			var doc: Variant = intent.get("character")
+			var why := CharacterFile.check(doc)
+			if why != "":
+				return why
+			var actor := CharacterFile.to_actor(doc, pid)
+			if state.encounter.actors.has(str(actor.id)):
+				var have := state.encounter.actor(str(actor.id))
+				if str(have.get("owner", "")) != pid:
+					return "an actor with that id is already at the table"
+				return kernel.commit([{"t": "actor.set", "id": str(actor.id), "changes": {"ext": actor.ext, "name": actor.name, "packs": actor.get("packs", {})}}], "Character updated", {"by": pid})
+			if not actor.has("packs") or (actor.packs is Dictionary and (actor.packs as Dictionary).is_empty()):
+				actor.packs = kernel.comp.versions()
+			why = kernel.commit([{"t": "actor.add", "actor": actor}], "Character brought", {"by": pid})
+			if why == "":
+				log.emit("%s brought %s" % [_player_name(pid), str(actor.name)])
+			return why
 	return "unknown intent '%s'" % str(intent.get("kind", ""))
 
 

@@ -253,6 +253,45 @@ func _build_join() -> Control:
 	return center
 
 
+# ================================================================ characters ==
+
+## Send one of the characters kept on this device to the table, to play
+## as mine. "" or why not (the table's refusal arrives through status).
+func bring_character(doc: Dictionary) -> String:
+	if session == null:
+		return "not at a table"
+	var why := CharacterFile.check(doc)
+	if why != "":
+		return why
+	return session.intent({"kind": "character", "character": doc})
+
+
+## Keep one of my characters, as the table has it now, on this device.
+func keep_character(actor_id: String) -> String:
+	if session == null:
+		return "not at a table"
+	for a in session.my_actors():
+		if str(a.get("id", "")) == actor_id:
+			var doc := CharacterFile.from_view(a, session.view.get("plugins", []))
+			var why := CharacterFile.save(doc)
+			_say("Kept %s on this device" % str(a.get("name", "")) if why == "" else why)
+			return why
+	return "no such character of mine"
+
+
+## The characters on this device that are not already at the table.
+func characters_to_bring() -> Array:
+	var here := {}
+	if session != null:
+		for a in session.my_actors():
+			here[str(a.get("id", ""))] = true
+	var out := []
+	for c in CharacterFile.list():
+		if not here.has(str(c.doc.actor.id)):
+			out.append(c)
+	return out
+
+
 func _build_pick() -> Control:
 	var column := VBoxContainer.new()
 	_columns.append(column)
@@ -630,7 +669,7 @@ func _render_pane() -> void:
 		"sheet":
 			var mine := session.my_actors()
 			if mine.is_empty():
-				_pane_text("No character of yours here. Ask the DM to give you one." if not v.is_empty() else "Waiting for the table…", "dim")
+				_pane_text("No character of yours here. Ask the DM to give you one, or bring one below." if not v.is_empty() else "Waiting for the table…", "dim")
 			for a in mine:
 				_pane_text(str(a.get("name", "")), "header")
 				var sheets: Array = a.get("sheets", [])
@@ -638,6 +677,24 @@ func _render_pane() -> void:
 					_pane_render(_default_sheet(), {"actor": a, "ext": a.get("ext", {}), "derived": a.get("derived", {}), "resources": a.get("resources", {}), "effects": a.get("effects", [])})
 				for sh in sheets:
 					_pane_render(sh.get("schema", {}), sh.get("data", {}))
+				if not (a.get("outdated", {}) as Dictionary).is_empty():
+					_pane_text("Built against older content: %s" % [a.outdated.keys()], "dim")
+				var keep := Button.new()
+				keep.text = "Keep %s on this device" % str(a.get("name", ""))
+				var aid := str(a.get("id", ""))
+				keep.pressed.connect(func() -> void: keep_character(aid))
+				_pane_box.add_child(keep)
+			if not display_mode:
+				for c in characters_to_bring():
+					var b := Button.new()
+					b.text = "Bring %s" % str(c.doc.actor.name)
+					b.tooltip_text = str(c.path)
+					var doc: Dictionary = c.doc
+					b.pressed.connect(func() -> void:
+						var why := bring_character(doc)
+						if why != "":
+							_say(why))
+					_pane_box.add_child(b)
 		"table":
 			_pane_render(_table_schema(v), v)
 

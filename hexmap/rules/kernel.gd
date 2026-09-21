@@ -25,6 +25,8 @@ var hooks := HookBus.new()
 var turns: TurnRunner
 var clock: Clock
 var pending: Pending
+## Content packs: the rulesets' and the table's, indexed.
+var comp := Compendium.new()
 ## id -> {derive: Callable(view) -> Dictionary, fields: {name: expr},
 ##        policy: {type: stack|best|override}, order, depends_on_state}
 var rulesets: Dictionary = {}

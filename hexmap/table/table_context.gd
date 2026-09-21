@@ -75,6 +75,9 @@ func _load_plugins() -> void:
 	for m in PluginHost.discover(plugin_dirs):
 		var why := host.load_dir(str(m.__dir))
 		plugin_log.append("%s: %s" % [str(m.get("id", "?")), "loaded" if why == "" else why])
+	# the table's own content, layered over what the plugins ship
+	for line in kernel.comp.load_user_packs():
+		plugin_log.append("pack " + line)
 	kernel.pending.close_orphans()
 
 

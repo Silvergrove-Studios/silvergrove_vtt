@@ -1,0 +1,5 @@
+{"entries": [
+  {"id": "frightened", "name": "Frightened", "valued": true, "text": "−value to every check; drops by one at the end of your turn."},
+  {"id": "slowed", "name": "Slowed", "valued": true, "text": "Lose that many actions at the start of your turn."},
+  {"id": "off-guard", "name": "Off-guard", "valued": false, "text": "−2 to armour class."}
+]}

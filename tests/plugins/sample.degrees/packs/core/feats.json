@@ -1,0 +1,6 @@
+{"entries": [
+  {"id": "quick-draw", "name": "Quick draw", "level": 1, "kind": "general", "traits": ["combat"], "text": "Your first strike each turn ignores the attack penalty."},
+  {"id": "steady", "name": "Steady", "level": 2, "kind": "general", "traits": ["defence"], "text": "Frightened wears off one step faster."},
+  {"id": "keen-eyes", "name": "Keen eyes", "level": 1, "kind": "skill", "traits": ["perception"], "text": "+1 circumstance to perception checks."},
+  {"id": "sneak", "name": "Sneak", "level": 1, "kind": "skill", "traits": ["stealth"], "text": "You may hide behind an ally."}
+]}

@@ -17,7 +17,7 @@ signal plugin_failed(id: String, where: String, message: String)
 signal plugin_loaded(id: String)
 
 const API_VERSION := 1
-const CAPABILITIES := ["state", "prompts", "log", "actions", "effects", "resources", "dice"]
+const CAPABILITIES := ["state", "prompts", "log", "actions", "effects", "resources", "dice", "content"]
 ## What a manifest must look like.
 const MANIFEST_SCHEMA := {
 	"type": "object",
@@ -33,6 +33,7 @@ const MANIFEST_SCHEMA := {
 		"main": {"type": "string"},
 		"files": {"type": "array", "items": {"type": "string"}},
 		"depends": {"type": "array", "items": {"type": "string"}},
+		"packs": {"type": "array", "items": {"type": "string"}},
 		"capabilities": {"type": "array", "items": {"type": "string", "enum": CAPABILITIES}},
 		"policy": {"type": "object"},
 		"settings": {"type": "object"},
@@ -184,6 +185,13 @@ func load_source(manifest: Dictionary, sources: Array, dir := "") -> String:
 			kernel.hooks.off(id)
 			return "%s: %s" % [id, why]
 	p.vm.seal()
+	# the packs the plugin ships, layered under whatever the table adds
+	for rel in manifest.get("packs", []):
+		if dir == "":
+			continue
+		var pw := kernel.comp.load_path(dir.path_join(str(rel)))
+		if pw != "":
+			_fail(p, "pack " + str(rel), pw)
 	kernel.register_ruleset(id, {"derive": _derive.bind(id), "policy": manifest.get("policy", {}),
 		"depends_on_state": bool(manifest.get("depends_on_state", false))})
 	_attach_hooks(p, kernel)
@@ -201,6 +209,9 @@ func _attach_hooks(p: Plugin, k: RulesKernel) -> void:
 func unload(id: String) -> void:
 	if not plugins.has(id):
 		return
+	for pid in kernel.comp.packs.keys():
+		if str(kernel.comp.packs[pid].plugin) == id and not bool(kernel.comp.packs[pid].get("user", false)):
+			kernel.comp.unload(str(pid))
 	kernel.unregister_ruleset(id)
 	kernel.validators = kernel.validators.filter(func(v: Dictionary) -> bool: return str(v.get("owner", "")) != id)
 	plugins.erase(id)
@@ -343,6 +354,10 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 		if not p.turn_strategy.is_empty():
 			kernel.turns.register(id, p.turn_strategy)
 		_attach_hooks(p, kernel)
+		# the plugin's shipped packs, fresh for each test
+		for rel in p.manifest.get("packs", []):
+			if p.dir != "":
+				kernel.comp.load_path(p.dir.path_join(str(rel)))
 		_test_counts = [0, 0]
 		_test_failures = []
 		var c := p.vm.call_function("__run_test", [i + 1, {}])
@@ -377,7 +392,8 @@ func _host_table(p: Plugin) -> Dictionary:
 			"state_get", "commit", "note", "setting", "roll", "dice_parse", "effects_apply", "effects_remove", "effects_on",
 			"effects_expire", "resource_get", "resource_op", "resource_refill", "test_check", "test_actor", "test_dispatch",
 			"turns_register", "turns_get", "turns_op", "turns_consume", "track_make", "track_advance", "track_get", "track_all",
-			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register"]:
+			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register",
+			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -641,6 +657,44 @@ class Bridge:
 		p.views[str(kind)] = PluginHost._norm_view(schema)
 		return true
 
+	# --- compendium
+	func comp_query(coll: String, opts: Variant) -> Dictionary:
+		return _k().comp.query(str(coll), PluginHost._as_dict(opts))
+
+	func comp_get(coll: String, id: String) -> Variant:
+		var e := _k().comp.get_entry(str(coll), str(id))
+		return e if not e.is_empty() else null
+
+	func comp_collections() -> Array:
+		return _k().comp.collections()
+
+	func comp_count(coll: String) -> int:
+		return _k().comp.count(str(coll))
+
+	## Into this plugin's homebrew pack, validated against the collection's
+	## schema when the plugin declared one.
+	func comp_put(coll: String, entry: Variant) -> Variant:
+		var p := _p()
+		if not p.can("content"):
+			return {"__error": "hm.comp.put needs the 'content' capability"}
+		var k := _k()
+		var pack := k.comp.user_pack(plugin_id + ".homebrew", str(p.manifest.get("name", plugin_id)) + " homebrew", plugin_id)
+		var why := k.comp.put(str(coll), PluginHost._as_dict(entry), str(pack.id), p.schemas.get(str(coll)))
+		return true if why == "" else {"__error": why}
+
+	func comp_remove(coll: String, id: String) -> Variant:
+		var p := _p()
+		if not p.can("content"):
+			return {"__error": "hm.comp.remove needs the 'content' capability"}
+		var why := _k().comp.remove(str(coll), str(id), plugin_id + ".homebrew")
+		return true if why == "" else {"__error": why}
+
+	func comp_versions() -> Dictionary:
+		return _k().comp.versions(plugin_id)
+
+	func comp_outdated(actor_id: String) -> Dictionary:
+		return _k().comp.outdated(_k().state.encounter.actor(str(actor_id)))
+
 	func test_check(cond: bool, msg: String) -> void:
 		var h := _h()
 		h._test_counts[0] += 1
@@ -654,6 +708,8 @@ class Bridge:
 			a.id = JsonDoc.new_id("a")
 		if a.has("ext"):
 			a.ext = PluginHost._as_dict(a.ext)
+		if not a.has("packs"):
+			a.packs = _k().comp.versions(plugin_id)
 		var why := _k().commit([{"t": "actor.add", "actor": a}], "Test actor")
 		return str(a.id) if why == "" else {"__error": why}
 

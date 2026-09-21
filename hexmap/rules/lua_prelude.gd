@@ -81,6 +81,21 @@ function hm.ui.register(kind, schema)
 	call(host.ui_register, kind, schema)
 end
 
+-- ----------------------------------------------------------- compendium --
+-- Content packs, indexed on the Table: query a page at a time, never the
+-- whole thing. `opts`: filter = { field = value | {values} }, text = "…",
+-- sort = "field" | "-field", page, per_page, fields = {…}, facets = {…}.
+hm.comp = {}
+function hm.comp.query(collection, opts) return call(host.comp_query, collection, opts or {}) end
+function hm.comp.get(collection, id) return call(host.comp_get, collection, id) end
+function hm.comp.collections() return call(host.comp_collections) end
+function hm.comp.count(collection) return call(host.comp_count, collection) end
+-- Homebrew: into this ruleset's own writable pack (needs "content").
+function hm.comp.put(collection, entry) return call(host.comp_put, collection, entry) end
+function hm.comp.remove(collection, id) return call(host.comp_remove, collection, id) end
+function hm.comp.versions() return call(host.comp_versions) end
+function hm.comp.outdated(actor_id) return call(host.comp_outdated, actor_id) end
+
 -- ---------------------------------------------------------------- turns --
 
 hm.turns = {}

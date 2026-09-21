@@ -1,0 +1,15 @@
+{
+  "id": "sample.degrees",
+  "version": "0.1.0",
+  "api": 1,
+  "name": "Sample: degrees",
+  "description": "An original, deliberately small ruleset with four degrees of success on every check, valued conditions that tick down, a three-action budget with a multiple-attack penalty, and a shipped compendium of creatures and feats. The third reference plugin.",
+  "license": "CC0-1.0",
+  "attribution": "Sample rules by Silvergrove Studios, CC0.",
+  "files": ["main.lua", "tests.lua"],
+  "packs": ["packs/core"],
+  "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice", "content"],
+  "policy": {"status": "best", "circumstance": "best", "item": "best"},
+  "settings": {"defaults": {"map": [0, -5, -10]}},
+  "tests": true
+}

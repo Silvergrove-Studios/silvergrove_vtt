@@ -5,9 +5,9 @@ the Table only, inside a sandboxed VM, and everything it does becomes
 events in the encounter's log. Players never run plugin code; they
 render what the plugin's data and derived numbers say.
 
-This is the API as of plugin API version 1 (Phases 2–4 of
-`docs/plugin-api-plan.md`). Compendium queries and map queries arrive in
-later phases and will be added here.
+This is the API as of plugin API version 1 (Phases 2–5 of
+`docs/plugin-api-plan.md`). Map queries arrive in Phase 6 and will be
+added here.
 
 ## Layout
 
@@ -16,6 +16,7 @@ my.rules/
   manifest.json
   main.lua          the rules
   tests.lua         the plugin's own tests (optional, encouraged)
+  packs/core/       content packs the ruleset ships (docs/content-format.md)
 ```
 
 Run the tests with `./run.sh plugintest my.rules`. The reference plugin
@@ -32,8 +33,9 @@ is `tests/plugins/sample.ordered`: read it first.
   "description": "…",
   "license": "…", "attribution": "…",
   "files": ["main.lua", "tests.lua"],      loaded in order (default: main.lua)
+  "packs": ["packs/core"],                 content packs to load, relative to the plugin
   "depends": ["other.plugin"],             must be loaded first; their hooks run first
-  "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice"],
+  "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice", "content"],
   "policy": {"status": "best", "circumstance": "best"},
   "settings": {"schema": {…}, "defaults": {"critical_on": 20}},
   "tests": true
@@ -42,7 +44,8 @@ is `tests/plugins/sample.ordered`: read it first.
 
 - **capabilities** gate what the plugin may do. Without `prompts` a yield
   is an error; without `state`, `ext.set` events are refused; without
-  `log`, `hm.log` is. The DM sees the list when installing.
+  `log`, `hm.log` is; without `content`, `hm.comp.put/remove` are. The DM
+  sees the list when installing.
 - **policy** says how typed parts of the same type combine in this
   ruleset's numbers and rolls: `stack` (sum, the default), `best` (the
   largest bonus and the largest penalty of that type count) or
@@ -128,6 +131,28 @@ with a context. Everything but `run` is public data the UI reads.
 hm.test("name", function(t) … end)
 ```
 See *Tests* below.
+
+### The compendium
+
+```lua
+hm.schema.define("creatures", { type = "object", required = {"id", "name", "level"}, properties = { … } })
+local page = hm.comp.query("creatures", { filter = { kind = "humanoid", level = {1, 2, 3} }, text = "gob", sort = "-level", page = 1, per_page = 20, fields = {"name", "level"}, facets = {"kind"} })
+page.total, page.pages, page.entries, page.facets.kind          -- a page, never the whole collection
+hm.comp.get("creatures", "goblin")   hm.comp.count("creatures")   hm.comp.collections()
+hm.comp.put("creatures", entry)      -- into this ruleset's homebrew pack, checked against the schema
+hm.comp.remove("creatures", id)
+hm.comp.versions()                    -- {pack id: pack_version}, to stamp on actors you make
+hm.comp.outdated(actor_id)            -- packs that changed since the actor was made
+```
+
+A schema declared for a collection name does three things: it checks
+homebrew entries, it generates the Table's editor form for them, and it
+tells the browser what the fields mean. An action registered with
+`target = "entry"` (and optionally `collection = "creatures"`) shows as
+a button on an open entry in the Table's Compendium panel and is
+dispatched with `ctx.entry`, `ctx.collection` and `ctx.scene` — the way
+a creature becomes an actor on the map. Actors you make from entries
+should carry `packs = hm.comp.versions()`.
 
 ### Views: what players see
 
