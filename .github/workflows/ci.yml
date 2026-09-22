@@ -1,7 +1,17 @@
+# The suite, headless on Linux: on pull requests, on pushes to main and to
+# tags, and by hand (`gh workflow run ci.yml --ref dev`). Pushes to dev
+# do not run it by themselves: a step is checked when asked, not on every
+# commit (Actions minutes on a private repo are finite).
 name: ci
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest

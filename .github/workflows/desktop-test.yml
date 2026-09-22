@@ -1,12 +1,10 @@
 # The suite on the real desktops: the headless run on macOS, Windows and
 # Linux, then each OS's own exported build launched with --selftest — the
-# binary a user downloads, rendering on that OS. Manual (macOS minutes are
-# dear) plus weekly.
+# binary a user downloads, rendering on that OS. Manual only (macOS minutes are
+# dear).
 name: desktop-test
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '41 6 * * 1'
 
 env:
   GODOT_VERSION: 4.7.1-stable

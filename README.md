@@ -210,4 +210,9 @@ runs the ones matching. The same suite runs inside any build with
 `--selftest` (results in `user://selftest.txt`), which is what the
 `desktop-test`, `android-test` and `ios-test` workflows do on real
 macOS/Windows/Linux runners, an emulator and a simulator — see
-`ARCHITECTURE.md`.
+`ARCHITECTURE.md`. None of the workflows runs on a push to `dev`: `ci`
+runs on pull requests, on pushes to `main` and on tags, and every
+workflow runs by hand — `gh workflow run ci.yml --ref dev` (likewise
+`desktop-test.yml`, `android-test.yml`, `ios-test.yml`, and
+`release.yml` for a `dev-build` prerelease). Minutes on a private repo
+are finite, and macOS ones count tenfold.
