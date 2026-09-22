@@ -285,10 +285,18 @@ kinds:
   this plugin's `derived` and `resources`), `tracks`, `prompts`, `rolls`,
   `log`, `state`.
 - **gm** — a Table panel, with the status data for the GM audience.
+- **entry:&lt;collection&gt;** — how an entry of that collection reads
+  when looked up: in the Compendium pane, in the lookup popup (View →
+  Look up…, Ctrl/Cmd+L), and on a phone when a sheet's button sends
+  `{kind = "lookup", collection, id}`. Data: `entry` (the record),
+  `role`, `me`, `facts` (the scalar fields as strings). Read-only; a
+  collection with no card gets a generic one (name, facts, text).
 
 Values: `text` (literal), `bind` (a JSON pointer, `"/derived/evade"`),
 `expr` (an Expr over the data, `"'Level ' .. @ext.level"`). A node with
-`if = "<expr>"` is hidden when it is false.
+`if = "<expr>"` is hidden when it is false. A `text` node with
+`rich = true` renders rules text as the SRDs write it — `**bold**`,
+`*italic*`, `# headings`, `- ` bullets, paragraphs.
 
 Widgets: `column`, `row`, `section {title}`, `tabs {tabs = {{title,
 children}}}`, `text {style = header|dim|mono}`, `number` (a typed number
@@ -325,7 +333,9 @@ may send: `{kind = "action", plugin, action, ctx}` (the Table checks
 `ctx.actor` / `ctx.token` are the player's), `{kind = "answer", prompt,
 answer}` (only the player a prompt is for), `{kind = "focus", ref}`
 (one of their tokens or characters), `{kind = "contribute", roll, name,
-expr}`. Displays may send none.
+expr}`. `{kind = "lookup", collection, id}` never reaches the Table: the
+device opens the entry's card (the phone fetches the entry under its
+audience). Displays may send none.
 
 **Audience.** A player character's `ext` and `derived` are public except
 the paths its `audience.fields` marks `owner` or `gm`; any other actor is

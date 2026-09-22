@@ -23,6 +23,8 @@ var commands: EncounterCommands
 var kernel: RulesKernel
 var host: PluginHost
 var plugin_dirs: Array = ["user://plugins"]
+## Set by the window: Callable(collection, id) opens the lookup popup on an entry.
+var lookup: Callable = Callable()
 ## What loading plugins reported (for the status bar / log).
 var plugin_log: PackedStringArray = []
 ## The campaign this session belongs to, when the encounter names one

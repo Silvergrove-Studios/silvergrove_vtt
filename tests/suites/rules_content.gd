@@ -188,6 +188,11 @@ func test_compendium_panel() -> void:
 	fey.pressed.emit()
 	panel._open("wolf")
 	await tree.process_frame
+	check(panel._card != null and panel._card.visible and not panel._fields.visible and _find_label(panel._card, "Wolf") != null and _find_label(panel._card, "Level ") != null, "a shipped entry opens as the ruleset's card, the fields hidden")
+	check(_button(panel._detail, "Fields") != null, "read-only: a Fields button")
+	_button(panel._detail, "Fields").pressed.emit()
+	check(panel._fields.visible and not panel._card.visible and _button(panel._detail, "Done") != null, "Fields shows the form")
+	await tree.process_frame
 	check(panel._form != null and panel._form.control("/level") is SpinBox, "a shipped entry opens in the plugin's schema form")
 	check(_button(panel._detail, "Copy to homebrew") != null and _button(panel._detail, "Save") == null and _button(panel._detail, "Add to the scene") != null, "read-only: copy, no save; the plugin's entry action is offered")
 	_button(panel._detail, "Copy to homebrew").pressed.emit()
@@ -373,3 +378,13 @@ func test_install_ruleset_zip() -> void:
 	root.remove_child(panel)
 	panel.free()
 	PluginHost._rm_rf(dest)
+
+
+func _find_label(root_node: Node, text: String) -> Label:
+	if root_node is Label and str((root_node as Label).text).begins_with(text):
+		return root_node
+	for c in root_node.get_children():
+		var l := _find_label(c, text)
+		if l != null:
+			return l
+	return null

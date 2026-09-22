@@ -764,9 +764,26 @@ func _begin_pick(payload: Dictionary) -> void:
 func _send_intent(payload: Dictionary) -> void:
 	if session == null:
 		return
+	# a lookup is answered here, from the table's compendium, as a card
+	if str(payload.get("kind", "")) == "lookup":
+		_lookup(str(payload.get("collection", "")), str(payload.get("id", "")))
+		return
 	var why := session.intent(payload)
 	if why != "":
 		_say(why)
+
+
+var _lookup_popup: LookupPopup
+
+
+func _lookup(collection: String, id: String) -> void:
+	if _lookup_popup == null:
+		_lookup_popup = LookupPopup.new()
+		add_child(_lookup_popup)
+	_lookup_popup.source = session.comp
+	_lookup_popup.cards = session.view.get("cards", {}) if session != null and not session.view.is_empty() else {}
+	_lookup_popup.role = "player"
+	_lookup_popup.show_entry(collection, id)
 
 
 ## What a character looks like when its ruleset registered no sheet: the

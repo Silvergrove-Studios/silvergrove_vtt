@@ -18,7 +18,7 @@ extends RefCounted
 ##   membership   x in list            (also substring for strings)
 ##   default      a ?? b               (b when a is null)
 ##   choice       cond ? a : b
-##   functions    min max abs floor ceil round clamp len num str lower upper
+##   functions    min max abs floor ceil round clamp len num str lower upper title
 ##                sum has contains starts ends join sign
 ##
 ## Errors: parse errors leave `error` set and eval() returns null;
@@ -210,6 +210,7 @@ func _call(fn: String, a: Array) -> Variant:
 		"str": return _to_text(a[0]) if n == 1 else _fail("str(value)")
 		"lower": return (a[0] as String).to_lower() if n == 1 and a[0] is String else _fail("lower(string)")
 		"upper": return (a[0] as String).to_upper() if n == 1 and a[0] is String else _fail("upper(string)")
+		"title": return (a[0] as String).capitalize() if n == 1 and a[0] is String else _fail("title(string)")
 		"sum":
 			if n == 1 and a[0] is Array:
 				var s := 0.0

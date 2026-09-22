@@ -340,6 +340,16 @@ hm.actions.register("learn", {
 })
 
 -- ------------------------------------------------------------------- views --
+-- how a creature entry reads when looked up: level and kind, then the text
+hm.ui.register("entry:creatures", {
+	type = "column",
+	children = {
+		{ type = "text", bind = "/entry/name", style = "header" },
+		{ type = "text", expr = "'Level ' .. @entry.level .. ' ' .. @entry.kind .. ' · AC ' .. @entry.ac_base .. ' · ' .. @entry.hp .. ' hp'", style = "dim" },
+		{ type = "text", bind = "/entry/text", rich = true },
+	},
+})
+
 hm.ui.register("sheet", {
 	type = "column",
 	children = {

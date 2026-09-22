@@ -27,6 +27,7 @@ var tokens: TokensPanel
 var inspector: TableInspector
 var turns: TurnsPanel
 var rules: RulesPanel
+var lookup: LookupPopup
 var compendium: CompendiumPanel
 var players: PlayersPanel
 var campaign_panel: CampaignPanel
@@ -61,7 +62,7 @@ var _picker_recent: VBoxContainer
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
 	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
-	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN,
+	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
 	T_FREE, T_DM, T_ORDERED, T_START, T_NEXT, T_PREV, T_END,
 	H_SHORTCUTS, H_ABOUT }
@@ -204,6 +205,11 @@ func _build_ui() -> void:
 	npcs = RosterPanel.new(ctx, false)
 	notes = NotesPanel.new(ctx)
 	maps = MapsPanel.new(ctx)
+	lookup = LookupPopup.new()
+	add_child(lookup)
+	ctx.lookup = func(collection: String, id: String) -> void:
+		_prepare_lookup()
+		lookup.show_entry(collection, id)
 	rules.pick_plugin_file = func(then: Callable) -> void:
 		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.zip ; Ruleset zips"])
 		fd.file_selected.connect(then)
@@ -343,6 +349,14 @@ func _show_picker(on: bool) -> void:
 		_picker_recent.add_child(l)
 
 
+## The lookup popup over this table's compendium and its rulesets' cards.
+func _prepare_lookup() -> void:
+	lookup.source = party._comp
+	lookup.cards = EntryCard.cards_of(ctx.host)
+	lookup.collections = ctx.kernel.comp.collections() if ctx.kernel != null else []
+	lookup.role = "gm"
+
+
 func _reset_layout() -> void:
 	dock.layout = LayoutStore.table_layout()
 	dock.layout.changed.connect(func() -> void: _layout_save.start())
@@ -406,6 +420,8 @@ func _build_menus() -> MenuBar:
 	_item(view_menu, "Zoom 100%", V_100, KEY_1, true)
 	view_menu.add_separator()
 	_item(view_menu, "Reset panel layout", V_DOCK)
+	view_menu.add_separator()
+	_item(view_menu, "Look up…", V_LOOKUP, KEY_L, true)
 	scale_menu = PopupMenu.new()
 	scale_menu.name = "UI size"
 	var si := 0
@@ -818,6 +834,9 @@ func _on_menu(id: int) -> void:
 		V_FIT: view.zoom_to_fit()
 		V_100: view.set_zoom(1.0)
 		V_DOCK: _reset_layout()
+		V_LOOKUP:
+			_prepare_lookup()
+			lookup.open()
 		V_SCALE_UP: app.step_ui_scale(true)
 		V_SCALE_DOWN: app.step_ui_scale(false)
 		S_SHOW:

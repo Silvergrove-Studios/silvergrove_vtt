@@ -148,6 +148,12 @@ func test_wire_views_intents_and_roles() -> void:
 	player.set_pane("sheet")
 	await tree.process_frame
 	check(player._renderers.size() == 1 and _has_button(player._pane_box, "dash") and _has_button(player._pane_box, "Act (nerve)"), "the sheet renders: her hand and the act buttons")
+	# a lookup from the phone: the entry comes from the table's compendium, the card is the ruleset's
+	check(v.has("cards") and v.cards.has("creatures") and v.cards.creatures.plugin == "sample.degrees", "the view carries the rulesets' entry cards")
+	player._send_intent({"kind": "lookup", "collection": "creatures", "id": "goblin"})
+	check(pump.call(func() -> bool: return player._lookup_popup != null and _find_label(player._lookup_popup, "Goblin skirmisher") != null), "the goblin's card opened on the phone")
+	check(_find_label(player._lookup_popup, "Level 1 humanoid · AC 13 · 8 hp") != null and _find_class(player._lookup_popup, "RichTextLabel") != null, "with the ruleset's own line and the rich text")
+	player._lookup_popup.hide()
 	# tap a card: play it → an effect appears in the next view
 	var pool_before: int = int(st.encounter.doc.state.ext.get("sample.focus", {}).get("pool", 0))
 	_button(player._pane_box, "dash").pressed.emit()

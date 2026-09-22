@@ -307,6 +307,11 @@ func _gm_intent(payload: Dictionary) -> void:
 			if pc.status != PluginHost.PluginCall.ERROR:
 				ctx.kernel.pending.drive(pc, str(payload.get("plugin", "")))
 		"focus": why = ctx.kernel.turns.set_focus(str(payload.get("ref", "")), "gm")
+		"lookup":
+			if ctx.lookup.is_valid():
+				ctx.lookup.call(str(payload.get("collection", "")), str(payload.get("id", "")))
+			else:
+				why = "nowhere to show it"
 		_: why = "unknown intent"
 	if why != "":
 		ctx.say(why)

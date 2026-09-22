@@ -1072,8 +1072,9 @@ class Bridge:
 			return {"__error": "unloaded"}
 		if not (schema is Dictionary):
 			return {"__error": "a view schema must be an object"}
-		if not ["sheet", "status", "gm"].has(str(kind)):
-			return {"__error": "unknown view kind '%s' (sheet, status, gm)" % kind}
+		# sheet, status, gm — or entry:<collection>, the card an entry of that collection reads as
+		if not ["sheet", "status", "gm"].has(str(kind)) and not (str(kind).begins_with("entry:") and str(kind).length() > 6):
+			return {"__error": "unknown view kind '%s' (sheet, status, gm, entry:<collection>)" % kind}
 		p.views[str(kind)] = PluginHost._norm_view(schema)
 		return true
 

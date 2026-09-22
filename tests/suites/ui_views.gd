@@ -128,6 +128,16 @@ func test_view_helpers() -> void:
 	check(_find(r, "Label", "top") != null and _find(r, "Label", "deep") == null, "render replaces")
 	r.render({"type": "list", "bind": "/nope", "empty": "nothing here"}, {})
 	check(_find(r, "Label", "nothing here") != null, "a list with no data shows its empty text")
+	# rules text: markdown as the SRDs write it, rendered rich
+	check(ViewRenderer.markdown_to_bbcode("A **bold** and *italic* word\n# Heading\n- one\n[x]") == "A [b]bold[/b] and [i]italic[/i] word\n[b]Heading[/b]\n  • one\n[lb]x]", "markdown to BBCode, brackets escaped")
+	r.render({"type": "text", "text": "**Casting Time:** Action", "rich": true}, {})
+	var rich := _find(r, "RichTextLabel", "")
+	check(rich != null and (rich as RichTextLabel).text == "[b]Casting Time:[/b] Action", "a rich text node is a RichTextLabel with BBCode")
+	# the generic entry card: the name, the facts on one line, the text
+	var data := EntryCard.data_for({"id": "x", "name": "Acid Arrow", "level": 2, "school": "evocation", "ritual": false, "concentration": true, "classes": ["wizard"], "shape": {}, "text": "A green arrow."})
+	check(data.facts == ["classes wizard", "concentration", "level 2", "school evocation"], "facts: scalars and flat lists, true flags by name, nothing empty: %s" % [data.facts])
+	r.render(EntryCard.generic(), data)
+	check(_find(r, "Label", "Acid Arrow") != null and _find(r, "Label", "classes wizard · concentration · level 2 · school evocation") != null and _find(r, "RichTextLabel", "") != null, "the generic card renders name, facts and text")
 	r.queue_free()
 	await tree.process_frame
 

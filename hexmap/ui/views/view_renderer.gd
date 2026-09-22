@@ -131,6 +131,27 @@ static func fill_intent(template: Variant, ctx: Dictionary) -> Variant:
 	return template
 
 
+## The little markdown rules text uses, as BBCode: **bold**, *italic*,
+## `# headings` (bold), `- ` bullets, paragraphs kept. Anything that
+## looks like BBCode already is escaped first.
+static func markdown_to_bbcode(md: String) -> String:
+	var s := md.replace("[", "[lb]")
+	var out := PackedStringArray()
+	for line in s.split("\n"):
+		var t := line
+		if t.begins_with("#"):
+			t = "[b]" + t.lstrip("#").strip_edges() + "[/b]"
+		elif t.begins_with("- ") or t.begins_with("* "):
+			t = "  • " + t.substr(2)
+		out.append(t)
+	s = "\n".join(out)
+	var bold := RegEx.create_from_string("\\*\\*(.+?)\\*\\*")
+	s = bold.sub(s, "[b]$1[/b]", true)
+	var italic := RegEx.create_from_string("(^|[^\\*])\\*([^\\*\\n]+?)\\*")
+	s = italic.sub(s, "$1[i]$2[/i]", true)
+	return s
+
+
 static func _text(v: Variant) -> String:
 	if v == null:
 		return ""
@@ -184,8 +205,19 @@ func _build(node: Variant, ctx: Dictionary, depth: int) -> Control:
 				tabs.add_child(page)
 			return tabs
 		"text":
+			var s := _text(value_of(n, ctx, "text"))
+			if bool(n.get("rich", false)):
+				# rules text as the SRDs write it: paragraphs, **bold**, *italic*, # headings, - lists
+				var rt := RichTextLabel.new()
+				rt.bbcode_enabled = true
+				rt.fit_content = true
+				rt.scroll_active = false
+				rt.selection_enabled = true
+				rt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				rt.text = markdown_to_bbcode(s)
+				return rt
 			var l := Label.new()
-			l.text = _text(value_of(n, ctx, "text"))
+			l.text = s
 			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			match str(n.get("style", "")):

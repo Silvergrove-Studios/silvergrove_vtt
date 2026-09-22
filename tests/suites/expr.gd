@@ -59,6 +59,7 @@ func test_expr_paths_strings_and_logic() -> void:
 	_is("str(@list)", "[1,2,3]")
 	_is("upper(@s) == \"SWORD OF DAWN\"", true)
 	_is("lower(\"AbC\")", "abc")
+	_is("title(\"huge dragon\")", "Huge Dragon")
 	_is("contains(@s, \"Dawn\") and starts(@s, \"Sword\") and ends(@s, \"n\")", true)
 	_is("\"of\" in @s", true, "substring membership")
 	_is("\"elf\" in @actor.tags", true)

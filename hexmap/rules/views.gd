@@ -35,7 +35,7 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 	var st := kernel.state
 	var e := st.encounter
 	var out := {"player": player_id, "role": role, "seq": kernel.log.seq, "turns": JsonDoc.deep(e.turns), "clock": JsonDoc.deep(e.clock),
-		"actors": {}, "status": [], "tracks": [], "prompts": [], "rolls": [], "log": [], "actions": {}, "plugins": []}
+		"actors": {}, "status": [], "tracks": [], "prompts": [], "rolls": [], "log": [], "actions": {}, "plugins": [], "cards": {}}
 	var plugin_ids := []
 	if host != null:
 		plugin_ids = host.plugins.keys()
@@ -43,6 +43,10 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 		for pid in plugin_ids:
 			var p: PluginHost.Plugin = host.plugins[pid]
 			out.plugins.append({"id": pid, "name": str(p.manifest.get("name", pid)), "version": str(p.manifest.get("version", ""))})
+			# the cards entries read as (entry:<collection> views), so a device can show what it looks up
+			for kind in p.views:
+				if str(kind).begins_with("entry:"):
+					out.cards[str(kind).substr(6)] = {"plugin": pid, "schema": p.views[kind]}
 			out.actions[pid] = JsonDoc.deep(p.actions)
 	# actors
 	var ids := e.actors.keys()

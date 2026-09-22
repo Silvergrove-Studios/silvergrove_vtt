@@ -6,7 +6,9 @@ extends VBoxContainer
 ## the plugin's schema generates; a homebrew entry can be edited or
 ## removed; the homebrew pack is saved under user://content and can be
 ## exported as one file to share. Plugin actions that take an entry
-## (`target = "entry"`) show as buttons on the open entry.
+## (`target = "entry"`) show as buttons on the open entry. An entry
+## opens as a card to read (the ruleset's, or a generic one); *Edit*
+## shows the fields.
 
 var ctx: TableContext
 var _collection: OptionButton
@@ -21,6 +23,9 @@ var _next: Button
 var _detail: VBoxContainer
 var _form: SchemaForm
 var _json: TextEdit
+var _card: ViewRenderer
+var _fields: Control
+var editing := false
 var _entry: Dictionary = {}
 var _result: Dictionary = {}
 var _page := 1
@@ -245,17 +250,37 @@ func _show_entry() -> void:
 		_detail.add_child(pl)
 	var record: Dictionary = JsonDoc.deep(_entry)
 	record.erase("__pack")
+	# the card first; the fields behind Edit (a new homebrew entry opens on them)
+	_card = ViewRenderer.new()
+	_card.render(EntryCard.schema_for(EntryCard.cards_of(ctx.host), coll), EntryCard.data_for(_entry))
+	_detail.add_child(_card)
+	_fields = VBoxContainer.new()
+	_fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_detail.add_child(_fields)
 	var schema := schema_for(coll)
 	if schema != null:
 		_form = SchemaForm.new()
 		_form.build(schema.root, record)
-		_detail.add_child(_form)
+		_fields.add_child(_form)
 	else:
 		_json = TextEdit.new()
 		_json.custom_minimum_size.y = 160
 		_json.text = JsonDoc.stringify(record)
-		_detail.add_child(_json)
+		_fields.add_child(_json)
+	if str(_entry.get("name", "")) == "New entry":
+		editing = true
+	_card.visible = not editing
+	_fields.visible = editing
 	var row := HFlowContainer.new()
+	var edit := Button.new()
+	edit.text = "Done" if editing else ("Edit" if writable else "Fields")
+	edit.tooltip_text = "The entry's fields" if not editing else "Back to the card"
+	edit.pressed.connect(func() -> void:
+		editing = not editing
+		_card.visible = not editing
+		_fields.visible = editing
+		edit.text = "Done" if editing else ("Edit" if writable else "Fields"))
+	row.add_child(edit)
 	if writable:
 		var save := Button.new()
 		save.text = "Save"

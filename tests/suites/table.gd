@@ -434,6 +434,27 @@ func test_campaign_first() -> void:
 		check(npcs._results.item_count >= 1, "the compendium answers the search: %d" % npcs._results.item_count)
 		npcs._add_from_compendium(npcs._results.get_item_metadata(0))
 		check(npcs.actors().size() == 1 and ctx.encounter().actor(npcs.actors()[0]).kind == "npc" and ctx.encounter().scenes.is_empty(), "a wolf in the roster, no token (no scene)")
+		# looking things up: View → Look up… searches every collection; a sheet's lookup intent opens the card
+		win._on_menu(win.V_LOOKUP)
+		await tree.process_frame
+		check(win.lookup.visible and win.lookup.collections.has("creatures"), "the lookup popup opens over the table's collections")
+		win.lookup._search.text = "goblin skirm"
+		win.lookup.search()
+		await tree.process_frame
+		var hit := -1
+		for i in win.lookup._results.item_count:
+			if win.lookup._results.get_item_text(i).begins_with("Goblin skirmisher"):
+				hit = i
+		check(hit >= 0, "a search finds the goblin skirmisher (%d results)" % win.lookup._results.item_count)
+		win.lookup._results.select(maxi(hit, 0))
+		win.lookup._open_selected()
+		await tree.process_frame
+		check(_find_label(win.lookup, "Level 1 humanoid") != null, "and shows the ruleset's card")
+		win.lookup.hide()
+		party._gm_intent({"kind": "lookup", "collection": "creatures", "id": "wolf"})
+		await tree.process_frame
+		check(win.lookup.visible and _find_label(win.lookup, "Wolf") != null, "a lookup intent from a sheet opens the popup on the entry")
+		win.lookup.hide()
 	# the Notes pane: a note written ahead, handed out in the session, journaled once
 	var notes := win.notes
 	notes._title.text = "The stone"
