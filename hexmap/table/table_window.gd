@@ -58,9 +58,10 @@ var _token_form: PropertyForm
 ## The campaign picker shown over the dock while no campaign is open.
 var _picker: Control
 var _picker_recent: VBoxContainer
+var _picker_packages: VBoxContainer
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
-	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN,
+	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN, M_FROM_PACKAGE, M_EXPORT_PACKAGE, M_DUPLICATE,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
@@ -310,12 +311,19 @@ func _build_picker() -> Control:
 	open_b.text = "Open campaign…"
 	open_b.pressed.connect(_open_campaign_dialog)
 	actions.add_child(open_b)
+	var pkg := Button.new()
+	pkg.text = "New from a package…"
+	pkg.tooltip_text = "A campaign someone assembled: copied into one of your own, which is what you play"
+	pkg.pressed.connect(func() -> void: _from_package_dialog())
+	actions.add_child(pkg)
 	var imp := Button.new()
 	imp.text = "Import an encounter…"
 	imp.tooltip_text = "An encounter file from before campaigns: opened as a campaign of its own"
 	imp.pressed.connect(_open_dialog)
 	actions.add_child(imp)
 	box.add_child(actions)
+	_picker_packages = VBoxContainer.new()
+	box.add_child(_picker_packages)
 	var rl := Label.new()
 	rl.text = "Recent"
 	rl.theme_type_variation = "HeaderLabel"
@@ -338,6 +346,7 @@ func _show_picker(on: bool) -> void:
 	for c in _picker_recent.get_children():
 		_picker_recent.remove_child(c)
 		c.queue_free()
+	_refresh_packages()
 	var any := false
 	for p in app.recent():
 		if not (str(p).ends_with(".campaign") or str(p).ends_with(".encounter")):
@@ -378,7 +387,11 @@ func _build_menus() -> MenuBar:
 	var file := PopupMenu.new()
 	file.name = "File"
 	_item(file, "New campaign…", M_NEW_CAMPAIGN, KEY_N, true)
+	_item(file, "New from a package…", M_FROM_PACKAGE)
 	_item(file, "Open campaign…", M_OPEN_CAMPAIGN, KEY_O, true)
+	file.add_separator()
+	_item(file, "Duplicate this campaign…", M_DUPLICATE)
+	_item(file, "Export as a package…", M_EXPORT_PACKAGE)
 	file.add_separator()
 	_item(file, "Save campaign", M_SAVE, KEY_S, true)
 	_item(file, "Save campaign as…", M_SAVE_AS, KEY_S, true, true)
@@ -800,6 +813,9 @@ func _on_menu(id: int) -> void:
 		M_OPEN_CAMPAIGN: _open_campaign_dialog()
 		M_SAVE_CAMPAIGN: _save(false)
 		M_CLOSE_CAMPAIGN: _close_campaign()
+		M_FROM_PACKAGE: _from_package_dialog()
+		M_EXPORT_PACKAGE: _export_package_dialog()
+		M_DUPLICATE: _duplicate_dialog()
 		M_RECAP: _recap_dialog()
 		M_CHECKPOINT:
 			_prompt("Checkpoint", "Name", "Checkpoint %d" % (ctx.encounter().checkpoints.size() + 1), func(v: String) -> void:
@@ -948,6 +964,10 @@ func _new_campaign_dialog() -> void:
 		_prompt("New campaign", "Name", "New campaign", func(v: String) -> void:
 			var c := Campaign.create(v if v.strip_edges() != "" else "Untitled campaign")
 			var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
+			# a campaign is a folder of its own: its maps, its content and its rules live beside it
+			var home := App.campaigns_dir(app.prefs).path_join(c.name)
+			DirAccess.make_dir_recursive_absolute(home)
+			fd.current_dir = ProjectSettings.globalize_path(home)
 			fd.current_file = c.name.to_lower().replace(" ", "_") + ".campaign"
 			fd.file_selected.connect(func(path: String) -> void:
 				if path.get_extension() == "":
@@ -959,6 +979,78 @@ func _new_campaign_dialog() -> void:
 				_open_campaign(c)
 				ctx.say("Campaign '%s' created. Add the party in the Session pane, and a map as a scene when there is somewhere to be." % c.name))
 			fd.popup_centered_ratio(0.7)))
+
+
+## A campaign of one's own from a package: the package is copied into a
+## folder of its own and that copy is what is played. The package itself
+## is never written to.
+func _from_package_dialog(path := "") -> void:
+	_guard_unsaved(func() -> void:
+		if path == "":
+			var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.campaignpkg ; Campaign packages"])
+			DirAccess.make_dir_recursive_absolute(App.packages_dir())
+			fd.current_dir = ProjectSettings.globalize_path(App.packages_dir())
+			fd.file_selected.connect(func(p: String) -> void: _from_package_dialog(p))
+			fd.popup_centered_ratio(0.7)
+			return
+		var info := CampaignPackage.read(path)
+		if not info.ok:
+			_info(str(info.why))
+			return
+		var unmet := CampaignPackage.unmet(info, _installed_rulesets(), App.version())
+		if not unmet.is_empty():
+			_info("%s cannot start here:\n\n• %s" % [str(info.name), "\n• ".join(PackedStringArray(unmet))])
+			return
+		_prompt("Start '%s'" % str(info.name), "Call this campaign", str(info.name), func(v: String) -> void:
+			var dest := App.campaigns_dir(app.prefs).path_join(v.strip_edges() if v.strip_edges() != "" else str(info.name))
+			var r := CampaignPackage.instance(path, dest, v)
+			if not r.ok:
+				_info("Could not start it: " + str(r.why))
+				return
+			_open_campaign_path(str(r.path))
+			ctx.say("'%s' is yours now, in %s. The package is untouched." % [str(r.name), ProjectSettings.globalize_path(dest)])))
+
+
+## The rulesets installed here, {id: version}, for a package's requirements.
+func _installed_rulesets() -> Dictionary:
+	var out := {}
+	for m in PluginHost.discover(ctx.plugin_dirs):
+		out[str(m.get("id", ""))] = str(m.get("version", ""))
+	return out
+
+
+## This campaign as a package for someone else: its maps, its content,
+## its prepared encounters — not the party's play.
+func _export_package_dialog() -> void:
+	if ctx.campaign == null or ctx.campaign.path == "":
+		_info("Save the campaign first: a package is made from what is on disk.")
+		return
+	var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaignpkg ; Campaign packages"])
+	DirAccess.make_dir_recursive_absolute(App.packages_dir())
+	fd.current_dir = ProjectSettings.globalize_path(App.packages_dir())
+	fd.current_file = "%s.campaignpkg" % ctx.campaign.name.to_lower().replace(" ", "_")
+	fd.file_selected.connect(func(path: String) -> void:
+		if path.get_extension() == "":
+			path += "." + CampaignPackage.EXT
+		var r := CampaignPackage.export_from(ctx.campaign, path, {"bundle_rules": false})
+		ctx.say("Packaged %d files into %s" % [int(r.files), ProjectSettings.globalize_path(path)] if r.ok else "Could not package it: " + str(r.why)))
+	fd.popup_centered_ratio(0.7)
+
+
+## The same campaign again, as its own folder: for a second group, or to
+## take it somewhere new without touching this one.
+func _duplicate_dialog() -> void:
+	if ctx.campaign == null or ctx.campaign.path == "":
+		_info("Save the campaign first.")
+		return
+	_prompt("Duplicate", "Call the copy", ctx.campaign.name + " (copy)", func(v: String) -> void:
+		var name := v.strip_edges() if v.strip_edges() != "" else ctx.campaign.name + " (copy)"
+		var dest := App.campaigns_dir(app.prefs).path_join(name)
+		var r := Campaign.duplicate_to(ctx.campaign, dest, name)
+		if not r.ok:
+			_info("Could not copy it: " + str(r.why))
+			return
+		ctx.say("Copied to %s" % ProjectSettings.globalize_path(str(r.path))))
 
 
 func _open_campaign_dialog() -> void:
@@ -1506,3 +1598,50 @@ func _shortcuts_dialog() -> void:
 	lines.append("Ctrl/Cmd+Z / Shift+Ctrl/Cmd+Z: undo / redo · Ctrl/Cmd+S: save · Ctrl/Cmd+M: add a map")
 	lines.append("H: hide / reveal selected tokens · Delete: remove them · Ctrl/Cmd+Space: next turn (ordered) · Shift+F: fog on/off · Esc: select tool")
 	_info("\n".join(lines))
+
+
+## The packages waiting in the library: each starts a campaign of its own.
+func _refresh_packages() -> void:
+	if _picker_packages == null:
+		return
+	for c in _picker_packages.get_children():
+		_picker_packages.remove_child(c)
+		c.queue_free()
+	var dir := App.packages_dir()
+	var da := DirAccess.open(dir)
+	if da == null:
+		return
+	var found := []
+	da.list_dir_begin()
+	var n := da.get_next()
+	while n != "":
+		if not da.current_is_dir() and n.ends_with("." + CampaignPackage.EXT):
+			var info := CampaignPackage.read(dir.path_join(n))
+			if info.ok:
+				found.append(info)
+		n = da.get_next()
+	da.list_dir_end()
+	if found.is_empty():
+		return
+	var head := Label.new()
+	head.text = "Campaigns to start"
+	head.theme_type_variation = "HeaderLabel"
+	_picker_packages.add_child(head)
+	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a.name) < str(b.name))
+	for info in found:
+		var row := HBoxContainer.new()
+		var text := Label.new()
+		var unmet := CampaignPackage.unmet(info, _installed_rulesets(), App.version())
+		text.text = "%s %s%s" % [str(info.name), str(info.package_version), ("  ·  " + str(unmet[0])) if not unmet.is_empty() else ""]
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text.tooltip_text = str(info.description)
+		if not unmet.is_empty():
+			text.theme_type_variation = "DimLabel"
+		row.add_child(text)
+		var start := Button.new()
+		start.text = "Start"
+		start.disabled = not unmet.is_empty()
+		var path := str(info.path)
+		start.pressed.connect(func() -> void: _from_package_dialog(path))
+		row.add_child(start)
+		_picker_packages.add_child(row)

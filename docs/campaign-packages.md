@@ -7,11 +7,19 @@ adds, the content it turns off — downloaded as one file, turned into
 *their* campaign at startup, and changed from there for as long as they
 play it.
 
-Status 2026-09-22: **P1–P3 built** (Hexmap `a6e70b1`): a campaign's own
-packs load with it, entries can be turned off and on for the campaign,
-and content imports into it at any time, schema-checked. P4–P8 below are
-still design. It follows `docs/campaign-plan.md` (the campaign-first
-Table, built) and `docs/content-format.md` (packs, built).
+Status 2026-09-22: **P1–P6 built.** A campaign's own packs load with it,
+entries can be turned off and on, content imports at any time
+(schema-checked), campaigns live in a folder of their own, a
+`.campaignpkg` can be read, started and exported, and a campaign can be
+duplicated. P7 (the author-side schema contract) and P8 (an example
+package) are still ahead. It follows `docs/campaign-plan.md` (the
+campaign-first Table) and `docs/content-format.md` (packs).
+
+**A package is a template and stays one.** Nothing the table does writes
+to a `.campaignpkg`: starting one copies it into a campaign folder, and
+that copy is what is played, imported into, saved and autosaved. To
+change a package, work on a campaign of your own and export a new
+version of it.
 
 ## Three roles
 
@@ -216,15 +224,18 @@ truth, the doc is the prose). `srd5e` freezes `classes`, `spells`,
 | ~~**P1 Campaign packs load**~~ | **done**: `campaign.packs` load with the campaign (after the plugins' and `user://content`, so the campaign wins by id); `TableContext.load_campaign_packs()`. | `rules_content.gd::test_campaign_content` |
 | ~~**P2 Content toggles**~~ | **done**: `content.disabled` on the campaign, `Compendium.disabled` filtering every query (`disabled: true` asks for them anyway) while by-id lookups still answer; the Compendium pane's *Use at this table* and *Show what is off*. | `rules_content.gd` (both tests) |
 | ~~**P3 Import**~~ | **done**: `ContentImport.inspect/import_into/write_pack` (a pack directory, a one-file pack, a file of entries), schema-checked per entry, `content_api` gate, copied into the campaign and recorded; *Import content…* in the Compendium pane. Left for P5: importing a `.campaignpkg`'s packs. | `rules_content.gd::test_campaign_content` |
-| **P4 The instance folder** | Campaigns live in a folder (`<name>/<name>.campaign` + `maps/`, `packs/`, `rules/`, `handouts/`); *New campaign* makes one; opening a loose `.campaign` still works; `rules_dir` loads a campaign-local ruleset. | a new campaign is a folder; a campaign carrying a ruleset runs it without installing it |
-| **P5 Packages** | `CampaignPackage.read/instance/export`; the picker lists installed packages (`user://packages`) and takes one from disk; *Export as a package…*; `requires` checked with a plain message. | a package instances into a playable campaign with its maps, packs and rules; exporting and re-instancing round-trips (`table.gd`) |
-| **P6 Duplicate** | *Duplicate campaign…* with the "new group" option. | the copy opens, has a new id, and the original is untouched |
+| ~~**P4 The instance folder**~~ | **done**: campaigns are made in `App.campaigns_dir()` (`~/Documents/Hexmap/Campaigns/<name>/`, the `campaigns_dir` preference moves it), a folder each; a loose `.campaign` still opens; `rules_dir` adds a campaign-carried ruleset, which wins over an installed one of the same id. | `table.gd::test_campaign_packages` |
+| ~~**P5 Packages**~~ | **done**: `CampaignPackage.read/unmet/instance/export_from`; *New from a package…* in the File menu and the picker, which lists what is in `user://packages` with what each needs; *Export as a package…*. | `table.gd::test_campaign_packages` |
+| ~~**P6 Duplicate**~~ | **done**: `Campaign.duplicate_to(source, dest, name, fresh)` — the whole folder, a new id, and with `fresh` none of this group's play; *Duplicate this campaign…* in the File menu. | `table.gd::test_campaign_packages` |
 | **P7 Schema contract** | `content_api` in manifests and packs; the load/import rules above; `./run.sh schemas`; docs. | a pack from a newer content API is refused with the reason; the schemas dump and validate a pack in CI |
 | **P8 The 5e package** | A small example package in `ruleset-dnd5e` (or its own repo): a two-map starter with a prepared fight, built on `srd5e`, exported by the export path itself. | it instances on a clean machine and plays |
 
 Order: P1 → P2 → P3 (the three that make a live campaign ownable), then
 P4 → P5 → P6 (distribution), P7 beside P3 (it is the import's contract),
-P8 last as the proof.
+P8 last as the proof. P7's enforcement half (a pack declaring the
+`content_api` it was written for, refused when it is newer than the
+ruleset) came with P3; what is left is the authoring half — publishing
+the schemas, freezing `srd5e`'s collections, and the prose.
 
 ## Decisions
 

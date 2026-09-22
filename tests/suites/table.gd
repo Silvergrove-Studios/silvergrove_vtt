@@ -698,3 +698,76 @@ func _find_button(root: Node, text: String) -> Button:
 		if b != null:
 			return b
 	return null
+
+
+## A package is a campaign someone assembled: it stays a template, and
+## starting it gives the DM a campaign of their own to play and import
+## into. Exporting one from a campaign is how a DM becomes an author.
+func test_campaign_packages() -> void:
+	var home := "user://test_packages"
+	if DirAccess.dir_exists_absolute(home):
+		PluginHost._rm_rf(home)
+	DirAccess.make_dir_recursive_absolute(home.path_join("source"))
+	# a campaign an author put together: a map, a pack of its own, a prepared fight, some play behind it
+	var author := Campaign.create("The Sunken Reach")
+	author.plugins.append({"id": "sample.degrees", "version": "0.1.0"})
+	author.players.append({"id": "pl_a", "name": "Ana", "color": "#4f9cf6"})
+	author.actors["a_pc"] = {"id": "a_pc", "kind": "pc", "name": "Ana's ranger", "owner": "pl_a"}
+	author.actors["a_npc"] = {"id": "a_npc", "kind": "npc", "name": "The harbourmaster"}
+	author.journal.append({"id": "j_1", "kind": "note", "title": "Ana's secret", "text": "…", "session": 1})
+	author.doc.sessions.append({"n": 1, "recap": "# Session 1"})
+	author.doc.runtime = {"scenes": []}
+	check(DirAccess.copy_absolute(_example("ruined_chapel.hexmap"), home.path_join("source/maps/chapel.hexmap")) != OK, "(a map needs its folder first)")
+	DirAccess.make_dir_recursive_absolute(home.path_join("source/maps"))
+	check(DirAccess.copy_absolute(_example("ruined_chapel.hexmap"), home.path_join("source/maps/chapel.hexmap")) == OK, "a map in the campaign's folder")
+	author.maps.append({"id": "m_chapel", "path": "maps/chapel.hexmap", "role": "battle", "name": "The chapel"})
+	author.encounters.append({"id": "enc", "name": "The ambush", "map": "m_chapel", "level": "ground", "creatures": [], "played": [1]})
+	check(ContentImport.write_pack(home.path_join("source/packs/reach"), {"id": "reach", "name": "Reach content", "plugin": "sample.degrees"},
+		{"creatures": [{"id": "reach-eel", "name": "Reach eel", "level": 2, "kind": "animal", "stats": {"might": 1, "agility": 2, "mind": 0}, "ac_base": 12, "hp": 9}]}) == "", "a pack of its own")
+	author.packs.append({"id": "reach", "path": "packs/reach", "version": "1"})
+	check(author.save(home.path_join("source/reach.campaign")) == OK, "the author's campaign saved")
+	# exported as a package: the adventure, not the play
+	var pkg := home.path_join("sunken_reach.campaignpkg")
+	var ex := CampaignPackage.export_from(author, pkg, {"id": "sunken-reach", "package_version": "1.2.0", "description": "A drowned coast."})
+	check(ex.ok and int(ex.files) >= 5, "exported: %d files%s" % [int(ex.files), "" if ex.ok else " — " + str(ex.why)])
+	var info := CampaignPackage.read(pkg)
+	check(info.ok and info.id == "sunken-reach" and info.name == "The Sunken Reach" and str(info.package_version) == "1.2.0", "the package says what it is: %s" % [info.why])
+	check(not info.bundles_rules and (info.requires.plugins as Array).any(func(p: Dictionary) -> bool: return str(p.id) == "sample.degrees"), "and what it needs")
+	check(CampaignPackage.unmet(info, {"sample.degrees": "0.1.0"}, "2.0.0").is_empty(), "a table with that ruleset can start it")
+	var no := CampaignPackage.unmet(info, {}, "2.0.0")
+	check(no.size() == 1 and str(no[0]).contains("not installed"), "one without is told why: %s" % [no])
+	check(CampaignPackage.unmet({"requires": {"app": ">=9.0.0"}}, {}, "2.0.0").size() == 1, "an older app is told too")
+	# a DM starts it: their own campaign, the package untouched
+	var before := FileAccess.get_file_as_bytes(pkg).size()
+	var inst := CampaignPackage.instance(pkg, home.path_join("mine"), "Ana's Reach")
+	check(inst.ok, "started: %s" % str(inst.why))
+	check(FileAccess.get_file_as_bytes(pkg).size() == before, "the package is untouched")
+	var err := []
+	var mine := Campaign.load_file(str(inst.path), err)
+	check(mine != null and mine.name == "Ana's Reach" and mine.id != author.id, "the copy is the DM's own, with its own id")
+	check(str(mine.doc.package.id) == "sunken-reach" and str(mine.doc.package.version) == "1.2.0", "it remembers the package it came from")
+	check(mine.doc.runtime.is_empty() and (mine.doc.sessions as Array).is_empty() and int(mine.clock.session) == 0, "with none of the author's play")
+	check((mine.doc.players as Array).is_empty() and not mine.actors.has("a_pc") and mine.actors.has("a_npc"), "no other table's party; the NPCs stay")
+	check(mine.encounters.size() == 1 and mine.maps.size() == 1 and mine.packs.size() == 1, "the adventure came whole")
+	check(FileAccess.file_exists(home.path_join("mine/maps/chapel.hexmap")) and FileAccess.file_exists(home.path_join("mine/packs/reach/pack.json")), "its maps and content are in the DM's folder")
+	# and it plays: the ruleset loads, the campaign's own pack with it
+	var app := App.new("user://test_prefs_packages.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	win._open_campaign_path(str(inst.path))
+	if PluginHost.available():
+		check(win.ctx.host != null and win.ctx.host.plugins.has("sample.degrees"), "the ruleset it names loaded")
+		check(win.ctx.kernel.comp.get_entry("creatures", "reach-eel").name == "Reach eel", "and the package's own content with it")
+	# duplicated for a second group
+	var dup := Campaign.duplicate_to(mine, home.path_join("second"), "Ben's Reach", true)
+	check(dup.ok, "duplicated: %s" % str(dup.why))
+	var copy := Campaign.load_file(str(dup.path), err)
+	check(copy != null and copy.name == "Ben's Reach" and copy.id != mine.id and copy.maps.size() == 1, "the copy stands alone")
+	check(copy.encounters.size() == 1 and (copy.encounters[0].played as Array).is_empty() and (copy.doc.journal as Array).is_empty(), "as a fresh start: nothing played, no journal")
+	check(FileAccess.file_exists(home.path_join("second/packs/reach/pack.json")), "with its own copy of the content")
+	check(not Campaign.duplicate_to(mine, home.path_join("second"), "Again").ok, "a folder that exists is not overwritten")
+	root.remove_child(win)
+	win.free()
+	PluginHost._rm_rf(home)

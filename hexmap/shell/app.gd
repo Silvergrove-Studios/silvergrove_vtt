@@ -32,6 +32,24 @@ static func version() -> String:
 	return str(ProjectSettings.get_setting("application/config/version", "dev"))
 
 
+## Where campaigns of one's own live: a folder each, under the system's
+## documents folder (the preference `campaigns_dir` moves it). A campaign
+## may still be opened from anywhere; this is only where new ones go.
+static func campaigns_dir(prefs: Dictionary = {}) -> String:
+	var chosen := str(prefs.get("campaigns_dir", ""))
+	if chosen != "":
+		return chosen
+	var docs := OS.get_system_dir(OS.SYSTEM_DIR_DOCUMENTS)
+	return (docs.path_join("Hexmap/Campaigns") if docs != "" else "user://campaigns")
+
+
+## Where downloaded campaign packages are kept. A package is never
+## written to by play: starting a campaign copies it into a folder of
+## its own.
+static func packages_dir() -> String:
+	return "user://packages"
+
+
 ## What a CI build wrote about itself (res://build_info.json: commit, when,
 ## run number), or {} for a run from the project.
 static func build_info() -> Dictionary:

@@ -487,6 +487,83 @@ func _upgrade() -> void:
 	doc.version = VERSION
 
 
+## The same campaign again in a folder of its own — its maps, its
+## content, its rules and its play — with a new id and name. A copy is
+## a copy: nothing is shared with the original. {ok, why, path}.
+static func duplicate_to(source: Campaign, dest: String, p_name: String, fresh := false) -> Dictionary:
+	var out := {"ok": false, "why": "", "path": ""}
+	if source == null or source.path == "":
+		out.why = "save the campaign first"
+		return out
+	if DirAccess.dir_exists_absolute(dest):
+		out.why = "%s already exists" % dest
+		return out
+	if DirAccess.make_dir_recursive_absolute(dest) != OK:
+		out.why = "cannot make %s" % dest
+		return out
+	var why := _copy_tree(source.base_dir(), dest, source.path.get_file())
+	if why != "":
+		out.why = why
+		return out
+	var err := []
+	var c := Campaign.load_file(dest.path_join(source.path.get_file()), err)
+	if c == null:
+		out.why = ", ".join(PackedStringArray(err))
+		return out
+	c.doc.id = JsonDoc.uuid()
+	c.doc.name = p_name
+	if fresh:
+		# for another group: the adventure, none of this one's play
+		c.doc.runtime = {}
+		c.doc.sessions = []
+		c.doc.journal = []
+		c.doc.players = []
+		c.doc.resources = {}
+		c.doc.clock = {"session": 0, "day": 1, "minute": 0}
+		var keep := {}
+		for aid in c.doc.actors:
+			if str(c.doc.actors[aid].get("kind", "")) != "pc":
+				keep[aid] = c.doc.actors[aid]
+		c.doc.actors = keep
+		for e in c.encounters:
+			if e is Dictionary:
+				e.erase("live")
+				e.played = []
+	var path := dest.path_join("%s.campaign" % CampaignPackage._slug(p_name))
+	if c.save(path) != OK:
+		out.why = "cannot write %s" % path
+		return out
+	if path != dest.path_join(source.path.get_file()):
+		DirAccess.remove_absolute(dest.path_join(source.path.get_file()))
+	out.path = path
+	out.ok = true
+	return out
+
+
+## Copy a campaign folder: everything but the autosaves.
+static func _copy_tree(from: String, to: String, campaign_file: String) -> String:
+	var da := DirAccess.open(from)
+	if da == null:
+		return "cannot read %s" % from
+	da.list_dir_begin()
+	var n := da.get_next()
+	while n != "":
+		if not n.begins_with(".") and not n.ends_with(".autosave"):
+			if da.current_is_dir():
+				DirAccess.make_dir_recursive_absolute(to.path_join(n))
+				var why := _copy_tree(from.path_join(n), to.path_join(n), "")
+				if why != "":
+					da.list_dir_end()
+					return why
+			elif n == campaign_file or campaign_file == "" or not n.ends_with(".campaign"):
+				if DirAccess.copy_absolute(from.path_join(n), to.path_join(n)) != OK:
+					da.list_dir_end()
+					return "cannot copy %s" % n
+		n = da.get_next()
+	da.list_dir_end()
+	return ""
+
+
 func save(p_path := "") -> Error:
 	if p_path != "":
 		path = p_path

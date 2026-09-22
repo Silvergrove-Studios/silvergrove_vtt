@@ -103,8 +103,14 @@ func _load_plugins() -> void:
 		order = campaign.plugin_order()
 		for pid in order:
 			host.settings_overrides[pid] = campaign.plugin_settings(pid)
+	# a ruleset the campaign carries (a package's own copy) wins over an installed one
+	var dirs := plugin_dirs.duplicate()
+	if campaign != null and str(campaign.doc.get("rules_dir", "")) != "":
+		var rules := campaign.resolve(str(campaign.doc.rules_dir))
+		if DirAccess.dir_exists_absolute(rules):
+			dirs.append(rules)
 	# only what this campaign plays: another ruleset's content is not parsed here
-	for r in host.load_all(plugin_dirs, order, order):
+	for r in host.load_all(dirs, order, order):
 		plugin_log.append("%s: %s" % [str(r.id), "loaded" if r.why == "" else r.why])
 	# a campaign carries its content itself: its packs, and its homebrew
 	# under its own folder. Nothing else on this machine is parsed.
