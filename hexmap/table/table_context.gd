@@ -25,6 +25,11 @@ var host: PluginHost
 var plugin_dirs: Array = ["user://plugins"]
 ## Set by the window: Callable(collection, id) opens the lookup popup on an entry.
 var lookup: Callable = Callable()
+## The table's own content library: packs kept for any campaign to import
+## from. It is never parsed into a campaign — only read when the DM
+## imports something — and stands in for a campaign's own content when
+## no campaign is open (an encounter file opened by itself).
+var library_dir := "user://content"
 ## What loading plugins reported (for the status bar / log).
 var plugin_log: PackedStringArray = []
 ## The campaign this session belongs to, when the encounter names one
@@ -99,11 +104,17 @@ func _load_plugins() -> void:
 		order = campaign.plugin_order()
 		for pid in order:
 			host.settings_overrides[pid] = campaign.plugin_settings(pid)
-	for r in host.load_all(plugin_dirs, order):
+	# only what this campaign plays: another ruleset's content is not parsed here
+	for r in host.load_all(plugin_dirs, order, order):
 		plugin_log.append("%s: %s" % [str(r.id), "loaded" if r.why == "" else r.why])
-	# the table's own content, layered over what the plugins ship
-	for line in kernel.comp.load_user_packs():
-		plugin_log.append("pack " + line)
+	# with no campaign, the table's own library stands in for one; a campaign
+	# carries its content itself (its packs, and its homebrew under its folder)
+	if campaign == null or campaign.path == "":
+		kernel.comp.user_dir = library_dir
+		for line in kernel.comp.load_user_packs():
+			plugin_log.append("pack " + line)
+	else:
+		kernel.comp.user_dir = campaign.base_dir().path_join("packs")
 	load_campaign_packs()
 	kernel.pending.close_orphans()
 

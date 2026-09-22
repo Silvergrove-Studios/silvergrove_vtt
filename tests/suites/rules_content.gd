@@ -488,3 +488,44 @@ func test_campaign_content() -> void:
 	var nr := ContentImport.import_into(newer, opened, ctx.host, ctx.kernel.comp)
 	check(not nr.ok and str(nr.why).contains("content API 9"), "a pack for a newer content API is refused: %s" % nr.why)
 	PluginHost._rm_rf(dir)
+
+
+## A campaign parses its own content and nothing else: the rulesets it
+## plays, their packs, and its own — not another ruleset's, and not the
+## table's library, which is only read when something is imported from it.
+func test_content_is_the_campaigns() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://test_content_scope"
+	if DirAccess.dir_exists_absolute(dir):
+		PluginHost._rm_rf(dir)
+	DirAccess.make_dir_recursive_absolute(dir)
+	# a library pack lying about, belonging to no campaign
+	var lib := "user://test_content_scope_library"
+	if DirAccess.dir_exists_absolute(lib):
+		PluginHost._rm_rf(lib)
+	check(ContentImport.write_pack(lib.path_join("library"), {"id": "library", "name": "The table's library", "plugin": "sample.degrees"},
+		{"creatures": [{"id": "library-lion", "name": "Library lion", "level": 3, "kind": "animal", "stats": {"might": 2, "agility": 2, "mind": 0}, "ac_base": 13, "hp": 14}]}) == "", "a pack in the table's library")
+	var c := Campaign.create("Scoped")
+	c.plugins.append({"id": "sample.degrees"})
+	check(c.save(dir.path_join("scoped.campaign")) == OK, "a campaign that plays one ruleset")
+	var ctx := TableContext.new()
+	ctx.app = App.new("user://test_prefs_scope.json")
+	ctx.plugin_dirs = ["res://tests/plugins"]
+	ctx.library_dir = lib
+	ctx.open_campaign(Campaign.load_file(dir.path_join("scoped.campaign"), []))
+	check(ctx.host.plugins.has("sample.degrees"), "its ruleset loaded")
+	check(not ctx.host.plugins.has("sample.ordered") and not ctx.host.plugins.has("sample.focus"), "the rulesets it does not play did not: %s" % [ctx.host.plugins.keys()])
+	check(ctx.kernel.comp.count("creatures") == 6, "its ruleset's content is there (%d creatures)" % ctx.kernel.comp.count("creatures"))
+	check(ctx.kernel.comp.get_entry("creatures", "library-lion").is_empty(), "the library's pack was not parsed into the campaign")
+	check(ctx.kernel.comp.collections().all(func(coll: String) -> bool:
+		return not ctx.kernel.comp.query(coll, {"text": "spark"}).entries.any(func(e: Dictionary) -> bool: return str(e.get("__pack", "")).begins_with("sample.focus"))), "nor another ruleset's")
+	# the library is what an import reads from, on purpose
+	var r := ContentImport.import_into(lib.path_join("library"), ctx.campaign, ctx.host, ctx.kernel.comp)
+	check(r.ok and ctx.kernel.comp.get_entry("creatures", "library-lion").name == "Library lion", "importing from the library brings it into the campaign: %s" % [r.why])
+	check(ctx.campaign.packs.any(func(p: Dictionary) -> bool: return str(p.id) == "library"), "and the campaign now carries it")
+	# a campaign's homebrew is its own, under its folder
+	check(ctx.kernel.comp.user_dir == dir.path_join("packs"), "homebrew is written into the campaign: %s" % ctx.kernel.comp.user_dir)
+	PluginHost._rm_rf(dir)
+	PluginHost._rm_rf(lib)

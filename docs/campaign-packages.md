@@ -235,9 +235,12 @@ P8 last as the proof.
   copy is a real copy. The cost is disk (a few MB of JSON, plus maps).
 - **Suppression, not deletion.** Turning content off is a campaign-level
   view over the compendium, reversible, and never edits a pack.
-- **Campaign-scoped content.** Imports land in the campaign, not in the
-  app. `user://content` stays for a table's own homebrew across
-  campaigns; a campaign's packs win over it by id.
+- **Campaign-scoped content, and nothing else parsed.** A campaign
+  parses the rulesets it plays, their packs and its own — another
+  installed ruleset is not loaded at all, and the table's library under
+  `user://content` is only read when the DM imports from it. Imports and
+  homebrew land in the campaign's folder. With no campaign open the
+  library stands in for one.
 - **Bundled rules are optional but pinned.** A package may carry the
   ruleset it was tested with; if it does, that copy runs for that
   campaign only.

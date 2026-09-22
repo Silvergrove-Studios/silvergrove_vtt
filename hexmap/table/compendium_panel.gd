@@ -111,7 +111,7 @@ func _init(p_ctx: TableContext) -> void:
 	crow.add_child(_show_disabled)
 	var import_b := Button.new()
 	import_b.text = "Import content…"
-	import_b.tooltip_text = "A pack folder, a one-file pack or a file of entries, into this campaign"
+	import_b.tooltip_text = "A pack folder, a one-file pack or a file of entries, into this campaign (the table's library is a good place to look)"
 	import_b.pressed.connect(func() -> void:
 		if pick_content_file.is_valid():
 			pick_content_file.call(func(path: String) -> void: ctx.say(import_content(path))))

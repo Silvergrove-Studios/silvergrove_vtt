@@ -306,9 +306,27 @@ var load_order: Array = []
 ## Load every plugin found under `dirs`, dependencies first, in the
 ## campaign's order where it names them. Returns [{id, why}] per plugin
 ## ("" for loaded), in the order tried.
-func load_all(dirs: Array, order: Array = []) -> Array:
+## Load the plugins found under `dirs`. `order` is the campaign's own
+## order; `only`, when it is not empty, is the set of ids this campaign
+## uses — nothing else is loaded, so no other ruleset's content is
+## parsed for a campaign that does not play it (dependencies come along).
+func load_all(dirs: Array, order: Array = [], only: Array = []) -> Array:
 	load_order = order.duplicate()
 	var found := discover(dirs)
+	if not only.is_empty():
+		var want := {}
+		var by_id_all := {}
+		for m in found:
+			by_id_all[str(m.get("id", ""))] = m
+		var need := func(id: String, self_ref: Callable) -> void:
+			if want.has(id) or not by_id_all.has(id):
+				return
+			want[id] = true
+			for dep in by_id_all[id].get("depends", []):
+				self_ref.call(str(dep), self_ref)
+		for id in only:
+			need.call(str(id), need)
+		found = found.filter(func(m: Dictionary) -> bool: return want.has(str(m.get("id", ""))))
 	var by_id := {}
 	for m in found:
 		by_id[str(m.get("id", ""))] = m

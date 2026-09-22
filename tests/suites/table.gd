@@ -388,7 +388,9 @@ func test_campaign_first() -> void:
 	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
 	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1", "ext": {"sample.ordered": {"level": 2, "stats": {"agi": 2, "str": 1, "wit": 0}}}}
 	c.resources["actor:a_h"] = {"sample.ordered": {"hp": Resources.pool(9, 15, "rest")}}
+	# the rulesets this campaign plays: only these are loaded, and only their content parsed
 	c.plugins.append({"id": "sample.ordered"})
+	c.plugins.append({"id": "sample.degrees"})
 	check(c.save(dir.path_join("first.campaign")) == OK, "saved")
 	win._open_path(dir.path_join("first.campaign"))
 	await tree.process_frame

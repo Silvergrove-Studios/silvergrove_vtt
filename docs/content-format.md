@@ -50,13 +50,21 @@ GM's secrets in a pack with `"audience": "gm"`, or on the entry.
 A pack can also be one file — `{"pack": {…}, "collections": {"creatures":
 […]}}` — which is how packs are exported to share.
 
+**What is parsed.** Only the open campaign's content: the rulesets it
+plays (its `plugins` list — no other installed ruleset is loaded, so no
+other ruleset's packs are parsed), their packs, and the campaign's own.
+The table's library under `user://content/` is *not* parsed into a
+campaign; it is where loose packs wait, and it is read when the DM
+imports one. With no campaign open — an encounter file by itself — the
+library stands in for a campaign's content.
+
 **Layering.** Packs load in order: what a plugin ships (its manifest's
-`packs`), then the table's own packs under `user://content/`, then the
-open campaign's own (its `packs` list, under its folder). Within a
+`packs`), then the open campaign's own (its `packs` list, under its
+folder), whose homebrew is written there too. Within a
 collection a later pack's entry with the same id replaces an earlier
-one, so a table can override a shipped creature by id, and a campaign
-can override both; removing the override brings the earlier one back.
-Every indexed entry carries `__pack`, the pack it came from.
+one, so a campaign can override a shipped creature by id; removing the
+override brings the shipped one back. Every indexed entry carries
+`__pack`, the pack it came from.
 
 **Importing.** `ContentImport` brings a pack directory, a one-file pack
 or a file of entries (`{"collection": "spells", "entries": [ … ]}`) into
@@ -90,9 +98,10 @@ they answer in low milliseconds on thousands of entries and never hand a
 VM the whole collection. The sort of a whole collection is cached per
 sort key until entries change.
 
-**Homebrew.** The Compendium panel copies a shipped entry into the
-table's homebrew pack for that plugin (`<plugin>.homebrew`), edits it in
-the schema form, saves the pack to `user://content/<pack>/` and can
+**Homebrew.** The Compendium panel copies a shipped entry into a
+homebrew pack for that plugin (`<plugin>.homebrew`), edits it in the
+schema form, saves the pack into the open campaign's own `packs/`
+folder (or the table's library when no campaign is open) and can
 export it as one file. A plugin may write its own homebrew pack with
 `hm.comp.put` (the `content` capability). Actors made from entries carry
 `packs: {pack id: pack_version}`; when a pack's version changes,

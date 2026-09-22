@@ -212,6 +212,9 @@ func _build_ui() -> void:
 		lookup.show_entry(collection, id)
 	compendium.pick_content_file = func(then: Callable) -> void:
 		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_ANY, ["*.json ; Packs and entry files"])
+		# the table's library is where loose packs wait to be imported
+		DirAccess.make_dir_recursive_absolute(ctx.library_dir)
+		fd.current_dir = ProjectSettings.globalize_path(ctx.library_dir)
 		fd.file_selected.connect(then)
 		fd.dir_selected.connect(then)
 		fd.popup_centered_ratio(0.7)
