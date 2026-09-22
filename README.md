@@ -180,6 +180,13 @@ this sits on top of that.
 - Why these formats: `docs/research-formats.md`.
 - How the code is put together: `ARCHITECTURE.md`.
 
+## Licence
+
+MIT — see `LICENSE`. Third-party components and formats are listed
+in `THIRD_PARTY.md`; the placeholder art under `packs/` is Silvergrove
+Studios' and is MIT with the rest. Rulesets are separate projects with
+their own licences.
+
 ## Content packs
 
 A pack is a folder with a `pack.json` and images (SVG, PNG, WebP, JPEG).
