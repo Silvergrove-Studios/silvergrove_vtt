@@ -53,10 +53,9 @@ A pack can also be one file — `{"pack": {…}, "collections": {"creatures":
 **What is parsed.** Only the open campaign's content: the rulesets it
 plays (its `plugins` list — no other installed ruleset is loaded, so no
 other ruleset's packs are parsed), their packs, and the campaign's own.
-The table's library under `user://content/` is *not* parsed into a
-campaign; it is where loose packs wait, and it is read when the DM
-imports one. With no campaign open — an encounter file by itself — the
-library stands in for a campaign's content.
+Nothing else on the machine is read. The table's library under
+`user://content/` is where loose packs wait to be imported and where a
+pack is exported to; it is opened only when the DM imports from it.
 
 **Layering.** Packs load in order: what a plugin ships (its manifest's
 `packs`), then the open campaign's own (its `packs` list, under its
@@ -101,8 +100,9 @@ sort key until entries change.
 **Homebrew.** The Compendium panel copies a shipped entry into a
 homebrew pack for that plugin (`<plugin>.homebrew`), edits it in the
 schema form, saves the pack into the open campaign's own `packs/`
-folder (or the table's library when no campaign is open) and can
-export it as one file. A plugin may write its own homebrew pack with
+folder — the campaign lists it, so it comes back with the campaign —
+and can export it as one file. A campaign that has never been saved has
+nowhere to keep content, and the Table says so. A plugin may write its own homebrew pack with
 `hm.comp.put` (the `content` capability). Actors made from entries carry
 `packs: {pack id: pack_version}`; when a pack's version changes,
 `Compendium.outdated(actor)` says so and the sheet shows it.

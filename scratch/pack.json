@@ -1,0 +1,11 @@
+{
+  "collections": {},
+  "format": "silvergrove.content",
+  "id": "scratch",
+  "name": "Scratch",
+  "pack_version": "1",
+  "plugin": "sample.degrees",
+  "provenance": {},
+  "user": true,
+  "version": 1
+}

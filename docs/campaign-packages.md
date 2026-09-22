@@ -239,8 +239,8 @@ P8 last as the proof.
   parses the rulesets it plays, their packs and its own — another
   installed ruleset is not loaded at all, and the table's library under
   `user://content` is only read when the DM imports from it. Imports and
-  homebrew land in the campaign's folder. With no campaign open the
-  library stands in for one.
+  homebrew land in the campaign's folder. A campaign that has not been
+  saved has nowhere to keep content yet, and is told so.
 - **Bundled rules are optional but pinned.** A package may carry the
   ruleset it was tested with; if it does, that copy runs for that
   campaign only.

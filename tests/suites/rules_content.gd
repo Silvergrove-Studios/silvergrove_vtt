@@ -527,5 +527,15 @@ func test_content_is_the_campaigns() -> void:
 	check(ctx.campaign.packs.any(func(p: Dictionary) -> bool: return str(p.id) == "library"), "and the campaign now carries it")
 	# a campaign's homebrew is its own, under its folder
 	check(ctx.kernel.comp.user_dir == dir.path_join("packs"), "homebrew is written into the campaign: %s" % ctx.kernel.comp.user_dir)
+	# a campaign with nowhere to keep content yet says so rather than writing somewhere else
+	var loose := TableContext.new()
+	loose.app = ctx.app
+	loose.plugin_dirs = ["res://tests/plugins"]
+	loose.library_dir = lib
+	loose.open_campaign(Campaign.create("Unsaved"))
+	check(loose.kernel.comp.user_dir == "", "an unsaved campaign has nowhere to write")
+	check(loose.kernel.comp.get_entry("creatures", "library-lion").is_empty(), "and the library is still not parsed into it")
+	loose.kernel.comp.user_pack("scratch", "Scratch", "sample.degrees")
+	check(loose.kernel.comp.save_user_pack("scratch").contains("save the campaign first"), "keeping a pack waits for the campaign to be saved")
 	PluginHost._rm_rf(dir)
 	PluginHost._rm_rf(lib)

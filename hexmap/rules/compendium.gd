@@ -39,8 +39,10 @@ var _layer := 0
 ## collection -> sort key -> ids in order (the sort of a whole collection
 ## is the costly part of a query; it only changes when entries do)
 var _sorted: Dictionary = {}
-## Where user packs are written.
-var user_dir := "user://content"
+## Where this table's writable packs live: the open campaign's own
+## `packs/` folder. Empty until the campaign has been saved — content
+## belongs to a campaign on disk, so there is nowhere to put it before.
+var user_dir := ""
 ## Entries this table does not use: {collection: {id: true}}. They stay
 ## in their packs and answer by id (a character built on one still
 ## works); they are kept out of every *offer* — searches, pickers, the
@@ -122,11 +124,14 @@ func unload(id: String) -> void:
 					_index(coll, _by_pack[coll][pid][eid], str(pid))
 
 
-## Make (or open) a writable pack for a table's own entries.
+## Make (or open) a writable pack for this campaign's own entries. It
+## exists in memory at once; keeping it needs somewhere to write (a
+## campaign that has been saved), which `save_user_pack` checks.
 func user_pack(id: String, p_name := "", plugin := "") -> Dictionary:
 	if not packs.has(id):
 		writes += 1
-		load_pack({"id": id, "name": p_name if p_name != "" else id, "plugin": plugin, "user": true, "pack_version": "1"}, {}, user_dir.path_join(id))
+		load_pack({"id": id, "name": p_name if p_name != "" else id, "plugin": plugin, "user": true, "pack_version": "1"}, {},
+			user_dir.path_join(id) if user_dir != "" else "")
 	return packs[id]
 
 
@@ -502,6 +507,8 @@ func save_user_pack(pack_id: String) -> String:
 	if not packs.has(pack_id) or not bool(packs[pack_id].get("user", false)):
 		return "no writable pack '%s'" % pack_id
 	var p: Dictionary = packs[pack_id]
+	if str(p.dir) == "" and user_dir == "":
+		return "nowhere to keep it: save the campaign first"
 	var dir := str(p.dir) if str(p.dir) != "" else user_dir.path_join(pack_id)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
 	var manifest := {"format": FORMAT, "version": VERSION, "id": pack_id, "name": p.name, "pack_version": p.pack_version, "plugin": p.plugin, "provenance": p.provenance, "user": true, "collections": {}}

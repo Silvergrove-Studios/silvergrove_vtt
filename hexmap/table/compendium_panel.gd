@@ -155,10 +155,18 @@ func schema_for(coll: String) -> JsonSchema:
 
 
 ## The writable pack a homebrew entry of this collection goes into.
+## The campaign's writable pack for this collection's plugin, or "" when
+## the campaign has nowhere to keep it yet.
 func homebrew_pack(coll: String) -> String:
 	var pid := plugin_for(coll)
 	var id := (pid + ".homebrew") if pid != "" else "table.homebrew"
+	if comp().user_dir == "":
+		return ""
 	comp().user_pack(id, ("%s homebrew" % str(ctx.host.plugins[pid].manifest.get("name", pid))) if pid != "" else "Table homebrew", pid)
+	# a pack of the campaign's own is listed by it, so it loads next time
+	if ctx.campaign != null and not ctx.campaign.packs.any(func(e: Dictionary) -> bool: return str(e.get("id", "")) == id):
+		ctx.campaign.packs.append({"id": id, "path": "packs/%s" % id, "version": "1"})
+		ctx.campaign.touch()
 	return id
 
 
@@ -250,7 +258,11 @@ func _new() -> void:
 	var coll := collection()
 	if coll == "":
 		return
-	_entry = {"id": JsonDoc.new_id("hb"), "name": "New entry", "__pack": homebrew_pack(coll)}
+	var pid := homebrew_pack(coll)
+	if pid == "":
+		ctx.say("Save the campaign first: its content is kept beside it")
+		return
+	_entry = {"id": JsonDoc.new_id("hb"), "name": "New entry", "__pack": pid}
 	_show_entry()
 
 
@@ -336,12 +348,15 @@ func _show_entry() -> void:
 	else:
 		var copy := Button.new()
 		copy.text = "Copy to homebrew"
-		copy.tooltip_text = "A copy of this entry in the table's homebrew pack, to edit"
+		copy.tooltip_text = "A copy of this entry in the campaign's homebrew pack, to edit"
 		copy.pressed.connect(func() -> void:
 			var dup: Dictionary = JsonDoc.deep(record)
 			dup.id = str(record.id) + "-" + JsonDoc.new_id("hb").substr(3)
 			dup.name = str(record.get("name", record.id)) + " (homebrew)"
 			var pid := homebrew_pack(coll)
+			if pid == "":
+				ctx.say("Save the campaign first: its content is kept beside it")
+				return
 			ctx.say(comp().put(coll, dup, pid, schema))
 			comp().save_user_pack(pid)
 			_entry = comp().get_entry(coll, str(dup.id))
@@ -352,7 +367,8 @@ func _show_entry() -> void:
 	export.text = "Export pack…"
 	export.tooltip_text = "Write this entry's pack as one file, to share"
 	export.pressed.connect(func() -> void:
-		var path := "user://content/%s.pack.json" % pack_id
+		DirAccess.make_dir_recursive_absolute(ctx.library_dir)
+		var path := ctx.library_dir.path_join("%s.pack.json" % pack_id)
 		var why := comp().export_pack(pack_id, path)
 		ctx.say("Exported to %s" % ProjectSettings.globalize_path(path) if why == "" else why))
 	row.add_child(export)
