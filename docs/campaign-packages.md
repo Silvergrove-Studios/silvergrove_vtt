@@ -7,9 +7,11 @@ adds, the content it turns off — downloaded as one file, turned into
 *their* campaign at startup, and changed from there for as long as they
 play it.
 
-Status 2026-09-22: **design only.** Nothing here is built yet. It
-follows `docs/campaign-plan.md` (the campaign-first Table, built) and
-`docs/content-format.md` (packs, built).
+Status 2026-09-22: **P1–P3 built** (Hexmap `a6e70b1`): a campaign's own
+packs load with it, entries can be turned off and on for the campaign,
+and content imports into it at any time, schema-checked. P4–P8 below are
+still design. It follows `docs/campaign-plan.md` (the campaign-first
+Table, built) and `docs/content-format.md` (packs, built).
 
 ## Three roles
 
@@ -211,9 +213,9 @@ truth, the doc is the prose). `srd5e` freezes `classes`, `spells`,
 
 | # | step | done when |
 |---|---|---|
-| **P1 Campaign packs load** | `campaign.packs` is honoured: packs under the instance folder load after the plugins' and before `user://content`, in list order; `Compendium.unload` on close. | a campaign with a pack sees its entries; closing it leaves the next campaign clean (`rules_content.gd`) |
-| **P2 Content toggles** | `content.disabled` on the campaign; the compendium hides disabled entries from `query`, `query_for` and `get_entry` for offers (not from `entry_for` by id); Compendium pane checkboxes and *Show disabled*; the ruleset's pickers and wizards see only what is on. | disabling the monk removes it from the class picker and the wizard; enabling brings it back; an actor built on it still derives (`rules_content.gd`, the 5e journey) |
-| **P3 Import** | `ContentImport.import(path, campaign)`: directory, one-file pack, entry file or `.campaignpkg`; schema validation with readable errors; copied into the instance, recorded in `packs` and `content.imported`; *Import content…* in the Compendium pane. | a supplement pack imports mid-session and its spells appear in the picker; a malformed one is refused naming the entry and the path |
+| ~~**P1 Campaign packs load**~~ | **done**: `campaign.packs` load with the campaign (after the plugins' and `user://content`, so the campaign wins by id); `TableContext.load_campaign_packs()`. | `rules_content.gd::test_campaign_content` |
+| ~~**P2 Content toggles**~~ | **done**: `content.disabled` on the campaign, `Compendium.disabled` filtering every query (`disabled: true` asks for them anyway) while by-id lookups still answer; the Compendium pane's *Use at this table* and *Show what is off*. | `rules_content.gd` (both tests) |
+| ~~**P3 Import**~~ | **done**: `ContentImport.inspect/import_into/write_pack` (a pack directory, a one-file pack, a file of entries), schema-checked per entry, `content_api` gate, copied into the campaign and recorded; *Import content…* in the Compendium pane. Left for P5: importing a `.campaignpkg`'s packs. | `rules_content.gd::test_campaign_content` |
 | **P4 The instance folder** | Campaigns live in a folder (`<name>/<name>.campaign` + `maps/`, `packs/`, `rules/`, `handouts/`); *New campaign* makes one; opening a loose `.campaign` still works; `rules_dir` loads a campaign-local ruleset. | a new campaign is a folder; a campaign carrying a ruleset runs it without installing it |
 | **P5 Packages** | `CampaignPackage.read/instance/export`; the picker lists installed packages (`user://packages`) and takes one from disk; *Export as a package…*; `requires` checked with a plain message. | a package instances into a playable campaign with its maps, packs and rules; exporting and re-instancing round-trips (`table.gd`) |
 | **P6 Duplicate** | *Duplicate campaign…* with the "new group" option. | the copy opens, has a new id, and the original is untouched |
@@ -239,6 +241,9 @@ P8 last as the proof.
 - **Bundled rules are optional but pinned.** A package may carry the
   ruleset it was tested with; if it does, that copy runs for that
   campaign only.
+- **Campaigns live in a managed folder** by default
+  (`~/Documents/Hexmap/Campaigns/<name>/`), listed by the picker, and can
+  still be opened from anywhere (P4).
 - **The base ruleset stays a separate download.** A package that bundles
   it is a convenience, not the norm; the ruleset has its own release
   cycle and its own licence notices.
