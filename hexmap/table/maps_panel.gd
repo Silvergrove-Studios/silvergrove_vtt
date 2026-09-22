@@ -558,6 +558,19 @@ func _entry_actions() -> Dictionary:
 	return out
 
 
+## A field spec from an entry action: "cr" or {key, label, values}
+## (values: what to show for a raw value, "0.25" → "1/4").
+static func _field_spec(f: Variant) -> Dictionary:
+	if f is Dictionary:
+		return {"key": str(f.get("key", "")), "label": str(f.get("label", f.get("key", ""))), "values": f.get("values", {}) if f.get("values") is Dictionary else {}}
+	return {"key": str(f), "label": str(f), "values": {}}
+
+
+static func _shown(spec: Dictionary, v: Variant) -> String:
+	var sv := str(v)
+	return str(spec.values.get(sv, sv))
+
+
 ## The filters the rulesets' entry actions ask for: one control per facet
 ## field — a dropdown of the collection's values, or a min/max pair when
 ## every value is a number.
@@ -573,9 +586,14 @@ func _build_filters() -> void:
 		var facets: Array = acts[coll].get("facets", [])
 		if facets.is_empty():
 			continue
+		var specs := {}
+		for f in acts[coll].get("fields", []):
+			var fs := _field_spec(f)
+			specs[fs.key] = fs
 		var page: Dictionary = ctx.kernel.comp.query_for(coll, {"per_page": 1, "facets": facets, "filter": acts[coll].get("filter", {})}, true)
 		var widgets := {}
 		for field in facets:
+			var spec: Dictionary = specs.get(field, _field_spec(field))
 			var counts: Dictionary = page.get("facets", {}).get(field, {})
 			var values := counts.keys()
 			var numeric := not values.is_empty() and values.all(func(v: Variant) -> bool: return str(v).is_valid_float())
@@ -592,10 +610,10 @@ func _build_filters() -> void:
 					sb.value_changed.connect(func(_v: float) -> void: _search_compendium())
 				lo.value = nums[0]
 				hi.value = nums[-1]
-				lo.tooltip_text = "%s from" % str(field)
-				hi.tooltip_text = "%s up to" % str(field)
+				lo.tooltip_text = "%s from" % str(spec.label)
+				hi.tooltip_text = "%s up to" % str(spec.label)
 				var l := Label.new()
-				l.text = str(field)
+				l.text = str(spec.label)
 				l.theme_type_variation = "DimLabel"
 				_filters.add_child(l)
 				_filters.add_child(lo)
@@ -603,12 +621,12 @@ func _build_filters() -> void:
 				widgets[field] = [lo, hi]
 			else:
 				var ob := OptionButton.new()
-				ob.add_item("any %s" % str(field))
+				ob.add_item("any %s" % str(spec.label))
 				ob.set_item_metadata(0, "")
 				values.sort()
 				for v in values:
 					var i := ob.item_count
-					ob.add_item("%s (%d)" % [str(v), int(counts[v])])
+					ob.add_item("%s (%d)" % [_shown(spec, v), int(counts[v])])
 					ob.set_item_metadata(i, str(v))
 				ob.item_selected.connect(func(_i: int) -> void: _search_compendium())
 				_filters.add_child(ob)
@@ -640,21 +658,22 @@ func _search_compendium() -> void:
 	if not _results.visible or ctx.kernel == null:
 		return
 	for coll in acts:
-		var fields: Array = acts[coll].get("fields", [])
+		var fields: Array = acts[coll].get("fields", []).map(_field_spec)
+		var keys: Array = fields.map(func(fs: Dictionary) -> String: return str(fs.key))
 		var filter: Dictionary = _filter_for(coll)
 		# the action's own filter (the ruleset's rules version, say) underneath the DM's
 		for k in acts[coll].get("filter", {}):
 			if not filter.has(k):
 				filter[k] = acts[coll].filter[k]
-		var opts := {"text": q, "per_page": 24, "fields": ["name"] + fields, "filter": filter}
+		var opts := {"text": q, "per_page": 24, "fields": ["name"] + keys, "filter": filter}
 		if not fields.is_empty():
-			opts.sort = str(fields[0])
+			opts.sort = str(keys[0])
 		var page: Dictionary = ctx.kernel.comp.query_for(coll, opts, true)
 		for e in page.get("entries", []):
 			var extra := PackedStringArray()
-			for f in fields:
-				if e.has(f) and str(e[f]) != "":
-					extra.append("%s %s" % [str(f), str(e[f])])
+			for fs in fields:
+				if e.has(fs.key) and str(e[fs.key]) != "":
+					extra.append("%s %s" % [str(fs.label), _shown(fs, e[fs.key])])
 			var i := _results.add_item("%s%s  (%s)" % [str(e.get("name", e.get("id", ""))), ("  —  " + " · ".join(extra)) if not extra.is_empty() else "", coll])
 			_results.set_item_metadata(i, {"collection": coll, "id": str(e.get("id", "")), "name": str(e.get("name", e.get("id", "")))})
 		if int(page.get("total", 0)) > 24:

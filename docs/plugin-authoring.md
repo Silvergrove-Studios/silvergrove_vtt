@@ -243,7 +243,8 @@ dispatched with `ctx.entry`, `ctx.collection` and `ctx.scene` — the way
 a creature becomes an actor on the map. The Table's encounter builder
 (the Maps pane) searches that collection through the same action: give
 it `fields = {"cr", "type"}` to show beside each name (and sort by the
-first), `facets = {"type", "cr"}` for the filters it offers (a dropdown
+first) — a field may also be `{key = "cr", label = "CR", values = {["0.25"] = "1/4"}}`
+to name it and say how its raw values read —, `facets = {"type", "cr"}` for the filters it offers (a dropdown
 of the values, or a range when they are all numbers), and
 `query = {filter = {...}}` for a filter that always applies (the
 campaign's rules version). Actors you make from entries should carry
