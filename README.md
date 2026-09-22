@@ -130,6 +130,15 @@ opens as a campaign of its own. `docs/campaign-plan.md` is the design,
 `docs/campaign-format.md` and `docs/encounter-format.md` the formats, and
 nothing in them edits a map.
 
+The rules come from **rulesets**: plugins in sandboxed Lua that run on
+the Table only. A ruleset is a zip (its `manifest.json` at the root, or
+in one top folder) — *Install ruleset…* in the **Rules** pane unpacks it
+under the Table's plugins folder and loads it; *Reload rules* picks up
+one you dropped in by hand; *Plugins folder* opens that folder. The 5E
+compatible ruleset is `Silvergrove-Studios/ruleset-dnd5e`
+(`srd5e-<version>.zip` on its Releases page). `docs/plugin-authoring.md`
+is how to write one.
+
 ## Using the player
 
 On the Table, press **Host** (or Network → Host on this network); the

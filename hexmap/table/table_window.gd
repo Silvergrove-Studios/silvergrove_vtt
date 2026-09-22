@@ -204,6 +204,10 @@ func _build_ui() -> void:
 	npcs = RosterPanel.new(ctx, false)
 	notes = NotesPanel.new(ctx)
 	maps = MapsPanel.new(ctx)
+	rules.pick_plugin_file = func(then: Callable) -> void:
+		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.zip ; Ruleset zips"])
+		fd.file_selected.connect(then)
+		fd.popup_centered_ratio(0.7)
 	maps.pick_map_file = func(then: Callable) -> void:
 		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.hexmap ; Hex maps", "*.json ; Map JSON"])
 		fd.file_selected.connect(then)

@@ -120,6 +120,77 @@ static func available() -> bool:
 
 # ------------------------------------------------------------- loading --
 
+## Install a ruleset from a zip (a release of a plugin repo: manifest.json
+## at the root, or inside one top folder) under `dest` as `<dest>/<id>`,
+## replacing what was there. {id, name, version, files, error}.
+static func install_zip(zip_path: String, dest := "user://plugins") -> Dictionary:
+	var out := {"id": "", "name": "", "version": "", "files": 0, "error": ""}
+	var zr := ZIPReader.new()
+	if zr.open(zip_path) != OK:
+		out.error = "not a zip: " + zip_path
+		return out
+	var names := zr.get_files()
+	# the manifest: at the root, or one folder down
+	var prefix := ""
+	if not names.has("manifest.json"):
+		for n in names:
+			if n.ends_with("/manifest.json") and n.count("/") == 1:
+				prefix = n.get_base_dir() + "/"
+				break
+	if prefix == "" and not names.has("manifest.json"):
+		zr.close()
+		out.error = "no manifest.json in the zip"
+		return out
+	var err := []
+	var m := JsonDoc.parse(zr.read_file(prefix + "manifest.json").get_string_from_utf8(), err)
+	var id := str(m.get("id", ""))
+	if id == "" or not id.is_valid_filename() or id.begins_with("."):
+		zr.close()
+		out.error = "the manifest has no usable id"
+		return out
+	out.id = id
+	out.name = str(m.get("name", id))
+	out.version = str(m.get("version", ""))
+	var target := dest.path_join(id)
+	DirAccess.make_dir_recursive_absolute(dest)
+	if DirAccess.dir_exists_absolute(target):
+		_rm_rf(target)
+	for n in names:
+		if prefix != "" and not n.begins_with(prefix):
+			continue
+		var rel := n.substr(prefix.length())
+		if rel == "" or rel.ends_with("/") or rel.contains("..") :
+			continue
+		var path := target.path_join(rel)
+		DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+		var f := FileAccess.open(path, FileAccess.WRITE)
+		if f == null:
+			out.error = "cannot write " + path
+			break
+		f.store_buffer(zr.read_file(n))
+		f.close()
+		out.files += 1
+	zr.close()
+	return out
+
+
+static func _rm_rf(dir: String) -> void:
+	var da := DirAccess.open(dir)
+	if da == null:
+		return
+	da.list_dir_begin()
+	var n := da.get_next()
+	while n != "":
+		var p := dir.path_join(n)
+		if da.current_is_dir():
+			_rm_rf(p)
+		else:
+			DirAccess.remove_absolute(p)
+		n = da.get_next()
+	da.list_dir_end()
+	DirAccess.remove_absolute(dir)
+
+
 ## Manifests of the plugins found directly under each directory.
 static func discover(dirs: Array) -> Array:
 	var out := []

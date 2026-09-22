@@ -302,3 +302,74 @@ func _button(root_node: Node, text: String) -> Button:
 		if b != null:
 			return b
 	return null
+
+
+## A ruleset arrives as a zip: installed under the plugins folder, loaded
+## without a restart, replaced by a newer zip.
+func test_install_ruleset_zip() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dest := "user://test_installed_plugins"
+	if DirAccess.dir_exists_absolute(dest):
+		PluginHost._rm_rf(dest)
+	# the zip a plugin repo's release would carry: one top folder with the manifest inside
+	var zip_path := "user://test_ruleset.zip"
+	var zp := ZIPPacker.new()
+	check(zp.open(zip_path) == OK, "a zip to write")
+	var src := "res://tests/plugins/sample.ordered"
+	var da := DirAccess.open(src)
+	var listed := PackedStringArray()
+	for n in da.get_files():
+		listed.append(n)
+	for n in listed:
+		zp.start_file("sample.ordered-1.0/" + n)
+		zp.write_file(FileAccess.get_file_as_bytes(src.path_join(n)))
+		zp.close_file()
+	zp.close()
+	var r := PluginHost.install_zip(zip_path, dest)
+	check(str(r.error) == "" and str(r.id) == "sample.ordered" and int(r.files) == listed.size(), "installed from the zip's top folder: %s" % [r])
+	check(FileAccess.file_exists(dest.path_join("sample.ordered/manifest.json")), "the manifest is under <plugins>/<id>")
+	var found := PluginHost.discover([dest])
+	check(found.size() == 1 and str(found[0].id) == "sample.ordered", "discover finds it")
+	# a live Table loads it on reload
+	var ctx := TableContext.new()
+	ctx.app = App.new("user://test_prefs_install.json")
+	ctx.plugin_dirs = [dest]
+	var e := Encounter.load_file(example("chapel_ambush.encounter"))
+	ctx.set_encounter(e)
+	check(ctx.host != null and ctx.host.plugins.has("sample.ordered"), "loaded at open")
+	check(ctx.kernel.commit([{"t": "actor.add", "actor": {"id": "a_h", "kind": "pc", "name": "Hero", "ext": {"sample.ordered": {"level": 2, "stats": {"agi": 2, "str": 1, "wit": 0}}}}}], "Hero") == "", "a hero with the ruleset's data")
+	check(int(ctx.encounter().actor("a_h").derived["sample.ordered"].defence.total) == 12, "derived by the installed ruleset")
+	ctx.encounter().actor("a_h").derived = {}
+	# a newer zip, manifest at the root this time, replaces it
+	var zp2 := ZIPPacker.new()
+	zp2.open(zip_path)
+	for n in listed:
+		var bytes := FileAccess.get_file_as_bytes(src.path_join(n))
+		if n == "manifest.json":
+			var m := JsonDoc.parse(bytes.get_string_from_utf8(), [])
+			m.version = "9.9.9"
+			bytes = JsonDoc.stringify(m).to_utf8_buffer()
+		zp2.start_file(n)
+		zp2.write_file(bytes)
+		zp2.close_file()
+	zp2.close()
+	var panel := RulesPanel.new(ctx)
+	root.add_child(panel)
+	panel.bind()
+	var said := panel.install_zip(zip_path)
+	check(said.begins_with("Installed") and said.contains("9.9.9"), "the Rules pane installs and reloads: %s" % said)
+	check(ctx.host.plugins.has("sample.ordered") and str(ctx.host.plugins["sample.ordered"].manifest.version) == "9.9.9", "the new version is the one loaded")
+	check(int(ctx.encounter().actor("a_h").get("derived", {}).get("sample.ordered", {}).get("defence", {}).get("total", 0)) == 12, "the sheets derived again")
+	check(PluginHost.install_zip("user://no_such.zip", dest).error != "", "not a zip: refused")
+	var bad := ZIPPacker.new()
+	bad.open("user://test_bad.zip")
+	bad.start_file("readme.txt")
+	bad.write_file("hi".to_utf8_buffer())
+	bad.close_file()
+	bad.close()
+	check(PluginHost.install_zip("user://test_bad.zip", dest).error.contains("manifest"), "no manifest: refused")
+	root.remove_child(panel)
+	panel.free()
+	PluginHost._rm_rf(dest)

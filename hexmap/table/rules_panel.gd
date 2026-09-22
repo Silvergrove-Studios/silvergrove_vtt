@@ -10,6 +10,8 @@ extends VBoxContainer
 
 var ctx: TableContext
 var _plugins: Label
+## Set by the window: opens a file dialog and calls back with a zip path.
+var pick_plugin_file: Callable
 var _actions: VBoxContainer
 var _prompts: VBoxContainer
 var _gm: VBoxContainer
@@ -33,6 +35,30 @@ func _init(p_ctx: TableContext) -> void:
 	_plugins.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_plugins.theme_type_variation = "DimLabel"
 	box.add_child(_plugins)
+	# rulesets come as zips (a release of a plugin repo) and live under user://plugins
+	var irow := HFlowContainer.new()
+	var install := Button.new()
+	install.text = "Install ruleset…"
+	install.tooltip_text = "A ruleset's zip (its manifest.json at the root): unpacked under the plugins folder and loaded"
+	install.pressed.connect(func() -> void:
+		if pick_plugin_file.is_valid():
+			pick_plugin_file.call(func(path: String) -> void: ctx.say(install_zip(path))))
+	irow.add_child(install)
+	var reload := Button.new()
+	reload.text = "Reload rules"
+	reload.tooltip_text = "Load the rulesets under the plugins folder again"
+	reload.pressed.connect(func() -> void:
+		ctx.reload_plugins()
+		ctx.say("Rules reloaded: " + ", ".join(PackedStringArray(ctx.host.plugins.keys())) if ctx.host != null and not ctx.host.plugins.is_empty() else "No rules found under " + plugins_folder()))
+	irow.add_child(reload)
+	var folder := Button.new()
+	folder.text = "Plugins folder"
+	folder.tooltip_text = plugins_folder()
+	folder.pressed.connect(func() -> void:
+		DirAccess.make_dir_recursive_absolute(str(ctx.plugin_dirs[0]))
+		OS.shell_open(plugins_folder()))
+	irow.add_child(folder)
+	box.add_child(irow)
 	var ah := Label.new()
 	ah.text = "Actions"
 	ah.theme_type_variation = "HeaderLabel"
@@ -68,6 +94,24 @@ func _init(p_ctx: TableContext) -> void:
 func bind() -> void:
 	ctx.encounter().changed.connect(func(_what: String, _s: String) -> void: refresh())
 	refresh()
+
+
+## Where installed rulesets live, as the OS names it.
+func plugins_folder() -> String:
+	return ProjectSettings.globalize_path(str(ctx.plugin_dirs[0]))
+
+
+## Install a ruleset zip into the plugins folder and load it. What happened, for the status line.
+func install_zip(path: String) -> String:
+	var r := PluginHost.install_zip(path, str(ctx.plugin_dirs[0]))
+	if str(r.error) != "":
+		return "Could not install: " + str(r.error)
+	ctx.reload_plugins()
+	var loaded := ctx.host != null and ctx.host.plugins.has(str(r.id))
+	var p: PluginHost.Plugin = ctx.host.plugins[str(r.id)] if loaded else null
+	if p != null and not p.errors.is_empty():
+		return "Installed %s %s with %d error(s): %s" % [str(r.name), str(r.version), p.errors.size(), str(p.errors[0])]
+	return "Installed %s %s (%d files)%s" % [str(r.name), str(r.version), int(r.files), "" if loaded else " — it did not load; see the Rules pane"]
 
 
 ## The actor behind the first selected token, or "".

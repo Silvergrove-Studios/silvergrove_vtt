@@ -105,6 +105,18 @@ func _load_plugins() -> void:
 	kernel.pending.close_orphans()
 
 
+## Drop every loaded plugin and load what is under plugin_dirs now (a
+## ruleset just installed); the sheets derive again.
+func reload_plugins() -> void:
+	if host != null:
+		for id in host.plugins.keys():
+			host.unload(str(id))
+	_load_plugins()
+	kernel.rederive_all()
+	kernel.pending.close_orphans()
+	encounter_changed.emit()
+
+
 func _on_changed(what: String, p_scene: String) -> void:
 	if what == "scenes" and state.encounter.scene(scene_id).is_empty():
 		scene_id = state.encounter.active_scene_id
