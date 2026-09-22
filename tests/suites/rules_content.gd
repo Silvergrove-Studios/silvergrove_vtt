@@ -156,6 +156,8 @@ func test_compendium_panel() -> void:
 	ctx.set_encounter(e)
 	ctx.state.resolve_maps()
 	ctx.kernel.comp.user_dir = "user://test_content_panel"
+	if ctx.campaign == null:
+		ctx.campaign = Campaign.create("Panel")
 	var panel := CompendiumPanel.new(ctx)
 	root.add_child(panel)
 	panel.bind()
@@ -216,6 +218,24 @@ func test_compendium_panel() -> void:
 	_button(panel._detail, "Delete").pressed.emit()
 	await tree.process_frame
 	check(ctx.kernel.comp.count("creatures") == 6, "deleted")
+	# turning an entry off from the pane: marked, not offered, back on a tick
+	panel._open("goblin")
+	await tree.process_frame
+	check(panel._use != null and panel._use.button_pressed, "the open entry is in play")
+	check(panel.set_used("creatures", "goblin", false).contains("off at this table"), "turned off from the pane")
+	check(ctx.campaign != null and ctx.campaign.is_disabled("sample.degrees", "creatures", "goblin"), "the campaign records it")
+	var hits := ctx.kernel.comp.query("creatures", {"text": "goblin"})
+	check(hits.entries.all(func(e: Dictionary) -> bool: return str(e.id) != "goblin"), "the skirmisher is offered nowhere (the chief still is: %d)" % int(hits.total))
+	panel._search.text = ""
+	panel._show_disabled.button_pressed = true
+	panel._query()
+	var listed := ""
+	for i in panel._list.item_count:
+		if str(panel._list.get_item_text(i)).contains("skirmisher"):
+			listed = str(panel._list.get_item_text(i))
+	check(listed.begins_with("✗ "), "Show what is off lists it, marked: %s" % listed)
+	panel._show_disabled.button_pressed = false
+	check(panel.set_used("creatures", "goblin", true).contains("in play again") and ctx.kernel.comp.query("creatures", {"text": "goblin"}).total == 2, "and back on a tick")
 	# a table that loads later gets its homebrew back from disk
 	var ctx2 := TableContext.new()
 	ctx2.app = ctx.app
@@ -388,3 +408,83 @@ func _find_label(root_node: Node, text: String) -> Label:
 		if l != null:
 			return l
 	return null
+
+
+## A campaign carries content: its own packs load with it, entries it
+## turns off are offered nowhere but still answer by id, and a pack or a
+## file of entries can be imported at any time.
+func test_campaign_content() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://test_campaign_content"
+	if DirAccess.dir_exists_absolute(dir):
+		PluginHost._rm_rf(dir)
+	DirAccess.make_dir_recursive_absolute(dir)
+	# a campaign with a pack of its own, beside the file
+	var c := Campaign.create("Content")
+	c.plugins.append({"id": "sample.degrees"})
+	check(ContentImport.write_pack(dir.path_join("packs/reach"), {"id": "reach", "name": "The Reach", "plugin": "sample.degrees"},
+		{"creatures": [{"id": "reach-eel", "name": "Reach eel", "level": 2, "kind": "animal", "stats": {"might": 1, "agility": 2, "mind": 0}, "ac_base": 12, "hp": 9}]}) == "", "a pack written beside the campaign")
+	c.packs.append({"id": "reach", "path": "packs/reach", "version": "1"})
+	check(c.save(dir.path_join("reach.campaign")) == OK, "saved")
+	var ctx := TableContext.new()
+	ctx.app = App.new("user://test_prefs_campaign_content.json")
+	ctx.plugin_dirs = ["res://tests/plugins"]
+	var err := []
+	var opened := Campaign.load_file(dir.path_join("reach.campaign"), err)
+	check(opened != null and int(opened.doc.version) == Campaign.VERSION and opened.content.has("disabled"), "opened, upgraded to v%d with a content block" % Campaign.VERSION)
+	ctx.open_campaign(opened)
+	check(ctx.kernel.comp.get_entry("creatures", "reach-eel").name == "Reach eel", "the campaign's own pack loaded with it")
+	check(ctx.kernel.comp.query("creatures", {"text": "eel"}).total == 1, "and is offered")
+	# turned off: offered nowhere, still there by id
+	check(opened.set_disabled("sample.degrees", "creatures", "wolf", true), "the wolf is turned off")
+	ctx.kernel.comp.disabled = opened.disabled_index()
+	check(ctx.kernel.comp.query("creatures", {"text": "wolf"}).total == 0, "no search finds it")
+	check(ctx.kernel.comp.query("creatures", {}).entries.all(func(e: Dictionary) -> bool: return str(e.id) != "wolf"), "no listing offers it")
+	check(ctx.kernel.comp.query("creatures", {"disabled": true}).entries.any(func(e: Dictionary) -> bool: return str(e.id) == "wolf"), "asking for the disabled ones finds it")
+	check(ctx.kernel.comp.get_entry("creatures", "wolf").name != "" and ctx.kernel.comp.entry_for("creatures", "wolf", true).name != "", "it still answers by id: what is already built on it keeps working")
+	check(ctx.kernel.comp.is_disabled("creatures", "wolf") and ctx.kernel.comp.disabled_count("creatures") == 1, "the compendium says it is off")
+	check(opened.set_disabled("sample.degrees", "creatures", "wolf", false) and not opened.set_disabled("sample.degrees", "creatures", "wolf", false), "turned on again, and again is no change")
+	ctx.kernel.comp.disabled = opened.disabled_index()
+	check(ctx.kernel.comp.query("creatures", {"text": "wolf"}).total == 1, "back in the search")
+	# import: a one-file pack of two creatures, mid-campaign
+	var one := dir.path_join("supplement.json")
+	var f := FileAccess.open(one, FileAccess.WRITE)
+	f.store_string(JsonDoc.stringify({"pack": {"id": "supplement", "name": "A supplement", "plugin": "sample.degrees", "pack_version": "2"},
+		"collections": {"creatures": [
+			{"id": "sea-drake", "name": "Sea drake", "level": 5, "kind": "other", "stats": {"might": 3, "agility": 2, "mind": 1}, "ac_base": 15, "hp": 40},
+			{"id": "wolf", "name": "Wolf (of the Reach)", "level": 2, "kind": "animal", "stats": {"might": 2, "agility": 2, "mind": 0}, "ac_base": 13, "hp": 12}]}}))
+	f.close()
+	var info := ContentImport.inspect(one)
+	check(info.ok and info.id == "supplement" and int(info.collections.creatures) == 2, "inspected before importing: %s" % [info])
+	var r := ContentImport.import_into(one, opened, ctx.host, ctx.kernel.comp)
+	check(r.ok and int(r.added.creatures) == 2, "imported: %s" % [r])
+	check(ctx.kernel.comp.get_entry("creatures", "sea-drake").name == "Sea drake", "the new creature is in the compendium at once")
+	check(ctx.kernel.comp.get_entry("creatures", "wolf").name == "Wolf (of the Reach)", "and an import overrides a shipped entry by id")
+	check(opened.packs.size() == 2 and opened.content.imported.size() == 1 and str(opened.content.imported[0].id) == "supplement", "the campaign records the pack and how it arrived")
+	check(FileAccess.file_exists(dir.path_join("packs/supplement/pack.json")), "copied into the campaign's folder")
+	# and it comes back with the campaign
+	var ctx2 := TableContext.new()
+	ctx2.app = ctx.app
+	ctx2.plugin_dirs = ["res://tests/plugins"]
+	check(opened.save() == OK, "saved with its imports")
+	ctx2.open_campaign(Campaign.load_file(dir.path_join("reach.campaign"), err))
+	check(ctx2.kernel.comp.get_entry("creatures", "sea-drake").name == "Sea drake" and ctx2.kernel.comp.get_entry("creatures", "reach-eel").name == "Reach eel", "both packs load when the campaign is opened again")
+	# what will not import
+	var bad := dir.path_join("bad.json")
+	var bf := FileAccess.open(bad, FileAccess.WRITE)
+	bf.store_string(JsonDoc.stringify({"pack": {"id": "bad", "plugin": "sample.degrees"},
+		"collections": {"creatures": [{"id": "broken", "name": "Broken", "level": "two", "kind": "animal", "ac_base": 12, "hp": 9}]}}))
+	bf.close()
+	var br := ContentImport.import_into(bad, opened, ctx.host, ctx.kernel.comp)
+	check(not br.ok and str(br.why).contains("creatures/broken"), "a bad entry is refused, naming it: %s" % br.why)
+	check(ctx.kernel.comp.get_entry("creatures", "broken").is_empty() and opened.packs.size() == 2, "and nothing was copied in")
+	var newer := dir.path_join("newer.json")
+	var nf := FileAccess.open(newer, FileAccess.WRITE)
+	nf.store_string(JsonDoc.stringify({"pack": {"id": "newer", "name": "From the future", "plugin": "sample.degrees", "content_api": 9},
+		"collections": {"creatures": []}}))
+	nf.close()
+	var nr := ContentImport.import_into(newer, opened, ctx.host, ctx.kernel.comp)
+	check(not nr.ok and str(nr.why).contains("content API 9"), "a pack for a newer content API is refused: %s" % nr.why)
+	PluginHost._rm_rf(dir)

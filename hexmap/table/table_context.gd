@@ -104,7 +104,24 @@ func _load_plugins() -> void:
 	# the table's own content, layered over what the plugins ship
 	for line in kernel.comp.load_user_packs():
 		plugin_log.append("pack " + line)
+	load_campaign_packs()
 	kernel.pending.close_orphans()
+
+
+## The campaign's own packs (its `packs` list, by path relative to the
+## file), layered last so they win by id, and the entries it turned off.
+func load_campaign_packs() -> void:
+	if campaign == null or kernel == null:
+		return
+	for p in campaign.packs:
+		if not (p is Dictionary):
+			continue
+		var path := campaign.resolve(str(p.get("path", "")))
+		if path == "":
+			continue
+		var why := kernel.comp.load_path(path)
+		plugin_log.append("pack %s: %s" % [str(p.get("id", path.get_file())), "loaded" if why == "" else why])
+	kernel.comp.disabled = campaign.disabled_index()
 
 
 ## Drop every loaded plugin and load what is under plugin_dirs now (a

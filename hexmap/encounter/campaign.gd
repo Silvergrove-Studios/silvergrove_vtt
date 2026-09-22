@@ -21,7 +21,7 @@ extends RefCounted
 ## order, meant to live in git beside the adventure.
 
 const FORMAT := "silvergrove.campaign"
-const VERSION := 2
+const VERSION := 3
 ## Actor kinds that belong to the campaign when a session ends even if
 ## the campaign had not seen them before (a character brought by a
 ## player, a companion gained).
@@ -43,7 +43,11 @@ static func create(p_name: String) -> Campaign:
 		"id": JsonDoc.uuid(),
 		"name": p_name,
 		"plugins": [],
+		# content packs of this campaign's own, by path relative to the file
 		"packs": [],
+		# the entries this table does not use ("<plugin>:<collection>/<id>",
+		# hidden from every offer, never deleted) and what was imported when
+		"content": {"disabled": [], "imported": []},
 		"players": [],
 		"actors": {},
 		# the persistent actors' pools and tracks: "actor:<id>" -> plugin -> name -> record
@@ -96,6 +100,72 @@ var places: Array:
 	get: return doc.places
 var sessions: Array:
 	get: return doc.sessions
+var packs: Array:
+	get: return doc.packs
+var content: Dictionary:
+	get: return doc.content
+
+
+## The campaign's folder: where its maps, packs and rules live.
+func base_dir() -> String:
+	return path.get_base_dir() if path != "" else ""
+
+
+## A path the campaign names (a map, a pack), resolved against its folder.
+func resolve(p: String) -> String:
+	if p == "" or p.is_absolute_path() or p.begins_with("res://") or p.begins_with("user://"):
+		return p
+	var dir := base_dir()
+	return dir.path_join(p) if dir != "" else p
+
+
+## Every pack of this campaign's own, as absolute paths (missing ones included).
+func pack_paths() -> Array:
+	var out := []
+	for p in packs:
+		if p is Dictionary and str(p.get("path", "")) != "":
+			out.append(resolve(str(p.path)))
+	return out
+
+
+## "<plugin>:<collection>/<id>" — how a disabled entry is named.
+static func content_key(plugin: String, collection: String, id: String) -> String:
+	return "%s:%s/%s" % [plugin, collection, id]
+
+
+## The disabled keys as {collection: {id: true}} for the compendium.
+func disabled_index() -> Dictionary:
+	var out := {}
+	for key in content.get("disabled", []):
+		var s := str(key)
+		var coll := s.substr(s.find(":") + 1).get_slice("/", 0) if s.contains(":") else s.get_slice("/", 0)
+		var eid := s.substr(s.find("/") + 1) if s.contains("/") else ""
+		if coll == "" or eid == "":
+			continue
+		if not out.has(coll):
+			out[coll] = {}
+		out[coll][eid] = true
+	return out
+
+
+## Turn an entry off (hidden from every offer) or on again. Whether it changed.
+func set_disabled(plugin: String, collection: String, id: String, off: bool) -> bool:
+	var key := content_key(plugin, collection, id)
+	var list: Array = content.disabled
+	var at := list.find(key)
+	if off == (at >= 0):
+		return false
+	if off:
+		list.append(key)
+		list.sort()
+	else:
+		list.remove_at(at)
+	touch()
+	return true
+
+
+func is_disabled(plugin: String, collection: String, id: String) -> bool:
+	return (content.disabled as Array).has(content_key(plugin, collection, id))
 
 
 func map_entry(mid: String) -> Dictionary:
@@ -394,6 +464,12 @@ func _upgrade() -> void:
 	for k in ["plugins", "packs", "players", "journal", "encounters", "maps", "places", "sessions"]:
 		if not (doc.get(k) is Array):
 			doc[k] = []
+	# version 3: content the campaign carries — what is turned off, what was imported
+	if not (doc.get("content") is Dictionary):
+		doc.content = {}
+	for k in ["disabled", "imported"]:
+		if not (doc.content.get(k) is Array):
+			doc.content[k] = []
 	for k in ["actors", "resources", "state", "tracks", "meta", "ext", "clock", "party", "runtime"]:
 		if not (doc.get(k) is Dictionary):
 			doc[k] = {}

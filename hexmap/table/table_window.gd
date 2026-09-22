@@ -210,6 +210,11 @@ func _build_ui() -> void:
 	ctx.lookup = func(collection: String, id: String) -> void:
 		_prepare_lookup()
 		lookup.show_entry(collection, id)
+	compendium.pick_content_file = func(then: Callable) -> void:
+		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_ANY, ["*.json ; Packs and entry files"])
+		fd.file_selected.connect(then)
+		fd.dir_selected.connect(then)
+		fd.popup_centered_ratio(0.7)
 	rules.pick_plugin_file = func(then: Callable) -> void:
 		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.zip ; Ruleset zips"])
 		fd.file_selected.connect(then)

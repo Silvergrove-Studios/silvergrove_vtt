@@ -41,6 +41,11 @@ var _layer := 0
 var _sorted: Dictionary = {}
 ## Where user packs are written.
 var user_dir := "user://content"
+## Entries this table does not use: {collection: {id: true}}. They stay
+## in their packs and answer by id (a character built on one still
+## works); they are kept out of every *offer* — searches, pickers, the
+## compendium's lists — until the campaign turns them on again.
+var disabled: Dictionary = {}
 ## How many times a user pack was written to (put, remove, a new user
 ## pack): a reader that caches an index knows when it went stale.
 var writes := 0
@@ -231,6 +236,19 @@ func count(coll: String) -> int:
 	return _entries.get(coll, {}).size()
 
 
+## How many of a collection are turned off.
+func disabled_count(coll: String) -> int:
+	var off := 0
+	for id in disabled.get(coll, {}):
+		if _entries.get(coll, {}).has(id):
+			off += 1
+	return off
+
+
+func is_disabled(coll: String, id: String) -> bool:
+	return bool(disabled.get(coll, {}).get(id, false))
+
+
 ## The winning entry, or {}.
 func get_entry(coll: String, id: String) -> Dictionary:
 	return JsonDoc.deep(_entries.get(coll, {}).get(id, {}))
@@ -290,7 +308,8 @@ func facets(coll: String) -> Dictionary:
 ## Query a collection. opts: filter {field: value | [values]}, text
 ## (words, all must match, prefixes allowed), sort (field, "-field" for
 ## descending; default "name"), page (from 1), per_page, fields (which
-## entry fields to return; default all), facets (fields to count).
+## entry fields to return; default all), facets (fields to count),
+## disabled (true: include the entries the campaign turned off).
 ## Result: {total, page, per_page, pages, entries, facets: {field: {value: n}}}.
 func query(coll: String, opts: Dictionary = {}) -> Dictionary:
 	var all: Dictionary = _entries.get(coll, {})
@@ -327,6 +346,14 @@ func query(coll: String, opts: Dictionary = {}) -> Dictionary:
 			_sort(whole, all, sort)
 			_sorted[coll][sort] = whole
 		list = _sorted[coll][sort]
+	# what the campaign turned off is not offered (opts.disabled = true asks for it anyway)
+	var off: Dictionary = disabled.get(coll, {})
+	if not off.is_empty() and not bool(opts.get("disabled", false)):
+		var kept := []
+		for id in list:
+			if not off.has(id):
+				kept.append(id)
+		list = kept
 	# facets over the matches
 	var facet_out := {}
 	for field in opts.get("facets", []):

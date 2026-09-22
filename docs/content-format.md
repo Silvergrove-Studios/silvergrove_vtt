@@ -51,11 +51,36 @@ A pack can also be one file — `{"pack": {…}, "collections": {"creatures":
 […]}}` — which is how packs are exported to share.
 
 **Layering.** Packs load in order: what a plugin ships (its manifest's
-`packs`), then the table's own packs under `user://content/`. Within a
+`packs`), then the table's own packs under `user://content/`, then the
+open campaign's own (its `packs` list, under its folder). Within a
 collection a later pack's entry with the same id replaces an earlier
-one, so a table can override a shipped creature by id; removing the
-override brings the shipped one back. Every indexed entry carries
-`__pack`, the pack it came from.
+one, so a table can override a shipped creature by id, and a campaign
+can override both; removing the override brings the earlier one back.
+Every indexed entry carries `__pack`, the pack it came from.
+
+**Importing.** `ContentImport` brings a pack directory, a one-file pack
+or a file of entries (`{"collection": "spells", "entries": [ … ]}`) into
+the open campaign: every entry is checked against the ruleset's schema
+for its collection (the entry's id and the failing path are named, and
+nothing is copied if one fails), the content is written into the
+campaign's `packs/<id>/`, and the campaign records it in `packs` and
+`content.imported`. It loads at once, mid-session included.
+
+**The schema contract.** A pack may declare the `content_api` of the
+ruleset it was written against, and a ruleset declares its own in its
+manifest (`"content_api": 1`, default 1). A pack written for a *newer*
+content API than the installed ruleset is refused with the reason; an
+older one loads. Within one content API a ruleset may change its
+collection schemas only additively — a new optional field, a new
+collection, a wider enum; renaming, removing, requiring or narrowing a
+field needs a new content API. Fields a Table does not know are kept,
+never dropped. `docs/campaign-packages.md` has the whole picture.
+
+**Turning content off.** A campaign may say it does not use an entry
+(`content.disabled`). It is hidden from every offer — searches,
+pickers, wizards, the Compendium pane's lists — while still answering
+by id, so a character already built on it keeps working. `query` takes
+`disabled: true` to list them anyway.
 
 **The index.** The Table indexes packs on load: facets over every
 top-level scalar and list-of-scalar field (except id, name, text,

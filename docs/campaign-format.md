@@ -1,4 +1,4 @@
-# The `.campaign` format (v2)
+# The `.campaign` format (v3)
 
 A campaign is what a group keeps: the players, their characters, the
 NPCs, the rulesets in play, the packs of content they have added, the
@@ -25,6 +25,8 @@ adventure. `hexmap/encounter/campaign.gd` reads and writes it.
   "plugins": [ { "id": "sample.ordered", "version": "0.1.0", "settings": { "critical_on": 19 } },
                { "id": "sample.house" } ],
   "packs": [ { "id": "homebrew.reach", "path": "packs/reach", "version": "3" } ],
+  "content": { "disabled": ["srd5e:classes/monk"],
+               "imported": [ { "id": "some.supplement", "path": "packs/some.supplement", "plugin": "srd5e", "session": 3, "at": "…", "entries": 41 } ] },
   "players": [ { "id": "pl_a1", "name": "Ana", "color": "#4f9cf6" } ],
   "actors": { "a_hero": { …actor, without derived… } },
   "resources": { "actor:a_hero": { "sample.ordered": { "hp": { "kind": "pool", "current": 6, "max": 10, "recharge": "rest" } } } },
@@ -44,7 +46,9 @@ adventure. `hexmap/encounter/campaign.gd` reads and writes it.
 }
 ```
 
-Version 2 adds `maps`, `encounters` (prepared, a recipe for a scene over
+Version 3 adds `content` (what the table turned off, what it imported)
+and makes `packs` real: they load with the campaign. Version 2 added
+`maps`, `encounters` (prepared, a recipe for a scene over
 a map — version 1 listed the sessions' encounter files here; those move
 to `sessions[].file` on upgrade), `places` (markers on a regional map
 that link to an encounter, another map or a note), `party` (where the
@@ -56,7 +60,17 @@ party is), `sessions` and `runtime`. Every other field is as before.
   plugins; `settings` are paths into the plugin's declared settings,
   over its defaults: rules variants, automation levels.
 - `packs`: content packs beyond what the plugins ship, by path relative
-  to the campaign file. Layered over shipped packs by id.
+  to the campaign file, loaded when the campaign opens — after the
+  plugins' own packs and the table's `user://content`, so a campaign's
+  content wins by id. `ContentImport` adds to this list.
+- `content.disabled`: entries this table does not use, as
+  `"<plugin>:<collection>/<id>"`. Suppression, never deletion: the entry
+  stays in its pack and still answers by id (a character built on it
+  keeps working), but it is offered nowhere — no search, no picker, no
+  wizard — until it is turned back on. The Compendium pane's *Use at
+  this table* is the switch; *Show what is off* lists them.
+- `content.imported`: what was brought in after the campaign started and
+  when (`session`), so a campaign can explain itself later.
 - `players`: the group. A session's encounter gets them on start and
   gives back any it added.
 - `actors`: the persistent ones — player characters, companions,

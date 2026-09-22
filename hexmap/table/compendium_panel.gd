@@ -8,7 +8,10 @@ extends VBoxContainer
 ## exported as one file to share. Plugin actions that take an entry
 ## (`target = "entry"`) show as buttons on the open entry. An entry
 ## opens as a card to read (the ruleset's, or a generic one); *Edit*
-## shows the fields.
+## shows the fields. *Use at this table* turns an entry off for this
+## campaign — hidden from every search, picker and wizard, never
+## deleted, back the moment it is ticked again — and *Import content…*
+## brings a pack or a file of entries into the campaign.
 
 var ctx: TableContext
 var _collection: OptionButton
@@ -26,6 +29,10 @@ var _json: TextEdit
 var _card: ViewRenderer
 var _fields: Control
 var editing := false
+var _show_disabled: CheckBox
+var _use: CheckBox
+## Set by the window: opens a file dialog and calls back with a path.
+var pick_content_file: Callable
 var _entry: Dictionary = {}
 var _result: Dictionary = {}
 var _page := 1
@@ -94,6 +101,22 @@ func _init(p_ctx: TableContext) -> void:
 	new_b.pressed.connect(_new)
 	prow.add_child(new_b)
 	add_child(prow)
+	var crow := HFlowContainer.new()
+	_show_disabled = CheckBox.new()
+	_show_disabled.text = "Show what is off"
+	_show_disabled.tooltip_text = "List the entries this campaign does not use, struck through"
+	_show_disabled.toggled.connect(func(_on: bool) -> void:
+		_page = 1
+		_query())
+	crow.add_child(_show_disabled)
+	var import_b := Button.new()
+	import_b.text = "Import content…"
+	import_b.tooltip_text = "A pack folder, a one-file pack or a file of entries, into this campaign"
+	import_b.pressed.connect(func() -> void:
+		if pick_content_file.is_valid():
+			pick_content_file.call(func(path: String) -> void: ctx.say(import_content(path))))
+	crow.add_child(import_b)
+	add_child(crow)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -181,16 +204,22 @@ func _query() -> void:
 		_page_label.text = "No content packs loaded."
 		return
 	var field := str(_facet_field.get_item_metadata(_facet_field.selected)) if _facet_field.selected >= 0 else ""
-	var opts := {"text": _search.text, "page": _page, "per_page": PER_PAGE, "fields": ["name"], "facets": [field] if field != "" else []}
+	var opts := {"text": _search.text, "page": _page, "per_page": PER_PAGE, "fields": ["name"], "facets": [field] if field != "" else [],
+		"disabled": _show_disabled.button_pressed}
 	if field != "" and _facet_value != "":
 		opts.filter = {field: _facet_value}
 	_result = comp().query(coll, opts)
 	for e in _result.entries:
-		var idx := _list.add_item("%s   ·  %s" % [str(e.get("name", e.id)), str(e.get("__pack", ""))])
+		var off := comp().is_disabled(coll, str(e.id))
+		var idx := _list.add_item("%s%s   ·  %s" % ["✗ " if off else "", str(e.get("name", e.id)), str(e.get("__pack", ""))])
 		_list.set_item_metadata(idx, str(e.id))
+		if off:
+			_list.set_item_custom_fg_color(idx, Color(0.6, 0.6, 0.62))
 		if not _entry.is_empty() and str(_entry.get("id", "")) == str(e.id):
 			_list.select(idx)
-	_page_label.text = "%d–%d of %d" % [(_page - 1) * PER_PAGE + 1, mini(_page * PER_PAGE, int(_result.total)), int(_result.total)] if int(_result.total) > 0 else "Nothing matches."
+	var n_off := comp().disabled_count(coll)
+	_page_label.text = "%d–%d of %d%s" % [(_page - 1) * PER_PAGE + 1, mini(_page * PER_PAGE, int(_result.total)), int(_result.total),
+		("  ·  %d off" % n_off) if n_off > 0 and not _show_disabled.button_pressed else ""] if int(_result.total) > 0 else "Nothing matches."
 	_prev.disabled = _page <= 1
 	_next.disabled = _page >= int(_result.pages)
 	if field != "":
@@ -272,6 +301,14 @@ func _show_entry() -> void:
 	_card.visible = not editing
 	_fields.visible = editing
 	var row := HFlowContainer.new()
+	# in or out of this campaign: the entry stays in its pack either way
+	_use = CheckBox.new()
+	_use.text = "Use at this table"
+	_use.tooltip_text = "Off: hidden from every search, picker and wizard here. The entry stays in its pack and comes back the moment this is ticked."
+	_use.button_pressed = not comp().is_disabled(coll, str(_entry.get("id", "")))
+	_use.disabled = ctx.campaign == null
+	_use.toggled.connect(func(on: bool) -> void: ctx.say(set_used(coll, str(_entry.get("id", "")), on)))
+	row.add_child(_use)
 	var edit := Button.new()
 	edit.text = "Done" if editing else ("Edit" if writable else "Fields")
 	edit.tooltip_text = "The entry's fields" if not editing else "Back to the card"
@@ -364,3 +401,48 @@ func _save() -> void:
 	_entry = comp().get_entry(coll, str(record.id))
 	refresh()
 	_show_entry()
+
+
+## Turn an entry on or off for this campaign. What happened, for the status line.
+func set_used(coll: String, id: String, on: bool) -> String:
+	if ctx.campaign == null:
+		return "No campaign is open"
+	if id == "":
+		return ""
+	var e := comp().get_entry(coll, id)
+	var plugin := plugin_for(coll)
+	ctx.campaign.set_disabled(plugin, coll, id, not on)
+	comp().disabled = ctx.campaign.disabled_index()
+	ctx.campaign_changed.emit()
+	_query()
+	if on:
+		return "%s is in play again" % str(e.get("name", id))
+	var used := _in_play(coll, id)
+	return "%s is off at this table%s" % [str(e.get("name", id)), ("; %s already uses it and keeps working" % used) if used != "" else ""]
+
+
+## The name of a character already built on this entry, or "" — turning
+## something off never breaks what is already in play, and the DM should hear so.
+func _in_play(coll: String, id: String) -> String:
+	for a in ctx.encounter().actors.values():
+		var ext: Dictionary = a.get("ext", {})
+		for pid in ext:
+			var blob := JsonDoc.stringify(ext[pid])
+			if blob.contains("\"%s\"" % id):
+				return str(a.get("name", a.get("id", "someone")))
+	return ""
+
+
+## Import a pack or a file of entries into the campaign. What happened.
+func import_content(path: String) -> String:
+	if ctx.campaign == null:
+		return "No campaign is open"
+	var r := ContentImport.import_into(path, ctx.campaign, ctx.host, comp())
+	if not r.ok:
+		return "Not imported: " + str(r.why)
+	var parts := PackedStringArray()
+	for name in r.added:
+		parts.append("%d %s" % [int(r.added[name]), str(name)])
+	refresh()
+	_query()
+	return "Imported %s: %s" % [str(r.id), ", ".join(parts) if not parts.is_empty() else "nothing"]
