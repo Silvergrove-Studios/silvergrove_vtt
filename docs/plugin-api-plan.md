@@ -836,7 +836,7 @@ the conformance suite fails a plugin whose manifest declares no tests.
 
 ## 8. Versioning during this work
 
-- App version stays at 1.2.0 until the user decides otherwise; dev numbers
+- App version stayed at 1.2.0 through the plan (2.0.0 released 2026-09-21); dev numbers
   roll with CI as now.
 - New format versions: `.encounter` 2, `.campaign` 1, `.pack` 1, protocol 2,
   plugin API 1 (in the manifest as `api`). Each has an upgrade path and a

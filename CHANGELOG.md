@@ -1,5 +1,49 @@
 # Changelog
 
+## 2.0.0 — 2026-09-21
+
+The Table becomes a campaign table with rules: a DM runs a campaign
+whose characters, NPCs, notes and maps persist between sessions, and the
+rules of the game come from a ruleset plugin — the first is the 5E
+compatible `srd5e` ruleset, installed from a zip.
+
+- **Rulesets.** Game rules are plugins in sandboxed Lua (Luau) that run
+  on the Table only; players' devices receive data, never code. A
+  ruleset defines actor schemas and derived sheets, actions with picks on
+  the map, effects with roll-time hooks, resources and rests, turn
+  systems, tracks and the clock, prompts to players and to the GM,
+  content packs and homebrew editors, and declarative views (sheet,
+  status, GM) the Table and the phones render. `docs/plugin-authoring.md`
+  is the guide; `./run.sh plugintest <dir>` runs a plugin's own tests.
+  *Install ruleset…* in the Rules pane unpacks a release zip under the
+  Table's plugins folder and loads it.
+- **The campaign is the document.** The Table opens on a campaign picker;
+  a `.campaign` holds the players, their characters with sheets, NPCs,
+  the journal, the maps and the live state, and a session is started and
+  ended from the Session pane (the recap is kept per session). Panes:
+  **Party** and **NPCs** (sheets as the ruleset draws them, editable by
+  the DM, rolls issued from them — in secret when the DM wants), **Notes**
+  (notes and handouts written ahead, handed to the phones when the moment
+  comes), **Maps** (the map library with battle and regional maps;
+  prepared encounters — creatures found by name, type and CR, with
+  counts, cells and hidden flags — to Launch, or to Stage out of the
+  players' sight and Go when arranged, and Return from; places on a
+  regional map and the party marker). Old `.encounter` files open as a
+  campaign. Maps are never edited from the Table.
+- **Square grids** beside hexes through the whole stack (drawing, walls,
+  lights, vision, movement with a diagonal rule), and **backdrop images**
+  under the grid, fitted by dragging two corners or by detecting a
+  printed grid.
+- **The Player** shows the ruleset's sheet with its buttons, prompts and
+  requested rolls, the table's status view and handouts, and a hub
+  between fights; the compendium reaches phones under their audience.
+- **Content packs and the compendium**: a versioned index with filters,
+  ranges and facets, user packs and homebrew editors built from each
+  collection's schema, character files.
+- Three client roles (player, display, co-GM), checkpoints, rulings,
+  bulk operations, a recap, and a plugin API audit with every finding
+  recorded (`docs/plugin-api-plan.md`, `docs/plugin-api-audit.md`).
+
 ## 1.2.0 — 2026-09-20
 
 Players find tables by themselves, across subnets, the way phones find

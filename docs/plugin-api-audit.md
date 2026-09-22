@@ -50,7 +50,7 @@ documents).
 | 4. The three studied shapes are expressible without a host change | holds | ordered initiative + modifiers (`sample.ordered`), focus holder + cards + GM pool (`sample.focus`), degrees + valued conditions + action budget (`sample.degrees`); plus a house-rules layer (`sample.house`). Phases 3–7 each added host features *the plugins asked for*, which is the point of the reference plugins — Phase 8 is the real test of this goal. |
 | 5. Every layer has a test harness before it has a second feature | holds for the code, not for every harness the plan named | see §4.1 |
 
-Standing constraints: the app version is still 1.2.0 (`project.godot`);
+Standing constraints: the app version was 1.2.0 through Phase 8 (2.0.0 released 2026-09-21);
 format versions are `.encounter` 2, `.campaign` 1, protocol 2, plugin
 API 1, as planned.
 
