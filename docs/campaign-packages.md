@@ -117,12 +117,13 @@ reach.campaignpkg (zip)
   plainly when it does not ("needs the srd5e ruleset 0.1.0 or newer").
 - `tested_with` is recorded into the instance, so a later "this campaign
   was written for srd5e 0.1.0, you are running 0.3.0" is answerable.
-- `bundles_rules` says whether `rules/` is there. Bundling makes the
-  download work offline and pins what was tested; not bundling keeps the
-  package small and lets the DM's ruleset stay current. Both are
-  supported; a package that bundles a ruleset must carry that ruleset's
-  licence file, which is why `rules/<id>/` is the release zip's contents
-  verbatim.
+- `bundles_rules` says whether `rules/` is there, and for a package this
+  build writes it always is: the download works offline, on a table with
+  nothing installed, and pins the rules that were tested. `rules/<id>/`
+  is the ruleset's own directory copied whole, so its licence file and
+  its content packs travel with it. `requires.plugins` is then only for
+  the rare package that deliberately leans on an installed ruleset
+  (`bundle_rules: false`), and it is what tells a DM what is missing.
 
 ## The instance
 
