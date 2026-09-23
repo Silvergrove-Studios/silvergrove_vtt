@@ -30,6 +30,8 @@ func _run(dir: String) -> int:
 		return 1
 	var st := EncounterState.new(Encounter.create("plugin test"))
 	var host := PluginHost.new(RulesKernel.new(st))
+	# a ruleset's tests read all of its content, whatever a campaign would choose
+	host.all_packs = true
 	host.plugin_failed.connect(func(id: String, where: String, msg: String) -> void: print("  %s: %s: %s" % [id, where, msg]))
 	# dependencies from sibling directories first (a layered plugin is
 	# tested over its base)

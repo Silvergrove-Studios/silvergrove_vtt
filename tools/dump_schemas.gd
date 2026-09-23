@@ -28,6 +28,7 @@ func _process(_delta: float) -> bool:
 	var st := EncounterState.new(Encounter.create("schemas"))
 	var kernel := RulesKernel.new(st)
 	var host := PluginHost.new(kernel)
+	host.all_packs = true
 	host.plugin_failed.connect(func(id: String, where: String, msg: String) -> void: print("  %s: %s: %s" % [id, where, msg]))
 	var why := host.load_dir(dir)
 	if why != "":

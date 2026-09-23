@@ -52,7 +52,13 @@ A pack can also be one file — `{"pack": {…}, "collections": {"creatures":
 
 **What is parsed.** Only the open campaign's content: the rulesets it
 plays (its `plugins` list — no other installed ruleset is loaded, so no
-other ruleset's packs are parsed), their packs, and the campaign's own.
+other ruleset's packs are parsed), the packs of theirs its settings call
+for, and the campaign's own. A plugin's manifest may make a pack
+conditional — `"packs": [{"path": "packs/srd52", "when": {"rules": "2024"}},
+{"path": "packs/srd51", "when": {"rules": "2014"}}]` — and it is loaded
+only when the campaign's settings match (a list of values means any of
+them). A ruleset's own tests, `./run.sh schemas` and pack checks read
+every pack regardless (`PluginHost.all_packs`).
 Nothing else on the machine is read. The table's library under
 `user://content/` is where loose packs wait to be imported and where a
 pack is exported to; it is opened only when the DM imports from it.

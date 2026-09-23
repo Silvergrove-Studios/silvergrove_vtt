@@ -40,7 +40,10 @@ const MANIFEST_SCHEMA := {
 		# plugin layering: this plugin replaces another's handlers for these
 		# hooks ("*" for all of them); it must depend on that plugin
 		"overrides": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
-		"packs": {"type": "array", "items": {"type": "string"}},
+		# a pack path, or {path, when: {setting: value | [values]}}: loaded
+		# only when the campaign's settings match (a rules version's own content)
+		"packs": {"type": "array", "items": {"anyOf": [{"type": "string"},
+			{"type": "object", "required": ["path"], "properties": {"path": {"type": "string"}, "when": {"type": "object"}}}]}},
 		"capabilities": {"type": "array", "items": {"type": "string", "enum": CAPABILITIES}},
 		"policy": {"type": "object"},
 		"settings": {"type": "object"},
@@ -54,6 +57,9 @@ var kernel: RulesKernel
 var plugins: Dictionary = {}
 ## Budgets applied to every VM.
 var instruction_budget := 1_000_000
+## Load every pack a plugin ships, whatever its `when` says: a ruleset's
+## own tests and checks read all of its content; a campaign does not.
+var all_packs := false
 var memory_budget := 64 * 1024 * 1024
 ## Wall-clock budget for one call into a plugin (an action, a hook, a
 ## derive): the instruction budget bounds Lua, this bounds what a loop of
@@ -280,8 +286,8 @@ func load_source(manifest: Dictionary, sources: Array, dir := "") -> String:
 			kernel.hooks.off(id)
 			return "%s: %s" % [id, why]
 	p.vm.seal()
-	# the packs the plugin ships, layered under whatever the table adds
-	for rel in manifest.get("packs", []):
+	# the packs the plugin ships (those the campaign's settings call for), under whatever the table adds
+	for rel in pack_paths(p):
 		if dir == "":
 			continue
 		var pw := kernel.comp.load_path(dir.path_join(str(rel)))
@@ -664,9 +670,41 @@ func _attach_to(k: RulesKernel, real_kernel: RulesKernel, pid: String, with_pack
 
 func _load_packs_into(comp: Compendium, pid: String) -> void:
 	var p: Plugin = plugins[pid]
-	for rel in p.manifest.get("packs", []):
+	for rel in pack_paths(p):
 		if p.dir != "":
 			comp.load_path(p.dir.path_join(str(rel)))
+
+
+## The packs of a plugin this table loads: every plain path, and each
+## {path, when} whose settings match the plugin's (the campaign's, over
+## the defaults). With `all_packs` every one of them — a ruleset's own
+## tests and pack checks read all of its content.
+func pack_paths(p: Plugin) -> Array:
+	var out := []
+	for item in p.manifest.get("packs", []):
+		if item is String:
+			out.append(str(item))
+			continue
+		if not (item is Dictionary) or str(item.get("path", "")) == "":
+			continue
+		if all_packs or _when(item.get("when", {}), p.settings):
+			out.append(str(item.path))
+	return out
+
+
+static func _when(cond: Variant, settings: Dictionary) -> bool:
+	if not (cond is Dictionary):
+		return true
+	for k in cond:
+		var have: Variant = JsonDoc.at_path(settings, str(k)) if str(k).contains("/") else settings.get(str(k))
+		var want: Variant = cond[k]
+		var ok := false
+		for w in (want if want is Array else [want]):
+			if str(w) == str(have):
+				ok = true
+		if not ok:
+			return false
+	return true
 
 
 # --------------------------------------------------------- host table --
