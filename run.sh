@@ -189,14 +189,14 @@ main() {
 		-h|--help|help) usage; return 0 ;;
 	esac
 	case "$cmd" in
-		app|edit|godot-editor|editor|table|player|display|export|shot|check|test|jointest|plugintest|examples|packs|sheet|godot|install|doctor) shift || true ;;
+		app|edit|godot-editor|editor|table|player|display|export|shot|check|test|jointest|plugintest|schemas|examples|packs|sheet|godot|install|doctor) shift || true ;;
 		*) cmd="app" ;;
 	esac
 
 	find_godot
 	setup_graphics
 	case "$cmd" in
-		app|editor|table|player|display|shot|export|check|test|jointest|plugintest|examples|packs|sheet) refresh_class_cache ;;
+		app|editor|table|player|display|shot|export|check|test|jointest|plugintest|schemas|examples|packs|sheet) refresh_class_cache ;;
 	esac
 
 	case "$cmd" in
@@ -238,6 +238,10 @@ main() {
 		plugintest)
 			[[ $# -ge 1 ]] || die "usage: ./run.sh plugintest <plugin dir>"
 			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tools/plugin_test.gd -- "$@"
+			;;
+		schemas)
+			[[ $# -ge 2 ]] || die "usage: ./run.sh schemas <plugin dir> <out dir>"
+			exec "$GODOT_BIN" --headless --path "$PROJECT_DIR" -s tools/dump_schemas.gd -- "$@"
 			;;
 		jointest)
 			[[ $# -ge 1 ]] || die "usage: ./run.sh jointest <host:port>"

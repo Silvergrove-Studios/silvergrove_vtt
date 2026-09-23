@@ -26,6 +26,10 @@ const MANIFEST_SCHEMA := {
 		"id": {"type": "string", "format": "id"},
 		"version": {"type": "string", "minLength": 1},
 		"api": {"type": "integer", "const": 1},
+		# the version of this ruleset's *content* shapes: a pack says which
+		# it was written for, and one written for a newer is refused. Within
+		# a content API the collection schemas may only grow (docs/content-format.md).
+		"content_api": {"type": "integer", "minimum": 1},
 		"name": {"type": "string", "minLength": 1},
 		"description": {"type": "string"},
 		"attribution": {"type": "string"},

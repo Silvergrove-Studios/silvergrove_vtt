@@ -83,6 +83,24 @@ collection, a wider enum; renaming, removing, requiring or narrowing a
 field needs a new content API. Fields a Table does not know are kept,
 never dropped. `docs/campaign-packages.md` has the whole picture.
 
+**Publishing the shapes.** `./run.sh schemas <plugin dir> <out dir>`
+writes each collection's schema as JSON Schema (draft 2020-12) plus
+`content-api.json` — the ruleset, its `content_api`, its collections and
+its references. A ruleset commits these beside its releases so a pack
+author can validate in CI with any JSON Schema tool, and diffs them in
+its own CI so a change to a shape is never silent. A ruleset's own packs
+should be checked against them too (`ruleset-dnd5e/tools/check_packs.gd`
+is the pattern).
+
+**References between collections.** A schema may annotate a string
+field with `"collection": "features"`: the ids in it name entries of
+that collection. It is an annotation — any JSON Schema tool ignores it —
+and Hexmap uses it when content is imported to say what an entry names
+that nothing has ("classes/my-warden names features/warden_rage, which
+is nowhere"). That is a warning beside the import, not a refusal: the
+rest of the pack is good content. In `srd5e` a class's `features[].id`,
+its `subclass_of` and a background's `feat` carry it.
+
 **Turning content off.** A campaign may say it does not use an entry
 (`content.disabled`). It is hidden from every offer — searches,
 pickers, wizards, the Compendium pane's lists — while still answering

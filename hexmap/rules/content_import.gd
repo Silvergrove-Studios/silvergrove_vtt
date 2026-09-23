@@ -66,10 +66,11 @@ static func inspect(path: String) -> Dictionary:
 	return out
 
 
-## Bring it in. Returns {ok, why, id, added: {collection: n}, refused: [reasons]}.
+## Bring it in. Returns {ok, why, id, added: {collection: n},
+## refused: [reasons], missing: [what it names and nothing has]}.
 ## `host` may be null (nothing is checked against a schema then).
 static func import_into(path: String, campaign: Campaign, host: PluginHost, comp: Compendium) -> Dictionary:
-	var out := {"ok": false, "why": "", "id": "", "added": {}, "refused": []}
+	var out := {"ok": false, "why": "", "id": "", "added": {}, "refused": [], "missing": []}
 	var info := inspect(path)
 	if not info.ok:
 		out.why = str(info.why)
@@ -94,6 +95,9 @@ static func import_into(path: String, campaign: Campaign, host: PluginHost, comp
 		out.refused = bad
 		out.why = "%d entr%s would not load: %s" % [bad.size(), "y" if bad.size() == 1 else "ies", str(bad[0])]
 		return out
+	# what it points at and nothing has (a class whose features are not there):
+	# worth saying, not worth refusing — the rest of the pack is good content
+	out.missing = dangling(collections, host, plugin, comp)
 	var id := str(info.id)
 	if id == "":
 		out.why = "the pack has no id"
@@ -243,3 +247,80 @@ static func _json(path: String) -> Dictionary:
 		return {}
 	var err := []
 	return JsonDoc.parse(FileAccess.get_file_as_string(path), err)
+
+
+## The paths in a collection's schema that name entries of another
+## collection — a property annotated `"collection": "features"` — as
+## {path: collection}, where a path is pointer-ish with `*` for a list
+## ("features/*/id"). It is an annotation, so any JSON Schema tool
+## ignores it and Hexmap uses it to check that what a class names exists.
+static func reference_paths(schema: Dictionary) -> Dictionary:
+	var out := {}
+	_refs(schema, "", out, 0)
+	return out
+
+
+static func _refs(node: Variant, path: String, out: Dictionary, depth: int) -> void:
+	if depth > 8 or not (node is Dictionary):
+		return
+	var d: Dictionary = node
+	if str(d.get("collection", "")) != "" and path != "":
+		out[path] = str(d.collection)
+	for key in d.get("properties", {}):
+		_refs(d.properties[key], path.path_join(str(key)) if path != "" else str(key), out, depth + 1)
+	if d.has("items"):
+		_refs(d["items"], path.path_join("*") if path != "" else "*", out, depth + 1)
+	if d.has("additionalProperties") and d.additionalProperties is Dictionary:
+		_refs(d.additionalProperties, path.path_join("*") if path != "" else "*", out, depth + 1)
+
+
+## The values an entry holds at an annotated path.
+static func values_at(entry: Variant, path: String) -> Array:
+	var parts := path.split("/", false)
+	var here: Array = [entry]
+	for part in parts:
+		var next := []
+		for v in here:
+			if str(part) == "*":
+				if v is Array:
+					next.append_array(v)
+				elif v is Dictionary:
+					next.append_array((v as Dictionary).values())
+			elif v is Dictionary and (v as Dictionary).has(str(part)):
+				next.append((v as Dictionary)[str(part)])
+		here = next
+	var out := []
+	for v in here:
+		if v is String and str(v) != "":
+			out.append(str(v))
+	return out
+
+
+## What an import names but nothing has: ["classes/my-warden → features/warden_rage", …].
+## Resolved against the import itself and the compendium already loaded.
+static func dangling(collections: Dictionary, host: PluginHost, plugin: String, comp: Compendium) -> Array:
+	var out := []
+	if host == null or not host.plugins.has(plugin):
+		return out
+	var p: PluginHost.Plugin = host.plugins[plugin]
+	for name in collections:
+		if not p.schemas.has(str(name)):
+			continue
+		var paths := reference_paths((p.schemas[str(name)] as JsonSchema).root)
+		if paths.is_empty():
+			continue
+		for e in collections[name]:
+			if not (e is Dictionary):
+				continue
+			for path in paths:
+				var want := str(paths[path])
+				for id in values_at(e, str(path)):
+					var here: Array = collections.get(want, [])
+					if here.any(func(x: Variant) -> bool: return x is Dictionary and str((x as Dictionary).get("id", "")) == id):
+						continue
+					if comp != null and not comp.get_entry(want, id).is_empty():
+						continue
+					out.append("%s/%s names %s/%s, which is nowhere" % [str(name), str(e.get("id", "?")), want, id])
+					if out.size() >= 8:
+						return out
+	return out

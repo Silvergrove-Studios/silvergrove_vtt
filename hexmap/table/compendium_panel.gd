@@ -461,4 +461,7 @@ func import_content(path: String) -> String:
 		parts.append("%d %s" % [int(r.added[name]), str(name)])
 	refresh()
 	_query()
-	return "Imported %s: %s" % [str(r.id), ", ".join(parts) if not parts.is_empty() else "nothing"]
+	var said := "Imported %s: %s" % [str(r.id), ", ".join(parts) if not parts.is_empty() else "nothing"]
+	if not (r.missing as Array).is_empty():
+		said += " — but %s" % str(r.missing[0]) + (" (and %d more)" % ((r.missing as Array).size() - 1) if (r.missing as Array).size() > 1 else "")
+	return said

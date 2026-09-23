@@ -487,6 +487,20 @@ func test_campaign_content() -> void:
 	nf.close()
 	var nr := ContentImport.import_into(newer, opened, ctx.host, ctx.kernel.comp)
 	check(not nr.ok and str(nr.why).contains("content API 9"), "a pack for a newer content API is refused: %s" % nr.why)
+	# what an entry names and nothing has: said, not refused
+	check(ContentImport.reference_paths({"type": "object", "properties": {
+		"kin": {"type": "string", "collection": "creatures"},
+		"parts": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string", "collection": "feats"}}}}}})
+		== {"kin": "creatures", "parts/*/id": "feats"}, "the schema's collection annotations, by path")
+	var pack := dir.path_join("kin.json")
+	var kf := FileAccess.open(pack, FileAccess.WRITE)
+	kf.store_string(JsonDoc.stringify({"pack": {"id": "kin", "name": "Kin", "plugin": "sample.degrees"},
+		"collections": {"creatures": [
+			{"id": "eel-kin", "name": "Eel kin", "level": 2, "kind": "animal", "stats": {"might": 1, "agility": 2, "mind": 0}, "ac_base": 12, "hp": 9, "feats": ["steady", "no-such-feat"]}]}}))
+	kf.close()
+	var kr := ContentImport.import_into(pack, opened, ctx.host, ctx.kernel.comp)
+	check(kr.ok, "it imports: the content is good")
+	check((kr.missing as Array).size() == 1 and str(kr.missing[0]).contains("feats/no-such-feat"), "and says what it names that nothing has: %s" % [kr.missing])
 	PluginHost._rm_rf(dir)
 
 

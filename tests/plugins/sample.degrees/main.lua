@@ -23,7 +23,9 @@ hm.schema.define("creatures", {
 	properties = { id = { type = "string" }, name = { type = "string" }, level = { type = "integer", minimum = 0, maximum = 25 },
 		kind = { type = "string", enum = { "humanoid", "animal", "giant", "undead", "fey", "other" } },
 		traits = { type = "array", items = { type = "string" } }, stats = STATS, ranks = RANKS,
-		ac_base = { type = "integer", minimum = 5, maximum = 30 }, hp = { type = "integer", minimum = 1 }, text = { type = "string", format = "text" } },
+		ac_base = { type = "integer", minimum = 5, maximum = 30 }, hp = { type = "integer", minimum = 1 }, text = { type = "string", format = "text" },
+		-- the ids here name entries of the feats collection: the Table checks them on import
+		feats = { type = "array", items = { type = "string", collection = "feats" } } },
 })
 hm.schema.define("feats", {
 	type = "object", required = { "id", "name", "level" },
