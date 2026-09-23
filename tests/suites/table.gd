@@ -728,15 +728,17 @@ func test_campaign_packages() -> void:
 	check(author.save(home.path_join("source/reach.campaign")) == OK, "the author's campaign saved")
 	# exported as a package: the adventure, not the play
 	var pkg := home.path_join("sunken_reach.campaignpkg")
-	var ex := CampaignPackage.export_from(author, pkg, {"id": "sunken-reach", "package_version": "1.2.0", "description": "A drowned coast."})
+	var ex := CampaignPackage.export_from(author, pkg, {"id": "sunken-reach", "package_version": "1.2.0", "description": "A drowned coast.",
+		"plugin_dirs": ["res://tests/plugins"]})
 	check(ex.ok and int(ex.files) >= 5, "exported: %d files%s" % [int(ex.files), "" if ex.ok else " — " + str(ex.why)])
 	var info := CampaignPackage.read(pkg)
 	check(info.ok and info.id == "sunken-reach" and info.name == "The Sunken Reach" and str(info.package_version) == "1.2.0", "the package says what it is: %s" % [info.why])
-	check(not info.bundles_rules and (info.requires.plugins as Array).any(func(p: Dictionary) -> bool: return str(p.id) == "sample.degrees"), "and what it needs")
-	check(CampaignPackage.unmet(info, {"sample.degrees": "0.1.0"}, "2.0.0").is_empty(), "a table with that ruleset can start it")
-	var no := CampaignPackage.unmet(info, {}, "2.0.0")
-	check(no.size() == 1 and str(no[0]).contains("not installed"), "one without is told why: %s" % [no])
-	check(CampaignPackage.unmet({"requires": {"app": ">=9.0.0"}}, {}, "2.0.0").size() == 1, "an older app is told too")
+	check(info.bundles_rules, "it carries the ruleset it plays")
+	check(CampaignPackage.unmet(info, {}, "2.0.0").is_empty(), "so a table that has installed nothing can start it")
+	check(CampaignPackage.unmet({"requires": {"app": ">=9.0.0"}}, {}, "2.0.0").size() == 1, "an older app is still told")
+	check(CampaignPackage.unmet({"requires": {"plugins": [{"id": "srd5e"}]}}, {}, "2.0.0").size() == 1, "and a package from before, carrying none, says what it wants")
+	var no_rules := CampaignPackage.export_from(author, home.path_join("bare.campaignpkg"), {"plugin_dirs": []})
+	check(not no_rules.ok and str(no_rules.why).contains("not here to put in the package"), "a ruleset that is not on this machine stops the export: %s" % str(no_rules.why))
 	# a DM starts it: their own campaign, the package untouched
 	var before := FileAccess.get_file_as_bytes(pkg).size()
 	var inst := CampaignPackage.instance(pkg, home.path_join("mine"), "Ana's Reach")
@@ -755,11 +757,14 @@ func test_campaign_packages() -> void:
 	var win := TableWindow.new()
 	win.app = app
 	root.add_child(win)
-	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	# nothing installed on this table: the campaign runs the ruleset the package brought
+	win.ctx.plugin_dirs = []
 	win._open_campaign_path(str(inst.path))
+	check(FileAccess.file_exists(home.path_join("mine/rules/sample.degrees/manifest.json")), "the ruleset came with it")
 	if PluginHost.available():
-		check(win.ctx.host != null and win.ctx.host.plugins.has("sample.degrees"), "the ruleset it names loaded")
-		check(win.ctx.kernel.comp.get_entry("creatures", "reach-eel").name == "Reach eel", "and the package's own content with it")
+		check(win.ctx.host != null and win.ctx.host.plugins.has("sample.degrees"), "and loads from the campaign, with nothing installed: %s" % [win.ctx.plugin_log])
+		check(win.ctx.kernel.comp.get_entry("creatures", "reach-eel").name == "Reach eel", "the package's own content too")
+		check(win.ctx.kernel.comp.count("creatures") == 7, "with the ruleset's own (%d)" % win.ctx.kernel.comp.count("creatures"))
 	# duplicated for a second group
 	var dup := Campaign.duplicate_to(mine, home.path_join("second"), "Ben's Reach", true)
 	check(dup.ok, "duplicated: %s" % str(dup.why))

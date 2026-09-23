@@ -1032,7 +1032,8 @@ func _export_package_dialog() -> void:
 	fd.file_selected.connect(func(path: String) -> void:
 		if path.get_extension() == "":
 			path += "." + CampaignPackage.EXT
-		var r := CampaignPackage.export_from(ctx.campaign, path, {"bundle_rules": false})
+		# a package carries what it needs, the rulesets included
+		var r := CampaignPackage.export_from(ctx.campaign, path, {"plugin_dirs": ctx.plugin_dirs})
 		ctx.say("Packaged %d files into %s" % [int(r.files), ProjectSettings.globalize_path(path)] if r.ok else "Could not package it: " + str(r.why)))
 	fd.popup_centered_ratio(0.7)
 

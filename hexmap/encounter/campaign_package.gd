@@ -67,6 +67,7 @@ static func unmet(info: Dictionary, installed: Dictionary, app_version: String) 
 	for p in req.get("plugins", []):
 		if not (p is Dictionary):
 			continue
+		# (a package that carries its rules never gets here)
 		var pid := str(p.get("id", ""))
 		var want := str(p.get("version", ""))
 		if not installed.has(pid):
@@ -144,9 +145,13 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 
 
 ## Write a package from a campaign: the document without its play state,
-## its maps, its packs, and — with `bundle_rules` — the ruleset it runs.
+## its maps, its packs, and **the rulesets it plays** — a package carries
+## everything it needs, so a table that has installed nothing can start
+## it. A ruleset travels whole, its own licence file included.
 ## opts: {id, package_version, authors, license, url, description,
-## bundle_rules, keep_players, rules_dir (where the ruleset is)}.
+## keep_players, plugin_dirs (where installed rulesets are),
+## bundle_rules = false only for a package that deliberately leans on an
+## installed ruleset}.
 static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary = {}) -> Dictionary:
 	var out := {"ok": false, "why": "", "path": dest_path, "files": 0}
 	if campaign == null or campaign.path == "":
@@ -169,6 +174,20 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 				keep[aid] = doc.actors[aid]
 		doc.actors = keep
 		doc.resources = {}
+	# the rulesets this campaign plays, copied in whole (their packs and licences with them)
+	var bundle := bool(opts.get("bundle_rules", true))
+	var rules_from := {}
+	if bundle:
+		rules_from = _rule_dirs(campaign, opts.get("plugin_dirs", []))
+		var missing := []
+		for p in campaign.plugins:
+			if p is Dictionary and not rules_from.has(str(p.get("id", ""))):
+				missing.append(str(p.get("id", "")))
+		if not missing.is_empty():
+			zp.close()
+			DirAccess.remove_absolute(dest_path)
+			out.why = "the %s ruleset is not here to put in the package (install it, or export without its rules)" % ", ".join(PackedStringArray(missing))
+			return out
 	var manifest := {"format": FORMAT, "version": VERSION,
 		"id": str(opts.get("id", _slug(campaign.name))), "name": campaign.name,
 		"package_version": str(opts.get("package_version", "1.0.0")),
@@ -177,7 +196,7 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		"description": str(opts.get("description", campaign.doc.get("meta", {}).get("description", ""))),
 		"requires": opts.get("requires", {"app": ">=%s" % _major(App.version()), "plugins": _plugin_requirements(campaign)}),
 		"tested_with": {"app": App.version(), "plugins": _plugin_versions(campaign)},
-		"bundles_rules": bool(opts.get("bundle_rules", false)),
+		"bundles_rules": bundle and not rules_from.is_empty(),
 		"campaign": "campaign.json"}
 	var n := 0
 	zp.start_file("package.json")
@@ -195,9 +214,6 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 			files.append(str(m.path))
 	for sub in ["packs", "handouts"]:
 		_walk(campaign.base_dir().path_join(sub), sub, files)
-	if bool(opts.get("bundle_rules", false)):
-		var rules: String = str(opts.get("rules_dir", campaign.base_dir().path_join(str(campaign.doc.get("rules_dir", "rules")))))
-		_walk(rules, "rules", files, campaign.base_dir())
 	for rel in files:
 		var src := campaign.resolve(rel)
 		if not FileAccess.file_exists(src):
@@ -206,9 +222,48 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		zp.write_file(FileAccess.get_file_as_bytes(src))
 		zp.close_file()
 		n += 1
+	# the rulesets, from wherever this table has them
+	for pid in rules_from:
+		var from := str(rules_from[pid])
+		var within := PackedStringArray()
+		_walk(from, "", within)
+		for rel in within:
+			var src := from.path_join(rel)
+			if not FileAccess.file_exists(src):
+				continue
+			zp.start_file("rules/%s/%s" % [pid, rel])
+			zp.write_file(FileAccess.get_file_as_bytes(src))
+			zp.close_file()
+			n += 1
 	zp.close()
 	out.files = n
 	out.ok = true
+	return out
+
+
+## Where each ruleset the campaign plays can be copied from: the
+## campaign's own copy first, then the dirs this table installs into.
+static func _rule_dirs(campaign: Campaign, plugin_dirs: Array) -> Dictionary:
+	var out := {}
+	var want := []
+	for p in campaign.plugins:
+		if p is Dictionary and str(p.get("id", "")) != "":
+			want.append(str(p.id))
+	if want.is_empty():
+		return out
+	var carried := campaign.resolve(str(campaign.doc.get("rules_dir", "rules")))
+	for m in PluginHost.discover([carried] + Array(plugin_dirs)):
+		var id := str(m.get("id", ""))
+		# a plugin a wanted one depends on travels too
+		if want.has(id) or Array(m.get("depends", [])).any(func(d: Variant) -> bool: return want.has(str(d))):
+			out[id] = str(m.get("__dir", ""))
+	# and what those depend on, one more pass (a base under a layer under a layer)
+	for m in PluginHost.discover([carried] + Array(plugin_dirs)):
+		for dep in m.get("depends", []):
+			if out.has(str(m.get("id", ""))) and not out.has(str(dep)):
+				for d in PluginHost.discover([carried] + Array(plugin_dirs)):
+					if str(d.get("id", "")) == str(dep):
+						out[str(dep)] = str(d.get("__dir", ""))
 	return out
 
 
