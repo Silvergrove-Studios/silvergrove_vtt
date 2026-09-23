@@ -800,6 +800,7 @@ func test_campaign_packages() -> void:
 	check(mine.doc.runtime.is_empty() and (mine.doc.sessions as Array).is_empty() and int(mine.clock.session) == 0, "with none of the author's play")
 	check((mine.doc.players as Array).is_empty() and not mine.actors.has("a_pc") and mine.actors.has("a_npc"), "no other table's party; the NPCs stay")
 	check(mine.encounters.size() == 1 and mine.maps.size() == 1 and mine.packs.size() == 1, "the adventure came whole")
+	check((mine.encounters[0].played as Array).is_empty() and not mine.doc.has("source_of"), "none of it marked played by the author's table, and not the author's working copy")
 	check(FileAccess.file_exists(home.path_join("mine/maps/ruined_chapel.hexmap")) and FileAccess.file_exists(home.path_join("mine/packs/reach/pack.json")), "its maps and content are in the DM's folder")
 	check(FileAccess.file_exists(home.path_join("mine/art/woodland/pack.json")), "and its art")
 	# and it plays: the ruleset loads, the campaign's own pack with it
@@ -825,6 +826,40 @@ func test_campaign_packages() -> void:
 	check(copy.encounters.size() == 1 and (copy.encounters[0].played as Array).is_empty() and (copy.doc.journal as Array).is_empty(), "as a fresh start: nothing played, no journal")
 	check(FileAccess.file_exists(home.path_join("second/packs/reach/pack.json")), "with its own copy of the content")
 	check(not Campaign.duplicate_to(mine, home.path_join("second"), "Again").ok, "a folder that exists is not overwritten")
+	# the author's loop: the campaign becomes the package's working copy, each release a version
+	var src_c := Campaign.load_file(home.path_join("source/reach.campaign"), err)
+	var rel1 := CampaignPackage.release(src_c, "First release.", {"path": home.path_join("reach_release.campaignpkg"), "plugin_dirs": ["res://tests/plugins"]})
+	check(rel1.ok and str(rel1.version) == "1.0.0" and str(src_c.doc.source_of.id) == "the_sunken_reach", "the first release is 1.0.0 and the campaign is now its source: %s" % [rel1])
+	var rel2 := CampaignPackage.release(src_c, "The harbour map is bigger.", {"plugin_dirs": ["res://tests/plugins"]})
+	check(rel2.ok and str(rel2.version) == "1.0.1" and str(rel2.path) == home.path_join("reach_release.campaignpkg"), "the next release bumps the patch and goes to the same file")
+	var info2 := CampaignPackage.read(str(rel2.path))
+	check(str(info2.package_version) == "1.0.1" and (info2.manifest.changelog as Array).size() == 2 and str(info2.manifest.changelog[1].notes) == "The harbour map is bigger.", "carrying its changelog")
+	check(CampaignPackage.bump("1.4.9", "minor") == "1.5.0" and CampaignPackage.bump("1.4.9", "major") == "2.0.0" and CampaignPackage.bump("0.1.0") == "0.1.1", "versions bump by part")
+	# a DM's campaign started from 1.2.0 sees 1.3.0 in the library — and nothing moves until they say so
+	var lib := home.path_join("library")
+	DirAccess.make_dir_recursive_absolute(lib)
+	var author2 := Campaign.load_file(home.path_join("source/reach.campaign"), err)
+	author2.encounters.append({"id": "enc_harbour", "name": "Trouble at the harbour", "map": str(author2.maps[0].id), "level": "ground", "creatures": [], "played": []})
+	check(ContentImport.write_pack(home.path_join("source/packs/reach"), {"id": "reach", "name": "Reach content", "plugin": "sample.degrees", "pack_version": "2"},
+		{"creatures": [{"id": "reach-eel", "name": "Reach eel", "level": 3, "kind": "animal", "stats": {"might": 1, "agility": 2, "mind": 0}, "ac_base": 12, "hp": 12}]}) == "", "the author changes the content")
+	author2.doc.source_of = {}
+	author2.save()
+	var v13 := CampaignPackage.export_from(author2, lib.path_join("reach_1_3.campaignpkg"), {"id": "sunken-reach", "package_version": "1.3.0", "plugin_dirs": ["res://tests/plugins"],
+		"changelog": [{"version": "1.3.0", "date": "2026-09-23", "notes": "A harbour fight; tougher eels."}]})
+	check(v13.ok, "1.3.0 is in the DM's library")
+	var mine2 := Campaign.load_file(str(inst.path), err)
+	var newer := CampaignPackage.newer_for(mine2, lib)
+	check(str(newer.get("package_version", "")) == "1.3.0", "the Table notices the newer version")
+	var rep := CampaignPackage.update_report(mine2, str(newer.path))
+	check(str(rep.from) == "1.2.0" and str(rep.to) == "1.3.0" and (rep.changelog as Array).size() == 1, "the report says from where to where, and why: %s" % [rep.changelog])
+	check((rep.packs.changed as Array).has("reach") and (rep.encounters.added as Array).has("Trouble at the harbour"), "what changes: the content, a new encounter (%s)" % [rep])
+	var summary2 := TableWindow.update_summary(rep)
+	check(summary2.contains("1.2.0 → 1.3.0") and summary2.contains("A harbour fight") and summary2.contains("Content changed: reach"), "the DM reads it first")
+	check(str(mine2.doc.package.version) == "1.2.0" and mine2.encounters.size() == 1, "and until they choose, nothing has moved")
+	var applied := CampaignPackage.apply_update(mine2, str(newer.path), true, false)
+	check(applied.ok and str(mine2.doc.package.version) == "1.3.0" and mine2.encounters.size() == 2, "taking it brings the new encounter in: %s" % [applied.applied])
+	check(FileAccess.get_file_as_string(home.path_join("mine/packs/reach/creatures.json")).contains("\"hp\": 12"), "and the new content")
+	check(mine2.encounter_entry("enc").played.is_empty() and (mine2.doc.package_updates as Array).size() == 1, "leaving the campaign's own play as it was, and noting the update")
 	# art its makers do not let be passed on stops the export, by name
 	DirAccess.make_dir_recursive_absolute(home.path_join("mine/art/secret"))
 	var sf := FileAccess.open(home.path_join("mine/art/secret/pack.json"), FileAccess.WRITE)

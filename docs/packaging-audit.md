@@ -51,13 +51,13 @@ app has, shared by every campaign, in a preference. The two halves of
 move it or find it through a file dialog. There is no "install this
 package" action, no association for `.campaignpkg`, no open-with.
 
-**A5. No way to move to a newer ruleset, and no way to update a
+**A5 (closed 2026-09-23). No way to move to a newer ruleset, and no way to update a
 package.** A campaign pins the rules it came with, which is what we
 want — but nothing offers "this package has a 1.3.0, bring in its new
 maps" or "srd5e 0.2.0 fixes a bug, move this campaign onto it". Both are
 in the design as prose only.
 
-**A6. Duplicate's "fresh start" is not offered.** `duplicate_to` takes
+**A6 (closed 2026-09-23). Duplicate's "fresh start" is not offered.** `duplicate_to` takes
 `fresh` and the tests use it; the menu always passes false.
 
 **A7. Homebrew moves between campaigns only by hand.** *Export pack…*
@@ -86,7 +86,7 @@ was the accepted trade. But nothing yet says what happens when two
 has 0.3.0 installed for its other campaigns. (Today: the campaign's copy
 wins, silently.)
 
-**B3. "The DM edits the base" has no shape.** A package is immutable and
+**B3 (resolved 2026-09-23: source campaigns). "The DM edits the base" has no shape.** A package is immutable and
 editing means instancing and exporting a new version — so a campaign
 developer's working copy is just another campaign, and the link back
 (`package.id`) is only a note. There is no notion of "this instance *is*

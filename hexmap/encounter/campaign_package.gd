@@ -171,6 +171,13 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 	doc.runtime = {}
 	doc.sessions = []
 	doc.erase("package")
+	# the author's own authoring and play are not the package's
+	doc.erase("source_of")
+	doc.erase("package_updates")
+	for e in doc.get("encounters", []):
+		if e is Dictionary:
+			e.erase("live")
+			e.played = []
 	if not bool(opts.get("keep_players", false)):
 		doc.players = []
 		var keep := {}
@@ -221,6 +228,7 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		"requires": opts.get("requires", {"app": ">=%s" % _major(App.version()), "plugins": _plugin_requirements(campaign)}),
 		"tested_with": {"app": App.version(), "plugins": _plugin_versions(campaign)},
 		"bundles_rules": bundle and not rules_from.is_empty(),
+		"changelog": opts.get("changelog", []),
 		"art": art,
 		"campaign": "campaign.json"}
 	var n := 0
@@ -267,6 +275,201 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 	zp.close()
 	out.files = n
 	out.digest = manifest.digest
+	out.ok = true
+	return out
+
+
+# ---------------------------------------------------------- authoring --
+
+## Release the package this campaign is the working copy of: the next
+## version (a patch by default), the notes added to its changelog, written
+## to the file it was released to before. A campaign that is not yet the
+## source of a package becomes one: it keeps the package it came from's id
+## and continues its versions, or takes its own name as id at 1.0.0.
+## {ok, why, path, version}.
+static func release(campaign: Campaign, notes: String, opts: Dictionary = {}) -> Dictionary:
+	var out := {"ok": false, "why": "", "path": "", "version": ""}
+	if campaign == null or campaign.path == "":
+		out.why = "save the campaign first"
+		return out
+	var src: Dictionary = campaign.doc.get("source_of", {}) if campaign.doc.get("source_of") is Dictionary else {}
+	var came_from: Dictionary = campaign.doc.get("package", {}) if campaign.doc.get("package") is Dictionary else {}
+	var id := str(src.get("id", came_from.get("id", _slug(campaign.name))))
+	var version := str(opts.get("version", ""))
+	if version == "":
+		var last := str(src.get("version", came_from.get("version", "")))
+		version = bump(last, str(opts.get("bump", "patch"))) if last != "" else "1.0.0"
+	var path := str(opts.get("path", src.get("path", "")))
+	if path == "":
+		out.why = "say where the package goes the first time"
+		return out
+	var changelog: Array = (src.get("changelog", []) as Array).duplicate(true)
+	changelog.append({"version": version, "date": Time.get_date_string_from_system(), "notes": notes.strip_edges()})
+	var o: Dictionary = opts.duplicate()
+	o.id = id
+	o.package_version = version
+	o.changelog = changelog
+	var r := export_from(campaign, path, o)
+	if not r.ok:
+		out.why = str(r.why)
+		return out
+	campaign.doc.source_of = {"id": id, "name": campaign.name, "version": version, "path": path, "changelog": changelog, "digest": str(r.get("digest", ""))}
+	campaign.touch()
+	campaign.save()
+	out.path = path
+	out.version = version
+	out.ok = true
+	return out
+
+
+## "1.2.3" → the next version by `part` ("major", "minor", "patch").
+static func bump(v: String, part := "patch") -> String:
+	var p := v.split(".")
+	var nums := [int(p[0]) if p.size() > 0 and p[0].is_valid_int() else 0, int(p[1]) if p.size() > 1 and p[1].is_valid_int() else 0,
+		int(p[2]) if p.size() > 2 and p[2].is_valid_int() else 0]
+	match part:
+		"major": nums = [nums[0] + 1, 0, 0]
+		"minor": nums = [nums[0], nums[1] + 1, 0]
+		_: nums[2] += 1
+	return "%d.%d.%d" % nums
+
+
+# ------------------------------------------------------------ updates --
+
+## A newer version of the package this campaign came from, in `dir`, or {}.
+static func newer_for(campaign: Campaign, dir: String) -> Dictionary:
+	var came: Dictionary = campaign.doc.get("package", {}) if campaign != null and campaign.doc.get("package") is Dictionary else {}
+	if came.is_empty():
+		return {}
+	var best := {}
+	var da := DirAccess.open(dir)
+	if da == null:
+		return {}
+	for f in da.get_files():
+		if not f.ends_with("." + EXT):
+			continue
+		var info := read(dir.path_join(f))
+		if not info.ok or str(info.id) != str(came.get("id", "")):
+			continue
+		var have := str(best.get("package_version", came.get("version", "")))
+		if _compare(str(info.package_version), have) > 0:
+			best = info
+	return best
+
+
+## What moving this campaign onto a newer version of its package would
+## change — never applied by itself. {from, to, changelog: [entries since],
+## maps: {added, changed}, packs: {added, changed}, art: {added, changed},
+## encounters: {added}, rules: [{id, from, to}]}.
+static func update_report(campaign: Campaign, pkg_path: String) -> Dictionary:
+	var info := read(pkg_path)
+	var came: Dictionary = campaign.doc.get("package", {}) if campaign.doc.get("package") is Dictionary else {}
+	var out := {"ok": info.ok, "why": str(info.get("why", "")), "from": str(came.get("version", "")), "to": str(info.get("package_version", "")),
+		"name": str(info.get("name", "")), "changelog": [], "maps": {"added": [], "changed": []}, "packs": {"added": [], "changed": []},
+		"art": {"added": [], "changed": []}, "encounters": {"added": []}, "rules": []}
+	if not info.ok:
+		return out
+	for entry in info.manifest.get("changelog", []):
+		if entry is Dictionary and _compare(str(entry.get("version", "")), str(out.from)) > 0:
+			out.changelog.append(entry)
+	var listed: Dictionary = info.manifest.get("files", {}) if info.manifest.get("files") is Dictionary else {}
+	var seen := {}
+	for rel in listed:
+		var parts := str(rel).split("/")
+		if parts.size() < 2:
+			continue
+		var kind: String = {"maps": "maps", "packs": "packs", "art": "art"}.get(parts[0], "")
+		if kind == "":
+			continue
+		var key := parts[1] if kind != "maps" else str(rel).substr(5)
+		var local := campaign.base_dir().path_join(str(rel))
+		var state := ""
+		if not FileAccess.file_exists(local):
+			state = "added" if not DirAccess.dir_exists_absolute(campaign.base_dir().path_join(parts[0]).path_join(parts[1])) or kind == "maps" else "changed"
+		elif sha256(FileAccess.get_file_as_bytes(local)) != str(listed[rel]):
+			state = "changed"
+		if state == "" or seen.has(kind + "/" + key):
+			continue
+		seen[kind + "/" + key] = true
+		(out[kind][state] as Array).append(key)
+	# prepared encounters the new version adds
+	var zr := ZIPReader.new()
+	if zr.open(pkg_path) == OK:
+		var err := []
+		var doc := JsonDoc.parse(zr.read_file(str(info.manifest.get("campaign", "campaign.json"))).get_string_from_utf8(), err)
+		for e in doc.get("encounters", []):
+			if e is Dictionary and campaign.encounter_entry(str(e.get("id", ""))).is_empty():
+				out.encounters.added.append(str(e.get("name", e.get("id", ""))))
+		# the rulesets it carries, against the campaign's own
+		for n in zr.get_files():
+			var parts := n.split("/")
+			if parts.size() == 3 and parts[0] == "rules" and parts[2] == "manifest.json":
+				var m := JsonDoc.parse(zr.read_file(n).get_string_from_utf8(), err)
+				var mine := campaign.base_dir().path_join("rules").path_join(parts[1]).path_join("manifest.json")
+				var have: Dictionary = JsonDoc.parse(FileAccess.get_file_as_string(mine), err) if FileAccess.file_exists(mine) else {}
+				if str(have.get("version", "")) != str(m.get("version", "")):
+					out.rules.append({"id": parts[1], "from": str(have.get("version", "")), "to": str(m.get("version", ""))})
+		zr.close()
+	return out
+
+
+## Bring a newer version's content into this campaign, as the DM chose:
+## `content` — maps, content packs, art, and the prepared encounters it
+## adds (the campaign's play, and encounters it has played, are left as
+## they are); `rules` — the rulesets the package carries replace the
+## campaign's own. {ok, why, applied: [what moved]}.
+static func apply_update(campaign: Campaign, pkg_path: String, content := true, rules := false) -> Dictionary:
+	var out := {"ok": false, "why": "", "applied": []}
+	var whole := verify(pkg_path)
+	if not whole.ok:
+		out.why = "the package is damaged: %s" % str(whole.why)
+		return out
+	var info := read(pkg_path)
+	var zr := ZIPReader.new()
+	if zr.open(pkg_path) != OK:
+		out.why = "cannot open it"
+		return out
+	var base := campaign.base_dir()
+	for n in zr.get_files():
+		if n.ends_with("/") or n.contains(".."):
+			continue
+		var top := n.get_slice("/", 0)
+		if (content and top in ["maps", "packs", "art", "handouts"]) or (rules and top == "rules"):
+			var path := base.path_join(n)
+			DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+			var f := FileAccess.open(path, FileAccess.WRITE)
+			if f == null:
+				continue
+			f.store_buffer(zr.read_file(n))
+			f.close()
+	if content:
+		var err := []
+		var doc := JsonDoc.parse(zr.read_file(str(info.manifest.get("campaign", "campaign.json"))).get_string_from_utf8(), err)
+		for m in doc.get("maps", []):
+			if m is Dictionary and campaign.map_entry(str(m.get("id", ""))).is_empty():
+				campaign.maps.append(m)
+				out.applied.append("map %s" % str(m.get("name", m.get("id", ""))))
+		for p in doc.get("packs", []):
+			if p is Dictionary and not campaign.packs.any(func(x: Dictionary) -> bool: return str(x.get("id", "")) == str(p.get("id", ""))):
+				campaign.packs.append(p)
+				out.applied.append("content %s" % str(p.get("id", "")))
+		for e in doc.get("encounters", []):
+			if e is Dictionary and campaign.encounter_entry(str(e.get("id", ""))).is_empty():
+				var fresh: Dictionary = JsonDoc.deep(e)
+				fresh.erase("live")
+				fresh.played = []
+				campaign.encounters.append(fresh)
+				out.applied.append("encounter %s" % str(e.get("name", e.get("id", ""))))
+		campaign.doc.package.version = str(info.package_version)
+		campaign.doc.package.tested_with = JsonDoc.deep(info.tested_with)
+	if rules:
+		out.applied.append("rules as tested with %s %s" % [str(info.name), str(info.package_version)])
+	zr.close()
+	var updates: Array = campaign.doc.get("package_updates", [])
+	updates.append({"to": str(info.package_version), "content": content, "rules": rules, "at": JsonDoc.now(), "session": int(campaign.clock.get("session", 0))})
+	campaign.doc.package_updates = updates
+	campaign.touch()
+	campaign.save()
 	out.ok = true
 	return out
 

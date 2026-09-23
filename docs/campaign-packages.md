@@ -38,6 +38,26 @@ version, licence and attribution. This catches damage on the way; it is
 not a signature (whoever alters a package can alter its manifest), which
 waits for a distribution channel that can vouch for a publisher.
 
+**The author's loop.** *Export as a package…* the first time asks where
+the package goes and makes the campaign that package's working copy
+(`source_of`: id, version, path, changelog). Every later export asks
+what changed, bumps the version (a patch by default) and writes the same
+file again with the changelog inside. A campaign started from a package
+that is then exported continues that package's id and versions. The
+package never carries the author's own play: sessions, runtime, their
+party, played or running encounters, the authoring record.
+
+**Updates are offered, never applied.** When a campaign was started from
+a package and the library holds a newer version of it, the Table says so
+on open, and *Review a newer version of its package…* shows the report —
+the changelog since, maps, content and art added or changed, prepared
+encounters added, and rulesets whose version differs — before anything
+moves. Taking it brings in the new maps, content, art and encounters;
+the party, the sessions, the journal and encounters already played stay
+as they are, and the rules stay as they are unless the DM chooses to move
+them too (`apply_update(…, rules = true)`). Each update is noted in
+`package_updates`.
+
 **Art belongs to the campaign.** Adding a map to a campaign copies the
 map into its `maps/` (remembering where it came from as `source`) and
 the art packs it names into its `art/`; the Table draws with that art

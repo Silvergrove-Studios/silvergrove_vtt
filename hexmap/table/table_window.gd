@@ -61,7 +61,7 @@ var _picker_recent: VBoxContainer
 var _picker_packages: VBoxContainer
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
-	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN, M_FROM_PACKAGE, M_EXPORT_PACKAGE, M_DUPLICATE,
+	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN, M_FROM_PACKAGE, M_EXPORT_PACKAGE, M_DUPLICATE, M_REVIEW_UPDATE,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
@@ -393,6 +393,7 @@ func _build_menus() -> MenuBar:
 	file.add_separator()
 	_item(file, "Duplicate this campaign…", M_DUPLICATE)
 	_item(file, "Export as a package…", M_EXPORT_PACKAGE)
+	_item(file, "Review a newer version of its package…", M_REVIEW_UPDATE)
 	file.add_separator()
 	_item(file, "Save campaign", M_SAVE, KEY_S, true)
 	_item(file, "Save campaign as…", M_SAVE_AS, KEY_S, true, true)
@@ -817,6 +818,7 @@ func _on_menu(id: int) -> void:
 		M_FROM_PACKAGE: _from_package_dialog()
 		M_EXPORT_PACKAGE: _export_package_dialog()
 		M_DUPLICATE: _duplicate_dialog()
+		M_REVIEW_UPDATE: _review_update()
 		M_RECAP: _recap_dialog()
 		M_CHECKPOINT:
 			_prompt("Checkpoint", "Name", "Checkpoint %d" % (ctx.encounter().checkpoints.size() + 1), func(v: String) -> void:
@@ -1048,9 +1050,23 @@ func _installed_rulesets() -> Dictionary:
 
 ## This campaign as a package for someone else: its maps, its content,
 ## its prepared encounters — not the party's play.
+## Release this campaign as a package. The first time it asks where the
+## package goes and the campaign becomes the package's working copy;
+## after that it asks what changed, bumps the version and writes the same
+## file again, keeping a changelog.
 func _export_package_dialog() -> void:
 	if ctx.campaign == null or ctx.campaign.path == "":
 		_info("Save the campaign first: a package is made from what is on disk.")
+		return
+	ctx.save_campaign()
+	var src: Dictionary = ctx.campaign.doc.get("source_of", {}) if ctx.campaign.doc.get("source_of") is Dictionary else {}
+	var ask_notes := func(path: String, next: String) -> void:
+		_prompt("Release %s %s" % [ctx.campaign.name, next], "What changed in this version", "" if not src.is_empty() else "First release.", func(notes: String) -> void:
+			# a package carries what it needs: its rules and its art included
+			var r := CampaignPackage.release(ctx.campaign, notes, {"path": path, "plugin_dirs": ctx.plugin_dirs})
+			ctx.say("Released %s %s to %s" % [ctx.campaign.name, str(r.version), ProjectSettings.globalize_path(str(r.path))] if r.ok else "Could not package it: " + str(r.why)))
+	if not src.is_empty():
+		ask_notes.call(str(src.path), CampaignPackage.bump(str(src.get("version", "1.0.0"))))
 		return
 	var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaignpkg ; Campaign packages"])
 	DirAccess.make_dir_recursive_absolute(App.packages_dir())
@@ -1059,10 +1075,45 @@ func _export_package_dialog() -> void:
 	fd.file_selected.connect(func(path: String) -> void:
 		if path.get_extension() == "":
 			path += "." + CampaignPackage.EXT
-		# a package carries what it needs, the rulesets included
-		var r := CampaignPackage.export_from(ctx.campaign, path, {"plugin_dirs": ctx.plugin_dirs})
-		ctx.say("Packaged %d files into %s" % [int(r.files), ProjectSettings.globalize_path(path)] if r.ok else "Could not package it: " + str(r.why)))
+		var came: Dictionary = ctx.campaign.doc.get("package", {}) if ctx.campaign.doc.get("package") is Dictionary else {}
+		ask_notes.call(path, CampaignPackage.bump(str(came.version)) if came.has("version") else "1.0.0"))
 	fd.popup_centered_ratio(0.7)
+
+
+## A newer version of the package this campaign came from, if the library
+## has one: what it would change, and the DM's choice — never automatic.
+func _review_update() -> void:
+	if ctx.campaign == null:
+		return
+	var newer := CampaignPackage.newer_for(ctx.campaign, App.packages_dir())
+	if newer.is_empty():
+		_info("No newer version of this campaign's package is in your library.")
+		return
+	var rep := CampaignPackage.update_report(ctx.campaign, str(newer.path))
+	_confirm(update_summary(rep) + "\n\nBring in its new maps, content, art and encounters? (Your party, sessions and journal stay as they are; the rules stay as they are too.)", func() -> void:
+		var r := CampaignPackage.apply_update(ctx.campaign, str(newer.path), true, false)
+		if not r.ok:
+			_info("Could not update: " + str(r.why))
+			return
+		_open_campaign_path(ctx.campaign.path)
+		ctx.say("Brought in: " + (", ".join(PackedStringArray(r.applied)) if not (r.applied as Array).is_empty() else "the newer files")))
+
+
+## The report a DM reads before taking a newer version of their package.
+static func update_summary(rep: Dictionary) -> String:
+	var lines := PackedStringArray(["%s %s → %s" % [str(rep.name), str(rep.from), str(rep.to)]])
+	for entry in rep.get("changelog", []):
+		lines.append("  %s: %s" % [str(entry.get("version", "")), str(entry.get("notes", ""))])
+	for kind in ["maps", "packs", "art"]:
+		for state in ["added", "changed"]:
+			var list: Array = rep[kind][state]
+			if not list.is_empty():
+				lines.append("%s %s: %s" % [{"maps": "Maps", "packs": "Content", "art": "Art"}[kind], state, ", ".join(PackedStringArray(list))])
+	if not (rep.encounters.added as Array).is_empty():
+		lines.append("New encounters: " + ", ".join(PackedStringArray(rep.encounters.added)))
+	for r in rep.get("rules", []):
+		lines.append("Rules: %s %s → %s (not moved unless you choose to)" % [str(r.id), str(r.from), str(r.to)])
+	return "\n".join(lines)
 
 
 ## The same campaign again, as its own folder: for a second group, or to
@@ -1074,11 +1125,15 @@ func _duplicate_dialog() -> void:
 	_prompt("Duplicate", "Call the copy", ctx.campaign.name + " (copy)", func(v: String) -> void:
 		var name := v.strip_edges() if v.strip_edges() != "" else ctx.campaign.name + " (copy)"
 		var dest := App.campaigns_dir(app.prefs).path_join(name)
-		var r := Campaign.duplicate_to(ctx.campaign, dest, name)
-		if not r.ok:
-			_info("Could not copy it: " + str(r.why))
-			return
-		ctx.say("Copied to %s" % ProjectSettings.globalize_path(str(r.path))))
+		var copy := func(fresh: bool) -> void:
+			var r := Campaign.duplicate_to(ctx.campaign, dest, name, fresh)
+			if not r.ok:
+				_info("Could not copy it: " + str(r.why))
+				return
+			ctx.say("Copied%s to %s" % [" as a fresh start" if fresh else "", ProjectSettings.globalize_path(str(r.path))])
+		# for another group: the adventure without this group's play
+		_confirm("Start the copy fresh, for another group? Its maps, content, rules and prepared encounters come along; this group's party, sessions, journal and played encounters do not.\n\n(Cancel copies everything, play included.)",
+			func() -> void: copy.call(true), func() -> void: copy.call(false)))
 
 
 func _open_campaign_dialog() -> void:
@@ -1130,6 +1185,10 @@ func _open_campaign(c: Campaign) -> void:
 		app.note_recent(c.path)
 	if warn != "":
 		_info("Opened with problems:\n\n" + warn)
+	# a newer version of the package it came from is only ever offered
+	var newer := CampaignPackage.newer_for(c, App.packages_dir())
+	if not newer.is_empty():
+		ctx.say("A newer version (%s) of %s is in your library: File → Review a newer version of its package…" % [str(newer.package_version), str(newer.name)])
 	ctx.say("Campaign '%s' open: %d players, %d characters, session %d" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
 	_update_title()
 	_update_menus()
