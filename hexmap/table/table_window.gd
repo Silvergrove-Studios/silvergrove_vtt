@@ -1002,14 +1002,40 @@ func _from_package_dialog(path := "") -> void:
 		if not unmet.is_empty():
 			_info("%s cannot start here:\n\n• %s" % [str(info.name), "\n• ".join(PackedStringArray(unmet))])
 			return
-		_prompt("Start '%s'" % str(info.name), "Call this campaign", str(info.name), func(v: String) -> void:
-			var dest := App.campaigns_dir(app.prefs).path_join(v.strip_edges() if v.strip_edges() != "" else str(info.name))
-			var r := CampaignPackage.instance(path, dest, v)
-			if not r.ok:
-				_info("Could not start it: " + str(r.why))
-				return
-			_open_campaign_path(str(r.path))
-			ctx.say("'%s' is yours now, in %s. The package is untouched." % [str(r.name), ProjectSettings.globalize_path(dest)])))
+		var whole := CampaignPackage.verify(path)
+		if not whole.ok:
+			_info("%s is damaged and will not start: %s.\n\nDownload it again." % [str(info.name), str(whole.why)])
+			return
+		# what is inside, and under whose terms, before anything is copied
+		_confirm("Start '%s'?\n\n%s" % [str(info.name), package_summary(path, whole)], func() -> void:
+			_start_package(path, info)))
+
+
+## What a DM reads before starting a package: what it holds and the
+## licences and attributions of everything in it.
+static func package_summary(path: String, whole: Dictionary) -> String:
+	var lines := PackedStringArray()
+	for item in CampaignPackage.contents(path):
+		var head: String = {"campaign": "Campaign", "ruleset": "Rules", "art": "Art", "content": "Content"}.get(str(item.kind), str(item.kind))
+		lines.append("%s: %s %s — %s" % [head, str(item.name), str(item.version), str(item.license) if str(item.license) != "" else "no licence stated"])
+		if str(item.attribution) != "" and str(item.kind) != "campaign":
+			lines.append("    " + str(item.attribution))
+	lines.append("")
+	lines.append("Checked: all %d files are as the author made them." % int(whole.checked) if not bool(whole.get("unchecked", false))
+		else "This package carries no checksums (made before they existed): it could not be checked.")
+	lines.append("The package itself is never changed: starting it makes a campaign of your own.")
+	return "\n".join(lines)
+
+
+func _start_package(path: String, info: Dictionary) -> void:
+	_prompt("Start '%s'" % str(info.name), "Call this campaign", str(info.name), func(v: String) -> void:
+		var dest := App.campaigns_dir(app.prefs).path_join(v.strip_edges() if v.strip_edges() != "" else str(info.name))
+		var r := CampaignPackage.instance(path, dest, v)
+		if not r.ok:
+			_info("Could not start it: " + str(r.why))
+			return
+		_open_campaign_path(str(r.path))
+		ctx.say("'%s' is yours now, in %s. The package is untouched." % [str(r.name), ProjectSettings.globalize_path(dest)]))
 
 
 ## The rulesets installed here, {id: version}, for a package's requirements.

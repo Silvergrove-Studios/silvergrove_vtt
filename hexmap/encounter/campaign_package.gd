@@ -86,6 +86,11 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 	if not info.ok:
 		out.why = str(info.why)
 		return out
+	# a damaged package is not started
+	var whole := verify(pkg_path)
+	if not whole.ok:
+		out.why = "the package is damaged: %s" % str(whole.why)
+		return out
 	var zr := ZIPReader.new()
 	if zr.open(pkg_path) != OK:
 		out.why = "cannot open %s" % pkg_path.get_file()
@@ -219,13 +224,15 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		"art": art,
 		"campaign": "campaign.json"}
 	var n := 0
-	zp.start_file("package.json")
-	zp.write_file(JsonDoc.stringify(manifest).to_utf8_buffer())
-	zp.close_file()
-	n += 1
-	zp.start_file("campaign.json")
-	zp.write_file(JsonDoc.stringify(doc).to_utf8_buffer())
-	zp.close_file()
+	# every file's SHA-256, written into package.json last: a package that
+	# was damaged (or altered) on its way to a DM is caught before it starts
+	var hashes := {}
+	var put := func(rel: String, bytes: PackedByteArray) -> void:
+		zp.start_file(rel)
+		zp.write_file(bytes)
+		zp.close_file()
+		hashes[rel] = sha256(bytes)
+	put.call("campaign.json", JsonDoc.stringify(doc).to_utf8_buffer())
 	n += 1
 	# everything the campaign names, by its own relative paths
 	var files := PackedStringArray()
@@ -238,9 +245,7 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		var src := campaign.resolve(rel)
 		if not FileAccess.file_exists(src):
 			continue
-		zp.start_file(rel)
-		zp.write_file(FileAccess.get_file_as_bytes(src))
-		zp.close_file()
+		put.call(rel, FileAccess.get_file_as_bytes(src))
 		n += 1
 	# the rulesets, from wherever this table has them
 	for pid in rules_from:
@@ -251,13 +256,111 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 			var src := from.path_join(rel)
 			if not FileAccess.file_exists(src):
 				continue
-			zp.start_file("rules/%s/%s" % [pid, rel])
-			zp.write_file(FileAccess.get_file_as_bytes(src))
-			zp.close_file()
+			put.call("rules/%s/%s" % [pid, rel], FileAccess.get_file_as_bytes(src))
 			n += 1
+	manifest.files = hashes
+	manifest.digest = digest_of(hashes)
+	zp.start_file("package.json")
+	zp.write_file(JsonDoc.stringify(manifest).to_utf8_buffer())
+	zp.close_file()
+	n += 1
 	zp.close()
 	out.files = n
+	out.digest = manifest.digest
 	out.ok = true
+	return out
+
+
+static func sha256(bytes: PackedByteArray) -> String:
+	var h := HashingContext.new()
+	h.start(HashingContext.HASH_SHA256)
+	h.update(bytes)
+	return h.finish().hex_encode()
+
+
+## One digest for a whole package: the SHA-256 of "path hash" lines, sorted.
+static func digest_of(hashes: Dictionary) -> String:
+	var keys := hashes.keys()
+	keys.sort()
+	var lines := PackedStringArray()
+	for k in keys:
+		lines.append("%s %s" % [str(k), str(hashes[k])])
+	return sha256("\n".join(lines).to_utf8_buffer())
+
+
+## Is the package whole? Every file its manifest lists is there with the
+## same SHA-256, and nothing is there it does not list. {ok, why, checked}.
+## A package from before checksums reports ok with `unchecked`. This
+## catches damage in transit; it is not a signature — whoever changes a
+## package can change its manifest too.
+static func verify(path: String) -> Dictionary:
+	var out := {"ok": false, "why": "", "checked": 0, "unchecked": false}
+	var info := read(path)
+	if not info.ok:
+		out.why = str(info.why)
+		return out
+	var listed: Dictionary = info.manifest.get("files", {}) if info.manifest.get("files") is Dictionary else {}
+	if listed.is_empty():
+		out.ok = true
+		out.unchecked = true
+		return out
+	if digest_of(listed) != str(info.manifest.get("digest", "")):
+		out.why = "its list of files does not match its digest"
+		return out
+	var zr := ZIPReader.new()
+	if zr.open(path) != OK:
+		out.why = "cannot open it"
+		return out
+	for n in zr.get_files():
+		if n.ends_with("/") or n == "package.json":
+			continue
+		if not listed.has(n):
+			zr.close()
+			out.why = "it holds %s, which its manifest does not list" % n
+			return out
+		if sha256(zr.read_file(n)) != str(listed[n]):
+			zr.close()
+			out.why = "%s is not what it was when the package was made" % n
+			return out
+		out.checked += 1
+	zr.close()
+	if int(out.checked) != listed.size():
+		out.why = "%d file%s its manifest lists %s missing" % [listed.size() - int(out.checked), "" if listed.size() - int(out.checked) == 1 else "s", "is" if listed.size() - int(out.checked) == 1 else "are"]
+		return out
+	out.ok = true
+	return out
+
+
+## What is inside, and under which terms — shown to a DM before they start
+## it: [{kind, id, name, version, license, attribution}].
+static func contents(path: String) -> Array:
+	var out := []
+	var info := read(path)
+	if not info.ok:
+		return out
+	out.append({"kind": "campaign", "id": str(info.id), "name": str(info.name), "version": str(info.package_version),
+		"license": str(info.license), "attribution": ", ".join(PackedStringArray(info.authors))})
+	var zr := ZIPReader.new()
+	if zr.open(path) != OK:
+		return out
+	for n in zr.get_files():
+		var parts := n.split("/")
+		var kind := ""
+		if parts.size() == 3 and parts[0] == "rules" and parts[2] == "manifest.json":
+			kind = "ruleset"
+		elif parts.size() == 3 and parts[0] == "art" and parts[2] == "pack.json":
+			kind = "art"
+		elif parts.size() == 3 and parts[0] == "packs" and parts[2] == "pack.json":
+			kind = "content"
+		if kind == "":
+			continue
+		var err := []
+		var m := JsonDoc.parse(zr.read_file(n).get_string_from_utf8(), err)
+		var prov: Dictionary = m.get("provenance", {}) if m.get("provenance") is Dictionary else {}
+		out.append({"kind": kind, "id": str(m.get("id", parts[1])), "name": str(m.get("name", parts[1])),
+			"version": str(m.get("version", m.get("pack_version", ""))),
+			"license": str(m.get("license", prov.get("license", ""))), "attribution": str(m.get("attribution", prov.get("attribution", "")))})
+	zr.close()
 	return out
 
 

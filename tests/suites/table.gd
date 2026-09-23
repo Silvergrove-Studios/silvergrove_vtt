@@ -754,6 +754,37 @@ func test_campaign_packages() -> void:
 	check((info.manifest.art as Dictionary).has("woodland") and (info.manifest.art as Dictionary).has("dungeons_and_castles"), "and the art its maps are drawn with, licences listed: %s" % [info.manifest.get("art", {})])
 	check(CampaignPackage.unmet(info, {}, "2.0.0").is_empty(), "so a table that has installed nothing can start it")
 	check(CampaignPackage.unmet({"requires": {"app": ">=9.0.0"}}, {}, "2.0.0").size() == 1, "an older app is still told")
+	# whole, and what is inside it under which terms, before a DM starts it
+	var whole := CampaignPackage.verify(pkg)
+	check(whole.ok and int(whole.checked) >= 5 and str(info.manifest.digest).length() == 64, "every file checks out against its SHA-256 (%d files): %s" % [int(whole.checked), str(whole.why)])
+	var inside := CampaignPackage.contents(pkg)
+	var kinds := {}
+	for item in inside:
+		kinds[str(item.kind)] = true
+	check(kinds.has("campaign") and kinds.has("ruleset") and kinds.has("art") and kinds.has("content"), "the contents name the campaign, its rules, its art and its content: %s" % [kinds.keys()])
+	check(inside.any(func(i: Dictionary) -> bool: return str(i.kind) == "art" and str(i.license).begins_with("MIT")), "with each one's licence")
+	var summary := TableWindow.package_summary(pkg, whole)
+	check(summary.contains("Rules: ") and summary.contains("Art: ") and summary.contains("all %d files are as the author made them" % int(whole.checked)), "the DM reads it before starting")
+	# a package damaged on the way is not started
+	var damaged := home.path_join("damaged.campaignpkg")
+	var zr := ZIPReader.new()
+	zr.open(pkg)
+	var zw := ZIPPacker.new()
+	zw.open(damaged)
+	for n in zr.get_files():
+		if n.ends_with("/"):
+			continue
+		var bytes := zr.read_file(n)
+		if n == "packs/reach/creatures.json":
+			bytes = bytes.get_string_from_utf8().replace("Reach eel", "Reach EEL").to_utf8_buffer()
+		zw.start_file(n)
+		zw.write_file(bytes)
+		zw.close_file()
+	zw.close()
+	zr.close()
+	var bad := CampaignPackage.verify(damaged)
+	check(not bad.ok and str(bad.why).contains("packs/reach/creatures.json"), "a changed file is caught, by name: %s" % str(bad.why))
+	check(not CampaignPackage.instance(damaged, home.path_join("never"), "Never").ok and not DirAccess.dir_exists_absolute(home.path_join("never")), "and it is not started")
 	check(CampaignPackage.unmet({"requires": {"plugins": [{"id": "srd5e"}]}}, {}, "2.0.0").size() == 1, "and a package from before, carrying none, says what it wants")
 	var no_rules := CampaignPackage.export_from(author, home.path_join("bare.campaignpkg"), {"plugin_dirs": []})
 	check(not no_rules.ok and str(no_rules.why).contains("not here to put in the package"), "a ruleset that is not on this machine stops the export: %s" % str(no_rules.why))

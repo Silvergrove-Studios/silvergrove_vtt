@@ -29,6 +29,15 @@ rulesets the campaign plays (and anything they depend on) whole, their
 content packs and licence files with them, and refuses to write a
 package whose ruleset is not on the machine to copy.
 
+**A package can be checked, and says what it holds.** Export writes the
+SHA-256 of every file into `package.json` (`files`, and one `digest`
+over them all). Before a DM starts a package the Table checks every file
+against it, refuses a damaged one by name, and shows what is inside —
+the campaign, each ruleset, each art pack, each content pack — with its
+version, licence and attribution. This catches damage on the way; it is
+not a signature (whoever alters a package can alter its manifest), which
+waits for a distribution channel that can vouch for a publisher.
+
 **Art belongs to the campaign.** Adding a map to a campaign copies the
 map into its `maps/` (remembering where it came from as `source`) and
 the art packs it names into its `art/`; the Table draws with that art
