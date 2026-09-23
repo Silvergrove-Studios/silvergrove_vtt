@@ -13,8 +13,12 @@ var tool: TableTools.Tool:
 func _init(p_ctx: TableContext) -> void:
 	super()
 	ctx = p_ctx
-	canvas.packs = ctx.app.packs
+	canvas.packs = ctx.art if ctx.art != null else ctx.app.packs
 	ctx.canvas = canvas
+	# the campaign's own art: a campaign draws with what it carries
+	ctx.art_changed.connect(func() -> void:
+		canvas.packs = ctx.art
+		canvas.queue_redraw())
 
 
 func show_scene() -> void:

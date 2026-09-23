@@ -20,9 +20,33 @@ var warnings: PackedStringArray = []
 var _textures: Dictionary = {}
 var _placeholder: Dictionary = {}
 var _extra_dirs: PackedStringArray = []
+## When set, the only places this library looks: a campaign's own `art/`.
+## The Table gives each open campaign a library scoped this way, so a
+## campaign draws with the art it carries and nothing else on the machine.
+var only_dirs: PackedStringArray = []
+
+
+## Licences under which art may travel inside a campaign package. A pack
+## may also say `"redistributable": true` (or false) outright.
+const REDISTRIBUTABLE := ["cc0", "cc-by", "cc by", "mit", "isc", "apache", "ofl", "public domain", "bsd", "zlib", "unlicense"]
+
+
+## May this pack be copied into a package for someone else? {ok, why}.
+static func redistributable(m: Dictionary) -> Dictionary:
+	if m.has("redistributable"):
+		return {"ok": bool(m.redistributable), "why": "" if bool(m.redistributable) else "its manifest says it may not be redistributed"}
+	var lic := str(m.get("license", "")).to_lower()
+	if lic == "":
+		return {"ok": false, "why": "it names no licence"}
+	for ok in REDISTRIBUTABLE:
+		if lic.contains(ok):
+			return {"ok": true, "why": ""}
+	return {"ok": false, "why": "its licence (%s) does not say it may be redistributed" % str(m.get("license", ""))}
 
 
 func search_dirs() -> PackedStringArray:
+	if not only_dirs.is_empty():
+		return only_dirs
 	var dirs := PackedStringArray()
 	# The project's own packs/ — only when running from the project: in a
 	# build res:// is the pack and globalize_path gives a bare "packs",

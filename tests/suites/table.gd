@@ -717,15 +717,32 @@ func test_campaign_packages() -> void:
 	author.journal.append({"id": "j_1", "kind": "note", "title": "Ana's secret", "text": "…", "session": 1})
 	author.doc.sessions.append({"n": 1, "recap": "# Session 1"})
 	author.doc.runtime = {"scenes": []}
-	check(DirAccess.copy_absolute(_example("ruined_chapel.hexmap"), home.path_join("source/maps/chapel.hexmap")) != OK, "(a map needs its folder first)")
-	DirAccess.make_dir_recursive_absolute(home.path_join("source/maps"))
-	check(DirAccess.copy_absolute(_example("ruined_chapel.hexmap"), home.path_join("source/maps/chapel.hexmap")) == OK, "a map in the campaign's folder")
-	author.maps.append({"id": "m_chapel", "path": "maps/chapel.hexmap", "role": "battle", "name": "The chapel"})
-	author.encounters.append({"id": "enc", "name": "The ambush", "map": "m_chapel", "level": "ground", "creatures": [], "played": [1]})
 	check(ContentImport.write_pack(home.path_join("source/packs/reach"), {"id": "reach", "name": "Reach content", "plugin": "sample.degrees"},
 		{"creatures": [{"id": "reach-eel", "name": "Reach eel", "level": 2, "kind": "animal", "stats": {"might": 1, "agility": 2, "mind": 0}, "ac_base": 12, "hp": 9}]}) == "", "a pack of its own")
 	author.packs.append({"id": "reach", "path": "packs/reach", "version": "1"})
 	check(author.save(home.path_join("source/reach.campaign")) == OK, "the author's campaign saved")
+	# the author adds a map from wherever it was drawn: the campaign takes a copy, and the art it is drawn with
+	var app0 := App.new("user://test_prefs_packages_author.json")
+	var authoring := TableWindow.new()
+	authoring.app = app0
+	root.add_child(authoring)
+	authoring.ctx.plugin_dirs = ["res://tests/plugins"]
+	authoring._open_campaign_path(home.path_join("source/reach.campaign"))
+	var said_add := authoring.maps.add_map(_example("ruined_chapel.hexmap"))
+	check(said_add == "", "the chapel added: %s" % said_add)
+	var chapel_entry: Dictionary = authoring.ctx.campaign.maps[0] if not authoring.ctx.campaign.maps.is_empty() else {}
+	check(str(chapel_entry.get("path", "")) == "maps/ruined_chapel.hexmap" and FileAccess.file_exists(home.path_join("source/maps/ruined_chapel.hexmap")), "copied into the campaign's maps/: %s" % [chapel_entry])
+	check(str(chapel_entry.get("source", "")) != "", "remembering where it came from")
+	check(FileAccess.file_exists(home.path_join("source/art/dungeons_and_castles/pack.json")) and FileAccess.file_exists(home.path_join("source/art/woodland/pack.json")), "its art came with it")
+	check(Array(authoring.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"], "and is the art this campaign draws with: %s" % [authoring.ctx.art.pack_ids()])
+	authoring.ctx.campaign.encounters.append({"id": "enc", "name": "The ambush", "map": str(chapel_entry.get("id", "")), "level": "ground", "creatures": [], "played": [1]})
+	for k in ["players", "actors", "journal"]:
+		authoring.ctx.campaign.doc[k] = author.doc[k]
+	authoring.ctx.campaign.doc.sessions = author.doc.sessions
+	check(authoring.ctx.save_campaign(home.path_join("source/reach.campaign")) == "", "saved")
+	author = Campaign.load_file(home.path_join("source/reach.campaign"), [])
+	root.remove_child(authoring)
+	authoring.free()
 	# exported as a package: the adventure, not the play
 	var pkg := home.path_join("sunken_reach.campaignpkg")
 	var ex := CampaignPackage.export_from(author, pkg, {"id": "sunken-reach", "package_version": "1.2.0", "description": "A drowned coast.",
@@ -734,6 +751,7 @@ func test_campaign_packages() -> void:
 	var info := CampaignPackage.read(pkg)
 	check(info.ok and info.id == "sunken-reach" and info.name == "The Sunken Reach" and str(info.package_version) == "1.2.0", "the package says what it is: %s" % [info.why])
 	check(info.bundles_rules, "it carries the ruleset it plays")
+	check((info.manifest.art as Dictionary).has("woodland") and (info.manifest.art as Dictionary).has("dungeons_and_castles"), "and the art its maps are drawn with, licences listed: %s" % [info.manifest.get("art", {})])
 	check(CampaignPackage.unmet(info, {}, "2.0.0").is_empty(), "so a table that has installed nothing can start it")
 	check(CampaignPackage.unmet({"requires": {"app": ">=9.0.0"}}, {}, "2.0.0").size() == 1, "an older app is still told")
 	check(CampaignPackage.unmet({"requires": {"plugins": [{"id": "srd5e"}]}}, {}, "2.0.0").size() == 1, "and a package from before, carrying none, says what it wants")
@@ -751,7 +769,8 @@ func test_campaign_packages() -> void:
 	check(mine.doc.runtime.is_empty() and (mine.doc.sessions as Array).is_empty() and int(mine.clock.session) == 0, "with none of the author's play")
 	check((mine.doc.players as Array).is_empty() and not mine.actors.has("a_pc") and mine.actors.has("a_npc"), "no other table's party; the NPCs stay")
 	check(mine.encounters.size() == 1 and mine.maps.size() == 1 and mine.packs.size() == 1, "the adventure came whole")
-	check(FileAccess.file_exists(home.path_join("mine/maps/chapel.hexmap")) and FileAccess.file_exists(home.path_join("mine/packs/reach/pack.json")), "its maps and content are in the DM's folder")
+	check(FileAccess.file_exists(home.path_join("mine/maps/ruined_chapel.hexmap")) and FileAccess.file_exists(home.path_join("mine/packs/reach/pack.json")), "its maps and content are in the DM's folder")
+	check(FileAccess.file_exists(home.path_join("mine/art/woodland/pack.json")), "and its art")
 	# and it plays: the ruleset loads, the campaign's own pack with it
 	var app := App.new("user://test_prefs_packages.json")
 	var win := TableWindow.new()
@@ -761,6 +780,8 @@ func test_campaign_packages() -> void:
 	win.ctx.plugin_dirs = []
 	win._open_campaign_path(str(inst.path))
 	check(FileAccess.file_exists(home.path_join("mine/rules/sample.degrees/manifest.json")), "the ruleset came with it")
+	check(Array(win.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"] and not win.ctx.art.terrain("woodland:grass").is_empty(), "the Table draws with the art the campaign carries: %s" % [win.ctx.art.pack_ids()])
+	check(win.view.canvas.packs == win.ctx.art, "the map canvas uses it")
 	if PluginHost.available():
 		check(win.ctx.host != null and win.ctx.host.plugins.has("sample.degrees"), "and loads from the campaign, with nothing installed: %s" % [win.ctx.plugin_log])
 		check(win.ctx.kernel.comp.get_entry("creatures", "reach-eel").name == "Reach eel", "the package's own content too")
@@ -773,6 +794,15 @@ func test_campaign_packages() -> void:
 	check(copy.encounters.size() == 1 and (copy.encounters[0].played as Array).is_empty() and (copy.doc.journal as Array).is_empty(), "as a fresh start: nothing played, no journal")
 	check(FileAccess.file_exists(home.path_join("second/packs/reach/pack.json")), "with its own copy of the content")
 	check(not Campaign.duplicate_to(mine, home.path_join("second"), "Again").ok, "a folder that exists is not overwritten")
+	# art its makers do not let be passed on stops the export, by name
+	DirAccess.make_dir_recursive_absolute(home.path_join("mine/art/secret"))
+	var sf := FileAccess.open(home.path_join("mine/art/secret/pack.json"), FileAccess.WRITE)
+	sf.store_string(JsonDoc.stringify({"format": "silvergrove.pack", "version": 1, "id": "secret", "name": "Bought art", "license": "Proprietary — personal use only"}))
+	sf.close()
+	var blocked := CampaignPackage.export_from(mine, home.path_join("blocked.campaignpkg"), {"plugin_dirs": ["res://tests/plugins"]})
+	check(not blocked.ok and str(blocked.why).contains("'secret'") and str(blocked.why).contains("personal use"), "art that may not be redistributed is refused: %s" % str(blocked.why))
+	check(not FileAccess.file_exists(home.path_join("blocked.campaignpkg")), "and no package is left behind")
+	check(PackLibrary.redistributable({"license": "CC-BY-4.0"}).ok and PackLibrary.redistributable({"license": "Proprietary", "redistributable": true}).ok and not PackLibrary.redistributable({}).ok, "licences that allow it, an explicit yes, and silence is no")
 	root.remove_child(win)
 	win.free()
 	PluginHost._rm_rf(home)

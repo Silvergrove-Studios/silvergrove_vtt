@@ -98,7 +98,7 @@ class Tool extends RefCounted:
 		var props: Array = canvas.props_in_order()
 		for i in range(props.size() - 1, -1, -1):
 			var pr: Dictionary = props[i]
-			if canvas.prop_hit(pr, ctx.app.packs.prop(str(pr.get("asset", ""))), p * canvas.ppx):
+			if canvas.prop_hit(pr, ctx.art.prop(str(pr.get("asset", ""))), p * canvas.ppx):
 				return {"collection": "props", "id": pr.id}
 		return {}
 
@@ -348,7 +348,7 @@ class SelectTool extends Tool:
 					"walls":
 						canvas.draw_wall(c, el, 1.0, true)
 					"props":
-						var r := canvas.prop_rect(el, ctx.app.packs.prop(str(el.get("asset", ""))))
+						var r := canvas.prop_rect(el, ctx.art.prop(str(el.get("asset", ""))))
 						c.draw_rect(r, Color(1, 1, 0.3, 0.9), false, w)
 					"notes", "lights":
 						c.draw_circle(px(Vector2(el.pos[0], el.pos[1])), handle_hex(12.0) * canvas.ppx, Color(1, 1, 0.3, 0.9), false, w)

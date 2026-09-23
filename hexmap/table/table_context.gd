@@ -29,6 +29,12 @@ var lookup: Callable = Callable()
 ## import from. It is never loaded — the only content a table has is the
 ## open campaign's, and the library is read when the DM imports from it.
 var library_dir := "user://content"
+## The art the Table draws with: the open campaign's own `art/`, and
+## nothing else — a campaign carries the art its maps use, as it carries
+## its rules and its content. (A campaign not yet saved has no folder to
+## carry anything in, so it draws with the app's library until it is.)
+var art: PackLibrary
+signal art_changed
 ## What loading plugins reported (for the status bar / log).
 var plugin_log: PackedStringArray = []
 ## The campaign this session belongs to, when the encounter names one
@@ -61,6 +67,8 @@ var pick: Dictionary = {}
 
 
 func set_encounter(e: Encounter) -> void:
+	if art == null:
+		refresh_art()
 	if state != null and state.encounter.changed.is_connected(_on_changed):
 		state.encounter.changed.disconnect(_on_changed)
 	state = EncounterState.new(e)
@@ -197,13 +205,115 @@ func campaign_ref_path() -> String:
 ## on. "" or why not.
 func open_campaign(c: Campaign) -> String:
 	campaign = c
+	# the maps it names bring their art with them (a campaign from before art was carried)
+	var missing := bring_in_art()
+	refresh_art()
 	var e := c.runtime_encounter()
 	set_encounter(e)
 	var warn := state.resolve_maps()
+	for pid in missing:
+		warn.append("the art pack '%s' its maps use is not on this machine" % str(pid))
 	campaign_changed.emit()
 	if not warn.is_empty():
 		return "\n".join(warn)
 	return ""
+
+
+## Point the Table's art at the campaign's own `art/` (or the app's library
+## for a campaign with no folder yet).
+func refresh_art() -> void:
+	var global: PackLibrary = app.packs if app != null else null
+	if campaign == null or campaign.path == "":
+		if global == null:
+			global = PackLibrary.new()
+		art = global
+	else:
+		var scoped := PackLibrary.new()
+		scoped.only_dirs = PackedStringArray([campaign.base_dir().path_join("art")])
+		scoped.reload()
+		art = scoped
+	art_changed.emit()
+
+
+## Copy into the campaign's `art/` every art pack its maps name that it
+## does not carry yet, from the app's library. The ids that could not be
+## found anywhere.
+func bring_in_art(extra_maps: Array = []) -> Array:
+	var missing := []
+	if campaign == null or campaign.path == "" or app == null:
+		return missing
+	var want := {}
+	for entry in campaign.maps:
+		if entry is Dictionary:
+			for pid in _art_of(campaign.resolve(str(entry.get("path", "")))):
+				want[pid] = true
+	for p in extra_maps:
+		for pid in _art_of(str(p)):
+			want[pid] = true
+	var dest := campaign.base_dir().path_join("art")
+	for pid in want:
+		if FileAccess.file_exists(dest.path_join(str(pid)).path_join("pack.json")):
+			continue
+		var from := app.packs.pack_dir(str(pid))
+		if from == "":
+			missing.append(str(pid))
+			continue
+		_copy_dir(from, dest.path_join(str(pid)))
+	return missing
+
+
+## The art packs a map file names.
+static func _art_of(map_path: String) -> Array:
+	if map_path == "" or not FileAccess.file_exists(map_path):
+		return []
+	var err := []
+	var d := JsonDoc.parse(FileAccess.get_file_as_string(map_path), err)
+	return (d.get("packs", {}) as Dictionary).keys() if d.get("packs") is Dictionary else []
+
+
+static func _copy_dir(from: String, to: String) -> void:
+	DirAccess.make_dir_recursive_absolute(to)
+	var da := DirAccess.open(from)
+	if da == null:
+		return
+	da.list_dir_begin()
+	var n := da.get_next()
+	while n != "":
+		if not n.begins_with(".") and not n.ends_with(".import") and not n.ends_with(".uid"):
+			if da.current_is_dir():
+				_copy_dir(from.path_join(n), to.path_join(n))
+			else:
+				DirAccess.copy_absolute(from.path_join(n), to.path_join(n))
+		n = da.get_next()
+	da.list_dir_end()
+
+
+## A map into the campaign: copied into its `maps/` folder with the art it
+## uses, so the campaign carries it (and can be copied and packaged). The
+## original is left where it was. {path (relative, for the library), missing: [art ids]}.
+func bring_in_map(path: String) -> Dictionary:
+	if campaign == null or campaign.path == "":
+		return {"path": relative_path(path), "missing": []}
+	var maps_dir := campaign.base_dir().path_join("maps")
+	var base := ProjectSettings.globalize_path(campaign.base_dir())
+	var full := ProjectSettings.globalize_path(path)
+	var inside := full.begins_with(base + "/")
+	var rel := ""
+	if inside:
+		rel = full.substr(base.length() + 1)
+	else:
+		DirAccess.make_dir_recursive_absolute(maps_dir)
+		var target := maps_dir.path_join(path.get_file())
+		var n := 2
+		while FileAccess.file_exists(target) and FileAccess.get_file_as_bytes(target) != FileAccess.get_file_as_bytes(path):
+			target = maps_dir.path_join("%s_%d.%s" % [path.get_file().get_basename(), n, path.get_extension()])
+			n += 1
+		if not FileAccess.file_exists(target):
+			DirAccess.copy_absolute(path, target)
+		rel = "maps/%s" % target.get_file()
+	var missing := bring_in_art([campaign.resolve(rel)])
+	refresh_art()
+	return {"path": rel, "missing": missing, "source": path if not inside else ""}
 
 
 ## Whether the live encounter is the open campaign's own runtime (as

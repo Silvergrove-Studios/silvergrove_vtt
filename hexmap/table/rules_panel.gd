@@ -238,7 +238,7 @@ func refresh() -> void:
 			var r := ViewRenderer.new()
 			r.intent.connect(_gm_intent)
 			r.comp_source = _comp_for_gm
-			r.packs = ctx.app.packs if ctx.app != null else null
+			r.packs = ctx.art
 			_gm.add_child(r)
 			r.render(p.views["gm"], Views.status_data(ctx.kernel, projection, str(pid), "", Views.ROLE_GM))
 			_renderers.append(r)

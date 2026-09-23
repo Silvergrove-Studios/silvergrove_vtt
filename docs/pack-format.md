@@ -22,7 +22,7 @@ so it is the right choice for anything that must print sharp.
   "name": "Woodland",
   "pack_version": "0.1.0",
   "authors": ["Silvergrove Studios"],
-  "license": "Proprietary — internal use",
+  "license": "MIT",
   "description": "Temperate forest floors, trees, camps and clearings.",
   "terrains": [ … ],
   "props": [ … ],

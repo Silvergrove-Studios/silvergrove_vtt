@@ -212,7 +212,7 @@ func _render(schema: Dictionary, data: Dictionary, title: String) -> void:
 	r.intent.connect(_gm_intent)
 	r.pick_requested.connect(_pick)
 	r.comp_source = _comp
-	r.packs = ctx.app.packs if ctx.app != null else null
+	r.packs = ctx.art
 	_sheet.add_child(r)
 	r.render(schema, data)
 	_renderers.append(r)

@@ -188,6 +188,25 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 			DirAccess.remove_absolute(dest_path)
 			out.why = "the %s ruleset is not here to put in the package (install it, or export without its rules)" % ", ".join(PackedStringArray(missing))
 			return out
+	# the art its maps are drawn with: carried in the campaign's art/, and it
+	# must be art its makers allow to be passed on
+	var art_dir := campaign.base_dir().path_join("art")
+	var art := {}
+	var da := DirAccess.open(art_dir)
+	if da != null:
+		for sub in da.get_directories():
+			var mp := art_dir.path_join(sub).path_join("pack.json")
+			if not FileAccess.file_exists(mp):
+				continue
+			var err := []
+			var m := JsonDoc.parse(FileAccess.get_file_as_string(mp), err)
+			var ok := PackLibrary.redistributable(m)
+			if not ok.ok:
+				zp.close()
+				DirAccess.remove_absolute(dest_path)
+				out.why = "the art pack '%s' cannot go in a package: %s" % [str(m.get("id", sub)), str(ok.why)]
+				return out
+			art[str(m.get("id", sub))] = {"version": str(m.get("pack_version", "")), "license": str(m.get("license", ""))}
 	var manifest := {"format": FORMAT, "version": VERSION,
 		"id": str(opts.get("id", _slug(campaign.name))), "name": campaign.name,
 		"package_version": str(opts.get("package_version", "1.0.0")),
@@ -197,6 +216,7 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		"requires": opts.get("requires", {"app": ">=%s" % _major(App.version()), "plugins": _plugin_requirements(campaign)}),
 		"tested_with": {"app": App.version(), "plugins": _plugin_versions(campaign)},
 		"bundles_rules": bundle and not rules_from.is_empty(),
+		"art": art,
 		"campaign": "campaign.json"}
 	var n := 0
 	zp.start_file("package.json")
@@ -212,7 +232,7 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 	for m in campaign.maps:
 		if m is Dictionary and str(m.get("path", "")) != "" and not str(m.path).is_absolute_path():
 			files.append(str(m.path))
-	for sub in ["packs", "handouts"]:
+	for sub in ["packs", "art", "handouts"]:
 		_walk(campaign.base_dir().path_join(sub), sub, files)
 	for rel in files:
 		var src := campaign.resolve(rel)

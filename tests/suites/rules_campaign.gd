@@ -199,7 +199,7 @@ func test_campaign_is_the_live_document() -> void:
 	# reopen: the runtime comes back exactly, not rebuilt
 	var again := Campaign.load_file(dir.path_join("live.campaign"))
 	var e2 := again.runtime_encounter()
-	check(e2.actor("a_h").ext.sample.stats.agi == 3 and e2.id == e.id and e2.resources["actor:a_h"].sample.hp.current == 8, "the runtime restored from the file")
+	check(e2.actor("a_h").ext.sample.stats.agi == 3 and str(e2.doc.get("id", "")) == str(e.doc.get("id", "x")) and e2.resources["actor:a_h"].sample.hp.current == 8, "the runtime restored from the file")
 	# a session on the runtime: the ritual only (no re-adding of actors), the checkpoint, the hook
 	var st2 := EncounterState.new(e2)
 	var k2 := RulesKernel.new(st2)
@@ -217,7 +217,7 @@ func test_campaign_is_the_live_document() -> void:
 	v1.erase("sessions")
 	v1.erase("runtime")
 	var up := Campaign.from_json(JsonDoc.stringify(v1))
-	check(up != null and up.sessions.size() == 1 and up.sessions[0].file == "sessions/one.encounter" and up.encounters.is_empty() and up.maps.is_empty() and up.doc.version == 2, "a v1 campaign upgrades in memory")
+	check(up != null and up.sessions.size() == 1 and up.sessions[0].file == "sessions/one.encounter" and up.encounters.is_empty() and up.maps.is_empty() and up.doc.version == Campaign.VERSION and up.content.has("disabled"), "a v1 campaign upgrades in memory, to the current version")
 	var e3 := up.runtime_encounter()
 	check(e3.actors.has("a_h") and e3.actor("a_h").name == "Hero the Bold", "and its runtime is built from the summary fields")
 	DirAccess.remove_absolute(dir.path_join("live.campaign"))

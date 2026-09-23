@@ -456,11 +456,19 @@ func add_map(path: String, role := "battle") -> String:
 	var mid := str(m.doc.get("id", ""))
 	if not ctx.campaign.map_entry(mid).is_empty():
 		return "'%s' is already in the library" % m.name
-	ctx.campaign.maps.append({"id": mid, "path": ctx.relative_path(path), "role": role, "name": m.name})
+	# the campaign carries the map and the art it is drawn with
+	var brought := ctx.bring_in_map(path)
+	var entry := {"id": mid, "path": str(brought.path), "role": role, "name": m.name}
+	if str(brought.get("source", "")) != "":
+		entry.source = str(brought.source)
+	ctx.campaign.maps.append(entry)
 	ctx.state.attach_map(m)
 	selected_map = mid
 	ctx.campaign.touch()
 	ctx.campaign_changed.emit()
+	if not (brought.missing as Array).is_empty():
+		return "added, but the art pack%s %s it is drawn with %s not on this machine" % ["s" if (brought.missing as Array).size() > 1 else "",
+			", ".join(PackedStringArray(brought.missing)), "are" if (brought.missing as Array).size() > 1 else "is"]
 	return ""
 
 

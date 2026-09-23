@@ -129,6 +129,7 @@ func _set_encounter(e: Encounter) -> void:
 		host.set_state(ctx.state)
 		host.kernel = ctx.kernel
 		host.plugins = ctx.host
+		host.packs = ctx.art
 	if view != null:
 		_bind_panels()
 		_refresh_scene_select()
@@ -897,7 +898,7 @@ func _on_menu(id: int) -> void:
 
 func _set_hosting(on: bool) -> void:
 	if on and host == null:
-		host = HostSession.new(ctx.state, app.packs)
+		host = HostSession.new(ctx.state, ctx.art)
 		host.kernel = ctx.kernel
 		host.plugins = ctx.host
 		host.apply_request = _apply_player_request
@@ -1092,6 +1093,7 @@ func _open_campaign(c: Campaign) -> void:
 		host.set_state(ctx.state)
 		host.kernel = ctx.kernel
 		host.plugins = ctx.host
+		host.packs = ctx.art
 	_bind_panels()
 	_refresh_scene_select()
 	_refresh_viewpoints()
