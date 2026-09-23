@@ -21,6 +21,24 @@ that copy is what is played, imported into, saved and autosaved. To
 change a package, work on a campaign of your own and export a new
 version of it.
 
+**A package carries everything it needs**, the rulesets and the art
+included. A DM who has installed nothing downloads one file, starts it,
+and plays: the ruleset runs from the campaign's own `rules/`, the maps
+draw with the campaign's own `art/`. Exporting a package copies the
+rulesets the campaign plays (and anything they depend on) whole, their
+content packs and licence files with them, and refuses to write a
+package whose ruleset is not on the machine to copy.
+
+**Art belongs to the campaign.** Adding a map to a campaign copies the
+map into its `maps/` (remembering where it came from as `source`) and
+the art packs it names into its `art/`; the Table draws with that art
+and nothing else, and hands the same art to the players' devices.
+Export puts `art/` in the package and lists each art pack's licence in
+`package.json`; art whose licence does not allow it to be passed on
+(anything but CC0, CC-BY, MIT, ISC, Apache, OFL, BSD, zlib, Unlicense
+or public domain, unless its manifest says `"redistributable": true`)
+stops the export, by name.
+
 ## Three roles
 
 - **The DM who wants to play something.** Downloads a package, picks it

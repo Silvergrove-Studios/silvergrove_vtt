@@ -106,8 +106,11 @@ party is), `sessions` and `runtime`. Every other field is as before.
   encounter's name; the Table searches it.
 - `maps`: the campaign's map library — places, drawn in the Editor —
   by path relative to the campaign file, with a `role` (`battle` or
-  `regional`). A map is never changed from the Table; scenes are made
-  over it.
+  `regional`). Adding a map copies it into the campaign's `maps/` and
+  records the original as `source`; the art packs it is drawn with are
+  copied into the campaign's `art/`, which is the only art the Table
+  draws this campaign with. A map is never changed from the Table;
+  scenes are made over it.
 - `encounters`: prepared encounters: a recipe for a scene — the map and
   level, creatures by compendium entry with a count, a cell and whether
   they start hidden, the DM's notes, the sessions it was `played` in.

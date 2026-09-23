@@ -33,14 +33,14 @@ is not kept. It is Hexmap gap **G9** (a `picker` field inside a form or
 wizard step, so options come from a live query) plus a rule about
 whether a disabled entry may still be *used* by id, not only offered.
 
-**A2. A package does not carry the art its maps need.** A `.hexmap`
+**A2 (closed 2026-09-23). A package does not carry the art its maps need.** A `.hexmap`
 records the **art packs** it draws from (`{"dungeons_and_castles":
 "0.1.0", "woodland": "0.1.0"}`) and names assets as `pack:asset`. Art
 packs live in app preferences (`pack_dirs`), are global, and are not in
 the package. Download a package on a clean machine and its maps render
 without their terrain and props. "Everything it needs" is not yet true.
 
-**A3. Art packs are app-global while everything else became
+**A3 (closed 2026-09-23). Art packs are app-global while everything else became
 campaign-scoped.** After the content change, rules content belongs to
 the campaign and nothing else is parsed — but art is still whatever the
 app has, shared by every campaign, in a preference. The two halves of
