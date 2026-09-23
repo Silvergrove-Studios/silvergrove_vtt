@@ -252,12 +252,13 @@ the schemas, freezing `srd5e`'s collections, and the prose.
   `user://content` is only read when the DM imports from it. Imports and
   homebrew land in the campaign's folder. A campaign that has not been
   saved has nowhere to keep content yet, and is told so.
-- **Bundled rules are optional but pinned.** A package may carry the
-  ruleset it was tested with; if it does, that copy runs for that
-  campaign only.
+- **A package carries its rules.** It is one download that plays: the
+  ruleset it was tested with travels inside it and runs for that
+  campaign only, so two campaigns may run two versions of a ruleset and
+  a table needs nothing installed.
 - **Campaigns live in a managed folder** by default
   (`~/Documents/Hexmap/Campaigns/<name>/`), listed by the picker, and can
   still be opened from anywhere (P4).
-- **The base ruleset stays a separate download.** A package that bundles
-  it is a convenience, not the norm; the ruleset has its own release
-  cycle and its own licence notices.
+- **A ruleset is copied whole, not filleted.** It keeps its own release
+  cycle and its own licence notices, and a package that carries it
+  carries those too — `rules/<id>/` is the ruleset's directory verbatim.
