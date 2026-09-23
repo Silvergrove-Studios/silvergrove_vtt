@@ -27,6 +27,8 @@ adventure. `hexmap/encounter/campaign.gd` reads and writes it.
   "packs": [ { "id": "homebrew.reach", "path": "packs/reach", "version": "3" } ],
   "content": { "disabled": ["srd5e:classes/monk"],
                "imported": [ { "id": "some.supplement", "path": "packs/some.supplement", "plugin": "srd5e", "session": 3, "at": "…", "entries": 41 } ] },
+  "package": { "id": "sunken-reach", "version": "1.2.0", "name": "The Sunken Reach", "tested_with": { … } },
+  "rules_dir": "rules",
   "players": [ { "id": "pl_a1", "name": "Ana", "color": "#4f9cf6" } ],
   "actors": { "a_hero": { …actor, without derived… } },
   "resources": { "actor:a_hero": { "sample.ordered": { "hp": { "kind": "pool", "current": 6, "max": 10, "recharge": "rest" } } } },
@@ -71,6 +73,13 @@ party is), `sessions` and `runtime`. Every other field is as before.
   this table* is the switch; *Show what is off* lists them.
 - `content.imported`: what was brought in after the campaign started and
   when (`session`), so a campaign can explain itself later.
+- `package`: the campaign package this campaign was started from, and
+  what that package was tested with (`docs/campaign-packages.md`).
+  Absent for a campaign made from nothing.
+- `rules_dir`: a folder in the campaign that holds rulesets of its own
+  (a package carries the rules it was tested with under `rules/`). They
+  load for this campaign and win over an installed ruleset of the same
+  id, so a campaign plays the rules it came with.
 - `players`: the group. A session's encounter gets them on start and
   gives back any it added.
 - `actors`: the persistent ones — player characters, companions,
