@@ -40,6 +40,9 @@ extends VBoxContainer
 ##       merged from every step
 ##   image {bind | src, height}    pack art by ref ("pack:asset") through `packs`
 ##   field {label, bind, kind (a PropertyForm type), on_change (intent with $value), options}
+##   a form or wizard field may say `collection` (and `query`, `limit`,
+##       `optional`) instead of `options`: its choices are that
+##       collection's entries, as this client may see them
 ##       one value edited in place; on_change is sent when it changes
 ## Unknown types render as text, so a client of version N shows a plugin
 ## of version N+1 legibly.
@@ -507,9 +510,12 @@ func _form(n: Dictionary, ctx: Dictionary) -> Control:
 	var fields: Array = []
 	for f in n.get("fields", []):
 		if f is Dictionary and f.has("key"):
-			fields.append(f)
+			fields.append(JsonDoc.deep(f))
 	pf.build(fields, n.get("values", {}) if n.get("values") is Dictionary else {})
 	box.add_child(pf)
+	# fields whose choices are a collection's entries (what the campaign has,
+	# minus what it turned off) are filled as the answers come back
+	_fill_choices(fields, pf)
 	var submit := Button.new()
 	submit.text = str(n.get("submit_label", "Submit"))
 	submit.theme_type_variation = "AccentButton"
@@ -709,10 +715,11 @@ func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
 		var fields: Array = []
 		for f in step.get("fields", []):
 			if f is Dictionary and f.has("key"):
-				fields.append(f)
+				fields.append(JsonDoc.deep(f))
 		pf.build(fields, values)
 		holder.add_child(pf)
 		form_ref[0] = pf
+		_fill_choices(fields, pf)
 		if step.has("text"):
 			var t := Label.new()
 			t.text = str(step.text)
@@ -763,6 +770,37 @@ func _image(n: Dictionary, ctx: Dictionary) -> Control:
 
 
 # --------------------------------------------------------------- field --
+
+## A form field may name a `collection` instead of fixed `options`: its
+## choices are that collection's entries as this client may see them —
+## what the campaign carries, less what it turned off, plus what it has
+## imported. The answer may come from the Table (a phone asks), so the
+## form is built at once and filled when each reply lands.
+func _fill_choices(fields: Array, pf: PropertyForm) -> void:
+	if not comp_source.is_valid():
+		return
+	for f in fields:
+		if not (f is Dictionary) or str((f as Dictionary).get("collection", "")) == "":
+			continue
+		var field: Dictionary = f
+		var q: Dictionary = field.get("query", {}) if field.get("query") is Dictionary else {}
+		var req: Dictionary = {"text": str(q.get("text", "")), "per_page": int(field.get("limit", 200)), "page": 1,
+			"fields": ["name"], "sort": str(q.get("sort", "name"))}
+		if q.get("filter") is Dictionary:
+			req.filter = q.filter
+		comp_source.call(str(field.collection), {"query": req}, func(reply: Dictionary) -> void:
+			if not is_instance_valid(pf) or not reply.has("page"):
+				return
+			var options := []
+			for e in reply.page.get("entries", []):
+				options.append({"id": str(e.get("id", "")), "name": str(e.get("name", e.get("id", "")))})
+			if bool(field.get("optional", false)):
+				options.push_front({"id": "", "name": str(field.get("none_label", "—"))})
+			field.options = options
+			field.type = "enum"
+			var keep := pf.get_values()
+			pf.build(pf._schema, keep))
+
 
 ## One value edited in place: a PropertyForm with a single row, whose
 ## change sends on_change with $value.

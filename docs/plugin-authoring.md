@@ -325,6 +325,17 @@ each), `log {limit}`, `spacer`, and:
   `on_change` with `"$value"` replaced. Sheets edited on the phone are
   fields and forms whose intents are actions that commit `actor.set`.
 
+A form or wizard field may take its choices from the compendium instead
+of a fixed list: `{key = "class", label = "Class", type = "enum",
+collection = "classes", query = {filter = {subclass_of = ""}}, limit =
+200, optional = false}`. The client asks the Table for that collection
+under its own audience and fills the control when the answer arrives, so
+the choices are what the campaign actually has — its packs, less what it
+turned off, plus what it imported. The value the intent carries is the
+entry's id. **Do not hardcode a list of your own content** (the classes,
+the species): a campaign that disables one, or imports another, must see
+that where a character is made.
+
 `"$values"` and `"$value"` are replaced wherever they sit in the intent.
 
 Intents are Dictionaries; string values that start with `$/` are

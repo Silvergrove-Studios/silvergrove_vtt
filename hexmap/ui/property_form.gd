@@ -70,9 +70,10 @@ func _make_control(item: Dictionary) -> Control:
 			return cb
 		"enum":
 			var ob := OptionButton.new()
+			# options are plain strings, or {id, name} records: the id is the value
 			for o in item.get("options", []):
-				ob.add_item(str(o))
-			ob.item_selected.connect(func(i: int) -> void: _emit(key, str(item.options[i])))
+				ob.add_item(str(o.get("name", o.get("id", ""))) if o is Dictionary else str(o))
+			ob.item_selected.connect(func(i: int) -> void: _emit(key, _option_value(item, i)))
 			return ob
 		"color":
 			var pb := ColorPickerButton.new()
@@ -131,7 +132,10 @@ func set_values(values: Dictionary) -> void:
 				(ctl as CheckBox).set_pressed_no_signal(v == true or (v is String and str(v) == "true"))
 			"enum":
 				var ob := ctl as OptionButton
-				var i: int = (item.options as Array).find(str(v))
+				var i := -1
+				for n in (item.get("options", []) as Array).size():
+					if _option_value(item, n) == str(v):
+						i = n
 				ob.select(maxi(i, 0))
 			"color":
 				(ctl as ColorPickerButton).color = Color(str(v)) if v != null else Color.WHITE
@@ -150,6 +154,15 @@ func set_values(values: Dictionary) -> void:
 	_updating = false
 
 
+## The value an enum option stands for: a record's `id`, or the string itself.
+static func _option_value(item: Dictionary, i: int) -> String:
+	var options: Array = item.get("options", [])
+	if i < 0 or i >= options.size():
+		return ""
+	var o: Variant = options[i]
+	return str((o as Dictionary).get("id", o.get("name", ""))) if o is Dictionary else str(o)
+
+
 func get_values() -> Dictionary:
 	var out := {}
 	for item in _schema:
@@ -161,7 +174,7 @@ func get_values() -> Dictionary:
 			"float": out[key] = (ctl as SpinBox).value
 			"int": out[key] = int((ctl as SpinBox).value)
 			"bool": out[key] = (ctl as CheckBox).button_pressed
-			"enum": out[key] = str(item.options[(ctl as OptionButton).selected])
+			"enum": out[key] = _option_value(item, (ctl as OptionButton).selected)
 			"color":
 				var c := (ctl as ColorPickerButton).color
 				out[key] = "#" + c.to_html(c.a < 1.0)

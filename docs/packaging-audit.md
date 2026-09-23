@@ -21,7 +21,7 @@ whose answers change what gets built next.
 
 ## A. Holes in what we have built
 
-**A1. Turning a class off does not turn it off.** The Compendium hides
+**A1 (closed 2026-09-23). Turning a class off does not turn it off.** The Compendium hides
 a disabled entry from searches and pickers, but `srd5e`'s character
 wizard lists classes, species and backgrounds from **constants in Lua**
 (`D.CLASS_ORDER`, `D.SPECIES`, `D.BACKGROUNDS`), not from the

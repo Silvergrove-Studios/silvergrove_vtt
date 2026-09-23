@@ -142,6 +142,43 @@ func test_view_helpers() -> void:
 	await tree.process_frame
 
 
+## A form or wizard field may take its choices from a collection: what
+## the campaign has, less what it turned off, plus what it imported.
+func test_choice_fields_come_from_the_compendium() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var asked := []
+	var entries := [{"id": "fighter", "name": "Fighter"}, {"id": "wizard", "name": "Wizard"}]
+	r.comp_source = func(coll: String, req: Dictionary, on_reply: Callable) -> void:
+		asked.append({"collection": coll, "req": req})
+		on_reply.call({"collection": coll, "page": {"entries": entries, "total": entries.size()}})
+	var sent := []
+	r.intent.connect(func(p: Dictionary) -> void: sent.append(p))
+	r.render({"type": "form", "fields": [
+		{"key": "name", "label": "Name", "type": "string"},
+		{"key": "class", "label": "Class", "type": "enum", "collection": "classes", "query": {"filter": {"subclass_of": ""}}}],
+		"submit_label": "Make", "submit": {"kind": "action", "plugin": "p", "action": "create", "ctx": {"form": "$values"}}}, {})
+	await tree.process_frame
+	check(asked.size() == 1 and str(asked[0].collection) == "classes" and asked[0].req.query.filter == {"subclass_of": ""}, "the collection is asked for, with the field's filter: %s" % [asked])
+	var ob := _find(r, "OptionButton") as OptionButton
+	check(ob != null and ob.item_count == 2 and ob.get_item_text(0) == "Fighter" and ob.get_item_text(1) == "Wizard", "the entries are the choices, by name")
+	ob.select(1)
+	ob.item_selected.emit(1)
+	_find(r, "Button", "Make").pressed.emit()
+	check(sent.size() == 1 and str(sent[0].ctx.form["class"]) == "wizard", "and the id is what the intent carries: %s" % [sent])
+	# what the campaign turned off is simply not in the answer, so it is not a choice
+	entries.remove_at(1)
+	r.render({"type": "wizard", "steps": [{"title": "Who", "fields": [
+		{"key": "class", "label": "Class", "type": "enum", "collection": "classes"}]}], "submit": {"kind": "action", "plugin": "p", "action": "go"}}, {})
+	await tree.process_frame
+	var ob2 := _find(r, "OptionButton") as OptionButton
+	check(ob2 != null, "the wizard step has a choice control")
+	if ob2 != null:
+		check(ob2.item_count == 1 and ob2.get_item_text(0) == "Fighter", "with the campaign's choices: %d items, first '%s'" % [ob2.item_count, ob2.get_item_text(0) if ob2.item_count > 0 else ""])
+	r.queue_free()
+	await tree.process_frame
+
+
 func test_pickers_wizards_repeaters_and_fields() -> void:
 	var r := ViewRenderer.new()
 	root.add_child(r)
