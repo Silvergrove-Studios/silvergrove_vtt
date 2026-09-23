@@ -104,7 +104,51 @@ from the Table under its audience. Fine. But a package's content, a
 campaign's disabled list and an import are all Table-side; the phone
 sees the consequences without being told anything changed.
 
-## C. Questions, in the order they change the build
+## C. Answered 2026-09-23
+
+The questions below were put to the user; these are the answers, and
+they are now the design.
+
+1. **Disabled means unoffered, not unusable.** Turning the monk off
+   hides it from every search, picker and wizard; a DM who deliberately
+   asks for it by id still gets it, and a character already built on it
+   keeps working. No ruleset has to honour a new rule — the host does
+   the hiding.
+2. **Choice lists come from the compendium, live.** Hexmap grows
+   pickers inside forms and wizard steps (gap G9), and rulesets stop
+   hardcoding their class, species and background lists. That is what
+   makes disabling and importing show up where a DM makes a character.
+3. **A package carries the art its maps use.** The art packs a map
+   names travel in the package, like its rules and its content. Art
+   whose licence does not permit redistribution cannot be packaged, and
+   export has to say so.
+4. **Art belongs to the campaign**, as content and rules do:
+   `<campaign>/art/<pack>/`, loaded for that campaign. A campaign copy
+   carries its art with it.
+5. **Packages are for strangers on the web.** The format is built to
+   survive that: a content checksum in the manifest, and the licences
+   and attributions of everything bundled surfaced *before* a DM starts
+   it. Signing and a catalogue wait for a distribution channel.
+6. **Updates are opt-in, with a report.** The Table may notice that a
+   newer package or ruleset exists and offer it, showing what would
+   change; nothing moves on its own, nothing moves silently.
+7. **A campaign can be a package's working copy.** It owns the package
+   id, export bumps the version and keeps a changelog, and re-exports to
+   the same file. That is what makes the developer role real.
+
+## D. Questions still open
+
+- **What does a player device see when content changes?** Nothing, a
+  note, or their own readable copy that works offline?
+- **Image handouts** — does the first real package need to carry a
+  region map as a picture, a letter, a portrait?
+- **Two things are called a pack** (B1): with art now bundled beside
+  content, `art/` and `packs/` sit side by side in a campaign. Is that
+  naming good enough, or does one of them want a better word?
+- **A campaign carrying a ruleset the table also has installed** (B2):
+  today the campaign's copy wins, silently. Should the Table say so?
+
+## E. Questions as they were asked
 
 1. **Should a disabled entry be unusable, or only unoffered?** Does
    disabling the monk stop `create_character` building one by id (a
