@@ -275,7 +275,8 @@ static func _walk(dir: String, prefix: String, into: PackedStringArray, under :=
 	da.list_dir_begin()
 	var n := da.get_next()
 	while n != "":
-		if not n.begins_with("."):
+		# the editor's own bookkeeping is not content
+		if not n.begins_with(".") and not n.ends_with(".uid") and not n.ends_with(".import"):
 			if da.current_is_dir():
 				_walk(dir.path_join(n), prefix.path_join(n), into, under)
 			else:
