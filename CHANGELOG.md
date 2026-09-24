@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.1.0 — 2026-09-24
+
+Campaigns you can download and hand on: a campaign package carries an
+adventure whole — its maps, its content, the art its maps are drawn
+with, and the rules it was tested with — and a DM starts one on a table
+that has installed nothing. And a campaign's content is its own.
+
+- **Campaign packages** (`.campaignpkg`, one zip). *New from a package…*
+  checks every file against the SHA-256s it carries, shows what is
+  inside and under which licences, then copies it into a campaign folder
+  of your own (under `Documents/Hexmap/Campaigns`); the package is never
+  written to. *Export as a package…* makes one from your campaign — the
+  first export makes the campaign that package's working copy, later
+  ones bump its version and keep a changelog — carrying the rulesets it
+  plays and the art its maps use, and refusing art whose licence does
+  not allow it to be passed on. A newer version of the package a
+  campaign came from is offered with a report of what would change, and
+  never applied by itself. *Duplicate this campaign…* copies one, or
+  starts it fresh for another group.
+- **A campaign parses its own content and nothing else**: the rulesets
+  it names (a ruleset's packs may depend on the campaign's settings, so
+  a 2024 5E campaign reads only SRD 5.2.1), their packs, its own packs
+  and its own `art/`. Adding a map copies it and its art in. Homebrew
+  and imports are written into the campaign.
+- **Turning content off and importing it.** An entry can be turned off
+  for a campaign — hidden from every search, picker and wizard, never
+  deleted — and a pack or a file of entries imported at any time,
+  checked against the ruleset's schemas. Form and wizard choices come
+  from the compendium live, so what is off and what was imported show
+  where characters are made.
+- **The content contract**: a ruleset declares its `content_api` and a
+  pack the one it was written for; `./run.sh schemas` publishes a
+  ruleset's collection shapes as JSON Schema; fields that name other
+  entries are checked on import.
+- **Looking things up**: entries read as cards (a ruleset draws its own),
+  in the Compendium pane, in *View → Look up…* (Ctrl/Cmd+L), and on a
+  phone from a sheet's "?" buttons; rules text renders rich.
+- Rulesets install from a zip in the Rules pane (*Install ruleset…*).
+- Hexmap is open source under the MIT licence.
+- Fixed: on Android a file copied from inside the app arrived empty.
+
 ## 2.0.0 — 2026-09-21
 
 The Table becomes a campaign table with rules: a DM runs a campaign

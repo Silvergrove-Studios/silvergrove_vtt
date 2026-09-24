@@ -774,7 +774,9 @@ func test_campaign_packages() -> void:
 	check(info.bundles_rules, "it carries the ruleset it plays")
 	if has_art:
 		check((info.manifest.art as Dictionary).has("woodland") and (info.manifest.art as Dictionary).has("dungeons_and_castles"), "and the art its maps are drawn with, licences listed: %s" % [info.manifest.get("art", {})])
-	check(CampaignPackage.unmet(info, {}, "2.0.0").is_empty(), "so a table that has installed nothing can start it")
+	check(CampaignPackage.unmet(info, {}, App.version()).is_empty(), "so a table that has installed nothing can start it")
+	check(str(info.requires.app) == ">=%s" % CampaignPackage._minor_floor(App.version()) and not CampaignPackage.unmet(info, {}, "2.0.0").is_empty(),
+		"it asks for the app it was made with, to the minor version (%s): an older one is told" % str(info.requires.app))
 	check(CampaignPackage.unmet({"requires": {"app": ">=9.0.0"}}, {}, "2.0.0").size() == 1, "an older app is still told")
 	# whole, and what is inside it under which terms, before a DM starts it
 	var whole := CampaignPackage.verify(pkg)

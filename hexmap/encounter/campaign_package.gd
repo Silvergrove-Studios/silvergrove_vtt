@@ -225,7 +225,8 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		"authors": opts.get("authors", [str(campaign.doc.get("meta", {}).get("author", ""))]).filter(func(a: Variant) -> bool: return str(a) != ""),
 		"license": str(opts.get("license", "")), "url": str(opts.get("url", "")),
 		"description": str(opts.get("description", campaign.doc.get("meta", {}).get("description", ""))),
-		"requires": opts.get("requires", {"app": ">=%s" % _major(App.version()), "plugins": _plugin_requirements(campaign)}),
+		# the app it was made with, to the minor version: an older one may not read what it relies on
+		"requires": opts.get("requires", {"app": ">=%s" % _minor_floor(App.version()), "plugins": _plugin_requirements(campaign)}),
 		"tested_with": {"app": App.version(), "plugins": _plugin_versions(campaign)},
 		"bundles_rules": bundle and not rules_from.is_empty(),
 		"changelog": opts.get("changelog", []),
@@ -657,8 +658,9 @@ static func _compare(a: String, b: String) -> int:
 	return 0
 
 
-static func _major(v: String) -> String:
-	return "%s.0.0" % v.split(".")[0]
+static func _minor_floor(v: String) -> String:
+	var p := v.split(".")
+	return "%s.%s.0" % [p[0], p[1] if p.size() > 1 else "0"]
 
 
 static func _slug(s: String) -> String:
