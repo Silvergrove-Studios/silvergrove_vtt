@@ -370,7 +370,9 @@ func _take_state(e: Encounter) -> Dictionary:
 	ids.sort()
 	for aid in ids:
 		var a: Dictionary = e.actors[aid]
-		if not actors.has(aid) and not PERSISTENT_KINDS.has(str(a.get("kind", ""))):
+		# the campaign's own: what it had, player characters and companions, and
+		# anything marked `persistent` (an NPC the DM added to the roster)
+		if not actors.has(aid) and not PERSISTENT_KINDS.has(str(a.get("kind", ""))) and not bool(a.get("persistent", false)):
 			continue
 		var kept: Dictionary = JsonDoc.deep(a)
 		kept.erase("derived")

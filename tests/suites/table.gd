@@ -436,6 +436,10 @@ func test_campaign_first() -> void:
 		check(npcs._results.item_count >= 1, "the compendium answers the search: %d" % npcs._results.item_count)
 		npcs._add_from_compendium(npcs._results.get_item_metadata(0))
 		check(npcs.actors().size() == 1 and ctx.encounter().actor(npcs.actors()[0]).kind == "npc" and ctx.encounter().scenes.is_empty(), "a wolf in the roster, no token (no scene)")
+		var wolf := str(npcs.actors()[0])
+		check(bool(ctx.encounter().actor(wolf).get("persistent", false)), "kept by the campaign, not only by the running state")
+		ctx.campaign.capture(ctx.encounter())
+		check(ctx.campaign.actors.has(wolf), "so the campaign's own record has it: a copy or a package carries it")
 		# looking things up: View → Look up… searches every collection; a sheet's lookup intent opens the card
 		win._on_menu(win.V_LOOKUP)
 		await tree.process_frame
@@ -520,6 +524,16 @@ func test_campaign_first() -> void:
 	check(mp.set_party(Vector2i(3, 4)) == "" and ctx.campaign.doc.party.cell == "3,4" and ctx.state.tokens(ctx.scene_id).any(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")), "the party marker")
 	check(mp.set_party(Vector2i(4, 4)) == "" and ctx.campaign.doc.party.cell == "4,4" and ctx.state.tokens(ctx.scene_id).filter(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")).size() == 1, "moved, not doubled")
 	var regional_scene := ctx.scene_id
+	# the markers are the campaign's: a scene made over the road afresh (a package started, a copy) shows them
+	var road_id := str(mp.shown_map_entry().id)
+	check(ctx.commands.remove_scene(regional_scene) == "" and mp.show_map(road_id) == "", "the road's scene gone, and shown again")
+	var tags := {}
+	for tk in ctx.state.tokens(ctx.scene_id):
+		for tg in tk.get("tags", []):
+			tags[str(tg)] = int(tags.get(str(tg), 0)) + 1
+	check(int(tags.get("place", 0)) == 1 and int(tags.get("party", 0)) == 1 and ctx.state.token(ctx.scene_id, str(place.id)).get("hidden", false) == true,
+		"its place (hidden) and the party are back where they were: %s" % [tags])
+	regional_scene = ctx.scene_id
 	check(mp.go_to_place(str(place.id)) == "" and ctx.scene_id != regional_scene and ctx.encounter().scenes.size() == 3, "Go launches the fight from the place")
 	check(mp.return_from(enc) == "" and ctx.scene_id == regional_scene, "and Return comes back to the regional map")
 	check(mp.remove_place(str(place.id)) == "" and ctx.campaign.places.is_empty() and ctx.state.token(regional_scene, str(place.id)).is_empty(), "the place removed with its marker")

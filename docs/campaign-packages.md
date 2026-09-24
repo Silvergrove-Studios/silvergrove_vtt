@@ -7,7 +7,7 @@ adds, the content it turns off — downloaded as one file, turned into
 *their* campaign at startup, and changed from there for as long as they
 play it.
 
-Status 2026-09-22: **P1–P6 built.** A campaign's own packs load with it,
+Status 2026-09-24: **P1–P8 built.** A campaign's own packs load with it,
 entries can be turned off and on, content imports at any time
 (schema-checked), campaigns live in a folder of their own, a
 `.campaignpkg` can be read, started and exported, and a campaign can be
@@ -276,7 +276,7 @@ truth, the doc is the prose). `srd5e` freezes `classes`, `spells`,
 | ~~**P5 Packages**~~ | **done**: `CampaignPackage.read/unmet/instance/export_from`; *New from a package…* in the File menu and the picker, which lists what is in `user://packages` with what each needs; *Export as a package…*. | `table.gd::test_campaign_packages` |
 | ~~**P6 Duplicate**~~ | **done**: `Campaign.duplicate_to(source, dest, name, fresh)` — the whole folder, a new id, and with `fresh` none of this group's play; *Duplicate this campaign…* in the File menu. | `table.gd::test_campaign_packages` |
 | ~~**P7 Schema contract**~~ | **done**: `content_api` in manifests and packs with the refusal rule (P3), `./run.sh schemas` publishing JSON Schema + `content-api.json`, the `collection` annotation and the missing-reference report on import, `srd5e` frozen at content API 1 with its schemas committed and checked in CI (`tools/check_packs.gd`). | `rules_content.gd`; the ruleset's CI |
-| **P8 The 5e package** | A small example package in `ruleset-dnd5e` (or its own repo): a two-map starter with a prepared fight, built on `srd5e`, exported by the export path itself. | it instances on a clean machine and plays |
+| ~~**P8 The 5e package**~~ | **done**: "The Ruined Chapel" (`ruleset-dnd5e/tools/build_starter.gd` → `dist/ruined-chapel-0.1.0.campaignpkg`, 915 KB): the forest road and the chapel with their art, a place and the party, a prepared fight of goblins and the package's own Chapel Warden, a Runestone Shard, Brother Aldous, a handout — on srd5e, carried inside — built through the Table's own paths and released with `CampaignPackage.release`. | the same tool starts it on a table with nothing installed and plays it (29 checks) |
 
 Order: P1 → P2 → P3 (the three that make a live campaign ownable), then
 P4 → P5 → P6 (distribution), P7 beside P3 (it is the import's contract),

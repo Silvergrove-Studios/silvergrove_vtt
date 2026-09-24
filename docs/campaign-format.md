@@ -83,7 +83,8 @@ party is), `sessions` and `runtime`. Every other field is as before.
 - `players`: the group. A session's encounter gets them on start and
   gives back any it added.
 - `actors`: the persistent ones — player characters, companions,
-  recurring NPCs — without their `derived` blocks (the kernel recomputes
+  recurring NPCs (an actor marked `persistent: true`, as the NPC pane
+  marks what it adds) — without their `derived` blocks (the kernel recomputes
   those in every session). Encounter-local actors (the goblins of one
   fight) live in the encounter. At the end of a session every actor the
   campaign already had, plus any of kind `pc` or `companion` new to it
@@ -115,7 +116,9 @@ party is), `sessions` and `runtime`. Every other field is as before.
   level, creatures by compendium entry with a count, a cell and whether
   they start hidden, the DM's notes, the sessions it was `played` in.
 - `places`: markers on a regional map (`map`, `cell`, `name`) that link to
-  an `encounter`, another `map`, or a journal `note`.
+  an `encounter`, another `map`, or a journal `note`. They, and the party
+  marker, are the campaign's record: a scene made over the map afresh
+  (a package just started, a copy) shows them where they were.
 - `party`: where the party is (a map and a cell), for the marker.
 - `sessions`: the sessions played, `n` with `started`/`ended`, the
   `recap` kept at the end, and `file` for version-1 sessions that lived

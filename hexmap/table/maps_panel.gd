@@ -503,10 +503,27 @@ func show_map(mid: String) -> String:
 	var entry := ctx.campaign.map_entry(mid)
 	var scene := Encounter.new_scene(m, str(m.levels[0].get("id", "ground")), str(entry.get("name", m.name)), str(entry.get("path", "")))
 	scene.fog.enabled = str(entry.get("role", "battle")) == "battle"
+	# a regional map's places and the party marker are the campaign's: a new
+	# scene over it (a package just started, a copy) shows them where they were
+	for pl in ctx.campaign.places:
+		if str(pl.get("map", "")) == mid:
+			var at := _cell_pos(m, str(pl.get("cell", "")))
+			scene.tokens.append(Encounter.new_token(str(pl.get("name", "")), at, {"id": str(pl.id), "label": "◆", "color": "#d9a441", "hidden": true, "tags": ["place"], "vision": null}))
+	var party: Dictionary = ctx.campaign.doc.get("party", {}) if ctx.campaign.doc.get("party") is Dictionary else {}
+	if str(party.get("map", "")) == mid:
+		scene.tokens.append(Encounter.new_token("The party", _cell_pos(m, str(party.get("cell", ""))), {"id": JsonDoc.new_id("party"), "label": "★", "color": "#4f9cf6", "hidden": false, "tags": ["party"], "vision": {"radius": 3}}))
 	var why := ctx.commands.add_scene(scene, true)
 	if why == "":
 		ctx.set_scene(str(scene.id))
 	return why
+
+
+## The centre of a "col,row" cell on a map.
+static func _cell_pos(m: HexMap, cell: String) -> Vector2:
+	var parts := cell.split(",")
+	if parts.size() != 2:
+		return Vector2.ZERO
+	return m.grid.cell_center(m.grid.offset_to_axial(int(parts[0]), int(parts[1])))
 
 
 # ---------------------------------------------------- prepared encounters --

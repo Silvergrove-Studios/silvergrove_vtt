@@ -377,11 +377,17 @@ func _add_from_compendium(pick: Variant) -> void:
 	if record.is_empty():
 		return
 	var act: Dictionary = acts[coll]
+	var before := ctx.encounter().actors.keys()
 	var pc := ctx.host.dispatch(act.plugin, act.action, {"entry": record, "collection": coll, "scene": "", "place": false})
 	if pc.status == PluginHost.PluginCall.ERROR:
 		ctx.say(pc.error)
 		return
 	ctx.kernel.pending.drive(pc, act.plugin)
+	# an NPC added here belongs to the campaign: it is kept, copied and packaged with it
+	# (the goblins of one fight are not; they are the fight's)
+	for aid in ctx.encounter().actors.keys():
+		if not before.has(aid):
+			ctx.commands.run({"t": "actor.set", "id": str(aid), "changes": {"persistent": true}}, "Keep " + str(ctx.encounter().actor(str(aid)).get("name", "")))
 	_search.text = ""
 	_results.visible = false
 	refresh()
