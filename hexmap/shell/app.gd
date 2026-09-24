@@ -28,6 +28,11 @@ func _init(p_prefs_path := PREFS_PATH) -> void:
 	packs.reload()
 
 
+## Tests and self-tests never host by themselves: a campaign opening would
+## otherwise bind the network port on every run.
+static var no_auto_host := false
+
+
 static func version() -> String:
 	return str(ProjectSettings.get_setting("application/config/version", "dev"))
 

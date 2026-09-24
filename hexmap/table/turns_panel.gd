@@ -312,4 +312,8 @@ func refresh() -> void:
 			_prev.disabled = order.is_empty() or not running
 			_end.disabled = not running
 			_start.text = "Restart" if not order.is_empty() else "Start"
+	# turns order the tokens on a scene: with no map on screen there is nothing to order
+	var no_scene := ctx.scene_id == "" or ctx.encounter().scene(ctx.scene_id).is_empty()
+	_start.disabled = no_scene
+	_start.tooltip_text = "Show a map first: turns order the tokens on a scene." if no_scene else "Order the tokens on this scene"
 	_syncing = false

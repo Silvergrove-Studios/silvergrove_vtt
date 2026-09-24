@@ -37,6 +37,7 @@ const SUITES := ["hex_grid", "document", "json_schema", "expr", "pdf", "exporter
 ## Run every test_* method of every suite (or those whose names contain
 ## `filter`). Tests may await frames, so this is a coroutine.
 func run_all(filter := "") -> void:
+	App.no_auto_host = true
 	for suite_name in SUITES:
 		var script: GDScript = load("res://tests/suites/%s.gd" % suite_name)
 		if script == null:

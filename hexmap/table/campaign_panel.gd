@@ -25,6 +25,10 @@ var _ruling: LineEdit
 var _rule: LineEdit
 ## Set by the window: (kind) -> void for "new", "open", "recap".
 var on_campaign_action: Callable
+## Set by the window: bring the Maps pane forward.
+var on_show_maps: Callable
+var _start_box: VBoxContainer
+var _steps: VBoxContainer
 
 
 func _init(p_ctx: TableContext) -> void:
@@ -38,6 +42,12 @@ func _init(p_ctx: TableContext) -> void:
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 8)
 	scroll.add_child(box)
+	# what to do next, for a DM who has just started (playtest 1)
+	_start_box = VBoxContainer.new()
+	_header(_start_box, "Getting started")
+	_steps = VBoxContainer.new()
+	_start_box.add_child(_steps)
+	box.add_child(_start_box)
 	# campaign
 	_campaign = Label.new()
 	_campaign.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -73,15 +83,16 @@ func _init(p_ctx: TableContext) -> void:
 		var mins: int = pair[1]
 		_button(crow, pair[0], "Advance the in-game clock (rests, dawn recharges and timed effects follow)", func() -> void: _say(ctx.kernel.clock.advance(mins), "Time passes"))
 	box.add_child(crow)
-	# checkpoints
-	_header(box, "Checkpoints")
+	# restore points
+	_header(box, "Restore points")
+	_dim(box, "The whole table as it was — tokens, sheets, hit points, turns — to come back to in one step. Mark one before a fight or a big reveal.")
 	var row := HBoxContainer.new()
 	_checkpoint_name = LineEdit.new()
 	_checkpoint_name.placeholder_text = "Before the fight…"
 	_checkpoint_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_checkpoint_name.text_submitted.connect(func(_t: String) -> void: _mark())
 	row.add_child(_checkpoint_name)
-	_button(row, "Mark", "Remember where things stand, by name", _mark)
+	_button(row, "Mark", "Mark a restore point: where things stand now, to come back to", _mark)
 	box.add_child(row)
 	_checkpoints = VBoxContainer.new()
 	box.add_child(_checkpoints)
@@ -112,6 +123,46 @@ func _init(p_ctx: TableContext) -> void:
 	box.add_child(_journal)
 	ctx.encounter_changed.connect(refresh)
 	ctx.scene_changed.connect(refresh)
+
+
+## The first things a DM does with a campaign, each ticked off when done;
+## the list goes once they all are.
+func steps(info: Dictionary) -> Array:
+	var e := ctx.encounter()
+	var out := []
+	out.append({"id": "map", "done": not e.scenes.is_empty(), "text": "Show a map — pick one in the Maps pane and press Show (the players see it too)",
+		"action": "Open the Maps pane", "call": on_show_maps})
+	var hosting := bool(info.get("hosting", false))
+	out.append({"id": "host", "done": hosting and not (info.get("connected", []) as Array).is_empty(),
+		"text": ("Players join — on their phones, Hexmap → Player, then this table (or %s)" % str(info.get("address", ""))) if hosting else "Players join — start hosting so their phones can find this table",
+		"action": "" if hosting else "Start hosting", "call": on_host})
+	var owners := {}
+	for a in e.actors.values():
+		if str(a.get("kind", "")) == "pc" and str(a.get("owner", "")) != "":
+			owners[str(a.owner)] = true
+	out.append({"id": "characters", "done": not e.players.is_empty() and e.players.all(func(p: Dictionary) -> bool: return owners.has(str(p.get("id", "")))),
+		"text": "Everyone has a character — players make theirs on the phone (New character), or you make them in the Party pane"})
+	out.append({"id": "session", "done": int(e.clock.get("session", 0)) > 0, "text": "Start the session — the button above: the clock, the recap and the rules' session refills begin"})
+	return out
+
+
+func _refresh_steps(info: Dictionary) -> void:
+	_clear(_steps)
+	var list := steps(info) if ctx.campaign != null else []
+	_start_box.visible = not list.is_empty() and not list.all(func(s: Dictionary) -> bool: return bool(s.done))
+	for s in list:
+		var row := HBoxContainer.new()
+		var l := Label.new()
+		l.text = ("✓ " if bool(s.done) else "○ ") + str(s.text)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if bool(s.done):
+			l.theme_type_variation = "DimLabel"
+		row.add_child(l)
+		if not bool(s.done) and str(s.get("action", "")) != "" and (s.get("call") as Callable).is_valid():
+			var call: Callable = s.call
+			_button(row, str(s.action), "", func() -> void: call.call())
+		_steps.add_child(row)
 
 
 func bind() -> void:
@@ -145,7 +196,8 @@ func refresh() -> void:
 		_hosting.text = "Not hosting. Players cannot join until you are."
 		_host_button.text = "Start hosting"
 	_clock.text = "Day %d, %02d:%02d" % [int(e.clock.get("day", 1)), int(e.clock.get("minute", 0)) / 60, int(e.clock.get("minute", 0)) % 60]
-	# checkpoints
+	_refresh_steps(info)
+	# restore points
 	_clear(_checkpoints)
 	if e.checkpoints.is_empty():
 		_dim(_checkpoints, "None yet.")

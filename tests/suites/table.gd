@@ -291,7 +291,12 @@ func test_table_window() -> void:
 	var names := LayoutStore.names(win.dock.layout)
 	for n in LayoutStore.TABLE_PANELS:
 		check(names.has(n), "table layout holds the %s panel: %s" % [n, names])
-	check(win.scene_select.disabled and win.ctx.scene_id == "", "a new encounter has no scene yet")
+	check(win.ctx.scene_id == "" and win.scene_select.item_count == 1 and win.scene_select.get_item_text(0).begins_with("No scene yet"), "a new encounter has no scene yet, and the drop-down says so")
+	check(win.tool_buttons["token"].disabled and win.tool_buttons["fog"].disabled and not win.tool_buttons["select"].disabled, "the map tools wait for a map")
+	check(win._menu("Scene").is_item_disabled(win._menu("Scene").get_item_index(win.S_FOG)) and win._menu("Turns").is_item_disabled(win._menu("Turns").get_item_index(win.T_START)), "so do fog and turns")
+	check(win.turns._start.disabled, "and the Turns pane's Start")
+	var sc := win.shortcut_lines()
+	check("\n".join(sc).contains("Look up") and "\n".join(sc).contains("Mark a restore point") and "\n".join(sc).contains("Token"), "the shortcuts list is read from the menus: %d lines" % sc.size())
 	win._open_path(_example("chapel_ambush.encounter"))
 	var ctx := win.ctx
 	check(ctx.encounter().name == "Chapel Ambush" and ctx.state.maps.size() == 1, "opens the example and resolves its map")
@@ -836,7 +841,13 @@ func test_campaign_packages() -> void:
 	root.add_child(win)
 	# nothing installed on this table: the campaign runs the ruleset the package brought
 	win.ctx.plugin_dirs = []
+	check(win.campaign_panel.steps({}).size() == 4, "the Getting started list has its four steps")
 	win._open_campaign_path(str(inst.path))
+	check(win.ctx.encounter().scenes.size() == 1 and win.ctx.scene_id != "", "a campaign with no scene opens on its map (playtest 1: 'the package had no scenes')")
+	var first_steps := win.campaign_panel.steps({})
+	check(bool(first_steps[0].done) and not bool(first_steps[3].done), "Getting started: the map step is done, the session is not")
+	check(win.campaign_panel._start_box.visible, "and the list shows while steps remain")
+	check(not win.tool_buttons["token"].disabled, "the map tools are there once a map is")
 	check(FileAccess.file_exists(home.path_join("mine/rules/sample.degrees/manifest.json")), "the ruleset came with it")
 	if has_art:
 		check(Array(win.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"] and not win.ctx.art.terrain("woodland:grass").is_empty(), "the Table draws with the art the campaign carries: %s" % [win.ctx.art.pack_ids()])

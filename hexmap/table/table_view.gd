@@ -21,9 +21,24 @@ func _init(p_ctx: TableContext) -> void:
 		canvas.queue_redraw())
 
 
+## What the canvas says when there is no scene to show (playtest 1).
+var empty_hint: Label
+
+
 func show_scene() -> void:
 	canvas.set_scene(ctx.state, ctx.scene_id)
 	zoom_to_fit.call_deferred()
+	if empty_hint == null:
+		empty_hint = Label.new()
+		empty_hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		empty_hint.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		empty_hint.grow_vertical = Control.GROW_DIRECTION_BOTH
+		empty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_hint.theme_type_variation = "DimLabel"
+		empty_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		empty_hint.text = "No scene yet.\nShow a map from the Maps pane (or the Scene drop-down) —\nthe players see what you show."
+		add_child(empty_hint)
+	empty_hint.visible = ctx.scene_id == "" or ctx.state == null or ctx.encounter().scene(ctx.scene_id).is_empty()
 
 
 func _on_zoom(z: float) -> void:

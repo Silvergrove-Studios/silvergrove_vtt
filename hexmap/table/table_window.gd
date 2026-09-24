@@ -61,7 +61,7 @@ var _picker_recent: VBoxContainer
 var _picker_packages: VBoxContainer
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
-	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN, M_FROM_PACKAGE, M_EXPORT_PACKAGE, M_DUPLICATE, M_REVIEW_UPDATE,
+	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN, M_FROM_PACKAGE, M_EXPORT_PACKAGE, M_DUPLICATE, M_REVIEW_UPDATE, M_RESTORE_POINT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
@@ -73,6 +73,13 @@ func _ready() -> void:
 	if app == null:
 		app = App.new()
 	ctx.app = app
+	# a dialog closing (a native file dialog above all, on macOS) can leave the
+	# Table's window not the key window: it then ignores clicks and hover until
+	# the app menu is used (playtest 1). Every dialog hands focus back.
+	get_tree().node_added.connect(func(n: Node) -> void:
+		if n is Window and n != get_window() and not (n is PopupMenu) and not (n as Window).visibility_changed.is_connected(_on_dialog_visibility):
+			(n as Window).visibility_changed.connect(_on_dialog_visibility.bind(n)))
+	_refocus.call_deferred()
 	theme = app.build_theme()
 	app.theme_changed.connect(_on_theme_changed)
 	app.ui_scale_changed.connect(_on_ui_scale)
@@ -86,6 +93,8 @@ func _ready() -> void:
 		view.canvas.overlay.queue_redraw())
 	ctx.scene_changed.connect(_on_scene_changed)
 	ctx.history.changed.connect(_update_menus)
+	ctx.campaign_changed.connect(_update_menus)
+	_update_menus()
 	_autosave.wait_time = AUTOSAVE_SECONDS
 	_autosave.timeout.connect(_autosave_now)
 	add_child(_autosave)
@@ -196,6 +205,7 @@ func _build_ui() -> void:
 		if kind == "recap":
 			_recap_dialog()
 	campaign_panel.on_host = func() -> void: _set_hosting(host == null)
+	campaign_panel.on_show_maps = _show_maps_pane
 	campaign_panel.host_info = func() -> Dictionary:
 		if host == null:
 			return {"hosting": false}
@@ -393,7 +403,7 @@ func _build_menus() -> MenuBar:
 	file.add_separator()
 	_item(file, "Duplicate this campaign…", M_DUPLICATE)
 	_item(file, "Export as a package…", M_EXPORT_PACKAGE)
-	_item(file, "Review a newer version of its package…", M_REVIEW_UPDATE)
+	_item(file, "Update from its package…", M_REVIEW_UPDATE)
 	file.add_separator()
 	_item(file, "Save campaign", M_SAVE, KEY_S, true)
 	_item(file, "Save campaign as…", M_SAVE_AS, KEY_S, true, true)
@@ -417,7 +427,8 @@ func _build_menus() -> MenuBar:
 	_item(edit_menu, "Hide / reveal tokens", M_HIDE, KEY_H)
 	_item(edit_menu, "Select all tokens", M_SELECT_ALL, KEY_A, true)
 	edit_menu.add_separator()
-	_item(edit_menu, "Checkpoint…", M_CHECKPOINT, KEY_K, true)
+	_item(edit_menu, "Mark a restore point…", M_CHECKPOINT, KEY_K, true)
+	_item(edit_menu, "Go back to a restore point…", M_RESTORE_POINT)
 	_item(edit_menu, "Bulk on selected tokens…", M_BULK, KEY_B, true)
 	_item(edit_menu, "Improvise a creature…", M_IMPROVISE, KEY_I, true)
 	edit_menu.id_pressed.connect(_on_menu)
@@ -571,7 +582,17 @@ func _build_toolbar() -> HBoxContainer:
 	bar.add_child(l)
 	scene_select = OptionButton.new()
 	scene_select.custom_minimum_size.x = 180
-	scene_select.item_selected.connect(func(i: int) -> void: ctx.set_scene(str(scene_select.get_item_metadata(i))))
+	scene_select.item_selected.connect(func(i: int) -> void:
+		var sid := str(scene_select.get_item_metadata(i))
+		if sid == "":
+			_show_maps_pane()
+		else:
+			ctx.set_scene(sid))
+	# (with no scene the one item is always selected: pressing it opens the maps)
+	scene_select.pressed.connect(func() -> void:
+		if ctx.encounter().scenes.is_empty():
+			scene_select.get_popup().hide.call_deferred()
+			_show_maps_pane())
 	bar.add_child(scene_select)
 	var l2 := Label.new()
 	l2.text = "See as"
@@ -643,7 +664,13 @@ func _refresh_scene_select() -> void:
 		if str(s.id) == ctx.scene_id:
 			scene_select.select(i)
 		i += 1
-	scene_select.disabled = e.scenes.is_empty()
+	# none yet: say so, and choosing it opens the maps (playtest 1: "the drop-down does nothing")
+	if e.scenes.is_empty():
+		scene_select.add_item("No scene yet — show a map…")
+		scene_select.set_item_metadata(0, "")
+		scene_select.select(0)
+	scene_select.disabled = false
+	scene_select.tooltip_text = "The scene the Table is looking at (● is the one the players see)" if not e.scenes.is_empty() else "Show a map from the campaign's library as a scene"
 
 
 func _refresh_viewpoints() -> void:
@@ -781,8 +808,53 @@ func _update_menus() -> void:
 		var mode := str(ctx.encounter().turns.get("mode", "free"))
 		for pair in [[T_FREE, "free"], [T_DM, "dm"], [T_ORDERED, "ordered"]]:
 			tm.set_item_checked(tm.get_item_index(pair[0]), mode == pair[1])
+	# what only means something with a map on screen waits for one (playtest 1)
+	var has_scene := has_scene()
+	for pair in [[scene_menu, [S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG]], [tm, [T_START, T_NEXT]], [edit_menu, [M_HIDE, M_DELETE, M_SELECT_ALL]]]:
+		var pm: PopupMenu = pair[0]
+		if pm == null:
+			continue
+		for id in pair[1]:
+			var at := pm.get_item_index(id)
+			if at >= 0:
+				pm.set_item_disabled(at, not has_scene)
+	for tname in tool_buttons:
+		var b: Button = tool_buttons[tname]
+		if not b.has_meta("tip"):
+			b.set_meta("tip", b.tooltip_text)
+		var needs_map: bool = str(tname) != "select"
+		b.disabled = needs_map and not has_scene
+		b.tooltip_text = str(b.get_meta("tip")) + ("\n\nShow a map first (the Maps pane, or the Scene drop-down)." if b.disabled else "")
+	if not has_scene and _tool_name != "" and _tool_name != "select":
+		_select_tool("select")
+	# the package it came from, and whether there is a newer one to take
+	var fm := _menu("File")
+	if fm != null:
+		var at := fm.get_item_index(M_REVIEW_UPDATE)
+		var came: Dictionary = ctx.campaign.doc.get("package", {}) if ctx.campaign != null and ctx.campaign.doc.get("package") is Dictionary else {}
+		var newer := CampaignPackage.newer_for(ctx.campaign, App.packages_dir()) if not came.is_empty() else {}
+		if came.is_empty():
+			fm.set_item_text(at, "Update from its package (not started from one)")
+		elif newer.is_empty():
+			fm.set_item_text(at, "Update from its package (%s %s is up to date)" % [str(came.get("name", "")), str(came.get("version", ""))])
+		else:
+			fm.set_item_text(at, "Update from its package (%s available)…" % str(newer.package_version))
+		fm.set_item_disabled(at, newer.is_empty())
 	_native_menus.sync_all()
 	_update_title()
+
+
+## Is a scene (a map) on screen? The map tools wait for one.
+func has_scene() -> bool:
+	return ctx.state != null and ctx.scene_id != "" and not ctx.encounter().scene(ctx.scene_id).is_empty()
+
+
+## Bring the Maps pane forward: where a scene is made from a library map.
+func _show_maps_pane() -> void:
+	for p in _panes:
+		if p is DockPane and str((p as DockPane).name) == "Maps" and dock != null:
+			dock.set_control_as_current_tab(p)
+	ctx.say("Pick a map in the Maps pane and press Show (add one with Add map… if the library is empty).")
 
 
 func _menu(p_name: String) -> PopupMenu:
@@ -821,8 +893,11 @@ func _on_menu(id: int) -> void:
 		M_REVIEW_UPDATE: _review_update()
 		M_RECAP: _recap_dialog()
 		M_CHECKPOINT:
-			_prompt("Checkpoint", "Name", "Checkpoint %d" % (ctx.encounter().checkpoints.size() + 1), func(v: String) -> void:
-				ctx.say("Marked " + v if ctx.kernel.checkpoint(v if v.strip_edges() != "" else "Checkpoint") != "" else "Could not mark a checkpoint"))
+			# a restore point: the whole table as it is now, to come back to in one step
+			_prompt("Mark a restore point — the whole table as it is now (tokens, sheets, hit points, turns), to come back to in one step if things go wrong",
+				"Call it", "Before %s" % (ctx.scene().get("name", "the fight") if not ctx.scene().is_empty() else "this"), func(v: String) -> void:
+				ctx.say("Restore point marked: " + v + " (Edit → Go back to a restore point)" if ctx.kernel.checkpoint(v if v.strip_edges() != "" else "Restore point") != "" else "Could not mark a restore point"))
+		M_RESTORE_POINT: _restore_point_dialog()
 		M_BULK: _bulk_dialog()
 		M_IMPROVISE: _improvise_dialog()
 		M_HOME: _guard_unsaved(func() -> void: go_home.emit())
@@ -1188,9 +1263,19 @@ func _open_campaign(c: Campaign) -> void:
 	# a newer version of the package it came from is only ever offered
 	var newer := CampaignPackage.newer_for(c, App.packages_dir())
 	if not newer.is_empty():
-		ctx.say("A newer version (%s) of %s is in your library: File → Review a newer version of its package…" % [str(newer.package_version), str(newer.name)])
+		ctx.say("A newer version (%s) of %s is in your library: File → Update from its package…" % [str(newer.package_version), str(newer.name)])
+	# a campaign with nothing on screen opens on its map: the regional one, else the first (playtest 1)
+	if ctx.encounter().scenes.is_empty() and not c.maps.is_empty():
+		var first := str(c.maps[0].get("id", ""))
+		for m in c.maps:
+			if str(m.get("role", "")) == "regional":
+				first = str(m.get("id", ""))
+				break
+		maps.show_map(first)
+	# the table is there to be joined: host at once, unless the DM turned that off
+	if host == null and bool(app.prefs.get("auto_host", true)) and not App.no_auto_host:
+		_set_hosting(true)
 	ctx.say("Campaign '%s' open: %d players, %d characters, session %d" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
-	_update_title()
 	_update_menus()
 
 
@@ -1620,6 +1705,9 @@ func _file_dialog(mode: FileDialog.FileMode, filters: Array) -> FileDialog:
 	fd.file_mode = mode
 	fd.access = FileDialog.ACCESS_FILESYSTEM
 	fd.use_native_dialog = DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE)
+	# a native dialog is not a window of ours: its closing is heard through its signals
+	for sig in ["file_selected", "files_selected", "dir_selected", "canceled"]:
+		fd.connect(sig, func(_a = null) -> void: _refocus.call_deferred())
 	for f in filters:
 		fd.add_filter(f.split(";")[0].strip_edges(), f.split(";")[1].strip_edges() if f.contains(";") else "")
 	if ctx.encounter().path != "":
@@ -1646,6 +1734,52 @@ func _form_dialog(title: String, form: PropertyForm, on_ok: Callable) -> void:
 	d.close_requested.connect(d.queue_free)
 	add_child(d)
 	d.popup_centered()
+
+
+## The restore points marked so far; going back to one asks first.
+func _restore_point_dialog() -> void:
+	var points: Array = ctx.encounter().checkpoints
+	if points.is_empty():
+		_info("No restore points yet.\n\nMark one (Edit → Mark a restore point…) before something you may want to take back whole: a fight, a big reveal, a risky ruling. Going back to it puts every token, sheet and hit point back as it was then; Undo can take the going-back back.")
+		return
+	var d := ConfirmationDialog.new()
+	d.title = "Go back to a restore point"
+	d.ok_button_text = "Go back"
+	var list := ItemList.new()
+	list.custom_minimum_size = Vector2(420, 200)
+	for i in range(points.size() - 1, -1, -1):
+		var cp: Dictionary = points[i]
+		var at := list.add_item("%s   ·  %s" % [str(cp.get("name", "")), str(cp.get("when", "")).replace("T", " ").left(16)])
+		list.set_item_metadata(at, str(cp.id))
+	list.select(0)
+	d.add_child(list)
+	d.confirmed.connect(func() -> void:
+		var sel := list.get_selected_items()
+		if sel.is_empty():
+			return
+		var why := ctx.kernel.restore_checkpoint(str(list.get_item_metadata(sel[0])))
+		ctx.say("Back to " + list.get_item_text(sel[0]).get_slice("   ·", 0) + " (Undo takes it back)" if why == "" else why))
+	d.confirmed.connect(d.queue_free)
+	d.canceled.connect(d.queue_free)
+	d.close_requested.connect(d.queue_free)
+	add_child(d)
+	d.popup_centered()
+
+
+func _on_dialog_visibility(w: Window) -> void:
+	if is_instance_valid(w) and not w.visible:
+		_refocus.call_deferred()
+
+
+## Bring the Table's window forward and make it the key window again.
+func _refocus() -> void:
+	if not is_inside_tree():
+		return
+	var w := get_window()
+	if w == null or DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_move_to_foreground(w.get_window_id())
+	w.grab_focus()
 
 
 func _prompt(title: String, label: String, initial: String, on_ok: Callable) -> void:
@@ -1677,15 +1811,37 @@ func _info(text: String) -> void:
 	d.popup_centered()
 
 
-func _shortcuts_dialog() -> void:
-	var lines := PackedStringArray()
+## Every shortcut the Table has, read from the menus' own accelerators and
+## the tools' keys, so the list cannot fall behind them.
+func shortcut_lines() -> PackedStringArray:
+	var lines := PackedStringArray(["Tools"])
 	for t in TableTools.all_tools():
-		lines.append("%s — %s: %s" % [t.key, t.label, t.hint])
+		lines.append("  %s — %s: %s" % [t.key, t.label, t.hint])
+	var bar := _ui_root.get_child(0) as MenuBar if _ui_root != null else null
+	if bar != null:
+		for menu in bar.get_children():
+			if not (menu is PopupMenu):
+				continue
+			var pm := menu as PopupMenu
+			var found := PackedStringArray()
+			for i in pm.item_count:
+				var accel := pm.get_item_accelerator(i)
+				if accel != KEY_NONE and not pm.is_item_separator(i):
+					found.append("  %s — %s" % [OS.get_keycode_string(accel), pm.get_item_text(i).trim_suffix("…")])
+			if not found.is_empty():
+				lines.append("")
+				lines.append(str(pm.name))
+				lines.append_array(found)
 	lines.append("")
-	lines.append("Space+drag or middle-drag: pan · wheel: zoom · Ctrl/Cmd+0: fit · Ctrl/Cmd+1: 100%")
-	lines.append("Ctrl/Cmd+Z / Shift+Ctrl/Cmd+Z: undo / redo · Ctrl/Cmd+S: save · Ctrl/Cmd+M: add a map")
-	lines.append("H: hide / reveal selected tokens · Delete: remove them · Ctrl/Cmd+Space: next turn (ordered) · Shift+F: fog on/off · Esc: select tool")
-	_info("\n".join(lines))
+	lines.append("On the map")
+	lines.append("  Space+drag or middle-drag — pan · wheel — zoom")
+	lines.append("  Delete — remove the selected tokens · Esc — back to the select tool")
+	lines.append("  %s — next turn (ordered turns)" % OS.get_keycode_string(KEY_SPACE | KEY_MASK_CMD_OR_CTRL))
+	return lines
+
+
+func _shortcuts_dialog() -> void:
+	_info("\n".join(shortcut_lines()))
 
 
 ## The packages waiting in the library: each starts a campaign of its own.
