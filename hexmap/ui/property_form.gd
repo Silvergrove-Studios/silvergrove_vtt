@@ -136,7 +136,9 @@ func set_values(values: Dictionary) -> void:
 				for n in (item.get("options", []) as Array).size():
 					if _option_value(item, n) == str(v):
 						i = n
-				ob.select(maxi(i, 0))
+				# (a field whose choices are still on their way has none yet)
+				if ob.item_count > 0:
+					ob.select(maxi(i, 0))
 			"color":
 				(ctl as ColorPickerButton).color = Color(str(v)) if v != null else Color.WHITE
 			"text":
