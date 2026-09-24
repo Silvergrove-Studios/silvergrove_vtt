@@ -728,13 +728,18 @@ func test_campaign_packages() -> void:
 	root.add_child(authoring)
 	authoring.ctx.plugin_dirs = ["res://tests/plugins"]
 	authoring._open_campaign_path(home.path_join("source/reach.campaign"))
+	# the phones' builds ship no art library of their own (a phone is sent the Table's art),
+	# so there is nothing for a map to bring along: the art checks are skipped there
+	var has_art := Array(app0.packs.pack_ids()).has("woodland") and Array(app0.packs.pack_ids()).has("dungeons_and_castles")
 	var said_add := authoring.maps.add_map(_example("ruined_chapel.hexmap"))
 	check(said_add == "", "the chapel added: %s" % said_add)
 	var chapel_entry: Dictionary = authoring.ctx.campaign.maps[0] if not authoring.ctx.campaign.maps.is_empty() else {}
 	check(str(chapel_entry.get("path", "")) == "maps/ruined_chapel.hexmap" and FileAccess.file_exists(home.path_join("source/maps/ruined_chapel.hexmap")), "copied into the campaign's maps/: %s" % [chapel_entry])
 	check(str(chapel_entry.get("source", "")) != "", "remembering where it came from")
-	check(FileAccess.file_exists(home.path_join("source/art/dungeons_and_castles/pack.json")) and FileAccess.file_exists(home.path_join("source/art/woodland/pack.json")), "its art came with it")
-	check(Array(authoring.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"], "and is the art this campaign draws with: %s" % [authoring.ctx.art.pack_ids()])
+	if has_art:
+		check(FileAccess.file_exists(home.path_join("source/art/dungeons_and_castles/pack.json")) and FileAccess.file_exists(home.path_join("source/art/woodland/pack.json")), "its art came with it")
+	if has_art:
+		check(Array(authoring.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"], "and is the art this campaign draws with: %s" % [authoring.ctx.art.pack_ids()])
 	authoring.ctx.campaign.encounters.append({"id": "enc", "name": "The ambush", "map": str(chapel_entry.get("id", "")), "level": "ground", "creatures": [], "played": [1]})
 	for k in ["players", "actors", "journal"]:
 		authoring.ctx.campaign.doc[k] = author.doc[k]
@@ -751,7 +756,8 @@ func test_campaign_packages() -> void:
 	var info := CampaignPackage.read(pkg)
 	check(info.ok and info.id == "sunken-reach" and info.name == "The Sunken Reach" and str(info.package_version) == "1.2.0", "the package says what it is: %s" % [info.why])
 	check(info.bundles_rules, "it carries the ruleset it plays")
-	check((info.manifest.art as Dictionary).has("woodland") and (info.manifest.art as Dictionary).has("dungeons_and_castles"), "and the art its maps are drawn with, licences listed: %s" % [info.manifest.get("art", {})])
+	if has_art:
+		check((info.manifest.art as Dictionary).has("woodland") and (info.manifest.art as Dictionary).has("dungeons_and_castles"), "and the art its maps are drawn with, licences listed: %s" % [info.manifest.get("art", {})])
 	check(CampaignPackage.unmet(info, {}, "2.0.0").is_empty(), "so a table that has installed nothing can start it")
 	check(CampaignPackage.unmet({"requires": {"app": ">=9.0.0"}}, {}, "2.0.0").size() == 1, "an older app is still told")
 	# whole, and what is inside it under which terms, before a DM starts it
@@ -761,10 +767,11 @@ func test_campaign_packages() -> void:
 	var kinds := {}
 	for item in inside:
 		kinds[str(item.kind)] = true
-	check(kinds.has("campaign") and kinds.has("ruleset") and kinds.has("art") and kinds.has("content"), "the contents name the campaign, its rules, its art and its content: %s" % [kinds.keys()])
-	check(inside.any(func(i: Dictionary) -> bool: return str(i.kind) == "art" and str(i.license).begins_with("MIT")), "with each one's licence")
+	check(kinds.has("campaign") and kinds.has("ruleset") and kinds.has("content") and (kinds.has("art") or not has_art), "the contents name the campaign, its rules, its art and its content: %s" % [kinds.keys()])
+	if has_art:
+		check(inside.any(func(i: Dictionary) -> bool: return str(i.kind) == "art" and str(i.license).begins_with("MIT")), "with each one's licence")
 	var summary := TableWindow.package_summary(pkg, whole)
-	check(summary.contains("Rules: ") and summary.contains("Art: ") and summary.contains("all %d files are as the author made them" % int(whole.checked)), "the DM reads it before starting")
+	check(summary.contains("Rules: ") and (summary.contains("Art: ") or not has_art) and summary.contains("all %d files are as the author made them" % int(whole.checked)), "the DM reads it before starting")
 	# a package damaged on the way is not started
 	var damaged := home.path_join("damaged.campaignpkg")
 	var zr := ZIPReader.new()
@@ -802,7 +809,8 @@ func test_campaign_packages() -> void:
 	check(mine.encounters.size() == 1 and mine.maps.size() == 1 and mine.packs.size() == 1, "the adventure came whole")
 	check((mine.encounters[0].played as Array).is_empty() and not mine.doc.has("source_of"), "none of it marked played by the author's table, and not the author's working copy")
 	check(FileAccess.file_exists(home.path_join("mine/maps/ruined_chapel.hexmap")) and FileAccess.file_exists(home.path_join("mine/packs/reach/pack.json")), "its maps and content are in the DM's folder")
-	check(FileAccess.file_exists(home.path_join("mine/art/woodland/pack.json")), "and its art")
+	if has_art:
+		check(FileAccess.file_exists(home.path_join("mine/art/woodland/pack.json")), "and its art")
 	# and it plays: the ruleset loads, the campaign's own pack with it
 	var app := App.new("user://test_prefs_packages.json")
 	var win := TableWindow.new()
@@ -812,7 +820,8 @@ func test_campaign_packages() -> void:
 	win.ctx.plugin_dirs = []
 	win._open_campaign_path(str(inst.path))
 	check(FileAccess.file_exists(home.path_join("mine/rules/sample.degrees/manifest.json")), "the ruleset came with it")
-	check(Array(win.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"] and not win.ctx.art.terrain("woodland:grass").is_empty(), "the Table draws with the art the campaign carries: %s" % [win.ctx.art.pack_ids()])
+	if has_art:
+		check(Array(win.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"] and not win.ctx.art.terrain("woodland:grass").is_empty(), "the Table draws with the art the campaign carries: %s" % [win.ctx.art.pack_ids()])
 	check(win.view.canvas.packs == win.ctx.art, "the map canvas uses it")
 	if PluginHost.available():
 		check(win.ctx.host != null and win.ctx.host.plugins.has("sample.degrees"), "and loads from the campaign, with nothing installed: %s" % [win.ctx.plugin_log])
