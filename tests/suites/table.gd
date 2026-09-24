@@ -731,7 +731,17 @@ func test_campaign_packages() -> void:
 	# the phones' builds ship no art library of their own (a phone is sent the Table's art),
 	# so there is nothing for a map to bring along: the art checks are skipped there
 	var has_art := Array(app0.packs.pack_ids()).has("woodland") and Array(app0.packs.pack_ids()).has("dungeons_and_castles")
+	if has_art:
+		var wd := app0.packs.pack_dir("woodland")
+		print("art diagnostics: woodland dir=%s exists=%s pack.json=%s ctx.app=%s campaign=%s" % [wd, DirAccess.dir_exists_absolute(wd),
+			FileAccess.file_exists(wd.path_join("pack.json")), authoring.ctx.app != null, authoring.ctx.campaign.path if authoring.ctx.campaign != null else "none"])
 	var said_add := authoring.maps.add_map(_example("ruined_chapel.hexmap"))
+	if has_art:
+		var copied := home.path_join("source/maps/ruined_chapel.hexmap")
+		var cd := JsonDoc.parse(FileAccess.get_file_as_string(copied), [])
+		print("art diagnostics: example=%s copied exists=%s size=%d packs=%s art dir=%s again=%s" % [_example("ruined_chapel.hexmap"), FileAccess.file_exists(copied),
+			FileAccess.get_file_as_bytes(copied).size(), cd.get("packs", "none"), DirAccess.get_directories_at(home.path_join("source/art")) if DirAccess.dir_exists_absolute(home.path_join("source/art")) else "none",
+			authoring.ctx.bring_in_art([copied])])
 	check(said_add == "", "the chapel added: %s" % said_add)
 	var chapel_entry: Dictionary = authoring.ctx.campaign.maps[0] if not authoring.ctx.campaign.maps.is_empty() else {}
 	check(str(chapel_entry.get("path", "")) == "maps/ruined_chapel.hexmap" and FileAccess.file_exists(home.path_join("source/maps/ruined_chapel.hexmap")), "copied into the campaign's maps/: %s" % [chapel_entry])
