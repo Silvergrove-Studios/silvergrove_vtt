@@ -188,3 +188,22 @@ static func sans_modified(text: String) -> String:
 	var re := RegEx.new()
 	re.compile('"modified": "[^"]*"')
 	return re.sub(text, '"modified": ""', true)
+
+
+## Copy a file byte for byte. Unlike DirAccess.copy_absolute this reads
+## through FileAccess, so a file inside the app's own package (res:// in an
+## exported build, which on Android is inside the APK) copies whole instead
+## of arriving empty. OK, or the error.
+static func copy_file(from: String, to: String) -> Error:
+	if not FileAccess.file_exists(from):
+		return ERR_FILE_NOT_FOUND
+	var bytes := FileAccess.get_file_as_bytes(from)
+	if bytes.is_empty() and FileAccess.get_open_error() != OK:
+		return FileAccess.get_open_error()
+	DirAccess.make_dir_recursive_absolute(to.get_base_dir())
+	var f := FileAccess.open(to, FileAccess.WRITE)
+	if f == null:
+		return FileAccess.get_open_error()
+	f.store_buffer(bytes)
+	f.close()
+	return OK

@@ -556,7 +556,7 @@ static func _copy_tree(from: String, to: String, campaign_file: String) -> Strin
 					da.list_dir_end()
 					return why
 			elif n == campaign_file or campaign_file == "" or not n.ends_with(".campaign"):
-				if DirAccess.copy_absolute(from.path_join(n), to.path_join(n)) != OK:
+				if JsonDoc.copy_file(from.path_join(n), to.path_join(n)) != OK:
 					da.list_dir_end()
 					return "cannot copy %s" % n
 		n = da.get_next()

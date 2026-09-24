@@ -283,7 +283,7 @@ static func _copy_dir(from: String, to: String) -> void:
 			if da.current_is_dir():
 				_copy_dir(from.path_join(n), to.path_join(n))
 			else:
-				DirAccess.copy_absolute(from.path_join(n), to.path_join(n))
+				JsonDoc.copy_file(from.path_join(n), to.path_join(n))
 		n = da.get_next()
 	da.list_dir_end()
 
@@ -309,7 +309,7 @@ func bring_in_map(path: String) -> Dictionary:
 			target = maps_dir.path_join("%s_%d.%s" % [path.get_file().get_basename(), n, path.get_extension()])
 			n += 1
 		if not FileAccess.file_exists(target):
-			DirAccess.copy_absolute(path, target)
+			JsonDoc.copy_file(path, target)
 		rel = "maps/%s" % target.get_file()
 	var missing := bring_in_art([campaign.resolve(rel)])
 	refresh_art()
