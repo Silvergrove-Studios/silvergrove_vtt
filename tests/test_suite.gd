@@ -38,6 +38,7 @@ const SUITES := ["hex_grid", "document", "json_schema", "expr", "pdf", "exporter
 ## `filter`). Tests may await frames, so this is a coroutine.
 func run_all(filter := "") -> void:
 	App.no_auto_host = true
+	App.no_browser = true
 	for suite_name in SUITES:
 		var script: GDScript = load("res://tests/suites/%s.gd" % suite_name)
 		if script == null:

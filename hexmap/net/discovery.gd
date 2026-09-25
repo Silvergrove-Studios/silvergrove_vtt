@@ -327,7 +327,7 @@ class Browser extends RefCounted:
 		var previous := str(prev.get("address", ""))
 		all.sort_custom(func(x: String, y: String) -> bool: return _rank(x, from, previous) < _rank(y, from, previous))
 		var entry := {"name": str(a.name), "host": str(a.get("host", "")), "port": int(a.port), "address": all[0] if not all.is_empty() else from,
-			"addresses": all, "seen": _clock, "via": via}
+			"addresses": all, "seen": _clock, "via": via, "web": int(a.get("web", prev.get("web", 0)))}
 		last_heard = "%s via %s from %s → %s" % [str(a.name), via, from, entry.address]
 		var fresh := prev.is_empty() or str(prev.address) != str(entry.address)
 		tables[key] = entry

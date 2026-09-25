@@ -17,10 +17,12 @@ const EXT := "campaignpkg"
 
 ## What a package says about itself, without instancing it:
 ## {ok, why, manifest, id, name, package_version, description, authors,
-##  license, requires, tested_with, bundles_rules, entries: n}
+##  license, requires, tested_with, bundles_rules, entries: n, cover}
+## `cover` is the file of its cover picture ("" for none): the manifest's
+## `cover`, else a cover.png|jpg|webp|svg at the top of the package.
 static func read(path: String) -> Dictionary:
 	var out := {"ok": false, "why": "", "manifest": {}, "id": "", "name": "", "package_version": "", "description": "",
-		"authors": [], "license": "", "requires": {}, "tested_with": {}, "bundles_rules": false, "entries": 0, "path": path}
+		"authors": [], "license": "", "requires": {}, "tested_with": {}, "bundles_rules": false, "entries": 0, "path": path, "cover": ""}
 	var zr := ZIPReader.new()
 	if zr.open(path) != OK:
 		out.why = "%s is not a package this build reads" % path.get_file()
@@ -50,8 +52,46 @@ static func read(path: String) -> Dictionary:
 	out.tested_with = m.get("tested_with", {}) if m.get("tested_with") is Dictionary else {}
 	out.bundles_rules = Array(names).any(func(n: String) -> bool: return str(n).begins_with("rules/"))
 	out.entries = names.size()
+	var cover := str(m.get("cover", ""))
+	if cover == "" or not Array(names).has(cover):
+		cover = ""
+		for ext in COVER_TYPES:
+			if Array(names).has("cover." + ext):
+				cover = "cover." + ext
+				break
+	out.cover = cover if COVER_TYPES.has(cover.get_extension().to_lower()) else ""
 	out.ok = true
 	return out
+
+
+const COVER_TYPES := ["png", "jpg", "jpeg", "webp", "svg"]
+
+
+## A package's cover as an image, or null when it has none or it will not
+## load. An SVG cover is drawn `svg_width` pixels across.
+static func cover_image(path: String, info: Dictionary, svg_width := 640) -> Image:
+	var file := str(info.get("cover", ""))
+	if file == "":
+		return null
+	var zr := ZIPReader.new()
+	if zr.open(path) != OK:
+		return null
+	var bytes := zr.read_file(file)
+	zr.close()
+	if bytes.is_empty():
+		return null
+	var img := Image.new()
+	var err := ERR_FILE_UNRECOGNIZED
+	match file.get_extension().to_lower():
+		"png": err = img.load_png_from_buffer(bytes)
+		"jpg", "jpeg": err = img.load_jpg_from_buffer(bytes)
+		"webp": err = img.load_webp_from_buffer(bytes)
+		"svg":
+			# drawn once at its own size to learn it, then at the width wanted
+			err = img.load_svg_from_buffer(bytes)
+			if err == OK and img.get_width() > 0:
+				err = img.load_svg_from_buffer(bytes, float(svg_width) / img.get_width())
+	return img if err == OK and not img.is_empty() else null
 
 
 ## What this table cannot satisfy, in plain words. `installed` is
@@ -277,6 +317,9 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 	for m in campaign.maps:
 		if m is Dictionary and str(m.get("path", "")) != "" and not str(m.path).is_absolute_path():
 			files.append(str(m.path))
+			# and its own files beside it (a backdrop picture): <stem>.assets/
+			var adir := str(m.path).get_basename() + ".assets"
+			_walk(campaign.base_dir().path_join(adir), adir, files)
 	for sub in ["packs", "art", "handouts"]:
 		_walk(campaign.base_dir().path_join(sub), sub, files)
 	for rel in files:
@@ -284,6 +327,13 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		if not FileAccess.file_exists(src):
 			continue
 		put.call(rel, FileAccess.get_file_as_bytes(src))
+		n += 1
+	# its cover, for the picker: the campaign's (meta.cover, a picture in its folder)
+	var cover_rel := str(opts.get("cover", campaign.doc.get("meta", {}).get("cover", "")))
+	if cover_rel != "" and COVER_TYPES.has(cover_rel.get_extension().to_lower()) and FileAccess.file_exists(campaign.resolve(cover_rel)):
+		var cover_name := "cover." + cover_rel.get_extension().to_lower()
+		put.call(cover_name, FileAccess.get_file_as_bytes(campaign.resolve(cover_rel)))
+		manifest.cover = cover_name
 		n += 1
 	# the rulesets, from wherever this table has them
 	for pid in rules_from:

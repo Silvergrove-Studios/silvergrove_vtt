@@ -138,14 +138,14 @@ func steps(info: Dictionary) -> Array:
 	var hosting := bool(info.get("hosting", false))
 	var title := ctx.campaign.name if ctx.campaign != null else e.name
 	out.append({"id": "host", "done": hosting and not (info.get("connected", []) as Array).is_empty(),
-		"text": ("Players join — on each phone: Hexmap → Join a game → “%s”" % title) if hosting else "Players join — open the table to them first",
+		"text": ("Players join “%s” — in a browser on their phone or computer, at the address the DM's screen shows (Invite players)" % title) if hosting else "Players join — open the table to them first",
 		"action": "How to join" if hosting else "Open to players", "call": on_join_info if hosting else on_host})
 	var owners := {}
 	for a in e.actors.values():
 		if str(a.get("kind", "")) == "pc" and str(a.get("owner", "")) != "":
 			owners[str(a.owner)] = true
 	out.append({"id": "characters", "done": not e.players.is_empty() and e.players.all(func(p: Dictionary) -> bool: return owners.has(str(p.get("id", "")))),
-		"text": "Everyone has a character — players make theirs on their phones, or you make them (Prep → Characters)"})
+		"text": "Everyone has a character — players make theirs on their own screens, or you make them (Prep → Characters)"})
 	out.append({"id": "session", "done": int(e.clock.get("session", 0)) > 0, "text": "Start the session — the clock, the recap and the rules' once-a-session refills begin",
 		"action": "Start session 1", "call": on_start_session})
 	return out

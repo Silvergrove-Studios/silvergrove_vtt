@@ -319,6 +319,13 @@ func bring_in_map(path: String) -> Dictionary:
 			n += 1
 		if not FileAccess.file_exists(target):
 			JsonDoc.copy_file(path, target)
+		# the map's own files (a backdrop) come with it, beside the copy
+		var from_assets := path.get_basename() + ".assets"
+		var to_assets := target.get_basename() + ".assets"
+		if DirAccess.dir_exists_absolute(from_assets) and not DirAccess.dir_exists_absolute(to_assets):
+			DirAccess.make_dir_recursive_absolute(to_assets)
+			for f in DirAccess.get_files_at(from_assets):
+				JsonDoc.copy_file(from_assets.path_join(f), to_assets.path_join(f))
 		rel = "maps/%s" % target.get_file()
 	var missing := bring_in_art([campaign.resolve(rel)])
 	refresh_art()

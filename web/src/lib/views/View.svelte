@@ -302,11 +302,19 @@
     border-bottom: 1px solid var(--border);
     padding-bottom: 4px;
   }
-  h4,
-  .header {
+  h4 {
     margin: 0;
     font-size: 1rem;
     font-weight: 650;
+  }
+  /* a sheet's or a card's name: the display face */
+  .header {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--heading);
+    line-height: 1.2;
   }
   p {
     margin: 0;

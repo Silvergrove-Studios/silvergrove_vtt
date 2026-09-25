@@ -81,6 +81,13 @@ var _last_menu := [-1, -1]
 var _token_form: PropertyForm
 ## The campaign picker shown over the dock while no campaign is open.
 var _picker: Control
+## What this window shows while a game runs: the game is running, the DM's
+## screen is in the browser, how players join (playtest 2: the whole Table
+## at once read as Photoshop). The full Table is a press away.
+var _running: Control
+var _full_table := false
+## The last address opened in the browser (for tests: no browser opens there).
+var last_opened := ""
 var _picker_recent: VBoxContainer
 var _picker_packages: VBoxContainer
 var _picker_continue: VBoxContainer
@@ -88,7 +95,7 @@ var _picker_continue: VBoxContainer
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
 	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN, M_FROM_PACKAGE, M_EXPORT_PACKAGE, M_DUPLICATE, M_REVIEW_UPDATE, M_RESTORE_POINT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
-	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP, V_WORLD, V_FIGHT, V_PREP,
+	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP, V_WORLD, V_FIGHT, V_PREP, V_RUNNING, V_DM_SCREEN,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
 	T_FREE, T_DM, T_ORDERED, T_START, T_NEXT, T_PREV, T_END,
 	H_SHORTCUTS, H_ABOUT }
@@ -313,6 +320,8 @@ func _build_ui() -> void:
 	stack.add_child(dock_ctl)
 	_picker = _build_picker()
 	stack.add_child(_picker)
+	_running = _build_running()
+	stack.add_child(_running)
 	root.add_child(stack)
 	_bind_panels()
 	_refresh_scene_select()
@@ -411,7 +420,8 @@ func _reveal_pane(p_name: String) -> void:
 ## What of the Table's chrome shows: nothing but the picker before a
 ## campaign is open; the map's tools only in a fight and in prep.
 func _sync_chrome() -> void:
-	var picking := _picker != null and _picker.visible
+	_refresh_running()
+	var picking := (_picker != null and _picker.visible) or (_running != null and _running.visible)
 	if _session_bar != null:
 		_session_bar.visible = not picking
 	# (in the world, a tool picked by its key brings the row until Esc)
@@ -457,7 +467,7 @@ func _build_banner() -> PanelContainer:
 func _update_banner() -> void:
 	if _banner == null or campaign_panel == null:
 		return
-	var picking := _picker != null and _picker.visible
+	var picking := (_picker != null and _picker.visible) or (_running != null and _running.visible)
 	if picking or ctx.campaign == null or _banner_hidden:
 		_banner.visible = false
 		return
@@ -535,7 +545,7 @@ func _end_fight() -> void:
 	if fight.is_empty():
 		set_mode("world")
 		return
-	_confirm("End '%s'? Its creatures and its map go; the party keeps its wounds and its loot, and the map before comes back." % str(fight.get("name", "the fight")), func() -> void:
+	_confirm("End '%s'? Its creatures and its map go, and the map before comes back. The party keeps its wounds. Nothing is looted by itself: what they take, you give them (a character's sheet → Give an item)." % str(fight.get("name", "the fight")), func() -> void:
 		var why := maps.return_from(str(fight.get("id", "")))
 		ctx.say(why if why != "" else "Back from " + str(fight.get("name", "the fight"))))
 
@@ -590,7 +600,7 @@ func _build_picker() -> Control:
 	center.add_child(box)
 	var title := Label.new()
 	title.text = "Run a game"
-	title.theme_type_variation = "HeaderLabel"
+	title.theme_type_variation = "DisplayLabel"
 	box.add_child(title)
 	var blurb := Label.new()
 	blurb.text = "A campaign keeps everything between sessions: the party, the people and places of the world, your notes, the maps. Carry on with yours, or start one."
@@ -657,13 +667,12 @@ func _show_picker(on: bool) -> void:
 	_refresh_packages()
 	var last := HomeScreen.last_campaign(app.recent())
 	if last != "":
-		var cont := Button.new()
-		cont.text = "Continue “%s”" % HomeScreen.campaign_title(last)
+		var cont := HomeScreen.card("Continue “%s”" % HomeScreen.campaign_title(last), "The campaign you had open last: everything as you left it", "", true)
+		cont.name = "Continue"
 		cont.tooltip_text = last
-		cont.theme_type_variation = "AccentButton"
-		cont.custom_minimum_size.y = 48
 		cont.pressed.connect(func() -> void: _open_path(last))
 		_picker_continue.add_child(cont)
+		HomeScreen.restyle_cards(_picker_continue, ThemeBuilder.tokens(app.theme_name))
 	var any := false
 	for p in app.recent():
 		if not (str(p).ends_with(".campaign") or str(p).ends_with(".encounter")) or str(p) == last:
@@ -760,6 +769,9 @@ func _build_menus() -> MenuBar:
 	view_menu.add_separator()
 	_item(view_menu, "Zoom to fit", V_FIT, KEY_0, true)
 	_item(view_menu, "Zoom 100%", V_100, KEY_1, true)
+	view_menu.add_separator()
+	_item(view_menu, "The game, running (how players join)", V_RUNNING)
+	_item(view_menu, "Open the DM's screen in the browser", V_DM_SCREEN)
 	view_menu.add_separator()
 	_item(view_menu, "World — the party, the map, the reference", V_WORLD)
 	_item(view_menu, "Fight — turns, tokens, stat blocks", V_FIGHT)
@@ -1324,6 +1336,10 @@ func _on_menu(id: int) -> void:
 		V_FIT: view.zoom_to_fit()
 		V_100: view.set_zoom(1.0)
 		V_DOCK: _reset_layout()
+		V_RUNNING:
+			_full_table = false
+			_sync_chrome()
+		V_DM_SCREEN: open_dm_screen()
 		V_WORLD: set_mode("world")
 		V_FIGHT: set_mode("fight")
 		V_PREP: set_mode("prep")
@@ -1424,6 +1440,107 @@ func _set_hosting(on: bool) -> void:
 
 
 ## The DM's web screen on this machine, with its token; "" when not hosting.
+# ================================================================ running ==
+
+func _build_running() -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "Running"
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	panel.visible = false
+	var center := CenterContainer.new()
+	panel.add_child(center)
+	var box := VBoxContainer.new()
+	box.name = "Box"
+	box.custom_minimum_size = Vector2(560, 0)
+	box.add_theme_constant_override("separation", 12)
+	center.add_child(box)
+	var title := Label.new()
+	title.name = "Title"
+	title.theme_type_variation = "DisplayLabel"
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(title)
+	var lead := Label.new()
+	lead.text = "The game is running."
+	lead.theme_type_variation = "HeaderLabel"
+	box.add_child(lead)
+	var how := Label.new()
+	how.text = "Your screen as the DM is in your browser: the book, the map, the fight. The players' screens are in theirs. Keep this window open — it runs the game."
+	how.theme_type_variation = "DimLabel"
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(how)
+	var open := HomeScreen.card("Open the DM's screen", "In your browser. If it is closed, this brings it back.", "eye", true)
+	open.name = "OpenDm"
+	open.pressed.connect(open_dm_screen)
+	box.add_child(open)
+	var join_head := Label.new()
+	join_head.text = "Players join at"
+	join_head.theme_type_variation = "DimLabel"
+	box.add_child(join_head)
+	var urls := VBoxContainer.new()
+	urls.name = "Urls"
+	box.add_child(urls)
+	var hint := Label.new()
+	hint.text = "On a phone or a computer on this network, in any browser. Invite players, on your screen, shows a code to scan."
+	hint.theme_type_variation = "DimLabel"
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(hint)
+	var here := Label.new()
+	here.name = "Here"
+	here.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(here)
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 8)
+	var save := Button.new()
+	save.text = "Save"
+	save.pressed.connect(func() -> void:
+		var why := ctx.save_campaign()
+		ctx.say(why if why != "" else "Saved"))
+	row.add_child(save)
+	var full := Button.new()
+	full.name = "FullTable"
+	full.text = "The full Table: maps, prep, everything…"
+	full.tooltip_text = "Everything this window can do: drawing up places and fights, the maps, the rules. The game goes on meanwhile."
+	full.pressed.connect(func() -> void:
+		_full_table = true
+		_sync_chrome())
+	row.add_child(full)
+	var close := Button.new()
+	close.text = "Close the campaign"
+	close.pressed.connect(_close_campaign)
+	row.add_child(close)
+	box.add_child(row)
+	HomeScreen.restyle_cards(panel, ThemeBuilder.tokens(app.theme_name) if app != null else ThemeBuilder.tokens(""))
+	return panel
+
+
+## The running panel shows while a campaign is open and hosted, unless the
+## DM went to the full Table (View → The game, running brings it back).
+func _refresh_running() -> void:
+	if _running == null:
+		return
+	var on := ctx.campaign != null and host != null and host.web != null and not _full_table and not (_picker != null and _picker.visible)
+	_running.visible = on
+	if not on:
+		return
+	(_running.find_child("Title", true, false) as Label).text = ctx.campaign.name
+	var urls := _running.find_child("Urls", true, false) as VBoxContainer
+	for c in urls.get_children():
+		urls.remove_child(c)
+		c.queue_free()
+	var list := Array(host.join_urls())
+	if list.is_empty():
+		list = ["http://localhost:%d  (this computer only: no network)" % host.web.port]
+	for u in list:
+		var l := Label.new()
+		l.text = str(u)
+		l.theme_type_variation = "HeaderLabel"
+		urls.add_child(l)
+	var names := PackedStringArray()
+	for p in ctx.encounter().players:
+		names.append("%s %s" % [str(p.get("name", "")), "(here)" if host.connected_players().has(str(p.get("id", ""))) else "(not yet)"])
+	(_running.find_child("Here", true, false) as Label).text = ("At the table: " + ", ".join(names)) if not names.is_empty() else "Nobody has joined yet."
+
+
 func dm_url() -> String:
 	if host == null or host.web == null:
 		return ""
@@ -1435,6 +1552,9 @@ func open_dm_screen() -> void:
 	var url := dm_url()
 	if url == "":
 		ctx.say("Start hosting first: the DM's screen is served by the table")
+		return
+	last_opened = url
+	if App.no_browser:
 		return
 	OS.shell_open(url)
 
@@ -1452,6 +1572,7 @@ func host_address() -> String:
 
 
 func _refresh_online() -> void:
+	_refresh_running()
 	players.online.clear()
 	players.cogm_code = host.cogm_code if host != null else ""
 	players.cogm_count = host.cogm_count() if host != null else 0
@@ -1542,13 +1663,28 @@ func _package_dialog(path: String, info: Dictionary, whole: Dictionary) -> Confi
 	d.ok_button_text = "Start"
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
+	# its cover first, when it has one
+	var img := CampaignPackage.cover_image(path, info, 1040)
+	if img != null:
+		var cover := TextureRect.new()
+		cover.name = "Cover"
+		cover.texture = ImageTexture.create_from_image(img)
+		cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		cover.custom_minimum_size = Vector2(520, 240)
+		cover.clip_contents = true
+		box.add_child(cover)
+	var title := Label.new()
+	title.text = str(info.name)
+	title.theme_type_variation = "DisplayLabel"
+	box.add_child(title)
 	var pitch := RichTextLabel.new()
 	pitch.bbcode_enabled = true
 	pitch.fit_content = true
 	pitch.scroll_active = false
 	pitch.custom_minimum_size = Vector2(520, 0)
 	var authors := ", ".join(PackedStringArray(info.get("authors", []))) if info.get("authors") is Array else ""
-	pitch.text = "[b]%s[/b]  %s%s\n\n%s" % [str(info.name), str(info.package_version), ("  ·  by " + authors) if authors != "" else "",
+	pitch.text = "%s%s\n\n%s" % [str(info.package_version), ("  ·  by " + authors) if authors != "" else "",
 		ViewRenderer.markdown_to_bbcode(str(info.description)) if str(info.description) != "" else "[i]No description.[/i]"]
 	box.add_child(pitch)
 	var row := HBoxContainer.new()
@@ -1784,6 +1920,10 @@ func _open_campaign(c: Campaign) -> void:
 	# the table is there to be joined: host at once, unless the DM turned that off
 	if host == null and bool(app.prefs.get("auto_host", true)) and not App.no_auto_host:
 		_set_hosting(true)
+	# the DM's own screen, in the browser, as the game opens
+	_full_table = false
+	if host != null and host.web != null and not App.no_browser and bool(app.prefs.get("open_dm_screen", true)):
+		open_dm_screen()
 	ctx.say("Campaign '%s' open: %d players, %d characters, session %d" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
 	set_mode("fight" if not _live_fight().is_empty() else "world")
 	_update_menus()
@@ -2391,19 +2531,20 @@ func _refresh_packages() -> void:
 	_picker_packages.add_child(head)
 	for info in found:
 		var unmet := CampaignPackage.unmet(info, _installed_rulesets(), App.version())
-		var b := Button.new()
 		var pitch := str(info.description).strip_edges().get_slice("\n", 0)
-		if pitch.length() > 110:
-			pitch = pitch.left(107) + "…"
-		b.text = "Start “%s”  %s\n%s" % [str(info.name), str(info.package_version), str(unmet[0]) if not unmet.is_empty() else pitch]
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.custom_minimum_size.y = 52
+		if pitch.length() > 140:
+			pitch = pitch.left(137) + "…"
+		# its cover, when the author gave it one (playtest 2: adventures had no face)
+		var img := CampaignPackage.cover_image(str(info.path), info, 320)
+		var b := HomeScreen.card("%s  %s" % [str(info.name), str(info.package_version)], str(unmet[0]) if not unmet.is_empty() else pitch, "map", false,
+			ImageTexture.create_from_image(img) if img != null else null)
+		b.name = "Adventure_" + str(info.id)
 		b.tooltip_text = str(info.path)
 		b.disabled = not unmet.is_empty()
 		var path := str(info.path)
 		b.pressed.connect(func() -> void: _from_package_dialog(path))
 		_picker_packages.add_child(b)
+	HomeScreen.restyle_cards(_picker_packages, ThemeBuilder.tokens(app.theme_name))
 
 
 ## The packages in these folders, readable, the newest version of each once

@@ -113,9 +113,7 @@
     flex-direction: column;
     gap: 12px;
   }
-  .sheet :global(.header) {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    color: var(--heading);
+  .sheet :global(.header:first-child) {
+    font-size: 1.6rem;
   }
 </style>

@@ -206,6 +206,17 @@ func _build_join() -> Control:
 		_pick_table(_tables.get_item_metadata(i))
 		_join_address())
 	column.add_child(_tables)
+	# the same table in a browser: the players' web screen (and a second
+	# screen on the DM's own computer)
+	_web_button = _big(Button.new(), "")
+	_web_button.name = "PlayInBrowser"
+	_web_button.theme_type_variation = "ToolButton"
+	_web_button.visible = false
+	_web_button.pressed.connect(func() -> void:
+		web_opened = _web_url
+		if open_url.is_valid() and not App.no_browser:
+			open_url.call(_web_url))
+	column.add_child(_web_button)
 	browser.updated.connect(_refresh_tables)
 	_known_label = Label.new()
 	_known_label.text = "Tables you have joined before"
@@ -485,11 +496,17 @@ func _stop_browsing() -> void:
 
 func _refresh_tables() -> void:
 	_tables.clear()
+	_web_url = ""
 	for t in browser.list():
+		if _web_url == "" and int(t.get("web", 0)) > 0:
+			_web_url = "http://%s:%d/" % [str(t.address), int(t.web)]
+			_web_button.text = "Or play “%s” in your browser" % str(t.name)
 		var extra: int = (t.get("addresses", []) as Array).size() - 1
 		var i := _tables.add_item("%s  —  %s:%d%s" % [str(t.name), str(t.address), int(t.port), ("  (+%d)" % extra) if extra > 0 else ""])
 		_tables.set_item_metadata(i, t)
 		_tables.set_item_tooltip(i, "heard via %s; addresses: %s" % [str(t.get("via", "")), ", ".join(PackedStringArray(t.get("addresses", [])))])
+	if _web_button != null:
+		_web_button.visible = _web_url != "" and open_url.is_valid()
 	if _browsing:
 		_tables_label.text = "Tables on this network" if _tables.item_count > 0 else "Listening for tables on this network…"
 
@@ -521,6 +538,14 @@ func _refresh_diag() -> void:
 ## A table from either list: put its address in the box so Join takes it;
 ## the other addresses it was heard at are kept as fallbacks for Join.
 var _alternatives: Array = []
+## The first table heard with a web side: its players' page, and the button to it.
+var _web_url := ""
+var _web_button: Button
+## The last address sent to the browser (for tests: no browser opens there).
+var web_opened := ""
+## Opens an address in the system's browser: given by the shell where it
+## can (this module runs everywhere); unset, the browser button stays away.
+var open_url: Callable = Callable()
 
 func _pick_table(t: Dictionary) -> void:
 	_address.text = "%s:%d" % [str(t.get("address", "")), int(t.get("port", Protocol.DEFAULT_PORT))]

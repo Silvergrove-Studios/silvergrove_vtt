@@ -60,14 +60,14 @@ func _run() -> void:
 	var info_path := _arg(args, "--info")
 	var web_port := int(_arg(args, "--web-port", str(WebServer.DEFAULT_PORT)))
 	App.no_auto_host = true
+	App.no_browser = true
 	var work := "user://web_host"
 	if DirAccess.dir_exists_absolute(work):
 		PluginHost._rm_rf(work)
 	var app := App.new(work.path_join("prefs.json"))
 	app.prefs.campaigns_dir = ProjectSettings.globalize_path(work.path_join("campaigns"))
-	DirAccess.make_dir_recursive_absolute(App.packages_dir())
-	var offered := App.packages_dir().path_join(pkg.get_file())
-	JsonDoc.copy_file(pkg, offered)
+	# started from where it is: nothing goes into the library of this computer's Hexmap
+	var offered := pkg
 	win = TableWindow.new()
 	win.app = app
 	win.bonjour = NoBonjour.new()

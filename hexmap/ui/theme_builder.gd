@@ -3,7 +3,8 @@ extends RefCounted
 ## Builds the editor Theme from a small set of design tokens, so the whole UI
 ## shares one palette, one spacing scale and one set of radii, and so a new
 ## look is a new token set rather than a new theme file. Fonts are Inter and
-## JetBrains Mono (OFL, hexmap/ui/fonts/), icons are Lucide (UiIcons).
+## JetBrains Mono, with Fraunces for titles (OFL, hexmap/ui/fonts/), icons
+## are Lucide (UiIcons).
 
 const VARIANTS := {
 	"slate": {
@@ -68,6 +69,24 @@ static func font(file: String) -> Font:
 		return f
 	_fonts[file] = ThemeDB.fallback_font
 	return ThemeDB.fallback_font
+
+
+## The display face, for titles (Fraunces: a variable font, set to `weight`),
+## falling back to Inter for what it has not got.
+static func display(weight := 600) -> Font:
+	var key := "display@%d" % weight
+	if _fonts.has(key):
+		return _fonts[key]
+	var base := font("Fraunces-Variable.woff2")
+	if base == ThemeDB.fallback_font:
+		_fonts[key] = font("Inter-SemiBold.ttf")
+		return _fonts[key]
+	var v := FontVariation.new()
+	v.base_font = base
+	v.variation_opentype = {TextServerManager.get_primary_interface().name_to_tag("wght"): weight}
+	v.fallbacks = [font("Inter-SemiBold.ttf")]
+	_fonts[key] = v
+	return v
 
 
 static func c(t: Dictionary, key: String) -> Color:
@@ -154,6 +173,15 @@ static func build(name: String) -> Theme:
 	th.set_font_size("font_size", "DimLabel", fs - 2)
 	th.set_color("font_color", "DimLabel", dim)
 	th.set_type_variation("DimLabel", "Label")
+	# titles: a page's (DisplayLabel), a card's (CardTitle)
+	th.set_type_variation("DisplayLabel", "Label")
+	th.set_font("font", "DisplayLabel", display(600))
+	th.set_font_size("font_size", "DisplayLabel", fs + 21)
+	th.set_color("font_color", "DisplayLabel", text)
+	th.set_type_variation("CardTitle", "Label")
+	th.set_font("font", "CardTitle", display(600))
+	th.set_font_size("font_size", "CardTitle", fs + 4)
+	th.set_color("font_color", "CardTitle", text)
 	th.set_font("font", "MonoLabel", mono)
 	th.set_font_size("font_size", "MonoLabel", fs - 1)
 	th.set_color("font_color", "MonoLabel", dim)

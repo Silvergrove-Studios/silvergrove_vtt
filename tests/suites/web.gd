@@ -39,6 +39,8 @@ func test_web_server() -> void:
 	for bad in ["/../project.godot", "/assets/../../project.godot", "/assets/%2e%2e/%2e%2e/project.godot", "/assets/x%00.js", "/nothing"]:
 		check(str(get.call(bad)).begins_with("HTTP/1.1 404"), "nothing outside its roots: %s" % bad)
 	check(str(get.call("/", "POST")).begins_with("HTTP/1.1 405"), "only GET and HEAD")
+	check(WebServer.address_rank("192.168.1.23") == 0 and WebServer.address_rank("10.5.91.189") == 0 and WebServer.address_rank("192.168.18.1") == 1
+		and WebServer.address_rank("100.99.188.26") == 2 and WebServer.address_rank("8.8.8.8") == 3, "the addresses players likely reach come first")
 	# the web clients as the exports carry them: one zip
 	var zpath := "user://test_webclient.zip"
 	var zp := ZIPPacker.new()

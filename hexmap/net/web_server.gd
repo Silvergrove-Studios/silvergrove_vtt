@@ -201,11 +201,37 @@ static func _status(code: int, text: String) -> PackedByteArray:
 	return ("HTTP/1.1 %d %s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % [code, text, body.size()]).to_utf8_buffer() + body
 
 
-## The addresses this machine answers on for other devices: "http://ip:port".
+## The addresses this machine answers on for other devices: "http://ip:port",
+## the likeliest first — a home or office network before the bridges of
+## virtual machines (…​.1) and overlay networks (100.64/10, a VPN's).
 static func urls(web_port: int) -> PackedStringArray:
-	var out := PackedStringArray()
+	var ips := []
 	for a in IP.get_local_addresses():
 		var s := str(a)
 		if s.is_valid_ip_address() and not s.contains(":") and not s.begins_with("127.") and not s.begins_with("169.254."):
-			out.append("http://%s:%d" % [s, web_port])
+			ips.append(s)
+	ips.sort_custom(func(a: String, b: String) -> bool:
+		var ra := address_rank(a)
+		var rb := address_rank(b)
+		return ra < rb or (ra == rb and a < b))
+	var out := PackedStringArray()
+	for ip in ips:
+		out.append("http://%s:%d" % [ip, web_port])
 	return out
+
+
+## How likely other devices reach us at an IPv4 address: 0 a private
+## network, 1 a private network's .1 (usually this machine's side of a
+## virtual one), 2 an overlay network (100.64/10), 3 anything else.
+static func address_rank(ip: String) -> int:
+	var p := ip.split(".")
+	if p.size() != 4:
+		return 3
+	var a := int(p[0])
+	var b := int(p[1])
+	if a == 100 and b >= 64 and b < 128:
+		return 2
+	var private := a == 10 or (a == 192 and b == 168) or (a == 172 and b >= 16 and b < 32)
+	if private:
+		return 1 if p[3] == "1" else 0
+	return 3

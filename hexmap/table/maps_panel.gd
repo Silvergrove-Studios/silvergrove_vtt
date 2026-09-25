@@ -880,8 +880,9 @@ func go(enc_id: String) -> String:
 	return ""
 
 
-## Return: the fight's creatures and its scene go; the party keeps its
-## wounds and its loot; the scene before comes back. "" or why.
+## Return: the fight's creatures and its scene go (and whatever they
+## carried: loot is the DM's to give, by hand); the party keeps its wounds;
+## the scene before comes back. "" or why.
 func return_from(enc_id: String) -> String:
 	var e := ctx.campaign.encounter_entry(enc_id) if ctx.campaign != null else {}
 	if e.is_empty() or not e.has("live") or (e.live as Dictionary).is_empty():

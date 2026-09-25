@@ -577,7 +577,18 @@ func test_campaign_first() -> void:
 	check(win.campaign_panel._hosting.text.begins_with("Not hosting") and win.campaign_panel._clock.text.begins_with("Day 1"), "the Session pane shows hosting and the clock")
 	win._set_hosting(true)
 	check(win.campaign_panel._hosting.text.contains("Address") and win.campaign_panel._hosting.text.contains("Co-GM code"), "hosting: the address and the code, for the phones: %s" % win.campaign_panel._hosting.text.replace("\n", " | "))
+	# the window, while the game runs: that it runs, where players join, the DM's screen a press away
+	check(win._running.visible and (win._running.find_child("Title", true, false) as Label).text == ctx.campaign.name, "the window says the game is running")
+	var join_at := (win._running.find_child("Urls", true, false) as VBoxContainer).get_children()
+	check(not join_at.is_empty() and (join_at[0] as Label).text.begins_with("http://"), "and where players join: %s" % [(join_at[0] as Label).text if not join_at.is_empty() else ""])
+	(win._running.find_child("OpenDm", true, false) as Button).pressed.emit()
+	check(win.last_opened.begins_with("http://localhost:") and win.last_opened.contains("/dm#t="), "the DM's screen, one press away: %s" % win.last_opened)
+	(win._running.find_child("FullTable", true, false) as Button).pressed.emit()
+	check(not win._running.visible and win._session_bar.visible, "the full Table, a press away")
+	win._on_menu(TableWindow.V_RUNNING)
+	check(win._running.visible, "and back again (View → The game, running)")
 	win._set_hosting(false)
+	check(not win._running.visible, "not hosting: the Table as it was")
 	# autosave writes the campaign beside its file
 	ctx.kernel.commit([{"t": "actor.set", "id": "a_h", "changes": {"name": "Hero the Bold"}}], "Rename")
 	win._autosave_now()
@@ -1071,6 +1082,16 @@ func test_campaign_packages() -> void:
 	var chapel_entry: Dictionary = authoring.ctx.campaign.maps[0] if not authoring.ctx.campaign.maps.is_empty() else {}
 	check(str(chapel_entry.get("path", "")) == "maps/ruined_chapel.hexmap" and FileAccess.file_exists(home.path_join("source/maps/ruined_chapel.hexmap")), "copied into the campaign's maps/: %s" % [chapel_entry])
 	check(str(chapel_entry.get("source", "")) != "", "remembering where it came from")
+	# a map drawn on a picture (a region): the picture comes with it
+	var vale := HexMap.create("The Vale", HexGrid.new(HexGrid.Orient.POINTY, HexGrid.Offset.ODD, 8, 6))
+	var png := Image.create(16, 12, false, Image.FORMAT_RGB8)
+	png.fill(Color("#7a9a5a"))
+	vale.add_asset("vale.png", png.save_png_to_buffer())
+	vale.levels[0]["backdrop"] = {"image": "local:vale.png", "pos": [0, 0], "size": [8.5, 6.0], "opacity": 1.0}
+	DirAccess.make_dir_recursive_absolute(home.path_join("elsewhere"))
+	check(vale.save(home.path_join("elsewhere/the_vale.hexmap")) == OK and FileAccess.file_exists(home.path_join("elsewhere/the_vale.assets/vale.png")), "a map on a picture, saved with it")
+	check(authoring.maps.add_map(home.path_join("elsewhere/the_vale.hexmap"), "regional") == "" and FileAccess.file_exists(home.path_join("source/maps/the_vale.assets/vale.png")),
+		"added to the campaign, its picture with it")
 	if has_art:
 		check(FileAccess.file_exists(home.path_join("source/art/dungeons_and_castles/pack.json")) and FileAccess.file_exists(home.path_join("source/art/woodland/pack.json")), "its art came with it")
 	if has_art:
@@ -1085,12 +1106,17 @@ func test_campaign_packages() -> void:
 	authoring.free()
 	# exported as a package: the adventure, not the play
 	var pkg := home.path_join("sunken_reach.campaignpkg")
+	var cover_svg := FileAccess.open(home.path_join("source/cover.svg"), FileAccess.WRITE)
+	cover_svg.store_string("<svg xmlns='http://www.w3.org/2000/svg' width='320' height='180'><rect width='320' height='180' fill='#224466'/><circle cx='160' cy='90' r='60' fill='#e5a55a'/></svg>")
+	cover_svg.close()
 	var ex := CampaignPackage.export_from(author, pkg, {"id": "sunken-reach", "package_version": "1.2.0", "description": "A drowned coast.",
-		"plugin_dirs": ["res://tests/plugins"]})
+		"plugin_dirs": ["res://tests/plugins"], "cover": "cover.svg"})
 	check(ex.ok and int(ex.files) >= 5, "exported: %d files%s" % [int(ex.files), "" if ex.ok else " — " + str(ex.why)])
 	var info := CampaignPackage.read(pkg)
 	check(info.ok and info.id == "sunken-reach" and info.name == "The Sunken Reach" and str(info.package_version) == "1.2.0", "the package says what it is: %s" % [info.why])
 	check(info.bundles_rules, "it carries the ruleset it plays")
+	var cover := CampaignPackage.cover_image(pkg, info, 480)
+	check(str(info.cover) == "cover.svg" and cover != null and cover.get_width() == 480 and cover.get_height() == 270, "and its cover, for the picker (%s)" % [str(info.cover)])
 	if has_art:
 		check((info.manifest.art as Dictionary).has("woodland") and (info.manifest.art as Dictionary).has("dungeons_and_castles"), "and the art its maps are drawn with, licences listed: %s" % [info.manifest.get("art", {})])
 	check(CampaignPackage.unmet(info, {}, App.version()).is_empty(), "so a table that has installed nothing can start it")
@@ -1137,6 +1163,7 @@ func test_campaign_packages() -> void:
 	var inst := CampaignPackage.instance(pkg, home.path_join("mine"), "Ana's Reach")
 	check(inst.ok, "started: %s" % str(inst.why))
 	check(FileAccess.get_file_as_bytes(pkg).size() == before, "the package is untouched")
+	check(FileAccess.file_exists(home.path_join("mine/maps/the_vale.assets/vale.png")), "the region's picture came in the package too")
 	var err := []
 	var mine := Campaign.load_file(str(inst.path), err)
 	check(mine != null and mine.name == "Ana's Reach" and mine.id != author.id, "the copy is the DM's own, with its own id")
@@ -1146,7 +1173,7 @@ func test_campaign_packages() -> void:
 	var kept_journal: Array = mine.journal.map(func(j: Dictionary) -> String: return str(j.id))
 	check(mine.player_notes.is_empty() and not kept_journal.has("j_1") and not kept_journal.has("j_shown") and kept_journal.has("j_prepared"),
 		"no player's notes and nothing the author's players were shown or banked; the author's prepared handout stays: %s" % [kept_journal])
-	check(mine.encounters.size() == 1 and mine.maps.size() == 1 and mine.packs.size() == 1, "the adventure came whole")
+	check(mine.encounters.size() == 1 and mine.maps.size() == 2 and mine.packs.size() == 1, "the adventure came whole")
 	check((mine.encounters[0].played as Array).is_empty() and not mine.doc.has("source_of"), "none of it marked played by the author's table, and not the author's working copy")
 	check(FileAccess.file_exists(home.path_join("mine/maps/ruined_chapel.hexmap")) and FileAccess.file_exists(home.path_join("mine/packs/reach/pack.json")), "its maps and content are in the DM's folder")
 	if has_art:
@@ -1176,7 +1203,10 @@ func test_campaign_packages() -> void:
 	# the start dialog: the pitch first, the name inline, what is inside folded away
 	var dlg := win._package_dialog(pkg, info, whole)
 	var pitch := _find_first(dlg, "RichTextLabel") as RichTextLabel
-	check(pitch != null and pitch.get_parsed_text().begins_with("The Sunken Reach  1.2.0") and pitch.get_parsed_text().contains("A drowned coast."), "the start dialog leads with the adventure: %s" % (pitch.get_parsed_text() if pitch != null else ""))
+	var dlg_title := dlg.find_children("*", "Label", true, false).filter(func(l: Label) -> bool: return l.theme_type_variation == "DisplayLabel")
+	check(not dlg_title.is_empty() and (dlg_title[0] as Label).text == "The Sunken Reach", "the start dialog leads with the adventure's name")
+	check(dlg.find_child("Cover", true, false) is TextureRect, "and its cover")
+	check(pitch != null and pitch.get_parsed_text().begins_with("1.2.0") and pitch.get_parsed_text().contains("A drowned coast."), "then its version and pitch: %s" % (pitch.get_parsed_text() if pitch != null else ""))
 	var cname := dlg.find_child("CampaignName", true, false) as LineEdit
 	check(cname != null and cname.text == "The Sunken Reach", "and asks what to call it, inline")
 	var inside_text := dlg.find_child("InsideText", true, false) as Label
@@ -1208,7 +1238,8 @@ func test_campaign_packages() -> void:
 	var dup := Campaign.duplicate_to(mine, home.path_join("second"), "Ben's Reach", true)
 	check(dup.ok, "duplicated: %s" % str(dup.why))
 	var copy := Campaign.load_file(str(dup.path), err)
-	check(copy != null and copy.name == "Ben's Reach" and copy.id != mine.id and copy.maps.size() == 1, "the copy stands alone")
+	check(copy != null and copy.name == "Ben's Reach" and copy.id != mine.id and copy.maps.size() == 2, "the copy stands alone")
+	check(FileAccess.file_exists(home.path_join("second/maps/the_vale.assets/vale.png")), "the region's picture with it")
 	check(copy.encounters.size() == 1 and (copy.encounters[0].played as Array).is_empty() and (copy.doc.journal as Array).is_empty(), "as a fresh start: nothing played, no journal")
 	check(FileAccess.file_exists(home.path_join("second/packs/reach/pack.json")), "with its own copy of the content")
 	check(not Campaign.duplicate_to(mine, home.path_join("second"), "Again").ok, "a folder that exists is not overwritten")

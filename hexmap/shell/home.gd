@@ -45,40 +45,40 @@ func _build() -> void:
 	resized.connect(_fit)
 	_fit()
 
+	# the name in the display face, what it is for beneath (playtest 2: one
+	# font for both read as unfinished)
 	var title := Label.new()
+	title.name = "Title"
 	title.text = App.NAME
-	title.theme_type_variation = "HeaderLabel"
+	title.theme_type_variation = "DisplayLabel"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(title)
+	var tagline := Label.new()
+	tagline.text = "Maps and games for your table"
+	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(tagline)
 	var sub := Label.new()
 	sub.text = App.build_stamp()
 	sub.theme_type_variation = "DimLabel"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(sub)
+	var gap := Control.new()
+	gap.custom_minimum_size.y = 8
+	column.add_child(gap)
 
 	# the campaign last opened, one press away (U3: pick up where we left off)
 	var last := last_campaign(app.recent())
 	if last != "" and App.mode_available("table"):
-		var cont := Button.new()
+		var cont := card("Continue “%s”" % campaign_title(last), "The campaign you had open last", "folder-open", true)
 		cont.name = "Continue"
-		cont.text = "Continue “%s”\nThe campaign you had open last" % campaign_title(last)
-		cont.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		cont.custom_minimum_size = Vector2(0, 64)
-		cont.theme_type_variation = "AccentButton"
-		cont.set_meta("icon", "folder-open")
 		cont.tooltip_text = last
 		cont.pressed.connect(func() -> void: open_mode.emit("table", last))
 		column.add_child(cont)
 
 	var order: Array = MODE_ORDER.filter(func(m: String) -> bool: return App.mode_available(m)) + MODE_ORDER.filter(func(m: String) -> bool: return not App.mode_available(m))
 	for m in order:
-		var b := Button.new()
+		var b := card(MODE_TEXT[m][0], MODE_TEXT[m][1], MODE_ICONS[m])
 		b.name = "Mode_" + m
-		b.text = "%s\n%s" % MODE_TEXT[m]
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.custom_minimum_size = Vector2(0, 64)
-		b.set_meta("icon", MODE_ICONS[m])
 		b.disabled = not App.mode_available(m)
 		if b.disabled:
 			b.tooltip_text = "Not on this device"
@@ -99,6 +99,80 @@ func _build() -> void:
 			examples.append(p)
 	if not examples.is_empty():
 		_file_list(column, "Example maps", examples)
+
+
+## A card to press: an icon, a title in the display face and a line of
+## what it does. (A button's own text is one font; this is two.)
+static func card(title: String, text: String, icon := "", accent := false, picture: Texture2D = null) -> Button:
+	var b := Button.new()
+	b.theme_type_variation = "AccentButton" if accent else ""
+	b.custom_minimum_size = Vector2(0, 96 if picture != null else 72)
+	b.set_meta("title", title)
+	b.set_meta("text", text)
+	if "accessibility_name" in b:
+		b.set("accessibility_name", "%s. %s" % [title, text])
+	var pad := MarginContainer.new()
+	pad.name = "Card"
+	pad.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pad.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		pad.add_theme_constant_override("margin_" + side, 14)
+	for side in ["top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 10)
+	b.add_child(pad)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 14)
+	pad.add_child(row)
+	if picture != null:
+		# a cover: cropped to a small landscape, not stretched
+		var pic := TextureRect.new()
+		pic.name = "Cover"
+		pic.texture = picture
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		pic.custom_minimum_size = Vector2(128, 76)
+		pic.clip_contents = true
+		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(pic)
+	elif icon != "":
+		var ic := TextureRect.new()
+		ic.name = "Icon"
+		ic.set_meta("icon", icon)
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+		ic.custom_minimum_size = Vector2(28, 0)
+		ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(ic)
+	var words := VBoxContainer.new()
+	words.name = "Words"
+	words.alignment = BoxContainer.ALIGNMENT_CENTER
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	words.add_theme_constant_override("separation", 2)
+	row.add_child(words)
+	var t := Label.new()
+	t.name = "Title"
+	t.text = title
+	t.theme_type_variation = "CardTitle"
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	words.add_child(t)
+	var d := Label.new()
+	d.name = "Text"
+	d.text = text
+	d.theme_type_variation = "DimLabel"
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	words.add_child(d)
+	# as tall as its words need, once they have wrapped at its width
+	var least := b.custom_minimum_size.y
+	pad.minimum_size_changed.connect(func() -> void:
+		b.custom_minimum_size.y = maxf(least, pad.get_combined_minimum_size().y))
+	return b
+
+
+## A card's words, "title\ntext" (for tests and tooltips).
+static func card_text(b: Button) -> String:
+	return "%s\n%s" % [str(b.get_meta("title", b.text)), str(b.get_meta("text", ""))]
 
 
 ## The most recent campaign still on disk, or "".
@@ -180,3 +254,20 @@ func _restyle() -> void:
 	for b in find_children("*", "Button", true, false):
 		if b.has_meta("icon"):
 			(b as Button).icon = UiIcons.get_icon(str(b.get_meta("icon")), int(t.icon) + 6, text, t.stroke)
+	restyle_cards(self, t)
+
+
+## Cards in the theme's colours: their icons, and on an accent card its
+## words in the accent's ink.
+static func restyle_cards(under: Node, t: Dictionary) -> void:
+	for pad in under.find_children("Card", "MarginContainer", true, false):
+		var b := pad.get_parent() as Button
+		if b == null:
+			continue
+		var on_accent := b.theme_type_variation == "AccentButton"
+		var ink := ThemeBuilder.c(t, "accent_text") if on_accent else ThemeBuilder.c(t, "text")
+		for ic in pad.find_children("Icon", "TextureRect", true, false):
+			(ic as TextureRect).texture = UiIcons.get_icon(str(ic.get_meta("icon")), int(t.icon) + 8, ink, t.stroke)
+		if on_accent:
+			for l in pad.find_children("*", "Label", true, false):
+				(l as Label).add_theme_color_override("font_color", ink if l.name == "Title" else Color(ink, 0.8))

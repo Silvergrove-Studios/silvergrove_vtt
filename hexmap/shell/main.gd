@@ -126,7 +126,11 @@ func open_mode(p_mode: String, arg := "") -> void:
 	match p_mode:
 		"editor": window = EditorWindow.new()
 		"table": window = TableWindow.new()
-		"player": window = PlayerWindow.new()
+		"player":
+			var pw := PlayerWindow.new()
+			# a table heard with a web side can be played in the browser too
+			pw.open_url = func(url: String) -> void: OS.shell_open(url)
+			window = pw
 		"display":
 			var pw := PlayerWindow.new()
 			pw.display_mode = true

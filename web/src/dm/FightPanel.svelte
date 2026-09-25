@@ -44,7 +44,7 @@
   {#if token}
     <section class="chosen">
       <div class="who">
-        <h3>{token.name}</h3>
+        {#if !actor}<h3>{token.name}</h3>{/if}
         <div class="tools">
           <button type="button" onclick={() => dmOp('token', { scene, id: token.id, hidden: !token.hidden })}>{token.hidden ? 'Reveal' : 'Hide'}</button>
           {#if token.actor}<button type="button" class="quiet" onclick={() => onopen(`actor:${token.actor}`)}>Open the card</button>{/if}

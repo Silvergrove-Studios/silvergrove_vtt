@@ -67,8 +67,9 @@ func test_home_screen() -> void:
 	(home._recent_box.get_child(0) as Button).pressed.emit()
 	check(opened.size() == 2 and opened[1][0] == "editor" and opened[1][1].ends_with("forest_road.hexmap"), "recent map opens in the editor")
 	# the words are what people come to do; what this device can do comes first
-	check((home.find_child("Mode_table", true, false) as Button).text.begins_with("Run a game") and (home.find_child("Mode_player", true, false) as Button).text.begins_with("Join a game")
-		and (home.find_child("Mode_editor", true, false) as Button).text.begins_with("Draw maps"), "Run a game, Join a game, Draw maps")
+	check(HomeScreen.card_text(home.find_child("Mode_table", true, false)).begins_with("Run a game") and HomeScreen.card_text(home.find_child("Mode_player", true, false)).begins_with("Join a game")
+		and HomeScreen.card_text(home.find_child("Mode_editor", true, false)).begins_with("Draw maps"), "Run a game, Join a game, Draw maps")
+	check((home.find_child("Title", true, false) as Label).theme_type_variation == "DisplayLabel", "the name in the display face, not the words' font")
 	var first_mode := home._column.get_children().filter(func(c: Node) -> bool: return str(c.name).begins_with("Mode_"))[0] as Button
 	check(not first_mode.disabled, "the first choice is one this device has: %s" % first_mode.name)
 	check(home.find_child("Continue", true, false) == null, "nothing to continue yet")
@@ -87,7 +88,7 @@ func test_home_screen() -> void:
 	home.open_mode.connect(func(m: String, a: String) -> void: opened.append([m, a]))
 	var cont := home.find_child("Continue", true, false) as Button
 	if App.mode_available("table"):
-		check(cont != null and cont.text.begins_with("Continue “Our Chapel”") and cont.get_index() < home.find_child("Mode_table", true, false).get_index(), "Continue “Our Chapel”, above everything")
+		check(cont != null and HomeScreen.card_text(cont).begins_with("Continue “Our Chapel”") and cont.get_index() < home.find_child("Mode_table", true, false).get_index(), "Continue “Our Chapel”, above everything")
 		cont.pressed.emit()
 		check(opened.size() == 1 and opened[0][0] == "table" and str(opened[0][1]).ends_with("our_chapel.campaign"), "opens it at the Table")
 	else:

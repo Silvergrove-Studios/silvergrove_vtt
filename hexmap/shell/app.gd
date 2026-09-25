@@ -31,6 +31,8 @@ func _init(p_prefs_path := PREFS_PATH) -> void:
 ## Tests and self-tests never host by themselves: a campaign opening would
 ## otherwise bind the network port on every run.
 static var no_auto_host := false
+## Nor do they open the DM's screen in a browser.
+static var no_browser := false
 
 
 static func version() -> String:

@@ -49,6 +49,7 @@ func _run() -> void:
 	var pkg := str(args[1])
 	DirAccess.make_dir_recursive_absolute(out)
 	App.no_auto_host = false
+	App.no_browser = true
 	var work := "user://journey_shots"
 	if DirAccess.dir_exists_absolute(work):
 		PluginHost._rm_rf(work)
