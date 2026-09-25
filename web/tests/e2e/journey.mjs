@@ -77,6 +77,13 @@ await step('Ben joins by tapping his name', async () => {
   await shot(ben, 'ben_joined');
 });
 
+await step('the adventure’s book opens with its introduction', async () => {
+  await dm.locator('.book').getByRole('button', { name: /^Introduction/ }).first().click();
+  await dm.getByText('Adventure background').waitFor({ timeout: 5000 });
+  await shot(dm, 'dm_introduction');
+  await dm.getByRole('button', { name: 'Close the card' }).click();
+});
+
 await step('the DM invites: a code and an address', async () => {
   await dm.getByRole('button', { name: 'Invite players' }).first().click();
   await dm.getByText('Open a player’s screen on this computer').waitFor();

@@ -118,6 +118,11 @@ func test_square_grid_exports() -> void:
 	check(first.substr(0, first.find("/>")).count(",") == 4, "a square has four corners: %s" % first)
 	var probe := Image.new()
 	check(probe.load_svg_from_string(svg) == OK and probe.get_width() == 600, "Godot's SVG loader accepts it (%d px wide)" % probe.get_width())
+	# a map drawn with no grid (a region painted as a picture) exports none either
+	check(m.shows_grid(), "a map shows its grid unless it says not")
+	m.style["show_grid"] = false
+	check(not m.shows_grid() and SvgExport.overlay(m, 0, 100.0).count("<polygon") == 0, "no grid drawn, none exported")
+	m.style.erase("show_grid")
 	# Tiled tile images on a square grid crop hex-shaped art to the square
 	# inside the hexagon: no transparent corners on a square tile
 	var packs := PackLibrary.new()

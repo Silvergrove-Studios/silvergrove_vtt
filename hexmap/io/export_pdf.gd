@@ -110,7 +110,7 @@ static func export(host: Node, map: HexMap, packs: PackLibrary, path: String, op
 		pdf.push_clip(page, place)
 		var to_page := func(p_hex: Vector2) -> Vector2:
 			return place.position + (p_hex - region_hex.position) * hex_pt
-		if bool(o.grid):
+		if bool(o.grid) and map.shows_grid():
 			var gw := maxf(float(map.style.get("grid_width", 0.012)) * hex_pt, 0.4)
 			pdf.set_line(page, gw, o.grid_color)
 			var pad := region_hex.grow(1.0)

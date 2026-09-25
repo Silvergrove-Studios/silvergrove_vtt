@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Maps without a grid.** *Show the grid* in Map settings: off for a map
+  painted as a picture, a region say, where travel is not counted in
+  cells (the DM of the third playtest: "for a lot of campaigns the
+  regional map should not have any grid at all"). Its cells still place
+  things, unseen; the Table, the web screens and the SVG and PDF exports
+  draw none, and a token dropped on it stays where it was let go.
+
 ## 2.3.0 — 2026-09-25
 
 The web Table: the response to the second playtest (`docs/playtest-2.md`,

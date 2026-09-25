@@ -13,7 +13,9 @@ static func overlay(map: HexMap, level_index: int, ppx: float) -> String:
 	s.append('<g id="grid" fill="none" stroke="%s" stroke-opacity="%s" stroke-width="%s" stroke-linejoin="round">' % [
 		_hex(Color(str(map.style.get("grid_color", "#00000066")))), _n(Color(str(map.style.get("grid_color", "#00000066"))).a),
 		_n(maxf(float(map.style.get("grid_width", 0.012)) * ppx, 0.5))])
-	for cell in grid.all_cells():
+	# (a map drawn without its grid exports without it too)
+	var cells: Array = grid.all_cells() if map.shows_grid() else []
+	for cell in cells:
 		var pts := PackedStringArray()
 		for c in grid.cell_corners(cell):
 			pts.append("%s,%s" % [_n(c.x * ppx), _n(c.y * ppx)])

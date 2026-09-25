@@ -299,7 +299,8 @@
       if (was.token) onTokenClick?.(was.token);
       else if (prep) onCellClick?.(prep.grid.cellAt(w), w);
     } else if (drag && was.token && prep) {
-      const c = prep.grid.center(prep.grid.cellAt(drag.pos));
+      // onto a cell's centre, or where it was let go on a map with no grid drawn
+      const c = map?.style?.show_grid === false ? drag.pos : prep.grid.center(prep.grid.cellAt(drag.pos));
       drag = { id: drag.id, pos: c };
       onTokenDrop?.(was.token, [c.x, c.y]);
       // (if the table refuses, the token goes back)

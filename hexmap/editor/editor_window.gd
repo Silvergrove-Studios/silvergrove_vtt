@@ -857,11 +857,12 @@ func _map_settings_dialog() -> void:
 		{"key": "units", "label": "Units", "type": "string"},
 		{"key": "reference_ppx", "label": "Authoring pixels per cell", "type": "int", "min": 16, "max": 2048},
 		{"key": "background", "label": "Background", "type": "color", "alpha": false},
+		{"key": "show_grid", "label": "Show the grid", "type": "bool", "tooltip": "Off for a map painted as a picture, a region say: its cells still place things, unseen. Keep it for a battle map, or where travel is counted in cells."},
 		{"key": "grid_color", "label": "Grid colour", "type": "color"},
 		{"key": "grid_width", "label": "Grid width", "type": "float", "min": 0.0, "max": 0.2, "step": 0.002, "suffix": " hex"},
 	], {"name": ctx.map.name, "author": ctx.map.doc.meta.get("author", ""), "description": ctx.map.doc.meta.get("description", ""),
 		"columns": g.columns, "rows": g.rows, "shape": g.shape, "orientation": g.orientation, "offset": g.offset, "distance": g.distance, "units": g.units,
-		"reference_ppx": ctx.map.reference_ppx, "background": s.get("background", "#1c1a17"), "grid_color": s.get("grid_color", "#00000066"), "grid_width": s.get("grid_width", 0.012)})
+		"reference_ppx": ctx.map.reference_ppx, "background": s.get("background", "#1c1a17"), "show_grid": ctx.map.shows_grid(), "grid_color": s.get("grid_color", "#00000066"), "grid_width": s.get("grid_width", 0.012)})
 	_form_dialog("Map settings", form, func(v: Dictionary) -> void:
 		var meta: Dictionary = ctx.map.doc.meta.duplicate()
 		meta.author = v.author
@@ -869,7 +870,8 @@ func _map_settings_dialog() -> void:
 		ctx.commands.update_map({
 			"name": v.name, "meta": meta, "reference_ppx": int(v.reference_ppx),
 			"grid": {"shape": v.shape, "orientation": v.orientation, "offset": v.offset, "columns": int(v.columns), "rows": int(v.rows), "distance": v.distance, "units": v.units},
-			"style": {"background": v.background, "grid_color": v.grid_color, "grid_width": v.grid_width},
+			# (the style's other keys are kept as they were)
+			"style": ctx.map.style.merged({"background": v.background, "show_grid": bool(v.show_grid), "grid_color": v.grid_color, "grid_width": v.grid_width}, true),
 		}))
 
 

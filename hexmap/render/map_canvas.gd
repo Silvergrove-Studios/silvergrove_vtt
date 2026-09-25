@@ -572,7 +572,7 @@ func _draw_cells(c: Node2D, grid: HexGrid, cells: Array, color: Color, alpha: fl
 
 
 func _draw_grid(c: Node2D) -> void:
-	if map == null or not show_grid:
+	if map == null or not show_grid or not map.shows_grid():
 		return
 	var grid := map.grid
 	var color := grid_color_override if grid_color_override.a > 0.0 else Color(str(map.style.get("grid_color", "#00000066")))

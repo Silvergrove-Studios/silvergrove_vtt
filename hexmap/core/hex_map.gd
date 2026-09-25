@@ -68,6 +68,12 @@ var reference_ppx: int:
 var style: Dictionary:
 	get: return doc.get("style", {})
 
+
+## Whether the grid is drawn: a map painted as a picture (a region) may say
+## not (`style.show_grid: false`). Its cells still place things, unseen.
+func shows_grid() -> bool:
+	return bool(style.get("show_grid", true))
+
 var levels: Array:
 	get: return doc.get("levels", [])
 
