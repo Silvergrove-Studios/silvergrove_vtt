@@ -82,13 +82,13 @@ what they were shown, and their own notes, in the Journal.
 Before the rest of the session the DM said the web screens were "a big
 improvement", and asked for three things. *The Ruined Chapel* 0.5.0 (the
 `playtest-3` prerelease of the ruleset repo, on Hexmap 2.3.0) answers the
-first two; the third is in Hexmap after 2.3.0.
+first two; the third is in Hexmap 2.3.1.
 
 | # | the DM said | now |
 |---|---|---|
 | D1 | "a dnd book usually has a long preamble describing the campaign" | The book opens with *The adventure*: an *Introduction* (background, overview, hooks, how to run it, the people), then *Part 1: Thornwick*, *Part 2: The road west*, *Part 3: The ruined chapel* and a *Conclusion*, in the order they are played. *Running it in Hexmap* is a note of its own. |
 | D2 | the forest road used as a regional map does not match one (a log two cells long, a village one cell wide, tents shown but not the chapel); "the forest road IS a battle map" | A true regional map: *The Vale of Thornwick*, painted at one scale — the village a cluster of roofs, the chapel a ruined church on its hill, the hut under an oak, the goblins' tents in the trees — each beside its place's marker. The forest road is a battle map again, for the optional fight at the goblins' lookout. |
-| D3 | a regional map may be hex when travel is measured, but for many campaigns it should have no grid at all | Map settings → *Show the grid* (off: no grid drawn, in the editor, the Table, the web screens and the SVG and PDF exports). In 2.3.0 the vale hides its grid with a clear grid colour. |
+| D3 | a regional map may be hex when travel is measured, but for many campaigns it should have no grid at all | Hexmap 2.3.1: Map settings → *Show the grid* (off: no grid drawn, in the editor, the Table, the web screens and the SVG and PDF exports). In 2.3.0 the vale hides its grid with a clear grid colour. |
 
 ## Known gaps
 

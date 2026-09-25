@@ -1,13 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.3.1 — 2026-09-25
+
+After the DM's first notes in the third playtest (`docs/playtest-3.md`).
 
 - **Maps without a grid.** *Show the grid* in Map settings: off for a map
   painted as a picture, a region say, where travel is not counted in
-  cells (the DM of the third playtest: "for a lot of campaigns the
-  regional map should not have any grid at all"). Its cells still place
-  things, unseen; the Table, the web screens and the SVG and PDF exports
-  draw none, and a token dropped on it stays where it was let go.
+  cells (the DM of the third playtest: a regional map may be hex when
+  travel is measured, but for a lot of campaigns it should have no grid
+  at all). Its cells still place things, unseen; the editor, the Table,
+  the web screens and the SVG and PDF exports draw none, and a token
+  dropped on it stays where it was let go.
 - The DM's next step names what the adventure says to read first by its
   own title (*Open “Introduction”*), not always *Start here*.
 - The web screens' map opens showing the whole map: it could fit itself
