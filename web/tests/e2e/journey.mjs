@@ -95,6 +95,14 @@ await step('a place’s card, from the book', async () => {
   await shot(dm, 'dm_place_card');
 });
 
+await step('a card popped out into a window of its own', async () => {
+  const [win] = await Promise.all([dm.context().waitForEvent('page'), dm.getByRole('button', { name: /Pop out/ }).click()]);
+  await win.setViewportSize({ width: 720, height: 900 });
+  await win.getByText('Read aloud').waitFor({ timeout: 10000 });
+  await shot(win, 'dm_card_popped_out');
+  await win.close();
+});
+
 await step('shown to the players: it comes up on their screens', async () => {
   await dm.getByRole('button', { name: 'Show the players' }).first().click();
   await ana.getByRole('dialog', { name: 'Thornwick' }).waitFor({ timeout: 5000 });

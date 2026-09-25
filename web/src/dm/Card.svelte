@@ -30,6 +30,7 @@
   const folders = $derived(folderChoices(dm));
   const filedIn = $derived(String(layout(dm).in[ref] ?? ''));
   let editing = $state(false);
+  let editingNotes = $state(false);
   let entry = $state<Dict | null>(null);
   let entryError = $state('');
   let showMenu = $state(false);
@@ -84,6 +85,20 @@
   const isLive = $derived(!!encounter?.live && Object.keys(encounter.live).length > 0);
   const players = $derived(game.players);
 </script>
+
+{#snippet yours(text: string, placeholder: string, save: (v: string) => void)}
+  <section class="yours">
+    <div class="yourshead">
+      <h3>For you <span class="dim">— the players never see this</span></h3>
+      <button type="button" class="quiet small" onclick={() => (editingNotes = !editingNotes)}>{editingNotes ? 'Done' : text.trim() ? 'Edit' : 'Write some'}</button>
+    </div>
+    {#if editingNotes}
+      <textarea rows="10" {placeholder} value={text} oninput={(e) => save(e.currentTarget.value)}></textarea>
+    {:else if text.trim()}
+      <div class="prose notes">{@html markdown(text)}</div>
+    {/if}
+  </section>
+{/snippet}
 
 <article class="card">
   <header class="head">
@@ -153,10 +168,7 @@
           <div class="prose">{@html markdown(String(place.text))}</div>
         </section>
       {/if}
-      <section class="yours">
-        <h3>For you <span class="dim">— the players never see this</span></h3>
-        <textarea rows="6" placeholder="What you know about this place" value={place.notes ?? ''} oninput={(e) => setPlace('notes', e.currentTarget.value)}></textarea>
-      </section>
+      {@render yours(String(place.notes ?? ''), 'What you know about this place', (v) => setPlace('notes', v))}
       {#if peopleHere.length}
         <section>
           <h3>Here</h3>
@@ -189,10 +201,7 @@
             <p class="dim">Nothing yet.</p>
           {/if}
         </section>
-        <section class="yours">
-          <h3>For you <span class="dim">— the players never see this</span></h3>
-          <textarea rows="5" placeholder="What they want, what they know, how they talk" value={person.notes ?? ''} oninput={(e) => setActor('notes', e.currentTarget.value)}></textarea>
-        </section>
+        {@render yours(String(person.notes ?? ''), 'What they want, what they know, how they talk', (v) => setActor('notes', v))}
         <button type="button" class="quiet small" onclick={() => (editing = !editing)}>{editing ? 'Done editing' : 'Edit what the players may learn'}</button>
       {/if}
       {#if viewActor}
@@ -369,6 +378,18 @@
   .edit textarea,
   .edit input {
     width: 100%;
+  }
+  .yourshead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .notes {
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(184, 156, 255, 0.07);
+    border: 1px solid rgba(184, 156, 255, 0.22);
   }
   .edit {
     display: flex;
