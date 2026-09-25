@@ -783,6 +783,10 @@ func launch(enc_id: String, show := true) -> String:
 			for aid in ctx.encounter().actors.keys():
 				if not before.has(aid):
 					made.append(str(aid))
+	# the party comes too: without their tokens the players would see only fog
+	var why_party := place_party(str(scene.id), m, e)
+	if why_party != "":
+		problems.append(why_party)
 	# (with no scene active before, the kernel shows the first one: nothing to stage behind)
 	e.live = {"scene": str(scene.id), "actors": made, "previous": previous, "staged": ctx.encounter().active_scene_id != str(scene.id)}
 	if not e.has("played") or not (e.played is Array):
@@ -794,6 +798,66 @@ func launch(enc_id: String, show := true) -> String:
 	if not problems.is_empty():
 		return "Launched with problems: " + "; ".join(problems)
 	return ""
+
+
+## The party on a fight's map: a token for every player character and
+## companion not already there, owned by its player, side by side from the
+## encounter's `party_cell` ("col,row", where the author says the party
+## comes in) or else the middle of the map's west edge. "" or why.
+func place_party(scene_id: String, m: HexMap, e: Dictionary) -> String:
+	var enc := ctx.encounter()
+	var grid := m.grid
+	var start := grid.offset_to_axial(1, grid.rows / 2)
+	var spec := str(e.get("party_cell", ""))
+	if spec.contains(","):
+		start = grid.offset_to_axial(int(spec.get_slice(",", 0)), int(spec.get_slice(",", 1)))
+	var taken := {}
+	var here := {}
+	for tk in ctx.state.tokens(scene_id):
+		taken[grid.world_to_axial(Vision.token_pos(tk))] = true
+		if str(tk.get("actor", "")) != "":
+			here[str(tk.actor)] = true
+	var ids := enc.actors.keys()
+	ids.sort_custom(func(a: String, b: String) -> bool: return str(enc.actors[a].get("name", a)).naturalnocasecmp_to(str(enc.actors[b].get("name", b))) < 0)
+	var events := []
+	for aid in ids:
+		var a: Dictionary = enc.actors[aid]
+		if not (str(a.get("kind", "")) in ["pc", "companion"]) or here.has(str(aid)):
+			continue
+		var cell := _free_cell(grid, start, taken)
+		taken[cell] = true
+		var owner := str(a.get("owner", ""))
+		var color := str(enc.player(owner).get("color", "#4f9cf6")) if owner != "" else "#4f9cf6"
+		var words := str(a.get("name", "?")).split(" ", false)
+		var label := (words[0].left(1) + (words[1].left(1) if words.size() > 1 else words[0].substr(1, 1))).to_upper() if not words.is_empty() else "?"
+		var extra := {"actor": str(aid), "label": label, "color": color, "hidden": false, "vision": {"radius": 6}}
+		if owner != "":
+			extra.owner = owner
+		# what the character's own token says (art, size, sight) wins
+		var own: Variant = a.get("token", {})
+		if own is Dictionary:
+			for k in ["art", "size", "color", "label", "vision"]:
+				if (own as Dictionary).has(k) and own[k] != null and str(own[k]) != "":
+					extra[k] = JsonDoc.deep(own[k])
+		events.append({"t": "token.add", "scene": scene_id, "token": Encounter.new_token(str(a.get("name", "")), grid.cell_center(cell), extra)})
+	if events.is_empty():
+		return ""
+	return ctx.commands.run_all(events, "The party arrives")
+
+
+## The free cell nearest `from` (itself, then ring by ring), on the map.
+static func _free_cell(grid: HexGrid, from: Vector2i, taken: Dictionary) -> Vector2i:
+	var seen := {from: true}
+	var queue: Array[Vector2i] = [from]
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		if grid.in_bounds(c) and not taken.has(c):
+			return c
+		for nb in grid.neighbors(c):
+			if not seen.has(nb) and seen.size() < 4096:
+				seen[nb] = true
+				queue.append(nb)
+	return from
 
 
 ## Go: the staged fight becomes the scene the players see. "" or why.

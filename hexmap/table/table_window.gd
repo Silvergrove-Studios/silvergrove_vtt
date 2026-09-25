@@ -19,6 +19,9 @@ const V_PLAYER_BASE := 2000
 var app: App
 var ctx := TableContext.new()
 var host: HostSession
+## The ports the table is hosted on (a test harness may move them).
+var host_port := Protocol.DEFAULT_PORT
+var web_port := WebServer.DEFAULT_PORT
 var host_button: Button
 var bonjour := Bonjour.new()
 var view: TableView
@@ -1392,7 +1395,7 @@ func _set_hosting(on: bool) -> void:
 			print("discovery: answered %s" % ip))
 		host.client_joined.connect(func(_p: String) -> void: _refresh_online())
 		host.client_left.connect(func(_p: String) -> void: _refresh_online())
-		var err := host.start()
+		var err := host.start(host_port, true, web_port)
 		if err != OK:
 			_info("Could not start hosting: %s" % error_string(err))
 			host = null

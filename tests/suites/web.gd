@@ -39,6 +39,23 @@ func test_web_server() -> void:
 	for bad in ["/../project.godot", "/assets/../../project.godot", "/assets/%2e%2e/%2e%2e/project.godot", "/assets/x%00.js", "/nothing"]:
 		check(str(get.call(bad)).begins_with("HTTP/1.1 404"), "nothing outside its roots: %s" % bad)
 	check(str(get.call("/", "POST")).begins_with("HTTP/1.1 405"), "only GET and HEAD")
+	# the web clients as the exports carry them: one zip
+	var zpath := "user://test_webclient.zip"
+	var zp := ZIPPacker.new()
+	zp.open(zpath)
+	zp.start_file("index.html")
+	zp.write_file("<!doctype html><html>Zipped web</html>".to_utf8_buffer())
+	zp.close_file()
+	zp.start_file("assets/app-1.js")
+	zp.write_file("console.log('zipped')".to_utf8_buffer())
+	zp.close_file()
+	zp.close()
+	var wz := WebServer.new()
+	wz.root = zpath
+	check(wz.respond("GET /dm HTTP/1.1\r\n\r\n").get_string_from_utf8().contains("Zipped web"), "the page, out of the zip")
+	check(wz.respond("GET /assets/app-1.js HTTP/1.1\r\n\r\n").get_string_from_utf8().contains("console.log('zipped')"), "a script, out of the zip")
+	check(wz.respond("GET /assets/none.js HTTP/1.1\r\n\r\n").get_string_from_utf8().begins_with("HTTP/1.1 404"), "only what the zip holds")
+	check(FileAccess.file_exists("res://webclient.zip") and WebServer.new().respond("GET / HTTP/1.1\r\n\r\n").get_string_from_utf8().contains("<div id=\"app\">"), "the built web clients are in the project (web/: npm run build)")
 	var head: String = get.call("/", "HEAD")
 	check(head.begins_with("HTTP/1.1 200") and not head.contains("Hexmap web"), "HEAD: the headers alone")
 	# over a real socket
@@ -191,6 +208,10 @@ func test_web_clients_on_the_host() -> void:
 	var dm_scene: Dictionary = dm.last("scene")
 	check((dm_scene.scene.tokens as Array).size() == 6 and (dm_scene.get("scenes", []) as Array).size() == 2, "the DM sees every token, and every scene")
 	check(HostSession.is_local_address("127.0.0.1") and HostSession.is_local_address("::1") and not HostSession.is_local_address("192.168.1.9"), "only a browser on this machine may be the DM")
+	for ip in ["0:0:0:0:0:0:0:1", "::ffff:127.0.0.1", "0:0:0:0:0:ffff:7f00:1", "127.0.1.1"]:
+		check(HostSession.is_local_address(ip), "this machine, however it is written: %s" % ip)
+	for ip in ["::ffff:192.168.1.9", "0:0:0:0:0:ffff:c0a8:109", "fe80::1", "::", "10.0.0.1", ""]:
+		check(not HostSession.is_local_address(ip), "not this machine: %s" % ip)
 	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "launch", "encounter": "e1"}})
 	check(_pump(host, [dm], func() -> bool: return ops.has("launch")), "the DM's operations reach the Table")
 	var crypt := str(st.encounter.scenes[1].id)

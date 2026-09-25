@@ -141,7 +141,41 @@ func _is_gm(c: Dictionary) -> bool:
 
 ## Is the client on this machine (the DM's own browser)?
 static func is_local_address(ip: String) -> bool:
-	return ip == "127.0.0.1" or ip == "::1" or ip == "::ffff:127.0.0.1"
+	var a := ip.strip_edges().to_lower()
+	if a.begins_with("127."):
+		return true
+	if not a.contains(":"):
+		return false
+	# IPv6, however it is written: "::1", "0:0:0:0:0:0:0:1", "::ffff:127.0.0.1",
+	# "0:0:0:0:0:ffff:7f00:1" (a browser on this computer asking for localhost)
+	var tail := ""
+	if a.get_slice(":", a.get_slice_count(":") - 1).contains("."):
+		tail = a.get_slice(":", a.get_slice_count(":") - 1)
+		a = a.left(a.length() - tail.length()) + "0:0"
+	var parts := a.split("::")
+	if parts.size() > 2:
+		return false
+	var head := parts[0].split(":", false)
+	var rest := parts[1].split(":", false) if parts.size() == 2 else PackedStringArray()
+	var groups := []
+	for g in head:
+		groups.append(g.hex_to_int())
+	for i in 8 - head.size() - rest.size():
+		groups.append(0)
+	for g in rest:
+		groups.append(g.hex_to_int())
+	if groups.size() != 8:
+		return false
+	var zeros := func(n: int) -> bool:
+		for i in n:
+			if int(groups[i]) != 0:
+				return false
+		return true
+	if zeros.call(7) and int(groups[7]) == 1:
+		return true
+	if zeros.call(5) and int(groups[5]) == 0xffff:
+		return tail.begins_with("127.") if tail != "" else (int(groups[6]) >> 8) == 127
+	return false
 
 
 ## The web address players open: one per network this machine is on.
@@ -323,6 +357,8 @@ func projection(c: Dictionary) -> Dictionary:
 	var role := Views.ROLE_GM if _is_gm(c) else (str(c.role) if c.role != "" else Views.ROLE_PLAYER)
 	var out := Views.project(kernel, plugins, pid, role)
 	out.notes = PlayerNotes.for_viewer(notes_source.call(), pid, role) if notes_source.is_valid() else []
+	# what can be looked up (the web screens search across these)
+	out.collections = kernel.comp.collections()
 	# the chat of sessions before, as far as this viewer may read it
 	out.chat_history = []
 	if chat_source.is_valid():

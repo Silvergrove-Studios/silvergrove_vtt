@@ -493,6 +493,10 @@ func test_campaign_first() -> void:
 		mp._search_compendium()
 		check(mp._results.item_count >= 1, "the compendium offers goblins")
 		check(mp.add_creature(enc, mp._results.get_item_metadata(0), 2, "9,8", true) == "" and ctx.campaign.encounter_entry(enc).creatures.size() == 1, "two goblins at 9,8, hidden, in the recipe")
+	# a player's character, who comes along to the fight; the author says where the party comes in
+	check(ctx.commands.run({"t": "player.add", "player": {"id": "pl_tess", "name": "Tess", "color": "#44aa88"}}, "Tess joins") == "", "a player")
+	check(ctx.commands.run({"t": "actor.add", "actor": {"id": "a_tess", "name": "Tess Arden", "kind": "pc", "owner": "pl_tess"}}, "Tess's character") == "", "and her character")
+	ctx.campaign.encounter_entry(enc).party_cell = "2,5"
 	# the party is somewhere first (with no scene at all, the first scene made is the active one)
 	check(mp.show_map(mid) == "" and ctx.encounter().active_scene_id != "", "the chapel shown as the party's scene")
 	var scenes_before := ctx.encounter().scenes.size()
@@ -508,6 +512,17 @@ func test_campaign_first() -> void:
 	check(mp.launch(enc) != "", "it cannot be launched twice")
 	check(mp.go(enc) == "" and ctx.encounter().active_scene_id == str(live.scene) and ctx.scene_id == str(live.scene) and not bool(ctx.campaign.encounter_entry(enc).live.get("staged", true)), "Go: the players are brought to the fight")
 	check(mp.go(enc) != "", "and not twice")
+	var tess := {}
+	for tk in ctx.state.tokens(str(live.scene)):
+		if str(tk.get("actor", "")) == "a_tess":
+			tess = tk
+	var chapel_grid := ctx.state.map_for(str(live.scene)).grid
+	check(not tess.is_empty() and str(tess.get("owner", "")) == "pl_tess" and str(tess.get("color", "")) == "#44aa88" and str(tess.get("label", "")) == "TA",
+		"the party came too: Tess's token, hers, in her colour (%s)" % [tess])
+	var entry_cell := chapel_grid.cell_center(chapel_grid.offset_to_axial(2, 5))
+	var at_entry := ctx.state.tokens(str(live.scene)).filter(func(t: Dictionary) -> bool: return str(t.get("actor", "")) != "" and Vision.token_pos(t).distance_to(entry_cell) < 0.01)
+	check(at_entry.size() == 1 and not tess.is_empty() and Vision.token_pos(tess).distance_to(entry_cell) < 2.1, "where the author said the party comes in, side by side (%s)" % [Vision.token_pos(tess) if not tess.is_empty() else null])
+	check(mp.place_party(str(live.scene), ctx.state.map_for(str(live.scene)), ctx.campaign.encounter_entry(enc)) == "" and ctx.state.tokens(str(live.scene)).filter(func(t: Dictionary) -> bool: return str(t.get("actor", "")) == "a_tess").size() == 1, "and only once")
 	mp._show_encounter()
 	check(mp._go.disabled and not mp._return.disabled, "now only Return")
 	if rules:

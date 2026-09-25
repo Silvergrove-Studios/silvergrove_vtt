@@ -8,6 +8,10 @@ extends RefCounted
 ## the WebSocket is). Players open it from any phone or computer on the
 ## network: nothing to install. Only GET and HEAD; nothing outside those
 ## roots is served. Non-blocking: poll it every frame.
+##
+## The web clients are built (web/, `npm run build`) into one zip,
+## `webclient.zip`, which the exports carry as it is: a folder of fonts and
+## images would be imported by Godot and not be there as files.
 
 const DEFAULT_PORT := 47780
 const MAX_REQUEST := 16384
@@ -20,8 +24,8 @@ const TYPES := {"html": "text/html; charset=utf-8", "js": "text/javascript; char
 ## The pages of the one-page web client: each serves index.html.
 const PAGES := ["/", "/play", "/dm", "/dm/card", "/join"]
 
-## Where the built web clients are (index.html and assets/).
-var root := "res://webdist"
+## Where the built web clients are (index.html and assets/): a zip, or a folder.
+var root := "res://webclient.zip"
 var port := 0
 ## (pack: String, file: String) -> PackedByteArray: a pack's file, or empty.
 var art_source: Callable = Callable()
@@ -31,6 +35,9 @@ var map_file_source: Callable = Callable()
 var config_source: Callable = Callable()
 var _server := TCPServer.new()
 var _conns: Array = []
+var _zip: ZIPReader = null
+var _zip_files: Dictionary = {}
+var _zip_time := 0
 
 
 func start(p_port := DEFAULT_PORT) -> Error:
@@ -49,6 +56,9 @@ func stop() -> void:
 	_conns.clear()
 	_server.stop()
 	port = 0
+	if _zip != null:
+		_zip.close()
+		_zip = null
 
 
 func is_running() -> bool:
@@ -116,14 +126,14 @@ func respond(head: String) -> PackedByteArray:
 	var type := ""
 	var cache := "no-cache"
 	if PAGES.has(path.trim_suffix("/") if path != "/" else path):
-		body = _file(root.path_join("index.html"))
+		body = _client_file("index.html")
 		type = TYPES.html
 	elif path == "/config.json":
 		var cfg: Dictionary = config_source.call() if config_source.is_valid() else {}
 		body = JSON.stringify(cfg).to_utf8_buffer()
 		type = TYPES.json
 	elif path.begins_with("/assets/"):
-		body = _file(root.path_join(path.substr(1)))
+		body = _client_file(path.substr(1))
 		type = _type(path)
 		cache = "max-age=31536000, immutable"
 	elif path.begins_with("/art/"):
@@ -151,6 +161,29 @@ func respond(head: String) -> PackedByteArray:
 	if method == "GET":
 		out.append_array(body)
 	return out
+
+
+## A file of the web clients, from the zip or the folder they were built into.
+func _client_file(rel: String) -> PackedByteArray:
+	if not root.get_extension().to_lower() == "zip":
+		return _file(root.path_join(rel))
+	# rebuilt while the table runs (developing the web clients): opened again
+	var t := FileAccess.get_modified_time(root)
+	if _zip != null and t != _zip_time:
+		_zip.close()
+		_zip = null
+	if _zip == null:
+		_zip = ZIPReader.new()
+		_zip_files.clear()
+		if _zip.open(root) != OK:
+			_zip = null
+			return PackedByteArray()
+		_zip_time = t
+		for f in _zip.get_files():
+			_zip_files[f] = true
+	if not _zip_files.has(rel):
+		return PackedByteArray()
+	return _zip.read_file(rel)
 
 
 static func _type(path: String) -> String:

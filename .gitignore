@@ -8,3 +8,5 @@ build_info.json
 plugins/android/nsd/build/
 plugins/android/nsd/.gradle/
 plugins/android/nsd/local.properties
+web/node_modules/
+web/dist/

@@ -1,0 +1,606 @@
+// Drawing a scene on a 2D canvas, as the host's map canvas draws it
+// (hexmap/render/map_canvas.gd), in its order: background, backdrop,
+// terrain, props, darkness, lights, grid, regions, doors, tokens, notes,
+// fog. The world is in hex units; the camera maps them to the screen. The
+// backdrop and terrain are drawn once into a cached canvas, and what a
+// snapshot decides (the props in order, the fog, the grid) is worked out
+// once per snapshot (`prepare`); the rest is drawn every frame.
+import { Grid, INSCRIBED_SQUARE, R, keyCell, type Cell, type Vec } from '../grid';
+import { asset, assetArt, image, raster, terrainImage } from '../art';
+import type { Dict } from '../game.svelte';
+
+export interface Camera {
+  x: number; // the world point at the centre of the view
+  y: number;
+  scale: number; // css pixels per hex unit
+}
+
+export interface Look {
+  gm: boolean;
+  selected: string;
+  /** a token being dragged: drawn where the pointer is */
+  dragging: { id: string; pos: Vec } | null;
+  /** a pick in progress: the cell under the pointer is lit */
+  picking: boolean;
+  hoverCell: Cell | null;
+  playerColors: Record<string, string>;
+  /** the token whose turn it is */
+  activeToken: string;
+  showGrid: boolean;
+}
+
+const FOG_UNSEEN = 'rgb(8, 8, 13)';
+const FOG_GM = 'rgba(13, 13, 31, 0.55)';
+const FOG_DIM = 'rgba(8, 8, 13, 0.62)';
+const PROP_LAYERS: Record<string, number> = { ground: 0, objects: 1, overhead: 2 };
+
+/** The scene's level with its overrides merged (a door opened, a light put out). */
+export function effectiveLevel(map: Dict, scene: Dict): Dict {
+  const levels: Dict[] = map.levels ?? [];
+  const lvl = levels.find((l) => String(l.id) === String(scene.level ?? '')) ?? levels[0] ?? {};
+  const ov: Dict = scene.overrides ?? {};
+  const out: Dict = { ...lvl };
+  for (const c of ['props', 'walls', 'lights', 'notes']) {
+    out[c] = ((lvl[c] as Dict[]) ?? []).map((o) => {
+      const o2 = ov[`${c}:${o.id}`];
+      return o2 ? { ...o, ...o2 } : o;
+    });
+  }
+  return out;
+}
+
+export function tokenPos(t: Dict): Vec {
+  const p = (t.pos as number[]) ?? [0, 0];
+  return { x: Number(p[0]), y: Number(p[1]) };
+}
+
+export function tokenRadius(t: Dict): number {
+  return 0.5 * Number(t.size ?? 1) * 0.92;
+}
+
+export function pointInPolygon(p: Vec, poly: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** The topmost token under a point (hex units), or null. */
+export function tokenAt(tokens: Dict[], p: Vec): Dict | null {
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const t = tokens[i];
+    const c = tokenPos(t);
+    if (Math.hypot(c.x - p.x, c.y - p.y) <= tokenRadius(t)) return t;
+  }
+  return null;
+}
+
+/** The layer tree's order and visibility: {ref: [index, visible]} (LayerTree.order / effective). */
+function layerTree(lvl: Dict): Map<string, [number, boolean]> {
+  const out = new Map<string, [number, boolean]>();
+  let i = 0;
+  const walk = (nodes: Dict[], visible: boolean) => {
+    for (const n of nodes ?? []) {
+      const v = visible && n.visible !== false;
+      if (Array.isArray(n.children)) walk(n.children, v);
+      else out.set(String(n.ref), [i++, v]);
+    }
+  };
+  if (Array.isArray(lvl.tree)) walk(lvl.tree, true);
+  return out;
+}
+
+// --------------------------------------------------------------- prepare --
+
+/** What a snapshot decides, worked out once: the grid, the level, the props
+ *  in order, the fog and the grid's outline as paths. */
+export interface Prepared {
+  grid: Grid;
+  lvl: Dict;
+  props: Dict[];
+  gridPath: Path2D;
+  fogUnseen: Path2D | null;
+  fogDim: Path2D | null;
+}
+
+function cellPath(path: Path2D, grid: Grid, cell: Cell, grow = 1): void {
+  const c = grid.center(cell);
+  grid.cornersAt(c).forEach((p, i) => {
+    const x = c.x + (p.x - c.x) * grow;
+    const y = c.y + (p.y - c.y) * grow;
+    if (i) path.lineTo(x, y);
+    else path.moveTo(x, y);
+  });
+  path.closePath();
+}
+
+export function prepare(map: Dict, scene: Dict, gm: boolean): Prepared {
+  const grid = new Grid(map.grid ?? {});
+  const lvl = effectiveLevel(map, scene);
+  const tree = layerTree(lvl);
+  const props = ((lvl.props as Dict[]) ?? [])
+    .map((p, i) => ({ p, i, t: tree.get(`props:${p.id}`) }))
+    .filter(({ p, t }) => (t ? t[1] : true) && (gm || !p.hidden))
+    .sort((a, b) => {
+      if (a.t && b.t) return a.t[0] - b.t[0];
+      const la = PROP_LAYERS[String(asset('props', String(a.p.asset ?? ''))?.layer ?? 'objects')] ?? 1;
+      const lb = PROP_LAYERS[String(asset('props', String(b.p.asset ?? ''))?.layer ?? 'objects')] ?? 1;
+      return la - lb || a.i - b.i;
+    })
+    .map(({ p }) => p);
+  const gridPath = new Path2D();
+  for (const cell of grid.allCells()) cellPath(gridPath, grid, cell);
+  let fogUnseen: Path2D | null = null;
+  let fogDim: Path2D | null = null;
+  if (scene.fog) {
+    // (Vision.cells_in: a cell is seen when its centre is in sight)
+    const explored = new Set<string>((scene.explored as string[]) ?? []);
+    const polys = (scene.visible as number[][][]) ?? [];
+    fogUnseen = new Path2D();
+    fogDim = new Path2D();
+    for (const cell of grid.allCells()) {
+      if (polys.some((p) => pointInPolygon(grid.center(cell), p))) continue;
+      const known = explored.has(`${cell.q},${cell.r}`);
+      if (gm && known) continue;
+      cellPath(known ? fogDim : fogUnseen, grid, cell, 1.02);
+    }
+  }
+  return { grid, lvl, props, gridPath, fogUnseen, fogDim };
+}
+
+// ------------------------------------------------------------- terrain --
+
+export interface TerrainCache {
+  canvas: HTMLCanvasElement;
+  res: number; // canvas pixels per hex unit
+  pad: number; // hex units around the map
+  pending: boolean; // images still loading: draw again when they come
+}
+
+/** Pixels per hex unit for a map's cached terrain: sharp, but within what a phone's canvas allows. */
+export function terrainRes(size: Vec, pad: number): number {
+  const area = (size.x + pad * 2) * (size.y + pad * 2);
+  return Math.max(16, Math.min(128, Math.floor(Math.sqrt(8e6 / Math.max(1, area)))));
+}
+
+/** The backdrop and terrain of a level, drawn once. */
+export function drawTerrain(map: Dict, lvl: Dict, grid: Grid, mapFileUrl: (file: string) => string): TerrainCache {
+  const size = grid.size();
+  const pad = 0.5;
+  const res = terrainRes(size, pad);
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.ceil((size.x + pad * 2) * res));
+  cv.height = Math.max(1, Math.ceil((size.y + pad * 2) * res));
+  const ctx = cv.getContext('2d')!;
+  let pending = false;
+  ctx.setTransform(res, 0, 0, res, pad * res, pad * res);
+  // the level's backdrop: an image the map brought with it
+  const b = lvl.backdrop as Dict | undefined;
+  if (b && !b.hidden && String(b.image ?? '').startsWith('local:')) {
+    const img = image(mapFileUrl(String(b.image).slice(6)));
+    if (img) {
+      const pos = (b.pos as number[]) ?? [0, 0];
+      const bs = (b.size as number[]) ?? [size.x, size.y];
+      ctx.globalAlpha = Number(b.opacity ?? 1);
+      ctx.drawImage(img, pos[0], pos[1], bs[0], bs[1]);
+      ctx.globalAlpha = 1;
+    } else pending = true;
+  }
+  const shape = grid.square ? 'square' : 'hex';
+  // `rot` is in sixths of a turn on hexes, quarters on squares
+  const rotStep = grid.square ? Math.PI / 2 : Math.PI / 3;
+  const terrain: Dict = lvl.terrain ?? {};
+  for (const key of Object.keys(terrain)) {
+    const t = terrain[key] as Dict;
+    const c = grid.center(keyCell(key));
+    const ref = String(t.t ?? '');
+    const known = asset('terrains', ref) != null;
+    const art = terrainImage(ref, Number(t.v ?? 0), shape);
+    ctx.save();
+    ctx.beginPath();
+    // (a hair wider, so neighbours leave no seam)
+    grid.cornersAt(c).forEach((p, i) => {
+      const x = c.x + (p.x - c.x) * 1.015;
+      const y = c.y + (p.y - c.y) * 1.015;
+      if (i) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+    const img = raster(art.img, art.url, res * 1.25 * (art.lay === 'hex_crop' ? 1 / INSCRIBED_SQUARE : art.lay === 'tile' ? 2 : 1));
+    if (!img) {
+      ctx.fillStyle = known ? art.color : '#7a2a4a';
+      ctx.fill();
+      if (known && art.url) pending = true;
+      ctx.restore();
+      continue;
+    }
+    ctx.clip();
+    // The same image placement as the host's UVs: the image is laid in a
+    // frame turned by the cell's rotation.
+    let ang = Number(t.rot ?? 0) * rotStep;
+    ctx.translate(c.x, c.y);
+    if (art.lay === 'tile') {
+      // cut out of a texture that repeats every two cells, in place
+      ctx.rotate(-ang);
+      ctx.translate(-c.x, -c.y);
+      const pat = ctx.createPattern(img, 'repeat');
+      if (pat) {
+        pat.setTransform(new DOMMatrix().scale(2 / img.width, 2 / img.height));
+        ctx.fillStyle = pat;
+        ctx.fillRect(c.x - 1, c.y - 1, 2, 2);
+      }
+    } else if (art.lay === 'square_box') {
+      ctx.rotate(-ang);
+      ctx.drawImage(img, -0.5, -0.5, 1, 1);
+    } else if (art.lay === 'hex_crop') {
+      // hex art on a square cell: the square inside the hexagon
+      const k = INSCRIBED_SQUARE;
+      ctx.rotate(-ang);
+      ctx.drawImage(img, -0.5 / k, -R / k, 1 / k, (2 * R) / k);
+    } else {
+      // the hex's bounding box (in pointy-top space) is the image
+      if (!grid.pointy) ang -= Math.PI / 6;
+      ctx.rotate(-ang);
+      ctx.drawImage(img, -0.5, -R, 1, 2 * R);
+    }
+    ctx.restore();
+  }
+  return { canvas: cv, res, pad, pending };
+}
+
+// ----------------------------------------------------------------- frame --
+
+export interface Frame {
+  ctx: CanvasRenderingContext2D;
+  width: number; // css pixels
+  height: number;
+  dpr: number;
+  cam: Camera;
+  map: Dict;
+  scene: Dict;
+  prep: Prepared;
+  terrain: TerrainCache | null;
+  look: Look;
+}
+
+export function drawFrame(f: Frame): void {
+  const { ctx, width, height, dpr, cam, map, scene, prep, look } = f;
+  const { grid, lvl } = prep;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#101216';
+  ctx.fillRect(0, 0, width, height);
+  // world → screen
+  const s = cam.scale * dpr;
+  ctx.setTransform(s, 0, 0, s, (width / 2 - cam.x * cam.scale) * dpr, (height / 2 - cam.y * cam.scale) * dpr);
+  const size = grid.size();
+  const fog = Boolean(scene.fog);
+  // background: under a player's fog, even the gaps between the edge cells are unseen
+  ctx.save();
+  if (!(fog && !look.gm)) {
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 28 * dpr;
+    ctx.shadowOffsetY = 6 * dpr;
+  }
+  ctx.fillStyle = fog && !look.gm ? FOG_UNSEEN : String(map.style?.background ?? '#1c1a17');
+  ctx.fillRect(0, 0, size.x, size.y);
+  ctx.restore();
+  if (f.terrain) {
+    const t = f.terrain;
+    ctx.drawImage(t.canvas, -t.pad, -t.pad, t.canvas.width / t.res, t.canvas.height / t.res);
+  }
+  drawProps(ctx, prep.props, cam.scale * dpr);
+  const darkness = Number(scene.darkness ?? lvl.darkness ?? 0);
+  if (darkness > 0) {
+    ctx.fillStyle = `rgba(5, 5, 15, ${darkness * 0.85})`;
+    ctx.fillRect(-3, -3, size.x + 6, size.y + 6);
+  }
+  drawLights(ctx, (scene.lights as Dict[]) ?? []);
+  if (look.showGrid) {
+    ctx.strokeStyle = String(map.style?.grid_color ?? '#00000066');
+    ctx.lineWidth = Math.max(1 / cam.scale, Number(map.style?.grid_width ?? 0.012));
+    ctx.stroke(prep.gridPath);
+  }
+  drawRegions(ctx, grid, scene, look.gm, cam.scale);
+  drawDoors(ctx, lvl, cam.scale);
+  const tokens = (scene.tokens as Dict[]) ?? [];
+  for (const t of tokens) {
+    const drag = look.dragging && look.dragging.id === t.id ? look.dragging.pos : null;
+    drawToken(ctx, t, drag ?? tokenPos(t), look, cam.scale, dpr);
+  }
+  if (look.gm) drawNotes(ctx, lvl, cam.scale);
+  if (fog) {
+    if (!look.gm) {
+      // the off-map surround is never seen either
+      ctx.fillStyle = FOG_UNSEEN;
+      const pad = 40;
+      ctx.fillRect(-pad, -pad, size.x + pad * 2, pad);
+      ctx.fillRect(-pad, size.y, size.x + pad * 2, pad);
+      ctx.fillRect(-pad, 0, pad, size.y);
+      ctx.fillRect(size.x, 0, pad, size.y);
+    }
+    if (prep.fogUnseen) {
+      ctx.fillStyle = look.gm ? FOG_GM : FOG_UNSEEN;
+      ctx.fill(prep.fogUnseen);
+    }
+    if (prep.fogDim && !look.gm) {
+      ctx.fillStyle = FOG_DIM;
+      ctx.fill(prep.fogDim);
+    }
+  }
+  if (look.hoverCell && look.picking) {
+    const path = new Path2D();
+    cellPath(path, grid, look.hoverCell);
+    ctx.fillStyle = 'rgba(255, 215, 90, 0.25)';
+    ctx.fill(path);
+    ctx.lineWidth = 2 / cam.scale;
+    ctx.strokeStyle = 'rgba(255, 215, 90, 0.95)';
+    ctx.stroke(path);
+  }
+}
+
+function drawProps(ctx: CanvasRenderingContext2D, props: Dict[], pxPerUnit: number): void {
+  for (const p of props) {
+    const def = asset('props', String(p.asset ?? ''));
+    if (!def) continue;
+    const sc = Number(p.scale ?? 1);
+    const sz = (def.size as number[]) ?? [1, 1];
+    const w = Number(sz[0]) * sc;
+    const h = Number(sz[1]) * sc;
+    const art = assetArt('props', String(p.asset ?? ''));
+    const img = raster(art.img, art.url, w * pxPerUnit);
+    if (!img) continue;
+    const pos = (p.pos as number[]) ?? [0, 0];
+    const anchor = (def.anchor as number[]) ?? [0.5, 0.5];
+    ctx.save();
+    ctx.globalAlpha = p.hidden ? 0.55 : 1;
+    ctx.translate(Number(pos[0]), Number(pos[1]));
+    ctx.rotate((Number(p.rot ?? 0) * Math.PI) / 180);
+    if (p.flip) ctx.scale(-1, 1);
+    ctx.drawImage(img, -anchor[0] * w, -anchor[1] * h, w, h);
+    ctx.restore();
+  }
+}
+
+/** Lights: the host's radial fall-off inside the polygon each light reaches, added together. */
+function drawLights(ctx: CanvasRenderingContext2D, lights: Dict[]): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const l of lights) {
+    const poly = l.polygon as number[][];
+    if (!poly || poly.length < 3) continue;
+    const [x, y] = (l.pos as number[]).map(Number);
+    const bright = Number(l.bright ?? 0);
+    const outer = Math.max(bright, Number(l.dim ?? 0));
+    if (outer <= 0) continue;
+    const color = String(l.color ?? '#ffb060');
+    const intensity = Number(l.intensity ?? 1);
+    ctx.save();
+    ctx.beginPath();
+    poly.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.closePath();
+    ctx.clip();
+    fan(ctx, x, y, outer, color, 0.3 * intensity);
+    if (bright > 0) fan(ctx, x, y, Math.min(bright, outer), color, 0.45 * intensity);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function fan(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, a: number): void {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, hexA(color, a));
+  g.addColorStop(0.35, hexA(color, a * 0.55));
+  g.addColorStop(1, hexA(color, 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+}
+
+/** Zones and tagged cells, and a template being shown; players do not see the DM's own. */
+function drawRegions(ctx: CanvasRenderingContext2D, grid: Grid, scene: Dict, gm: boolean, scale: number): void {
+  const regions: Dict = scene.regions ?? {};
+  const list: Dict[] = Object.keys(regions)
+    .sort()
+    .map((id) => regions[id] as Dict)
+    .filter((r) => gm || r.audience !== 'gm');
+  const hl = scene.highlight as Dict | undefined;
+  if (hl && Array.isArray(hl.cells)) list.push({ ...hl, color: hl.color ?? '#ffffff', alpha: 0.35 });
+  for (const r of list) {
+    const color = String(r.color ?? '#ffb060');
+    const alpha = Number(r.alpha ?? 0.22);
+    const path = new Path2D();
+    const cells = ((r.cells as string[]) ?? []).filter((k) => typeof k === 'string');
+    for (const key of cells) cellPath(path, grid, keyCell(key));
+    ctx.fillStyle = hexA(color, alpha);
+    ctx.fill(path);
+    ctx.lineWidth = Math.max(1 / scale, 0.02);
+    ctx.strokeStyle = hexA(color, alpha * 2);
+    ctx.stroke(path);
+    if (r.label && cells.length) {
+      const c = grid.center(keyCell(cells[0]));
+      const fs = Math.max(10 / scale, 0.22);
+      ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText(String(r.label), c.x, c.y);
+    }
+  }
+}
+
+/** Doors only: the walls are in the art, and a door is something to open. */
+function drawDoors(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): void {
+  for (const w of (lvl.walls as Dict[]) ?? []) {
+    if (String(w.door ?? 'none') !== 'door' || w.hidden) continue;
+    const pts = (w.points as number[][]) ?? [];
+    if (pts.length < 2) continue;
+    const open = String(w.state ?? 'closed') === 'open';
+    const a = pts[0];
+    const b = pts[pts.length - 1];
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(4 / scale, 0.09);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(2.5 / scale, 0.055);
+    ctx.strokeStyle = open ? '#e0d090' : '#e0a040';
+    ctx.beginPath();
+    if (open) {
+      // an open door: the frame's two ends
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(a[0] + (b[0] - a[0]) * 0.22, a[1] + (b[1] - a[1]) * 0.22);
+      ctx.moveTo(b[0], b[1]);
+      ctx.lineTo(b[0] + (a[0] - b[0]) * 0.22, b[1] + (a[1] - b[1]) * 0.22);
+    } else {
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+    }
+    ctx.stroke();
+  }
+}
+
+/** The DM's notes on the map: a yellow pin and its title. */
+function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): void {
+  for (const n of (lvl.notes as Dict[]) ?? []) {
+    const [x, y] = ((n.pos as number[]) ?? [0, 0]).map(Number);
+    const r = Math.max(5 / scale, 0.12);
+    ctx.beginPath();
+    ctx.arc(x, y, r + 2 / scale, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#f0d060';
+    ctx.fill();
+    const title = String(n.title ?? '');
+    if (title) {
+      const fs = 12 / scale;
+      ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = fs * 0.25;
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(title, x + r * 1.5, y);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(title, x + r * 1.5, y);
+    }
+  }
+}
+
+/** A token: a disc in its colour (or its art, clipped round), a ring in its owner's colour, its label. */
+export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look: Look, scale: number, dpr = 1): void {
+  const r = tokenRadius(t);
+  const hidden = Boolean(t.hidden);
+  const alpha = hidden ? 0.5 : 1;
+  const tags: string[] = Array.isArray(t.tags) ? (t.tags as string[]) : [];
+  const ring = t.owner ? look.playerColors[String(t.owner)] ?? '#ffffff' : '#ffffff';
+  const rot = (Number(t.rot ?? 0) * Math.PI) / 180;
+  const ringW = Math.max(r * 0.09, 1.5 / scale);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.arc(pos.x + r * 0.06, pos.y + r * 0.08, r, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fill();
+  const art = t.art ? assetArt('tokens', String(t.art)) : null;
+  const img = art ? raster(art.img, art.url, r * 2 * scale * dpr) : null;
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+  if (img) {
+    ctx.save();
+    ctx.clip();
+    ctx.translate(pos.x, pos.y);
+    ctx.rotate(rot);
+    ctx.drawImage(img, -r, -r, r * 2, r * 2);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = String(t.color ?? '#c0392b');
+    ctx.fill();
+    const label = String(t.label ?? '');
+    if (label) {
+      const fs = label.length <= 2 ? r * 0.9 : r * 0.6;
+      ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = Math.max(fs * 0.12, 2 / scale);
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(label, pos.x, pos.y + fs * 0.05);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, pos.x, pos.y + fs * 0.05);
+    }
+  }
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, r - ringW / 2, 0, Math.PI * 2);
+  ctx.lineWidth = ringW + 1.5 / scale;
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.stroke();
+  ctx.lineWidth = ringW;
+  ctx.strokeStyle = ring;
+  ctx.stroke();
+  if (Math.abs(Number(t.rot ?? 0)) > 0.01) {
+    // which way it faces
+    const dx = Math.cos(rot - Math.PI / 2);
+    const dy = Math.sin(rot - Math.PI / 2);
+    ctx.beginPath();
+    ctx.moveTo(pos.x + dx * r * 0.75, pos.y + dy * r * 0.75);
+    ctx.lineTo(pos.x + dx * (r + ringW), pos.y + dy * (r + ringW));
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+  }
+  ctx.restore();
+  if (hidden && look.gm) {
+    // the DM's reminder that players cannot see it
+    ctx.save();
+    ctx.setLineDash([ringW * 1.6, ringW * 1.6]);
+    ctx.lineWidth = ringW;
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r + ringW * 1.2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (look.activeToken && look.activeToken === t.id) {
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r + ringW * 2.2, 0, Math.PI * 2);
+    ctx.lineWidth = ringW * 1.2;
+    ctx.strokeStyle = '#ffd75a';
+    ctx.stroke();
+  }
+  if (look.selected && look.selected === t.id) {
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r + ringW * 3.6, 0, Math.PI * 2);
+    ctx.lineWidth = ringW;
+    ctx.strokeStyle = 'rgba(255, 255, 77, 0.9)';
+    ctx.stroke();
+  }
+  // a place on a regional map, and the party: their names under them, so the
+  // map reads without clicking every marker (about 13 px on screen)
+  if ((tags.includes('place') || tags.includes('party')) && t.name) {
+    const fs = 13 / scale;
+    const y = pos.y + r + ringW * 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = fs * 0.3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.strokeText(String(t.name), pos.x, y);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(String(t.name), pos.x, y);
+    ctx.restore();
+  }
+}
+
+export function hexA(hex: string, a: number): string {
+  let h = hex.replace('#', '');
+  if (h.length === 3 || h.length === 4) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h.slice(0, 6), 16);
+  const k = h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${Math.max(0, Math.min(1, a * k))})`;
+}

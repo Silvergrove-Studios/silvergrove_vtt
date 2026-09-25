@@ -27,19 +27,19 @@ macOS, Windows and Linux; playing works on those and on iOS and Android.
 
 | # | what | where | status |
 |---|---|---|---|
-| H1 | an HTTP server beside the WebSocket: the web clients' files, pack art and pictures, map files | host (Godot) | |
-| H2 | join by name (a new player is added; a returning one is found); a local DM role with a token | host | |
-| H3 | scene snapshots for web clients, filtered for each viewer (hidden tokens, GM regions, what their tokens see) | host | |
-| H4 | chat: messages to everyone, to the DM, to some players; kept in the log and banked into the campaign; the roll log | host | |
-| H5 | DM operations and state for the web DM screen (campaign, places, people, notes, pictures, contents, fights, turns, sharing, sessions) | host | |
-| W1 | the web project: Vite, TypeScript, Svelte; the protocol client; grid math; the expression language; tests | web | |
-| W2 | the map canvas: terrain, props, walls, lights, tokens, fog, backdrops; pan and zoom by mouse and touch | web | |
-| W3 | the view renderer: rulesets' sheets, party views, cards, forms, wizards, pickers, prompts | web | |
-| W4 | the player's screen: join, map, character, journal (their notes and what they were shown), chat, what the DM shows | web | |
-| W5 | the DM's screen: party, map, the book (contents, cards that read well and pop out), showing players things, chat and rolls, sessions, the fight | web | |
+| H1 | an HTTP server beside the WebSocket: the web clients' files, pack art and pictures, map files | host (Godot) | done — serves `webclient.zip` (one file the exports carry; Godot would import a folder of fonts), reopened when rebuilt |
+| H2 | join by name (a new player is added; a returning one is found); a local DM role with a token | host | done — any spelling of this computer's address counts (a browser's `localhost` arrives as long-form IPv6) |
+| H3 | scene snapshots for web clients, filtered for each viewer (hidden tokens, GM regions, what their tokens see) | host | done |
+| H4 | chat: messages to everyone, to the DM, to some players; kept in the log and banked into the campaign; the roll log | host | done |
+| H5 | DM operations and state for the web DM screen (campaign, places, people, notes, pictures, contents, fights, turns, sharing, sessions) | host | done — and a launched fight now brings the party's tokens (the players saw only fog without them) |
+| W1 | the web project: Vite, TypeScript, Svelte; the protocol client; grid math; the expression language; tests | web | done — Vite 8, Svelte 5, TypeScript 6; the build is reproducible (CI checks the committed zip) |
+| W2 | the map canvas: terrain, props, walls, lights, tokens, fog, backdrops; pan and zoom by mouse and touch | web | done — Canvas 2D; pack SVGs rasterised once per size; terrain cached; follows the player's own token |
+| W3 | the view renderer: rulesets' sheets, party views, cards, forms, wizards, pickers, prompts | web | done — every widget type, forms, wizards, pickers, prompts |
+| W4 | the player's screen: join, map, character, journal (their notes and what they were shown), chat, what the DM shows | web | done — join by name or a tap, map, character (or the maker), table, chat, journal, what the DM shows |
+| W5 | the DM's screen: party, map, the book (contents, cards that read well and pop out), showing players things, chat and rolls, sessions, the fight | web | done (first cut) — book with folders, cards that pop out, show the players, chat, the fight bar and order, stat blocks, targets picked on the map, a next-step note |
 | R1 | NPCs and creatures as stat blocks | srd5e | |
 | R2 | giving an item: a manual act for the DM | srd5e | |
 | R3 | the adventure: a regional map that looks like a region, a cover image | srd5e (package) | |
 | G1 | Godot: Home and the first screens restyled; adventure covers; the running-game window; *Join a game* opens the web client | host | |
-| T1 | tests: Godot suites for the host; web unit tests; end-to-end in a browser; CI | both | |
+| T1 | tests: Godot suites for the host; web unit tests; end-to-end in a browser; CI | both | in progress — Godot suites, 30 web unit tests, `tools/web_host.gd` + `tests/e2e/journey.mjs` (Chrome, the whole journey), CI job for the web |
 | D1 | docs, the playtest-3 script, a build for testers | both | |
