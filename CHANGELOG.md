@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.2.0 — in testing (dev builds)
+
+The Table as a DM's screen, after the first playtest: most of a session
+is talk, exploring and looking things up, and the Table now leads with
+that.
+
+- **World, Fight and Prep.** A campaign opens in the World: the party on
+  the left (the ruleset's party view — numbers, passives, conditions,
+  *Ask for a roll*), the map in the middle, the Reference on the right.
+  Launching a prepared encounter switches to the Fight (turns, tokens,
+  the map tools, in ordered turns); *End the fight* comes back. Prep has
+  every pane. Each mode keeps its own arrangement.
+- **The session bar**: the campaign, the day, *Start / End session N*,
+  the modes, every map of the campaign (shown or not), *End the fight*,
+  who has joined, *How to join*; and a *Next* line that says what to do
+  until the first session is under way.
+- **The Reference**: one search over the campaign and the rules; the
+  campaign's contents as a tree — notes for the DM, the party, places
+  with their people, people, handouts, what was shown, pictures, maps,
+  and the rules as a glossary. A person's and a place's card: picture,
+  what the players may know, the DM's own notes, where they are, who is
+  there. Selecting a marker or a character on the map opens its card.
+- **Showing the players things**: *Show the players ▾* on a card — to
+  everyone or to one player — puts its picture and text on the phones,
+  full screen, and in their Journal; the card says who has seen it;
+  *Stop showing it* takes it back. The DM's notes never go. Pictures come
+  from art packs (a `pictures` collection) or from a file.
+- **Home** leads with *Continue “…”*, *Run a game*, *Join a game* and
+  *Draw maps*; the Table's first screen finds adventures in the library
+  and in Downloads, and starting one is a single dialog that leads with
+  the adventure's own description. *Join a game* on a phone: tap the
+  table; the network's details behind *Trouble joining?*; a player with
+  no character is taken to where one is made.
+- Place names under their markers; a place can be just a place (a
+  village, an inn) with its own card.
+- Rulesets: a `party` view kind, form choices from the view's own data,
+  and a view kind this Table does not know is kept, not refused.
+- Fixed: a package could be started over a campaign of the same name.
+
 ## 2.1.0 — 2026-09-24
 
 Campaigns you can download and hand on: a campaign package carries an
