@@ -853,7 +853,11 @@ func show_handout(h: Dictionary) -> void:
 		_shown_box = VBoxContainer.new()
 		_shown_box.add_theme_constant_override("separation", 10)
 		margin.add_child(_shown_box)
-		add_child(_shown)
+		# inside the safe area, over the play screen: clear of the notch and the gesture bar
+		if _safe != null:
+			_safe.add_child(_shown)
+		else:
+			add_child(_shown)
 	for c in _shown_box.get_children():
 		_shown_box.remove_child(c)
 		c.queue_free()
