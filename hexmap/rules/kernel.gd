@@ -408,7 +408,11 @@ func roll(spec: Variant, ctx: Dictionary = {}, label := "Roll", reason: Dictiona
 		return {}
 	var after := hooks.run_sync("after_roll", {"spec": s, "result": result, "ctx": ctx})
 	result = after.result
-	var entry := {"id": JsonDoc.new_id("r"), "kind": "roll", "label": label, "spec": s, "result": result, "draw": result.draw,
+	# (ids are random: thousands of rolls in one log can meet one already there)
+	var rid := JsonDoc.new_id("r")
+	while state._log_has(rid):
+		rid = JsonDoc.new_id("r")
+	var entry := {"id": rid, "kind": "roll", "label": label, "spec": s, "result": result, "draw": result.draw,
 		"actor": str(ctx.get("actor", "")), "audience": str(result.get("visibility", "all"))}
 	var why := log.record({"t": "log.add", "entry": entry}, label, reason, str(entry.audience))
 	if why != "":

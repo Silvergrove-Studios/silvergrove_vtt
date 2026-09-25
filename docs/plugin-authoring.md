@@ -272,8 +272,10 @@ hm.ui.register("gm", { … })
 
 A view is data: what to show, bound to the data the Table projects for
 the viewer, and which *intent* a tap sends. Clients never run plugin
-code; a client that does not know a widget shows it as text. Three
-kinds:
+code; a client that does not know a widget shows it as text, and a Table
+that does not know a view kind keeps it and never draws it (so a plugin
+written for a newer Table still loads; one older than a kind refuses it,
+so register a new kind with `pcall(hm.ui.register, …)`). The kinds:
 
 - **sheet** — rendered on the owner's phone (and for the GM) for each
   actor that carries this plugin's data. Its data: `me` (player id),
@@ -285,6 +287,11 @@ kinds:
   this plugin's `derived` and `resources`), `tracks`, `prompts`, `rolls`,
   `log`, `state`.
 - **gm** — a Table panel, with the status data for the GM audience.
+- **party** — the Table's World view, on screen all session: the party
+  at a glance and what a DM asks of them while they talk and explore.
+  Same data as `gm`, whose view the Table shows when there is no `party`.
+  Its buttons may send `{kind = "show", actor = "$/item/id"}` (or `ref =
+  "actor:<id>"`): the Table opens that card in its Reference pane.
 - **entry:&lt;collection&gt;** — how an entry of that collection reads
   when looked up: in the Compendium pane, in the lookup popup (View →
   Look up…, Ctrl/Cmd+L), and on a phone when a sheet's button sends
@@ -335,6 +342,13 @@ turned off, plus what it imported. The value the intent carries is the
 entry's id. **Do not hardcode a list of your own content** (the classes,
 the species): a campaign that disables one, or imports another, must see
 that where a character is made.
+
+A field may also take its choices from the view's own data: `{key =
+"who", type = "enum", from = {bind = "/actors", ["if"] = "@item.kind ==
+'pc'", first = {{id = "", name = "The whole party"}}}}` — the `first`
+records, then each record at `bind` passing `if` (an Expr over `@item`),
+as `{id = <id expr, default @item.id>, name = <label expr, default
+@item.name>}`.
 
 `"$values"` and `"$value"` are replaced wherever they sit in the intent.
 

@@ -104,7 +104,13 @@ party is), `sessions` and `runtime`. Every other field is as before.
   the campaign already had, comes back.
 - `journal`: what the sessions left worth keeping — rulings, handouts,
   notes marked `journal: true` — each stamped with its `session` and the
-  encounter's name; the Table searches it.
+  encounter's name; the Table searches it. A `handout` is something for
+  the players: an author's prepared one has `audience: "gm"` until the DM
+  shows it; one the DM showed has the `audience` it was shown to, the
+  `ref` it was shown from (`place:<id>`, `actor:<id>`, `note:<id>`,
+  `picture:<pack:asset>`), and may carry an `image`. The phones' Journal
+  holds every handout its player may see; *Stop showing it* sets the
+  audience back to `gm`.
 - `maps`: the campaign's map library — places, drawn in the Editor —
   by path relative to the campaign file, with a `role` (`battle` or
   `regional`). Adding a map copies it into the campaign's `maps/` and
@@ -115,10 +121,14 @@ party is), `sessions` and `runtime`. Every other field is as before.
 - `encounters`: prepared encounters: a recipe for a scene — the map and
   level, creatures by compendium entry with a count, a cell and whether
   they start hidden, the DM's notes, the sessions it was `played` in.
-- `places`: markers on a regional map (`map`, `cell`, `name`) that link to
-  an `encounter`, another `map`, or a journal `note`. They, and the party
-  marker, are the campaign's record: a scene made over the map afresh
-  (a package just started, a copy) shows them where they were.
+- `places`: markers on a regional map (`map`, `cell`, `name`) of a
+  `kind`: `place` (somewhere to be: a village, an inn — its card opens),
+  or a link to an `encounter`, another `map`, or a journal `note`. A
+  place has `text` (what the players are told: the description read out,
+  shown to them with the picture), `notes` (the DM's alone), and `image`
+  (a picture, `pack:asset`). They, and the party marker, are the
+  campaign's record: a scene made over the map afresh (a package just
+  started, a copy) shows them where they were.
 - `party`: where the party is (a map and a cell), for the marker.
 - `sessions`: the sessions played, `n` with `started`/`ended`, the
   `recap` kept at the end, and `file` for version-1 sessions that lived
@@ -195,6 +205,21 @@ elsewhere).
   not see.
 - `packs`: the pack versions this actor's references were resolved
   against, so "update to latest" knows what changed.
+- `persistent`: kept by the campaign though it is not a character (a
+  recurring NPC); encounter-local actors are not.
+- For a person of the world (the Reference pane's card): `place` (the
+  place they are at), `image` (their picture), `public` (what the players
+  may know of them, shown with the picture) and `notes` (the DM's alone).
+  None of these reach a phone except what the DM shows.
+
+## Audiences
+
+Who may see a record: `"all"`, `"gm"`, `"owner:<player>"` (the player
+who owns it) or `"players:<id>,<id>"` (the players named). The GM sees
+everything; a display sees `all` only. Log entries, effects and tracks
+carry one; so do the journal's handouts. What the DM shows the players is
+a handout with the audience they chose (everyone, or one player — shown
+to one and then another, it is theirs both).
 
 ## Character files
 

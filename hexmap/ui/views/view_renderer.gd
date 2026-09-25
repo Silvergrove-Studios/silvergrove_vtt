@@ -42,7 +42,11 @@ extends VBoxContainer
 ##   field {label, bind, kind (a PropertyForm type), on_change (intent with $value), options}
 ##   a form or wizard field may say `collection` (and `query`, `limit`,
 ##       `optional`) instead of `options`: its choices are that
-##       collection's entries, as this client may see them
+##       collection's entries, as this client may see them; or `from`:
+##       {bind, if, id, label, first} — its choices are the records at
+##       `bind` in the data that pass `if` (an Expr over @item), each
+##       {id: id (default @item.id), name: label (default @item.name)},
+##       after the `first` records ({id, name}) given as they are
 ##       one value edited in place; on_change is sent when it changes
 ## Unknown types render as text, so a client of version N shows a plugin
 ## of version N+1 legibly.
@@ -510,7 +514,7 @@ func _form(n: Dictionary, ctx: Dictionary) -> Control:
 	var fields: Array = []
 	for f in n.get("fields", []):
 		if f is Dictionary and f.has("key"):
-			fields.append(JsonDoc.deep(f))
+			fields.append(_with_options(JsonDoc.deep(f), ctx))
 	pf.build(fields, n.get("values", {}) if n.get("values") is Dictionary else {})
 	box.add_child(pf)
 	# fields whose choices are a collection's entries (what the campaign has,
@@ -715,7 +719,7 @@ func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
 		var fields: Array = []
 		for f in step.get("fields", []):
 			if f is Dictionary and f.has("key"):
-				fields.append(JsonDoc.deep(f))
+				fields.append(_with_options(JsonDoc.deep(f), ctx))
 		pf.build(fields, values)
 		holder.add_child(pf)
 		form_ref[0] = pf
@@ -776,6 +780,38 @@ func _image(n: Dictionary, ctx: Dictionary) -> Control:
 ## what the campaign carries, less what it turned off, plus what it has
 ## imported. The answer may come from the Table (a phone asks), so the
 ## form is built at once and filled when each reply lands.
+## A field whose choices come `from` the data: made an enum over them.
+static func _with_options(field: Dictionary, ctx: Dictionary) -> Dictionary:
+	if field.get("from") is Dictionary:
+		field.options = options_from(field.from, ctx)
+		field.type = "enum"
+		field.erase("from")
+	return field
+
+
+## The choices a `from` spec names: its `first` records, then the records
+## at `bind` passing `if`, as {id, name}.
+static func options_from(spec: Dictionary, ctx: Dictionary) -> Array:
+	var out: Array = []
+	for r in spec.get("first", []):
+		if r is Dictionary:
+			out.append({"id": str(r.get("id", "")), "name": str(r.get("name", r.get("id", "")))})
+	var items: Variant = at_pointer(ctx, str(spec.get("bind", "")))
+	if items is Dictionary:
+		items = (items as Dictionary).values()
+	if not (items is Array):
+		return out
+	for it in items:
+		var sub: Dictionary = ctx.duplicate()
+		sub.item = it
+		if spec.has("if") and not Expr.truthy(Expr.evaluate(str(spec["if"]), sub)):
+			continue
+		var id: Variant = Expr.evaluate(str(spec.get("id", "@item.id")), sub)
+		var label: Variant = Expr.evaluate(str(spec.get("label", "@item.name")), sub)
+		out.append({"id": str(id) if id != null else "", "name": str(label) if label != null else str(id)})
+	return out
+
+
 func _fill_choices(fields: Array, pf: PropertyForm) -> void:
 	if not comp_source.is_valid():
 		return

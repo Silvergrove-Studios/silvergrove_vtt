@@ -119,3 +119,18 @@ way onto a map or start anything; these are the reasons.
    addresses, diagnostics.
 
 These are the inputs to the use cases (J2, `docs/use-cases.md`).
+
+## Wave 2: the same journey, reshaped (2026-09-24)
+
+The screens after the refactor (`docs/playtest-1.md`, "Wave 2"), walked by
+the same tool with *The Ruined Chapel* 0.3.0.
+
+| | |
+|---|---|
+| ![Home](images/journey/wave2/01_home.png) Home leads with running a game | ![Picker](images/journey/wave2/02_table_picker.png) the Table's first screen: the adventure found, your campaigns |
+| ![Start](images/journey/wave2/03_package_start.png) starting a package: the pitch first | ![World](images/journey/wave2/04_world_open.png) the World: the party, the road, the contents; *Next* says what to do |
+| ![Place](images/journey/wave2/05_world_place_card.png) a place's card: picture, *Show the players*, the description | ![Person](images/journey/wave2/06_world_person_card.png) a person's card: portrait, where, what the players may know, the DM's notes |
+| ![Lookup](images/journey/wave2/07_world_lookup.png) a rule looked up mid-conversation | ![Fight](images/journey/wave2/08_fight.png) the Fight: turns, tokens, the reference |
+| ![Prep](images/journey/wave2/09_prep.png) Prep: every pane | ![Join](images/journey/wave2/10_player_first_screen.png) *Join a game* on a phone |
+| ![Shown](images/journey/wave2/11_player_shown.png) what the DM showed, on a phone | |
+

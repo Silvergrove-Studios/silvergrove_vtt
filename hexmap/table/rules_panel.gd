@@ -298,21 +298,7 @@ func _comp_for_gm(collection: String, req: Dictionary, on_reply: Callable) -> vo
 
 ## The DM answering a prompt on a player's behalf, or a GM view's button.
 func _gm_intent(payload: Dictionary) -> void:
-	var why := ""
-	match str(payload.get("kind", "")):
-		"answer": why = ctx.kernel.pending.answer(str(payload.get("prompt", "")), payload.get("answer", {}), "")
-		"action":
-			var pc := ctx.host.dispatch(str(payload.get("plugin", "")), str(payload.get("action", "")), payload.get("ctx", {}) if payload.get("ctx") is Dictionary else {})
-			why = pc.error
-			if pc.status != PluginHost.PluginCall.ERROR:
-				ctx.kernel.pending.drive(pc, str(payload.get("plugin", "")))
-		"focus": why = ctx.kernel.turns.set_focus(str(payload.get("ref", "")), "gm")
-		"lookup":
-			if ctx.lookup.is_valid():
-				ctx.lookup.call(str(payload.get("collection", "")), str(payload.get("id", "")))
-			else:
-				why = "nowhere to show it"
-		_: why = "unknown intent"
+	var why := GmIntents.run(ctx, payload)
 	if why != "":
 		ctx.say(why)
 	refresh()

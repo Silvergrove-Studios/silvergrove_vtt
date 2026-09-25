@@ -179,6 +179,29 @@ func test_choice_fields_come_from_the_compendium() -> void:
 	await tree.process_frame
 
 
+## A field's choices from the view's own data: "who" — the whole party, or
+## one of the characters in the data.
+func test_choice_fields_come_from_the_data() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var sent := []
+	r.intent.connect(func(p: Dictionary) -> void: sent.append(p))
+	var data := {"actors": [{"id": "a_1", "name": "Brakka", "kind": "pc"}, {"id": "g_1", "name": "Goblin", "kind": "monster"}, {"id": "a_2", "name": "Mira", "kind": "pc"}]}
+	r.render({"type": "form", "fields": [
+		{"key": "who", "label": "Who", "type": "enum", "from": {"bind": "/actors", "if": "@item.kind == 'pc'", "first": [{"id": "", "name": "The whole party"}]}}],
+		"values": {"who": ""}, "submit_label": "Ask", "submit": {"kind": "action", "plugin": "p", "action": "ask", "ctx": {"form": "$values"}}}, data)
+	var ob := _find(r, "OptionButton") as OptionButton
+	check(ob != null and ob.item_count == 3 and ob.get_item_text(0) == "The whole party" and ob.get_item_text(1) == "Brakka" and ob.get_item_text(2) == "Mira", "the whole party, then the characters, not the goblin")
+	ob.select(2)
+	ob.item_selected.emit(2)
+	_find(r, "Button", "Ask").pressed.emit()
+	check(sent.size() == 1 and str(sent[0].ctx.form.who) == "a_2", "the id is what is sent: %s" % [sent])
+	check(ViewRenderer.options_from({"bind": "/actors", "label": "@item.name .. ' (' .. @item.kind .. ')'"}, data).map(func(o: Dictionary) -> String: return str(o.name)) == ["Brakka (pc)", "Goblin (monster)", "Mira (pc)"], "a label expression")
+	check(ViewRenderer.options_from({"bind": "/nothing"}, data).is_empty(), "nothing at the pointer: no choices")
+	r.queue_free()
+	await tree.process_frame
+
+
 func test_pickers_wizards_repeaters_and_fields() -> void:
 	var r := ViewRenderer.new()
 	root.add_child(r)

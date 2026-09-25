@@ -91,6 +91,21 @@ hm.ui.register("sheet", {
 	},
 })
 
+-- The Table's World mode: the party at a glance (a name opens the sheet)
+-- and a form whose choices come from the data.
+hm.ui.register("party", {
+	type = "column",
+	children = {
+		{ type = "list", bind = "/actors", item = { type = "row", ["if"] = "@item.kind == 'pc'", children = {
+			{ type = "button", expr = "@item.name", intent = { kind = "show", actor = "$/item/id" } },
+			{ type = "text", expr = "'Defence ' .. (@item.derived.defence.total ?? '?')", style = "mono" },
+		} } },
+		{ type = "form", fields = {
+			{ key = "who", label = "Who", type = "enum", from = { bind = "/actors", ["if"] = "@item.kind == 'pc'", first = { { id = "", name = "Everyone" } } } },
+		}, submit_label = "Rest", submit = { kind = "action", plugin = hm.id, action = "rest", ctx = { form = "$values" } } },
+	},
+})
+
 -- ----------------------------------------------------------------- hooks --
 -- Attack rolls carry the attacker's attack parts and every condition that
 -- bears on rolls.

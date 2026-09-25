@@ -110,7 +110,7 @@ func _load_pack(dir: String) -> void:
 		warnings.append("%s: duplicate pack id '%s' (already loaded from %s)" % [dir, id, packs[id]["_dir"]])
 		return
 	m["_dir"] = dir
-	for k in ["terrains", "props", "walls", "lights", "tokens"]:
+	for k in ["terrains", "props", "walls", "lights", "tokens", "pictures"]:
 		if not m.has(k):
 			m[k] = []
 	packs[id] = m
@@ -171,7 +171,7 @@ static func split_ref(ref: String) -> PackedStringArray:
 
 
 ## The manifest entry for an asset ref in the given collection
-## ("terrains", "props", "walls", "lights", "tokens"), or {} if unknown.
+## ("terrains", "props", "walls", "lights", "tokens", "pictures"), or {} if unknown.
 func asset(collection: String, ref: String) -> Dictionary:
 	var parts := split_ref(ref)
 	if parts.is_empty():
@@ -188,6 +188,8 @@ func prop(ref: String) -> Dictionary: return asset("props", ref)
 func wall_style(ref: String) -> Dictionary: return asset("walls", ref)
 func light_preset(ref: String) -> Dictionary: return asset("lights", ref)
 func token_art(ref: String) -> Dictionary: return asset("tokens", ref)
+## A picture to show the players: a place, a person, a handout.
+func picture(ref: String) -> Dictionary: return asset("pictures", ref)
 
 
 ## All assets of a collection across packs, each with "_ref" and "_pack" set.
@@ -299,6 +301,24 @@ func token_texture(ref: String, ppx: float, size := 1.0) -> Texture2D:
 	if file == "":
 		return null
 	return _texture(split_ref(ref)[0], file, size * ppx, ref)
+
+
+## A picture at about `px` across; null when the ref is unknown.
+func picture_texture(ref: String, px := 512.0) -> Texture2D:
+	var p := picture(ref)
+	var file := str(p.get("texture", ""))
+	if file == "":
+		return null
+	return _texture(split_ref(ref)[0], file, px, ref)
+
+
+## The packs that hold pictures.
+func picture_packs() -> PackedStringArray:
+	var out := PackedStringArray()
+	for pid in pack_ids():
+		if not (packs[pid].get("pictures", []) as Array).is_empty():
+			out.append(pid)
+	return out
 
 
 func wall_texture(ref: String, ppx: float) -> Texture2D:

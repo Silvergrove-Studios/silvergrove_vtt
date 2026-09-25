@@ -49,6 +49,7 @@ func test_shell_args() -> void:
 
 
 func test_home_screen() -> void:
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_home.json"))
 	var app := App.new("user://test_prefs_home.json")
 	app.note_recent(example("forest_road.hexmap"))
 	var home := HomeScreen.new()
@@ -65,5 +66,33 @@ func test_home_screen() -> void:
 	check(home._recent_box != null and home._recent_box.get_child_count() == 1, "recent files listed")
 	(home._recent_box.get_child(0) as Button).pressed.emit()
 	check(opened.size() == 2 and opened[1][0] == "editor" and opened[1][1].ends_with("forest_road.hexmap"), "recent map opens in the editor")
+	# the words are what people come to do; what this device can do comes first
+	check((home.find_child("Mode_table", true, false) as Button).text.begins_with("Run a game") and (home.find_child("Mode_player", true, false) as Button).text.begins_with("Join a game")
+		and (home.find_child("Mode_editor", true, false) as Button).text.begins_with("Draw maps"), "Run a game, Join a game, Draw maps")
+	var first_mode := home._column.get_children().filter(func(c: Node) -> bool: return str(c.name).begins_with("Mode_"))[0] as Button
+	check(not first_mode.disabled, "the first choice is one this device has: %s" % first_mode.name)
+	check(home.find_child("Continue", true, false) == null, "nothing to continue yet")
 	home.queue_free()
+	# a campaign opened before: Continue it, first thing
+	var dir := "user://test_home_campaign"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var c := Campaign.create("Our Chapel")
+	check(c.save(dir.path_join("our_chapel.campaign")) == OK, "a campaign on disk")
+	app.note_recent(ProjectSettings.globalize_path(dir.path_join("our_chapel.campaign")))
+	check(HomeScreen.last_campaign(app.recent()).ends_with("our_chapel.campaign") and HomeScreen.campaign_title("x/our_chapel.campaign") == "Our Chapel", "the last campaign, by its name")
+	home = HomeScreen.new()
+	home.app = app
+	root.add_child(home)
+	opened.clear()
+	home.open_mode.connect(func(m: String, a: String) -> void: opened.append([m, a]))
+	var cont := home.find_child("Continue", true, false) as Button
+	if App.mode_available("table"):
+		check(cont != null and cont.text.begins_with("Continue “Our Chapel”") and cont.get_index() < home.find_child("Mode_table", true, false).get_index(), "Continue “Our Chapel”, above everything")
+		cont.pressed.emit()
+		check(opened.size() == 1 and opened[0][0] == "table" and str(opened[0][1]).ends_with("our_chapel.campaign"), "opens it at the Table")
+	else:
+		check(cont == null, "no Continue where there is no Table")
+	home.queue_free()
+	DirAccess.remove_absolute(dir.path_join("our_chapel.campaign"))
+	DirAccess.remove_absolute(dir)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_home.json"))

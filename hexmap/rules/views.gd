@@ -6,7 +6,8 @@ extends RefCounted
 ## receive this. The same projection, with the GM audience, feeds the
 ## Table's own panels.
 ##
-## Audience strings on records and log entries: "all", "gm", "owner:<pid>".
+## Audience strings on records and log entries: "all", "gm", "owner:<pid>",
+## "players:<pid>,<pid>" (the players named, and the GM).
 ## An actor's `audience.fields` maps field paths (within ext or derived,
 ## "ext/x/secret") to "gm" | "owner" | "all"; fields not listed are "all"
 ## for player characters and "gm" for everything else.
@@ -27,6 +28,8 @@ static func can_see(audience: String, player_id: String, role: String) -> bool:
 		"gm": return false
 	if audience.begins_with("owner:"):
 		return role == ROLE_PLAYER and audience.substr(6) == player_id
+	if audience.begins_with("players:"):
+		return role == ROLE_PLAYER and audience.substr(8).split(",").has(player_id)
 	return false
 
 
@@ -133,7 +136,7 @@ static func status_data(kernel: RulesKernel, projection: Dictionary, plugin: Str
 	for aid in projection.actors:
 		var pa: Dictionary = projection.actors[aid]
 		actors.append({"id": pa.id, "name": pa.name, "owner": pa.owner, "mine": pa.mine, "kind": pa.kind,
-			"derived": pa.get("derived", {}).get(plugin, {}), "resources": pa.get("resources", {}).get(plugin, {})})
+			"derived": pa.get("derived", {}).get(plugin, {}), "resources": pa.get("resources", {}).get(plugin, {}), "effects": pa.get("effects", [])})
 	var tracks := []
 	for tr in projection.tracks:
 		if str(tr.get("plugin", plugin)) == plugin:

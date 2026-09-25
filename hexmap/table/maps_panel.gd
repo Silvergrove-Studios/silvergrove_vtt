@@ -17,6 +17,11 @@ extends VBoxContainer
 ## that link to a prepared encounter, another map or a note, and the
 ## party marker (a token tagged `party`) says where the party is.
 
+## A prepared encounter launched (or staged), and returned from: the
+## window switches to the fight and back to the world.
+signal fight_started(enc_id: String)
+signal fight_ended(enc_id: String)
+
 var ctx: TableContext
 var selected_map := ""
 var selected_enc := ""
@@ -128,7 +133,9 @@ func _init(p_ctx: TableContext) -> void:
 	_place_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	prow.add_child(_place_name)
 	_place_kind = OptionButton.new()
-	for k in ["encounter", "map", "note"]:
+	# a place is somewhere to be (a village: its description and its people);
+	# the others lead on — to a fight, another map, a note
+	for k in ["place", "encounter", "map", "note"]:
 		_place_kind.add_item(k)
 	_place_kind.item_selected.connect(func(_i: int) -> void: _fill_place_targets())
 	prow.add_child(_place_kind)
@@ -392,7 +399,8 @@ func remove_place(pid: String) -> String:
 	return why
 
 
-## What the place links to: launch the encounter, show the map, or say the note.
+## What the place links to: launch the encounter, show the map, or say
+## the note; a place that is only a place opens its card.
 func go_to_place(pid: String) -> String:
 	var pl := {}
 	for p in ctx.campaign.places:
@@ -416,6 +424,9 @@ func go_to_place(pid: String) -> String:
 				return "the note is gone"
 			ctx.say("%s: %s" % [str(j.get("title", "Note")), str(j.get("text", ""))])
 			return ""
+	if ctx.show_ref.is_valid():
+		ctx.show_ref.call("place:" + pid)
+		return ""
 	return "the place links to nothing"
 
 
@@ -779,6 +790,7 @@ func launch(enc_id: String, show := true) -> String:
 	(e.played as Array).append(int(ctx.encounter().clock.get("session", 0)))
 	ctx.campaign.touch()
 	ctx.campaign_changed.emit()
+	fight_started.emit(enc_id)
 	if not problems.is_empty():
 		return "Launched with problems: " + "; ".join(problems)
 	return ""
@@ -832,6 +844,7 @@ func return_from(enc_id: String) -> String:
 	e.erase("live")
 	ctx.campaign.touch()
 	ctx.campaign_changed.emit()
+	fight_ended.emit(enc_id)
 	return ""
 
 

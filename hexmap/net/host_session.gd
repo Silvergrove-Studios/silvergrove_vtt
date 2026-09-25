@@ -27,6 +27,10 @@ var port := 0
 ## for every hosting. "" refuses co-GMs.
 var cogm_code := ""
 var announcer := Discovery.Announcer.new()
+## What the campaign has shared before this session (its journal's
+## handouts): each client's view carries the entries it may see, so a
+## player's Journal keeps what the DM has shown them. Set by the Table.
+var journal_source: Callable = Callable()
 var _server := TCPServer.new()
 var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
 var _listening := false
@@ -185,6 +189,12 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 					_send(c, Protocol.event(msg))
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
+	# a picture shown: phones that lack its pack (one added since they joined) fetch it
+	if t == "log.add" and str(ev.get("entry", {}).get("image", "")) != "":
+		var listing := pack_listing()
+		for c in _clients:
+			if c.hello:
+				_send(c, {"t": "packs", "packs": listing})
 
 
 ## Regions and cells reach players only as far as their audience allows:
@@ -230,9 +240,21 @@ func _audience_events(ev: Dictionary, inv: Dictionary) -> Array:
 func projection(c: Dictionary) -> Dictionary:
 	if kernel == null:
 		return {}
-	if _is_gm(c):
-		return Views.project(kernel, plugins, "", Views.ROLE_GM)
-	return Views.project(kernel, plugins, str(c.player), str(c.role) if c.role != "" else Views.ROLE_PLAYER)
+	var pid := "" if _is_gm(c) else str(c.player)
+	var role := Views.ROLE_GM if _is_gm(c) else (str(c.role) if c.role != "" else Views.ROLE_PLAYER)
+	var out := Views.project(kernel, plugins, pid, role)
+	out.journal = []
+	if journal_source.is_valid():
+		for entry in journal_source.call():
+			if entry is Dictionary and str(entry.get("kind", "")) == "handout" and Views.can_see(str(entry.get("audience", "gm")), pid, role):
+				out.journal.append(JsonDoc.deep(entry))
+	return out
+
+
+## Something the views draw on changed outside the encounter (the
+## campaign's journal): every client's view is sent again.
+func refresh_views() -> void:
+	_views_dirty = true
 
 
 func _send_view(c: Dictionary) -> void:
@@ -485,12 +507,15 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 			_send(c, {"t": "file", "pack": pack, "file": file, "data": Marshalls.raw_to_base64(bytes)})
 
 
-## The packs the encounter's maps use, with their file lists.
+## The packs the encounter's maps use, and the packs holding the pictures
+## the DM may show, with their file lists.
 func pack_listing() -> Array:
 	var ids := {}
 	for id in state.maps:
 		for p in (state.maps[id] as HexMap).doc.get("packs", {}):
 			ids[str(p)] = true
+	for p in packs.picture_packs():
+		ids[str(p)] = true
 	var out := []
 	for id in ids:
 		if packs.pack_dir(id) == "":

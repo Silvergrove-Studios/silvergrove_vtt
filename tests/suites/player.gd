@@ -129,7 +129,7 @@ func test_player_window() -> void:
 	var win := PlayerWindow.new()
 	win.app = app
 	root.add_child(win)
-	check(win.screen == "join" and win._known.item_count == 0 and win._diag.text.begins_with("This device:"), "starts on the join screen: no tables joined yet, diagnostics shown")
+	check(win.screen == "join" and win._known.item_count == 0 and win._diag.text.begins_with("This device:") and not win._trouble.visible and not win._known.visible, "starts on the join screen: no tables joined yet, the network's details behind Trouble joining?")
 	win._join_address()
 	check((win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Type the address"), "joining an empty address asks for one")
 	win._choose_file("/nowhere/x.encounter")

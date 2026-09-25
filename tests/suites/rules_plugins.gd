@@ -33,6 +33,10 @@ func test_plugin_manifests() -> void:
 	check(_load(host, "", {"id": "t.ok", "version": "1", "api": 1, "name": "x"}).contains("already"), "not twice")
 	host.unload("t.ok")
 	check(not host.plugins.has("t.ok") and host.kernel.rulesets.is_empty(), "unload drops it from the kernel")
+	# a view this Table does not draw (a newer Table's) is kept, not refused: the plugin still loads
+	check(_load(host, "hexmap.ui.register('party', { type = 'column' }); hexmap.ui.register('overlay', { type = 'column' }); hexmap.ui.register('entry:spells', { type = 'column' })",
+		{"id": "t.views", "version": "1", "api": 1, "name": "x"}) == "" and host.plugins["t.views"].views.has("overlay") and host.plugins["t.views"].views.has("party"), "a view kind from a newer Table loads, kept undrawn")
+	check(_load(host, "hexmap.ui.register('Not a kind!', { type = 'column' })", {"id": "t.badview", "version": "1", "api": 1, "name": "x"}).contains("not a view kind"), "a kind that is no kind is refused")
 	var found := PluginHost.discover(["res://tests/plugins"])
 	check(found.size() >= 4 and str(found[0].id) == "sample.degrees" and str(found[1].id) == "sample.focus" and str(found[2].id) == "sample.house" and str(found[3].id) == "sample.ordered", "discover() finds the sample plugins, sorted: %s" % [found.map(func(m): return m.id)])
 

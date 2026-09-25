@@ -734,6 +734,9 @@ func _host_table(p: Plugin) -> Dictionary:
 
 
 class Bridge:
+	## The views this Table draws (and entry:<collection> cards).
+	const KNOWN_VIEWS := ["sheet", "status", "gm", "party"]
+	static var _VIEW_KIND := RegEx.create_from_string("^[a-z][a-z0-9_]*(:[a-z0-9_.-]+)?$")
 	var host: WeakRef
 	var plugin_id := ""
 
@@ -1132,10 +1135,16 @@ class Bridge:
 			return {"__error": "unloaded"}
 		if not (schema is Dictionary):
 			return {"__error": "a view schema must be an object"}
-		# sheet, status, gm — or entry:<collection>, the card an entry of that collection reads as
-		if not ["sheet", "status", "gm"].has(str(kind)) and not (str(kind).begins_with("entry:") and str(kind).length() > 6):
-			return {"__error": "unknown view kind '%s' (sheet, status, gm, entry:<collection>)" % kind}
-		p.views[str(kind)] = PluginHost._norm_view(schema)
+		# sheet, status, gm, party (the DM's party at a glance, with the rolls
+		# asked of it) — or entry:<collection>, the card an entry reads as.
+		# A kind this build does not know is kept and never drawn, so a
+		# plugin written for a newer Table still loads on this one.
+		var k := str(kind)
+		if k == "entry:" or not _VIEW_KIND.search(k):
+			return {"__error": "'%s' is not a view kind (sheet, status, gm, party, entry:<collection>)" % kind}
+		if not KNOWN_VIEWS.has(k) and not k.begins_with("entry:"):
+			push_warning("%s registers a view '%s' this Table does not draw" % [plugin_id, k])
+		p.views[k] = PluginHost._norm_view(schema)
 		return true
 
 	# --- map

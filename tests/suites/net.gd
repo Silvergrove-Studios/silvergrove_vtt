@@ -231,9 +231,8 @@ func test_table_hosts_player_joins() -> void:
 	var found: bool = player._browsing and pump.call(func() -> bool: return ours.call() >= 0, 2500)
 	if found:
 		say.call("  found the table by discovery: %s" % player._tables.get_item_text(ours.call()))
-		player._tables.item_selected.emit(ours.call())   # a tap fills the address…
-		check(player._address.text.ends_with(":%d" % table.host.port), "…with the table's address")
-		player._join_address()                            # …and Join connects
+		player._tables.item_selected.emit(ours.call())   # a tap joins…
+		check(player._address.text.ends_with(":%d" % table.host.port), "…the table's address")
 	else:
 		say.call("  (no discovery on loopback here; using the address)")
 		player._address.text = "127.0.0.1:%d" % table.host.port
@@ -243,6 +242,33 @@ func test_table_hosts_player_joins() -> void:
 	check(player._players.item_count == 2 and player._pick_title.text == "Chapel Ambush", "players listed from the table's document")
 	player._start(str(player._players.get_item_metadata(0)))
 	check(pump.call(func() -> bool: return player.screen == "play" and player.view.canvas.map != null), "joined as Ana and the map arrived")
+	# a player with no character of her own is taken to where one is made
+	check(pump.call(func() -> bool: return not player.session.view.is_empty()), "the table's view arrived")
+	var no_character: bool = player.session.my_actors().is_empty()
+	check(player.pane_mode == ("table" if no_character else ""), "no character of her own: the pane where one is made (%s, %d of hers)" % [player.pane_mode, player.session.my_actors().size()])
+	if no_character:
+		check(player._pane_box.find_children("*", "Label", true, false).any(func(l: Label) -> bool: return l.text == "You have no character yet"), "and told so")
+		player.set_pane("")
+	# the DM shows the players something: on the phone at once, kept in the
+	# Journal; what is shown to another player never reaches this one
+	check(Sharing.share(table.ctx, "note:runes", "The runes", "Runes glow faintly.", "", "all") == "", "shown to everyone")
+	check(pump.call(func() -> bool: return player.is_showing_handout()), "on Ana's phone at once, on the whole screen")
+	check(player._shown_box.find_children("*", "Label", true, false).any(func(l: Label) -> bool: return l.text == "The runes"), "the runes")
+	player._close_shown()
+	var ana_id: String = player.session.player_id
+	var ben_id := ""
+	for pl in table.ctx.encounter().players:
+		if str(pl.id) != ana_id:
+			ben_id = str(pl.id)
+	check(Sharing.share(table.ctx, "note:ben", "Ben's secret", "Only Ben.", "", "players:" + ben_id) == "", "shown to Ben alone")
+	check(Sharing.share(table.ctx, "note:ana", "For Ana", "Only Ana.", "", "players:" + ana_id) == "", "and something to Ana alone")
+	check(pump.call(func() -> bool: return player.handouts().size() == 2), "Ana's phone has what was shown to everyone and to her: %s" % [player.handouts().map(func(h: Dictionary) -> String: return str(h.title))])
+	check(not player.handouts().any(func(h: Dictionary) -> bool: return str(h.title) == "Ben's secret"), "never what was shown to Ben")
+	player._close_shown()
+	player.set_pane("journal")
+	check(player._pane_box.find_children("*", "Label", true, false).any(func(l: Label) -> bool: return l.text == "For Ana"), "her Journal keeps them")
+	player.set_pane("")
+	check(Sharing.unshare(table.ctx, "note:ana") == "" and pump.call(func() -> bool: return player.handouts().size() == 1), "taken back: gone from her Journal")
 	check(table.players.online.size() == 1 and table.players.list.get_item_text(0).begins_with("●"), "the table shows Ana online")
 	check(player.view.canvas.tokens_in_view().size() == 2, "Ana sees the party")
 	var pmap: HexMap = player.view.canvas.map

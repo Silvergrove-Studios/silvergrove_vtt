@@ -287,11 +287,11 @@ func test_table_window() -> void:
 	var win := TableWindow.new()
 	win.app = app
 	root.add_child(win)
-	check(win.view != null and win.dock != null and win._panes.size() == 13, "table window builds with thirteen panes")
+	check(win.view != null and win.dock != null and win._panes.size() == LayoutStore.TABLE_PANELS.size(), "table window builds with every pane: %d" % win._panes.size())
 	var names := LayoutStore.names(win.dock.layout)
 	for n in LayoutStore.TABLE_PANELS:
 		check(names.has(n), "table layout holds the %s panel: %s" % [n, names])
-	check(win.ctx.scene_id == "" and win.scene_select.item_count == 1 and win.scene_select.get_item_text(0).begins_with("No scene yet"), "a new encounter has no scene yet, and the drop-down says so")
+	check(win.ctx.scene_id == "" and win.scene_select.item_count == 1 and win.scene_select.get_item_text(0).begins_with("No map yet"), "a new encounter has no map yet, and the drop-down says so")
 	check(win.tool_buttons["token"].disabled and win.tool_buttons["fog"].disabled and not win.tool_buttons["select"].disabled, "the map tools wait for a map")
 	check(win._menu("Scene").is_item_disabled(win._menu("Scene").get_item_index(win.S_FOG)) and win._menu("Turns").is_item_disabled(win._menu("Turns").get_item_index(win.T_START)), "so do fog and turns")
 	check(win.turns._start.disabled, "and the Turns pane's Start")
@@ -353,10 +353,10 @@ func test_table_window() -> void:
 	ev.keycode = KEY_T
 	ev.pressed = true
 	win._unhandled_key_input(ev)
-	check(win.view.tool is TableTools.TokenTool and win.tool_options.visible, "T picks the token tool and shows its options")
+	check(win.view.tool is TableTools.TokenTool and win._opts_panel.visible and win._tools_row.visible, "T picks the token tool and shows the tools and its options, in the world too")
 	ev.keycode = KEY_ESCAPE
 	win._unhandled_key_input(ev)
-	check(win.view.tool is TableTools.SelectTool and not win.tool_options.visible, "Esc back to select")
+	check(win.view.tool is TableTools.SelectTool and not win._opts_panel.visible and (win._tools_row.visible == (win.ctx.mode != "world")), "Esc back to select: in the world the tools go again")
 	# Save to a temp path, reload, same document.
 	var path := ProjectSettings.globalize_path("user://test_table_save.encounter")
 	win._save_to(path)
@@ -445,27 +445,34 @@ func test_campaign_first() -> void:
 		check(bool(ctx.encounter().actor(wolf).get("persistent", false)), "kept by the campaign, not only by the running state")
 		ctx.campaign.capture(ctx.encounter())
 		check(ctx.campaign.actors.has(wolf), "so the campaign's own record has it: a copy or a package carries it")
-		# looking things up: View → Look up… searches every collection; a sheet's lookup intent opens the card
+		# looking things up: View → Look up… is the Reference pane's search, over every collection; a sheet's lookup intent opens the card there
 		win._on_menu(win.V_LOOKUP)
 		await tree.process_frame
-		check(win.lookup.visible and win.lookup.collections.has("creatures"), "the lookup popup opens over the table's collections")
-		win.lookup._search.text = "goblin skirm"
-		win.lookup.search()
+		check(win.reference._search.has_focus(), "Look up… goes to the Reference pane's search")
+		win.reference._search.text = "goblin skirm"
+		win.reference.refresh_list()
+		var hit := ""
+		var stack: Array = [win.reference._tree.get_root()]
+		while not stack.is_empty():
+			var it: TreeItem = stack.pop_back()
+			for child in it.get_children():
+				if child.get_text(0).begins_with("Goblin skirmisher"):
+					hit = str(child.get_metadata(0))
+				stack.append(child)
+		check(hit.begins_with("entry:creatures/"), "a search finds the goblin skirmisher: %s" % [win.reference.rows()])
+		win.reference.open(hit)
 		await tree.process_frame
-		var hit := -1
-		for i in win.lookup._results.item_count:
-			if win.lookup._results.get_item_text(i).begins_with("Goblin skirmisher"):
-				hit = i
-		check(hit >= 0, "a search finds the goblin skirmisher (%d results)" % win.lookup._results.item_count)
-		win.lookup._results.select(maxi(hit, 0))
-		win.lookup._open_selected()
-		await tree.process_frame
-		check(_find_label(win.lookup, "Level 1 humanoid") != null, "and shows the ruleset's card")
-		win.lookup.hide()
+		check(_find_label(win.reference, "Level 1 humanoid") != null, "and shows the ruleset's card")
 		party._gm_intent({"kind": "lookup", "collection": "creatures", "id": "wolf"})
 		await tree.process_frame
-		check(win.lookup.visible and _find_label(win.lookup, "Wolf") != null, "a lookup intent from a sheet opens the popup on the entry")
+		check(win.reference.current == "entry:creatures/wolf" and win.reference._title.text == "Wolf", "a lookup intent from a sheet opens the entry in the Reference pane")
+		# with the Reference pane put away, the popup instead
+		win.dock.layout.set_tab_hidden("Reference", true)
+		party._gm_intent({"kind": "lookup", "collection": "creatures", "id": "wolf"})
+		await tree.process_frame
+		check(win.lookup.visible and _find_label(win.lookup, "Wolf") != null, "and with no Reference pane, the popup")
 		win.lookup.hide()
+		win.dock.layout.set_tab_hidden("Reference", false)
 	# the Notes pane: a note written ahead, handed out in the session, journaled once
 	var notes := win.notes
 	notes._title.text = "The stone"
@@ -573,6 +580,248 @@ func test_campaign_first() -> void:
 	for f in ["first.campaign"]:
 		DirAccess.remove_absolute(dir.path_join(f))
 	DirAccess.remove_absolute(dir)
+
+
+## World, Fight, Prep (playtest 1: most of a session is talk, exploring and
+## looking things up): the campaign opens in the World — the party, the
+## map, the reference; a place on the map opens its card; its encounter
+## launched is the Fight, and back is the World again.
+func test_world_mode() -> void:
+	# the three layouts: the World shows the party, the map and the reference; the rest wait
+	var world := LayoutStore.table_world_layout()
+	var fight := LayoutStore.table_fight_layout()
+	var prep := LayoutStore.table_layout()
+	for n in LayoutStore.TABLE_PANELS:
+		check(LayoutStore.names(world).has(n) and LayoutStore.names(fight).has(n) and LayoutStore.names(prep).has(n), "every layout holds %s" % n)
+		check(world.is_tab_hidden(n) != (n in ["Party", "Canvas", "Reference"]), "the World shows %s: %s" % [n, not world.is_tab_hidden(n)])
+		check(fight.is_tab_hidden(n) != (n in ["Turns", "Tokens", "Canvas", "Reference", "Rules", "Inspector"]), "a Fight shows %s: %s" % [n, not fight.is_tab_hidden(n)])
+		check(not prep.is_tab_hidden(n), "Prep shows %s" % n)
+	check(LayoutStore.table_path("world") != LayoutStore.table_path("prep") and LayoutStore.table_path("prep") == LayoutStore.table_path(), "each mode keeps its own arrangement")
+	var dir := "user://table_world_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	# (the windows of the tests before save their layouts as they leave)
+	await tree.process_frame
+	for m in LayoutStore.TABLE_MODES:
+		DirAccess.remove_absolute(LayoutStore.table_path(m))
+	var c := Campaign.create("World test")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1", "ext": {"sample.ordered": {"level": 2, "stats": {"agi": 2, "str": 1, "wit": 0}}}}
+	c.resources["actor:a_h"] = {"sample.ordered": {"hp": Resources.pool(9, 15, "rest")}}
+	c.actors["a_hessa"] = {"id": "a_hessa", "kind": "npc", "name": "Mother Hessa", "persistent": true}
+	c.plugins.append({"id": "sample.ordered"})
+	c.plugins.append({"id": "sample.degrees"})
+	check(c.save(dir.path_join("world.campaign")) == OK, "saved")
+	var app := App.new("user://test_prefs_table_world.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	check(not win._session_bar.visible and not win._tools_row.visible, "the picker alone: no session bar, no tools")
+	win._open_path(dir.path_join("world.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var rules := ctx.host != null and ctx.host.plugins.has("sample.ordered")
+	check(ctx.mode == "world" and win.dock.layout == win._layouts.world and win.mode_buttons.world.button_pressed, "a campaign opens in the World")
+	check(win._session_bar.visible and not win._tools_row.visible and not win._opts_panel.visible, "the session bar, and no map tools")
+	check(win._campaign_label.text == "World test" and win._session_button.text == "Start session 1" and win._session_label.text.begins_with("Day 1") and win._session_label.tooltip_text.begins_with("Between sessions"), "the campaign and its session: %s / %s" % [win._session_label.text, win._session_button.text])
+	check(win._banner.visible and win._banner_label.text.begins_with("Put a map on screen") and win._banner_action.visible, "the banner says what is next: %s" % win._banner_label.text)
+	# the World's map: the road, a region with places; the chapel, a fight over it
+	var mp := win.maps
+	check(mp.add_map(_example("forest_road.hexmap"), "regional") == "" and mp.add_map(_example("ruined_chapel.hexmap")) == "", "two maps in the library")
+	var road := str(ctx.campaign.maps[0].id)
+	var chapel := str(ctx.campaign.maps[1].id)
+	check(win.scene_select.item_count == 2 and str(win.scene_select.get_item_metadata(0)) == "map:" + road, "On screen offers the campaign's maps: %d" % win.scene_select.item_count)
+	win.scene_select.select(0)
+	win.scene_select.item_selected.emit(0)
+	check(str(ctx.scene().get("map", "")) == road and ctx.encounter().active_scene_id == ctx.scene_id, "choosing one puts it up, for the players too")
+	check(win.scene_select.get_item_text(0).begins_with("●") and str(win.scene_select.get_item_metadata(1)) == "map:" + chapel, "the road is up (●), the chapel still offered")
+	check(not win._banner_label.text.begins_with("Put a map"), "the banner moves on: %s" % win._banner_label.text)
+	var enc := mp.new_encounter("The chapel ambush", chapel, "ground")
+	check(mp.add_place("Thornwick", "place", "", Vector2i(2, 3)) == "" and mp.add_place("Chapel ruins", "encounter", enc, Vector2i(6, 4)) == "", "a village and the chapel on the road")
+	var thornwick := str(ctx.campaign.places[0].id)
+	var ruins := str(ctx.campaign.places[1].id)
+	await tree.process_frame
+	# a picture pack the campaign carries (an adventure's pictures of its places and people)
+	var pics := dir.path_join("art/test_pics")
+	DirAccess.make_dir_recursive_absolute(pics)
+	var img := Image.create(64, 48, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.3, 0.5, 0.2))
+	img.save_png(pics.path_join("village.png"))
+	var pf := FileAccess.open(pics.path_join("pack.json"), FileAccess.WRITE)
+	pf.store_string(JsonDoc.stringify({"format": "silvergrove.pack", "version": 1, "id": "test_pics", "name": "Test pictures", "pack_version": "1", "license": "CC0",
+		"pictures": [{"id": "village", "name": "The village", "texture": "village.png", "tags": ["place"]}]}))
+	pf.close()
+	ctx.refresh_art()
+	check(ctx.art.picture("test_pics:village").name == "The village" and ctx.art.picture_texture("test_pics:village") != null and Array(ctx.art.picture_packs()) == ["test_pics"], "a pack's pictures: listed, drawn")
+	# the Reference pane: the campaign's contents, by kind; places hold their people
+	var ref := win.reference
+	ref.refresh_list()
+	var rows := Array(ref.rows()).map(func(r: String) -> String: return r.strip_edges())
+	for want in ["The party", "Hero  · Ana", "People", "Mother Hessa", "Places", "Thornwick", "Chapel ruins", "Pictures", "The village", "Maps"]:
+		check(rows.has(want), "the contents list %s: %s" % [want, rows])
+	ref._search.text = "hessa"
+	ref.refresh_list()
+	check(ref.row_for("actor:a_hessa") != null and ref.row_for("place:" + thornwick) == null, "a search finds her, and only what matches")
+	ref._search.text = ""
+	ref.refresh_list()
+	if rules:
+		# the rules as a glossary: a collection opens to every entry
+		var glossary := ""
+		for r in ref.rows():
+			if str(r).begins_with("Rules"):
+				glossary = str(r)
+		check(glossary == "Rules", "the rules are in the contents")
+		var coll_row: TreeItem = null
+		var stack: Array = [ref._tree.get_root()]
+		while not stack.is_empty():
+			var it: TreeItem = stack.pop_back()
+			for child in it.get_children():
+				if child.has_meta("collection") and str(child.get_meta("collection")) == "creatures":
+					coll_row = child
+				stack.append(child)
+		check(coll_row != null and coll_row.get_text(0).begins_with("Creatures"), "each collection a chapter: %s" % (coll_row.get_text(0) if coll_row != null else "none"))
+		if coll_row != null:
+			coll_row.collapsed = false
+			ref._on_collapsed(coll_row)
+			check(ref.row_for("entry:creatures/wolf") != null, "opened: every creature, the wolf among them")
+	# a place selected on the map opens its card
+	ctx.select_token(thornwick)
+	check(ref.current == "place:" + thornwick and ref._title.text == "Thornwick", "the village's marker opens its card")
+	check(_find_button(ref, "Mark it on their map") != null and ref._card.find_child("ShowPlayers", true, false) != null, "which offers to mark it on the players' map, and to show it to them")
+	check((ref._card.find_child("ShownTo", true, false) as Label).text == "Players see it: nothing yet", "nobody has been shown it yet")
+	(_find_button(ref, "Mark it on their map") as Button).pressed.emit()
+	await tree.process_frame
+	check(not bool(ctx.state.token(ctx.scene_id, thornwick).hidden) and _find_button(ref, "Hide it from their map") != null, "marked: the players see it")
+	var te := ref._card.find_child("Description", true, false) as TextEdit
+	te.text = "Smoke over thatch. The Drowsy Ox is the only inn."
+	te.focus_exited.emit()
+	check(str(ref.place(thornwick).get("text", "")) == te.text and ctx.campaign.dirty, "its description is kept with the campaign")
+	var secret := ref._card.find_child("Notes", true, false) as TextEdit
+	secret.text = "The reeve sold the bell."
+	secret.focus_exited.emit()
+	check(str(ref.place(thornwick).get("notes", "")) == "The reeve sold the bell.", "and the DM's own notes on it, apart")
+	# its picture, chosen from the campaign's
+	(ref._card.find_child("PictureMenu", true, false) as MenuButton).get_popup().id_pressed.emit(0)
+	var chooser: AcceptDialog = null
+	for node in ref.get_children():
+		if node is AcceptDialog and node.visible:
+			chooser = node
+	var plist := chooser.find_child("Pictures", true, false) as ItemList if chooser != null else null
+	check(plist != null and plist.item_count == 1 and plist.get_item_text(0) == "The village", "the campaign's pictures to choose from")
+	if plist != null:
+		plist.item_selected.emit(0)
+	check(str(ref.place(thornwick).get("image", "")) == "test_pics:village", "the village has its picture")
+	await tree.process_frame
+	check(ref._card.find_child("Picture", true, false) != null, "on its card")
+	# shown to everyone: the picture and the description, on the phones
+	check(ref.share_current("all").begins_with("Shown to everyone"), "shown to everyone")
+	var shown: Array = ctx.encounter().log.filter(func(x: Dictionary) -> bool: return str(x.get("kind", "")) == "handout" and str(x.get("ref", "")) == "place:" + thornwick)
+	check(shown.size() == 1 and str(shown[0].title) == "Thornwick" and str(shown[0].image) == "test_pics:village" and str(shown[0].text).begins_with("Smoke") and str(shown[0].audience) == "all",
+		"a handout with the picture and the description, not the DM's notes: %s" % [shown])
+	check(not str(shown[0].get("text", "")).contains("bell"), "the DM's notes stay the DM's")
+	await tree.process_frame
+	check((ref._card.find_child("ShownTo", true, false) as Label).text == "Players see it: everyone", "the card says who has seen it")
+	(ref._card.find_child("ShowPlayers", true, false) as MenuButton).get_popup().id_pressed.emit(999)
+	check(not ctx.encounter().log.any(func(x: Dictionary) -> bool: return str(x.get("ref", "")) == "place:" + thornwick), "taken back: gone from the phones")
+	# to Ana alone
+	await tree.process_frame
+	check(ref.share_current("players:pl_1") == "Shown to Ana: Thornwick" and Sharing.shown_to(ctx, "place:" + thornwick) == "players:pl_1", "shown to Ana alone")
+	check(Views.can_see("players:pl_1", "pl_1", Views.ROLE_PLAYER) and not Views.can_see("players:pl_1", "pl_2", Views.ROLE_PLAYER) and not Views.can_see("players:pl_1", "", Views.ROLE_DISPLAY), "only her phone may see it")
+	ref.refresh_list()
+	check(Array(ref.rows()).any(func(r: String) -> bool: return r.begins_with("Thornwick  → Ana")), "listed under Shown to the players")
+	var hid := str(ctx.encounter().log.filter(func(x: Dictionary) -> bool: return str(x.get("ref", "")) == "place:" + thornwick)[0].id)
+	ref.open("handout:" + hid)
+	check(_find_button(ref, "Stop showing it") != null and _find_button(ref, "Open what it was shown from") != null, "its card: take it back, or go to the village")
+	check(ref.stop_showing(hid) == "Taken back" and Sharing.shown_to(ctx, "place:" + thornwick) == "", "taken back from there too")
+	check(ref.share_current("all") != "" and Sharing.share(ctx, "note:x", "Nothing", "", "", "all").begins_with("There is nothing"), "nothing to show is refused")
+	# a picture of one's own, from a file: into the campaign's own pack, whose licence is not known
+	var own := CampaignPictures.add_file(ctx, ProjectSettings.globalize_path(pics.path_join("village.png")), "My village")
+	check(own.has("ref") and ctx.art.picture(str(own.ref)).name == "My village", "a picture from a file: %s" % [own])
+	check(not PackLibrary.redistributable(ctx.art.manifest(PackLibrary.split_ref(str(own.get("ref", "x:y")))[0])).ok, "and not passed on in a package until its licence is said")
+	# a person: where they are, what the players may know, what the DM knows
+	ref.open("actor:a_hessa")
+	var where := ref._card.find_child("Where", true, false) as OptionButton
+	var at := -1
+	for i in where.item_count:
+		if str(where.get_item_metadata(i)) == thornwick:
+			at = i
+	where.select(at)
+	where.item_selected.emit(at)
+	check(str(ctx.encounter().actor("a_hessa").get("place", "")) == thornwick, "Hessa is in Thornwick")
+	await tree.process_frame
+	var nte := ref._card.find_child("Notes", true, false) as TextEdit
+	nte.text = "Knows the chapel's crypt; wants her son back."
+	nte.focus_exited.emit()
+	check(str(ctx.encounter().actor("a_hessa").get("notes", "")) == nte.text and ctx.history.undo_label().begins_with("Notes on"), "the DM's notes on her, undoably")
+	ref._search.text = "crypt"
+	ref.refresh_list()
+	check(ref.row_for("actor:a_hessa") != null, "and a search finds her by them")
+	ref._search.text = ""
+	ref.refresh_list()
+	ref.back()
+	check(ref.current.begins_with("handout:") or ref.current == "place:" + thornwick, "Back: the card before")
+	ref.open("place:" + thornwick)
+	await tree.process_frame
+	check(_find_button(ref, "Mother Hessa") != null, "with Hessa among the people here")
+	check(ref.row_for("place:" + thornwick) != null and ref.row_for("place:" + thornwick).get_children().any(func(row: TreeItem) -> bool: return str(row.get_metadata(0)) == "actor:a_hessa"), "and under the village in the contents")
+	if rules:
+		# the Party pane: the ruleset's party view; a name opens the sheet beside it
+		await tree.process_frame
+		var hero := _find_button(win.party_pane, "Hero")
+		check(hero != null, "the party view shows Hero")
+		if hero != null:
+			hero.pressed.emit()
+			check(ref.current == "actor:a_h" and _find_label(ref, "Defence") != null, "his name opens his sheet in the Reference")
+		var who := _find_first(win.party_pane, "OptionButton") as OptionButton
+		check(who != null and who.item_count == 2 and who.get_item_text(0) == "Everyone" and who.get_item_text(1) == "Hero", "a form's choices from the data: everyone, or Hero")
+		check(GmIntents.run(ctx, {"kind": "show", "actor": "a_hessa"}) == "" and ref.current == "actor:a_hessa", "a show intent by an actor's id")
+	# the chapel's card launches the fight: the Fight, then back to the World
+	ref.open("place:" + ruins)
+	check(_find_button(ref, "Run this encounter") != null, "the chapel's card offers its encounter")
+	(_find_button(ref, "Run this encounter") as Button).pressed.emit()
+	check(ctx.mode == "fight" and win.dock.layout == win._layouts.fight and win._tools_row.visible, "launched: the Fight, with the map tools")
+	check(win._fight_button.visible and win.mode_buttons.fight.text == "Fight ●" and win.mode_buttons.fight.tooltip_text.begins_with("The chapel ambush is running"), "the bar says a fight is on, which, and how to end it")
+	check(mp.return_from(enc) == "" and ctx.mode == "world" and str(ctx.scene().get("map", "")) == road and not win._fight_button.visible, "returned: the World and the road again")
+	# a tool picked by its key in the World brings its row until Esc
+	var ev := InputEventKey.new()
+	ev.keycode = KEY_T
+	ev.pressed = true
+	win._unhandled_key_input(ev)
+	check(win._tools_row.visible and win._opts_panel.visible, "T: the token tool and its options, in the World")
+	ev.keycode = KEY_ESCAPE
+	win._unhandled_key_input(ev)
+	check(not win._tools_row.visible and not win._opts_panel.visible, "Esc: gone again")
+	# Prep: every pane; the World again
+	win.set_mode("prep")
+	check(win.dock.layout == win._layouts.prep and win.dock.layout.hidden_tabs.is_empty() and win._tools_row.visible, "Prep: every pane, the tools: %s hidden" % [win.dock.layout.hidden_tabs.keys()])
+	win.set_mode("world")
+	check(win.dock.layout.is_tab_hidden("Maps"), "the World: the Maps pane put away")
+	win._reveal_pane("Maps")
+	check(not win.dock.layout.is_tab_hidden("Maps"), "brought out when asked for")
+	var leaf := win.dock.layout.get_leaf_for_node(win._panes.filter(func(p: Node) -> bool: return str(p.name) == "Maps")[0])
+	var tabs_shown := []
+	for n in leaf.names:
+		if not win.dock.layout.is_tab_hidden(n):
+			tabs_shown.append(n)
+	check(tabs_shown[leaf.current_tab] == "Maps", "and it is the tab in front: %s of %s" % [leaf.current_tab, tabs_shown])
+	# the session from the bar
+	win._toggle_session()
+	check(int(ctx.encounter().clock.session) == 1 and win._session_button.text == "End session 1" and win._session_label.tooltip_text == "Session 1 is running", "Start session 1: %s" % win._session_button.text)
+	win._banner_hidden = true
+	win._update_banner()
+	check(not win._banner.visible, "the hints can be put away")
+	# a campaign saved mid-fight opens on the fight
+	check(mp.launch(enc) == "" and ctx.mode == "fight", "fighting")
+	check(ctx.save_campaign() == "", "saved mid-fight")
+	win._close_campaign()
+	win._open_path(dir.path_join("world.campaign"))
+	await tree.process_frame
+	check(ctx.mode == "fight" and win._fight_button.visible, "reopened on the fight")
+	win.queue_free()
+	await tree.process_frame
+	PluginHost._rm_rf(dir)
+	for m in LayoutStore.TABLE_MODES:
+		DirAccess.remove_absolute(LayoutStore.table_path(m))
 
 
 func test_canvas_view_touch() -> void:
@@ -849,6 +1098,37 @@ func test_campaign_packages() -> void:
 	check(win.campaign_panel._start_box.visible, "and the list shows while steps remain")
 	check(not win.tool_buttons["token"].disabled, "the map tools are there once a map is")
 	check(FileAccess.file_exists(home.path_join("mine/rules/sample.degrees/manifest.json")), "the ruleset came with it")
+	# never started over a campaign already there; the dialog offers a free name
+	var again := CampaignPackage.instance(pkg, home.path_join("mine"), "Mine again")
+	check(not again.ok and str(again.why).contains("already a campaign") and Campaign.load_file(str(inst.path), err).name == "Ana's Reach", "a package is never started over a campaign: %s" % str(again.why))
+	check(TableWindow.free_campaign_name(home, "mine") == "mine 2" and TableWindow.free_campaign_name(home, "nowhere") == "nowhere", "a free name for the next start")
+	# the first screen finds the adventures in the library and in Downloads, the newest of each once
+	var found := TableWindow.found_packages([home, home.path_join("nowhere"), ""])
+	check(found.size() == 1 and str(found[0].id) == "sunken-reach", "found in the folders it looks in: %s" % [found.map(func(f: Dictionary) -> String: return str(f.path).get_file())])
+	# the start dialog: the pitch first, the name inline, what is inside folded away
+	var dlg := win._package_dialog(pkg, info, whole)
+	var pitch := _find_first(dlg, "RichTextLabel") as RichTextLabel
+	check(pitch != null and pitch.get_parsed_text().begins_with("The Sunken Reach  1.2.0") and pitch.get_parsed_text().contains("A drowned coast."), "the start dialog leads with the adventure: %s" % (pitch.get_parsed_text() if pitch != null else ""))
+	var cname := dlg.find_child("CampaignName", true, false) as LineEdit
+	check(cname != null and cname.text == "The Sunken Reach", "and asks what to call it, inline")
+	var inside_text := dlg.find_child("InsideText", true, false) as Label
+	check(inside_text != null and not inside_text.visible and inside_text.text.contains("Rules: "), "what is inside and the licences are there, folded away")
+	(dlg.find_child("Inside", true, false) as Button).pressed.emit()
+	check(inside_text.visible, "a press away")
+	dlg.hide()
+	dlg.queue_free()
+	# a package path opens that dialog (a file opened from Home or the command line)
+	win.ctx.encounter().dirty = false
+	win.ctx.campaign.dirty = false
+	win._open_path(pkg)
+	var opened_dlg: ConfirmationDialog = null
+	for c in win.get_children():
+		if c is ConfirmationDialog and (c as ConfirmationDialog).title == "Start “The Sunken Reach”" and not c.is_queued_for_deletion():
+			opened_dlg = c
+	check(opened_dlg != null and opened_dlg.visible, "a package opened is offered to start")
+	if opened_dlg != null:
+		opened_dlg.hide()
+		opened_dlg.queue_free()
 	if has_art:
 		check(Array(win.ctx.art.pack_ids()) == ["dungeons_and_castles", "woodland"] and not win.ctx.art.terrain("woodland:grass").is_empty(), "the Table draws with the art the campaign carries: %s" % [win.ctx.art.pack_ids()])
 	check(win.view.canvas.packs == win.ctx.art, "the map canvas uses it")
@@ -910,3 +1190,13 @@ func test_campaign_packages() -> void:
 	root.remove_child(win)
 	win.free()
 	PluginHost._rm_rf(home)
+
+
+func _find_first(root: Node, cls: String) -> Node:
+	if root.is_class(cls):
+		return root
+	for c in root.get_children():
+		var f := _find_first(c, cls)
+		if f != null:
+			return f
+	return null

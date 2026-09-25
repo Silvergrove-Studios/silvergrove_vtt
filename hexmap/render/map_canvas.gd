@@ -757,6 +757,19 @@ func draw_token(c: Node2D, tk: Dictionary, alpha := 1.0, active := false, select
 		for i in range(0, n, 4):
 			var a := TAU * i / n
 			c.draw_arc(pos, r + ring_w * 1.2, a, a + TAU / n * 2.0, 4, Color(1, 1, 1, 0.7), ring_w, true)
+	# a place on a regional map, and the party: their names under them, so the
+	# map reads without clicking every marker
+	var tags: Array = tk.get("tags", []) if tk.get("tags") is Array else []
+	if tags.has("place") or tags.has("party"):
+		var caption := str(tk.get("name", ""))
+		if caption != "":
+			var font := ThemeDB.fallback_font
+			# about 13 px on screen whatever the zoom (texture_ppx follows it)
+			var fs := int(clampf(13.0 * ppx / maxf(texture_ppx, 1.0), 10.0, 600.0))
+			var w := font.get_string_size(caption, HORIZONTAL_ALIGNMENT_CENTER, -1, fs).x
+			var at := pos + Vector2(-w / 2.0, r + ring_w * 2.0 + fs)
+			c.draw_string_outline(font, at, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(maxf(3.0, fs * 0.25)), Color(0, 0, 0, 0.85 * alpha))
+			c.draw_string(font, at, caption, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, alpha))
 	if active:
 		c.draw_arc(pos, r + ring_w * 2.2, 0.0, TAU, n, Color("#ffd75a"), ring_w * 1.2, true)
 	if selected:

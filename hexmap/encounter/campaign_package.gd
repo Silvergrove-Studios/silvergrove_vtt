@@ -101,6 +101,12 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 		zr.close()
 		out.why = "%s names %s, which is not in it" % [str(info.name), campaign_file]
 		return out
+	# never over a campaign already there
+	var existing := DirAccess.open(dest)
+	if existing != null and (not existing.get_files().is_empty() or not existing.get_directories().is_empty()):
+		zr.close()
+		out.why = "there is already a campaign in %s" % dest
+		return out
 	if DirAccess.make_dir_recursive_absolute(dest) != OK:
 		zr.close()
 		out.why = "cannot make %s" % dest

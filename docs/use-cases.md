@@ -120,16 +120,45 @@ J3's job. A step count is a ceiling, not a target.
 works and the playtest was about the Table. It stays reachable from Home
 and from the Table's map library ("Edit this map").
 
+## U9 — A session of talk and exploring, no fight
+
+*Most sessions never reach a fight* (the user, after J1/J2). The party
+arrives in a village, talks to people, asks around, travels on.
+
+- **Starts:** the campaign open, a session running, the region on screen.
+- **Ends:** the party knows what they came to learn and is on the road.
+- **Must be true:** the party's sheets and the region are on screen; any
+  person, place, note or rule is one search away; a person's card has
+  what the DM knows and the DCs to learn it; a social roll (of the
+  party, one character, or a person of the world; open or secret) is two
+  clicks from the screen the DM is on.
+- **Steps (DM):** click a place → read it out → *Show the players* → ask
+  for a roll → look something up. **Each ≤ 2.**
+
+## U10 — Show the players something
+
+*A picture of the village, the innkeeper's face, the reeve's notice.*
+
+- **Starts:** the thing open in the Reference pane.
+- **Ends:** it is on the players' phones (all, or the one it is for), and
+  in their Journal after.
+- **Must be true:** the DM chooses who sees it and can take it back; the
+  DM's notes never go with it; the card says who has seen it.
+- **Steps (DM):** *Show the players ▾* → everyone, or one of them. **≤ 2.**
+
 ## Questions for review
 
 1. **Are these the right jobs?** Anything missing (e.g. running a game
    with no map at all — theatre of the mind; a DM on a single screen
-   with no phones; a co-DM)?
+   with no phones; a co-DM)? *Answered: U9 and U10 were missing — most
+   sessions are talk and looking things up, and showing players things is
+   constant.*
 2. **U1 and U3 put "play an adventure" and "continue" on Home**, above
    Editor / Table / Player. Is that the right first screen, or should
    Home stay a mode picker?
 3. **Prep vs play (U4 vs U2)**: should the Table have two distinct modes
    the DM switches between, or one screen that adapts to "session
-   running / fight running"?
+   running / fight running"? *Built: three modes — World (the default),
+   Fight (entered and left with a fight), Prep.*
 4. **The players' side (U1, U6)**: should joining ever show a network
    list, or only "the table on this network" plus a code to type?

@@ -27,6 +27,9 @@ var _rule: LineEdit
 var on_campaign_action: Callable
 ## Set by the window: bring the Maps pane forward.
 var on_show_maps: Callable
+## Set by the window: what the players do to join; start the session.
+var on_join_info: Callable
+var on_start_session: Callable
 var _start_box: VBoxContainer
 var _steps: VBoxContainer
 
@@ -130,19 +133,21 @@ func _init(p_ctx: TableContext) -> void:
 func steps(info: Dictionary) -> Array:
 	var e := ctx.encounter()
 	var out := []
-	out.append({"id": "map", "done": not e.scenes.is_empty(), "text": "Show a map — pick one in the Maps pane and press Show (the players see it too)",
-		"action": "Open the Maps pane", "call": on_show_maps})
+	out.append({"id": "map", "done": not e.scenes.is_empty(), "text": "Put a map on screen — pick one from “On screen” at the top (the players see it too)",
+		"action": "Pick a map", "call": on_show_maps})
 	var hosting := bool(info.get("hosting", false))
+	var title := ctx.campaign.name if ctx.campaign != null else e.name
 	out.append({"id": "host", "done": hosting and not (info.get("connected", []) as Array).is_empty(),
-		"text": ("Players join — on their phones, Hexmap → Player, then this table (or %s)" % str(info.get("address", ""))) if hosting else "Players join — start hosting so their phones can find this table",
-		"action": "" if hosting else "Start hosting", "call": on_host})
+		"text": ("Players join — on each phone: Hexmap → Join a game → “%s”" % title) if hosting else "Players join — open the table to them first",
+		"action": "How to join" if hosting else "Open to players", "call": on_join_info if hosting else on_host})
 	var owners := {}
 	for a in e.actors.values():
 		if str(a.get("kind", "")) == "pc" and str(a.get("owner", "")) != "":
 			owners[str(a.owner)] = true
 	out.append({"id": "characters", "done": not e.players.is_empty() and e.players.all(func(p: Dictionary) -> bool: return owners.has(str(p.get("id", "")))),
-		"text": "Everyone has a character — players make theirs on the phone (New character), or you make them in the Party pane"})
-	out.append({"id": "session", "done": int(e.clock.get("session", 0)) > 0, "text": "Start the session — the button above: the clock, the recap and the rules' session refills begin"})
+		"text": "Everyone has a character — players make theirs on their phones, or you make them (Prep → Characters)"})
+	out.append({"id": "session", "done": int(e.clock.get("session", 0)) > 0, "text": "Start the session — the clock, the recap and the rules' once-a-session refills begin",
+		"action": "Start session 1", "call": on_start_session})
 	return out
 
 

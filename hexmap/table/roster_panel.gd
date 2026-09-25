@@ -221,28 +221,7 @@ func _render(schema: Dictionary, data: Dictionary, title: String) -> void:
 ## A sheet button pressed by the DM: dispatched as the GM, prompts driven
 ## to the players.
 func _gm_intent(payload: Dictionary) -> void:
-	var why := ""
-	match str(payload.get("kind", "")):
-		"answer": why = ctx.kernel.pending.answer(str(payload.get("prompt", "")), payload.get("answer", {}), "")
-		"action":
-			var plugin := str(payload.get("plugin", ""))
-			var c: Dictionary = payload.get("ctx", {}) if payload.get("ctx") is Dictionary else {}
-			c = c.duplicate()
-			if not c.has("scene") and ctx.scene_id != "":
-				c.scene = ctx.scene_id
-			var pc := ctx.host.dispatch(plugin, str(payload.get("action", "")), c)
-			why = pc.error
-			if pc.status != PluginHost.PluginCall.ERROR:
-				ctx.kernel.pending.drive(pc, plugin, func(done: PluginHost.PluginCall) -> void:
-					if done.status == PluginHost.PluginCall.ERROR:
-						ctx.say(done.error))
-		"focus": why = ctx.kernel.turns.set_focus(str(payload.get("ref", "")), "gm")
-		"lookup":
-			if ctx.lookup.is_valid():
-				ctx.lookup.call(str(payload.get("collection", "")), str(payload.get("id", "")))
-			else:
-				why = "nowhere to show it"
-		_: why = "unknown intent"
+	var why := GmIntents.run(ctx, payload)
 	if why != "":
 		ctx.say(why)
 	_render_sheet()

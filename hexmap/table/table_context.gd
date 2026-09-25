@@ -25,6 +25,15 @@ var host: PluginHost
 var plugin_dirs: Array = ["user://plugins"]
 ## Set by the window: Callable(collection, id) opens the lookup popup on an entry.
 var lookup: Callable = Callable()
+## Set by the window: Callable(ref) opens something of the campaign's in the
+## Reference pane — "actor:<id>", "place:<id>", "note:<id>", "map:<id>",
+## "entry:<collection>/<id>".
+var show_ref: Callable = Callable()
+## What the DM is doing, which decides what the Table shows: "world" (the
+## default: the party, the map, the reference), "fight" (a fight is on),
+## "prep" (building between sessions: every pane).
+var mode := "world"
+signal mode_changed
 ## The table's own content library: packs kept for any campaign to
 ## import from. It is never loaded — the only content a table has is the
 ## open campaign's, and the library is read when the DM imports from it.

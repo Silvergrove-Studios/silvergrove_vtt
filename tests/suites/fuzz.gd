@@ -190,17 +190,20 @@ func test_player_join_flow() -> void:
 	var win := PlayerWindow.new()
 	win.app = app
 	root.add_child(win)
-	# Picking a listed table fills the address; Join uses it.
+	# A tap on a listed table joins it (U1: as few steps as can be).
 	win.browser.heard({"name": "Chapel", "port": 47777}, "10.5.91.189")
 	win._refresh_tables()
 	check(win._tables.item_count == 1, "a heard table is listed")
 	win._tables.item_selected.emit(0)
-	check(win._address.text == "10.5.91.189:47777" and win.session == null, "a tap fills the address and does not connect yet")
-	check((win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Chapel"), "status says which table")
+	check(win._address.text == "10.5.91.189:47777" and win.session is NetSession and (win.session as NetSession).address == "10.5.91.189", "a tap joins the table")
+	check((win._join.find_child("JoinStatus", true, false) as Label).text.begins_with("Connecting to 10.5.91.189"), "and says so")
+	win._leave()
 	app.note_table("192.168.1.9", 5000, "Other")
 	win._refresh_known()
+	check(win._known.visible, "a table joined before is offered")
 	win._known.item_selected.emit(0)
-	check(win._address.text == "192.168.1.9:5000", "a remembered table fills the address too")
+	check(win._address.text == "192.168.1.9:5000" and win.session is NetSession, "and a tap joins it too")
+	win._leave()
 	# Join with an address connects (to nothing here, but a session exists).
 	win._address.text = "127.0.0.1:1"
 	win._join_address()
@@ -212,8 +215,6 @@ func test_player_join_flow() -> void:
 	win.browser.heard({"name": "Multi", "port": 1, "addresses": ["127.0.0.1", "127.0.0.2"]}, "127.0.0.1")
 	win._refresh_tables()
 	win._tables.item_selected.emit(0)
-	check(win._address.text == "127.0.0.1:1" and win._alternatives == ["127.0.0.2"], "the pick keeps the other addresses as fallbacks")
-	win._join_address()
 	var first := win.session
 	check(first is NetSession and first.address == "127.0.0.1", "tries the first address")
 	var t0 := Time.get_ticks_msec()

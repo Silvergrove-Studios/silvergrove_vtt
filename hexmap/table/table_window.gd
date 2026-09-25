@@ -36,6 +36,24 @@ var npcs: RosterPanel
 var notes: NotesPanel
 var maps: MapsPanel
 var tool_options: HBoxContainer
+var party_pane: PartyPane
+var reference: ReferencePanel
+## The mode buttons (World, Fight, Prep) and the session bar's parts.
+var mode_buttons: Dictionary = {}
+var _session_bar: Control
+var _tools_row: Control
+var _opts_panel: Control
+var _banner: PanelContainer
+var _banner_label: Label
+var _banner_action: Button
+var _banner_hidden := false
+var _campaign_label: Label
+var _session_label: Label
+var _session_button: Button
+var _show_players: Button
+var _fight_button: Button
+## Each mode's layout, loaded when the mode is first used.
+var _layouts: Dictionary = {}
 ## The tool the DM chose; a pick borrows the view and gives it back.
 var _tool_name := "select"
 var tool_buttons: Dictionary = {}
@@ -59,11 +77,12 @@ var _token_form: PropertyForm
 var _picker: Control
 var _picker_recent: VBoxContainer
 var _picker_packages: VBoxContainer
+var _picker_continue: VBoxContainer
 
 enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
 	M_NEW_CAMPAIGN, M_OPEN_CAMPAIGN, M_SAVE_CAMPAIGN, M_RECAP, M_CLOSE_CAMPAIGN, M_FROM_PACKAGE, M_EXPORT_PACKAGE, M_DUPLICATE, M_REVIEW_UPDATE, M_RESTORE_POINT,
 	M_UNDO, M_REDO, M_DELETE, M_SELECT_ALL, M_HIDE, M_CHECKPOINT, M_BULK, M_IMPROVISE,
-	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP,
+	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP, V_WORLD, V_FIGHT, V_PREP,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
 	T_FREE, T_DM, T_ORDERED, T_START, T_NEXT, T_PREV, T_END,
 	H_SHORTCUTS, H_ABOUT }
@@ -94,6 +113,12 @@ func _ready() -> void:
 	ctx.scene_changed.connect(_on_scene_changed)
 	ctx.history.changed.connect(_update_menus)
 	ctx.campaign_changed.connect(_update_menus)
+	ctx.campaign_changed.connect(func() -> void:
+		_refresh_scene_select()
+		_update_session_bar()
+		_update_banner()
+		if host != null:
+			host.refresh_views())
 	_update_menus()
 	_autosave.wait_time = AUTOSAVE_SECONDS
 	_autosave.timeout.connect(_autosave_now)
@@ -101,7 +126,7 @@ func _ready() -> void:
 	_autosave.start()
 	_layout_save.wait_time = 2.0
 	_layout_save.one_shot = true
-	_layout_save.timeout.connect(func() -> void: LayoutStore.save(dock.layout, LayoutStore.table_path()))
+	_layout_save.timeout.connect(func() -> void: LayoutStore.save(dock.layout, LayoutStore.table_path(ctx.mode)))
 	add_child(_layout_save)
 	_select_tool("select")
 	_update_title()
@@ -149,7 +174,7 @@ func _set_encounter(e: Encounter) -> void:
 
 
 func _bind_panels() -> void:
-	for p in [scenes, tokens, inspector, turns, rules, compendium, players, campaign_panel, party, npcs, notes, maps]:
+	for p in [scenes, tokens, inspector, turns, rules, compendium, players, campaign_panel, party, npcs, notes, maps, party_pane, reference]:
 		p.bind()
 
 
@@ -163,6 +188,9 @@ func _on_encounter_changed(what: String, scene_id: String) -> void:
 		view.show_scene()
 	if scene_id == ctx.scene_id or scene_id == "" or what == "turns":
 		view.canvas.refresh()
+	if what in ["clock", "scenes", "active_scene", "players", "actors", "restore", "encounter"]:
+		_update_session_bar()
+		_update_banner()
 	_update_title()
 	_update_menus()
 
@@ -183,11 +211,16 @@ func _build_ui() -> void:
 	add_child(root)
 	_ui_root = root
 	root.add_child(_build_menus())
-	root.add_child(_build_toolbar())
-	var opts_panel := PanelContainer.new()
-	opts_panel.theme_type_variation = "DockHeader"
-	opts_panel.add_child(_build_tool_options())
-	root.add_child(opts_panel)
+	_session_bar = _build_session_bar()
+	root.add_child(_session_bar)
+	_banner = _build_banner()
+	root.add_child(_banner)
+	_tools_row = _build_toolbar()
+	root.add_child(_tools_row)
+	_opts_panel = PanelContainer.new()
+	_opts_panel.theme_type_variation = "DockHeader"
+	_opts_panel.add_child(_build_tool_options())
+	root.add_child(_opts_panel)
 
 	view = TableView.new(ctx)
 	view.cursor_moved.connect(_on_cursor)
@@ -206,20 +239,44 @@ func _build_ui() -> void:
 			_recap_dialog()
 	campaign_panel.on_host = func() -> void: _set_hosting(host == null)
 	campaign_panel.on_show_maps = _show_maps_pane
-	campaign_panel.host_info = func() -> Dictionary:
-		if host == null:
-			return {"hosting": false}
-		var names := []
-		for pid in players.online:
-			names.append(str(ctx.encounter().player(str(pid)).get("name", pid)))
-		return {"hosting": true, "address": host_address(), "code": host.cogm_code, "connected": names}
+	campaign_panel.on_join_info = _join_info
+	campaign_panel.on_start_session = _toggle_session
+	campaign_panel.host_info = _host_info
 	party = RosterPanel.new(ctx, true)
 	npcs = RosterPanel.new(ctx, false)
 	notes = NotesPanel.new(ctx)
 	maps = MapsPanel.new(ctx)
+	party_pane = PartyPane.new(ctx)
+	reference = ReferencePanel.new(ctx)
+	reference.go_place = func(pid: String) -> void: ctx.say(maps.go_to_place(pid))
+	reference.show_map = func(mid: String) -> void: ctx.say(maps.show_map(mid))
+	reference.pick_picture_file = func(then: Callable) -> void:
+		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.png, *.jpg, *.jpeg, *.webp, *.svg ; Pictures"])
+		fd.current_dir = OS.get_system_dir(OS.SYSTEM_DIR_PICTURES)
+		fd.file_selected.connect(then)
+		fd.popup_centered_ratio(0.7)
+	ctx.show_ref = func(ref: String) -> void:
+		reference.open(ref)
+		_reveal_pane("Reference")
+	# a fight launched is a fight on screen; back from it, the world again
+	# (a fight goes in turns, ready for the DM to Start once the scene is set;
+	# afterwards everyone moves freely again)
+	maps.fight_started.connect(func(_enc: String) -> void:
+		if str(ctx.encounter().turns.get("mode", "free")) == "free":
+			ctx.commands.set_turn_mode("ordered")
+		set_mode("fight"))
+	maps.fight_ended.connect(func(_enc: String) -> void:
+		if bool(ctx.encounter().turns.get("running", false)):
+			ctx.commands.stop_turns()
+		ctx.commands.set_turn_mode("free")
+		set_mode("world"))
 	lookup = LookupPopup.new()
 	add_child(lookup)
+	# a rule looked up from a sheet opens in the Reference pane, the DM's book
 	ctx.lookup = func(collection: String, id: String) -> void:
+		if dock != null and not dock.layout.is_tab_hidden("Reference"):
+			ctx.show_ref.call("entry:%s/%s" % [collection, id])
+			return
 		_prepare_lookup()
 		lookup.show_entry(collection, id)
 	compendium.pick_content_file = func(then: Callable) -> void:
@@ -278,71 +335,298 @@ func _build_dock_layout() -> Control:
 		DockPane.new("Compendium", compendium),
 		DockPane.new("Players", players, players.header_actions()),
 		DockPane.new("Session", campaign_panel),
-		DockPane.new("Party", party, party.header_actions()),
+		DockPane.new("Characters", party, party.header_actions()),
 		DockPane.new("NPCs", npcs, npcs.header_actions()),
 		DockPane.new("Notes", notes),
 		DockPane.new("Maps", maps),
+		DockPane.new("Party", party_pane),
+		DockPane.new("Reference", reference),
 	]
 	for p in _panes:
 		dock.add_child(p)
-	dock.layout = LayoutStore.load_or_default(LayoutStore.table_path(), LayoutStore.TABLE_PANELS, LayoutStore.table_layout)
-	dock.layout.changed.connect(func() -> void: _layout_save.start())
+	dock.layout = _layout_for(ctx.mode)
 	return dock
 
 
-## The first screen of the Table: the campaigns this device has opened,
-## and the ways to start one.
+## A mode's layout, loaded (as the user left it, or the default) the first time.
+func _layout_for(mode: String) -> DockableLayout:
+	if not _layouts.has(mode):
+		var layout := LayoutStore.load_table_mode(mode)
+		layout.changed.connect(func() -> void: _layout_save.start())
+		_layouts[mode] = layout
+	return _layouts[mode]
+
+
+## Switch what the Table shows: "world" (the party, the map, the reference),
+## "fight" (turns, tokens, stat blocks) or "prep" (every pane).
+func set_mode(mode: String) -> void:
+	if not LayoutStore.TABLE_MODES.has(mode):
+		return
+	ctx.mode = mode
+	if dock != null:
+		dock.layout = _layout_for(mode)
+	for m in mode_buttons:
+		(mode_buttons[m] as Button).set_pressed_no_signal(m == mode)
+	_sync_chrome()
+	if mode == "world" and _tool_name != "select":
+		_select_tool("select")
+	ctx.mode_changed.emit()
+
+
+## Bring a pane forward (its tab), showing it if the mode hides it.
+func _reveal_pane(p_name: String) -> void:
+	if dock == null:
+		return
+	var layout := dock.layout
+	var pane: Node = null
+	for p in _panes:
+		if p is DockPane and str((p as DockPane).name) == p_name:
+			pane = p
+	var leaf := layout.get_leaf_for_node(pane) if pane != null else null
+	if leaf == null:
+		return
+	if layout.is_tab_hidden(p_name):
+		layout.set_tab_hidden(p_name, false)
+	# a leaf's current tab counts the tabs shown, not the hidden ones
+	var at := 0
+	for n in leaf.names:
+		if n == p_name:
+			break
+		if not layout.is_tab_hidden(n):
+			at += 1
+	leaf.current_tab = at
+
+
+## What of the Table's chrome shows: nothing but the picker before a
+## campaign is open; the map's tools only in a fight and in prep.
+func _sync_chrome() -> void:
+	var picking := _picker != null and _picker.visible
+	if _session_bar != null:
+		_session_bar.visible = not picking
+	# (in the world, a tool picked by its key brings the row until Esc)
+	var tools := not picking and (ctx.mode != "world" or _tool_name != "select")
+	if _tools_row != null:
+		_tools_row.visible = tools
+	if _opts_panel != null:
+		_opts_panel.visible = tools and _tool_name == "token"
+	_update_banner()
+	_update_session_bar()
+
+
+## The line under the session bar that says what to do next, until the
+## first things are done (playtest 1: "not obvious what the next steps are").
+func _build_banner() -> PanelContainer:
+	var panel := PanelContainer.new()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	panel.add_child(row)
+	var head := Label.new()
+	head.text = "Next"
+	head.theme_type_variation = "HeaderLabel"
+	row.add_child(head)
+	_banner_label = Label.new()
+	_banner_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_banner_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(_banner_label)
+	_banner_action = Button.new()
+	_banner_action.theme_type_variation = "AccentButton"
+	row.add_child(_banner_action)
+	var hide := Button.new()
+	hide.text = "Hide"
+	hide.theme_type_variation = "ToolButton"
+	hide.tooltip_text = "Hide these hints (the Session pane in Prep keeps the list)"
+	hide.pressed.connect(func() -> void:
+		_banner_hidden = true
+		_update_banner())
+	row.add_child(hide)
+	panel.visible = false
+	return panel
+
+
+func _update_banner() -> void:
+	if _banner == null or campaign_panel == null:
+		return
+	var picking := _picker != null and _picker.visible
+	if picking or ctx.campaign == null or _banner_hidden:
+		_banner.visible = false
+		return
+	var next := {}
+	for st in campaign_panel.steps(_host_info()):
+		if not bool(st.done):
+			next = st
+			break
+	_banner.visible = not next.is_empty()
+	if next.is_empty():
+		return
+	_banner_label.text = str(next.text)
+	for c in _banner_action.pressed.get_connections():
+		_banner_action.pressed.disconnect(c.callable)
+	var call: Variant = next.get("call")
+	_banner_action.visible = str(next.get("action", "")) != "" and call is Callable and (call as Callable).is_valid()
+	if _banner_action.visible:
+		_banner_action.text = str(next.action)
+		_banner_action.pressed.connect(func() -> void: (call as Callable).call())
+
+
+func _host_info() -> Dictionary:
+	if host == null:
+		return {"hosting": false}
+	var names := []
+	for pid in players.online:
+		names.append(str(ctx.encounter().player(str(pid)).get("name", pid)))
+	return {"hosting": true, "address": host_address(), "code": host.cogm_code, "connected": names}
+
+
+## The campaign, its session, the modes, who can join.
+func _update_session_bar() -> void:
+	if _session_bar == null or _campaign_label == null:
+		return
+	var e := ctx.encounter()
+	if ctx.campaign == null:
+		_campaign_label.text = e.name
+		_session_label.text = ""
+		_session_button.visible = false
+	else:
+		_campaign_label.text = ctx.campaign.name + ("*" if ctx.campaign_dirty() else "")
+		var n := int(e.clock.get("session", 0))
+		var open_session := n > 0 and not ctx.campaign.session_entry(n).is_empty() and not ctx.campaign.session_entry(n).has("ended")
+		_session_label.text = "Day %d, %02d:%02d" % [int(e.clock.get("day", 1)), int(e.clock.get("minute", 0)) / 60, int(e.clock.get("minute", 0)) % 60]
+		_session_label.tooltip_text = ("Session %d is running" % n) if open_session else ("Between sessions (%d played)" % n)
+		_session_button.visible = true
+		_session_button.text = ("End session %d" % n) if open_session else ("Start session %d" % (n + 1))
+		_session_button.theme_type_variation = "" if open_session else "AccentButton"
+	var fight := _live_fight()
+	if mode_buttons.has("fight"):
+		(mode_buttons.fight as Button).text = "Fight ●" if not fight.is_empty() else "Fight"
+		(mode_buttons.fight as Button).tooltip_text = ("%s is running: turns, tokens and stat blocks" % str(fight.get("name", ""))) if not fight.is_empty() else "Turns, tokens and stat blocks — a fight on the map"
+	if _fight_button != null:
+		_fight_button.visible = not fight.is_empty()
+	if host_button != null:
+		host_button.set_pressed_no_signal(host != null)
+		var info := _host_info()
+		host_button.text = ("%d joined" % (info.get("connected", []) as Array).size()) if host != null else "Closed"
+		host_button.tooltip_text = ("Players can join from their phones (%s). Press to close the table to them." % ", ".join(PackedStringArray(info.get("connected", []))) if not (info.get("connected", []) as Array).is_empty() else "Players can join from their phones. Press to close the table to them.") if host != null else "Players cannot join now. Press to open the table to them."
+
+
+## The prepared encounter running now, or {}.
+func _live_fight() -> Dictionary:
+	if ctx.campaign == null:
+		return {}
+	for enc in ctx.campaign.encounters:
+		if enc is Dictionary and enc.has("live") and not (enc.live as Dictionary).is_empty():
+			return enc
+	return {}
+
+
+## The running fight is over: Return (its creatures and scene go).
+func _end_fight() -> void:
+	var fight := _live_fight()
+	if fight.is_empty():
+		set_mode("world")
+		return
+	_confirm("End '%s'? Its creatures and its map go; the party keeps its wounds and its loot, and the map before comes back." % str(fight.get("name", "the fight")), func() -> void:
+		var why := maps.return_from(str(fight.get("id", "")))
+		ctx.say(why if why != "" else "Back from " + str(fight.get("name", "the fight"))))
+
+
+func _toggle_session() -> void:
+	if ctx.campaign == null:
+		return
+	var e := ctx.encounter()
+	var n := int(e.clock.get("session", 0))
+	var open_session := n > 0 and not ctx.campaign.session_entry(n).is_empty() and not ctx.campaign.session_entry(n).has("ended")
+	if not open_session:
+		var why := ctx.start_session()
+		ctx.say(why if why != "" else "Session %d started" % int(ctx.encounter().clock.get("session", 0)))
+	else:
+		_confirm("End session %d? The recap is kept, the journal stamped and the campaign saved." % n, func() -> void:
+			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all") if ctx.campaign_is_live() else "")
+			ctx.say(str(r.get("error", "")) if str(r.get("error", "")) != "" else "Session %d ended" % n))
+	_update_session_bar()
+	_update_banner()
+
+
+## What the players do to join, and this table's address.
+func _join_info() -> void:
+	var name := ctx.campaign.name if ctx.campaign != null else ctx.encounter().name
+	if host == null:
+		_info("The table is closed to players right now. Press \"Closed\" at the top to open it; then, on each phone: open Hexmap → Join a game → pick \"%s\"." % name)
+		return
+	var info := _host_info()
+	var here: Array = info.get("connected", [])
+	_info("On each player's phone (on the same Wi-Fi as this computer):\n\n1. Open Hexmap and tap Join a game.\n2. Pick \"%s\" from the list.\n3. Pick their name, then make a character (or take the one you made).\n\nIf the table is not listed, they can type this address: %s\n\nJoined now: %s\n\nA second DM on another laptop joins with the co-DM code %s." % [
+		name, str(info.get("address", "")), ", ".join(PackedStringArray(here)) if not here.is_empty() else "nobody yet", str(info.get("code", ""))])
+
+
+## The first screen of the Table: carry on with the last campaign, start an
+## adventure (the packages in the library and in Downloads), or open, make
+## or import one. (Playtest 1: the DM with a downloaded adventure could not
+## find the way in among four equal buttons and the editor's chrome.)
 func _build_picker() -> Control:
 	var panel := PanelContainer.new()
 	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	panel.add_child(center)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(center)
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(460, 0)
+	box.custom_minimum_size = Vector2(520, 0)
 	box.add_theme_constant_override("separation", 10)
 	center.add_child(box)
 	var title := Label.new()
-	title.text = "Campaigns"
+	title.text = "Run a game"
 	title.theme_type_variation = "HeaderLabel"
 	box.add_child(title)
 	var blurb := Label.new()
-	blurb.text = "A campaign keeps the party's sheets, the NPCs, the notes and the maps between sessions. Open one, or start a new one."
+	blurb.text = "A campaign keeps everything between sessions: the party, the people and places of the world, your notes, the maps. Carry on with yours, or start one."
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	blurb.theme_type_variation = "DimLabel"
 	box.add_child(blurb)
-	var actions := HBoxContainer.new()
-	actions.add_theme_constant_override("separation", 8)
-	var new_b := Button.new()
-	new_b.text = "New campaign…"
-	new_b.theme_type_variation = "AccentButton"
-	new_b.pressed.connect(_new_campaign_dialog)
-	actions.add_child(new_b)
-	var open_b := Button.new()
-	open_b.text = "Open campaign…"
-	open_b.pressed.connect(_open_campaign_dialog)
-	actions.add_child(open_b)
-	var pkg := Button.new()
-	pkg.text = "New from a package…"
-	pkg.tooltip_text = "A campaign someone assembled: copied into one of your own, which is what you play"
-	pkg.pressed.connect(func() -> void: _from_package_dialog())
-	actions.add_child(pkg)
-	var imp := Button.new()
-	imp.text = "Import an encounter…"
-	imp.tooltip_text = "An encounter file from before campaigns: opened as a campaign of its own"
-	imp.pressed.connect(_open_dialog)
-	actions.add_child(imp)
-	box.add_child(actions)
+	_picker_continue = VBoxContainer.new()
+	box.add_child(_picker_continue)
 	_picker_packages = VBoxContainer.new()
+	_picker_packages.add_theme_constant_override("separation", 6)
 	box.add_child(_picker_packages)
+	var start_file := Button.new()
+	start_file.text = "Start an adventure from a file…"
+	start_file.tooltip_text = "A .campaignpkg you downloaded: it becomes a campaign of your own; the file is never changed"
+	start_file.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	start_file.pressed.connect(func() -> void: _from_package_dialog())
+	box.add_child(start_file)
 	var rl := Label.new()
-	rl.text = "Recent"
+	rl.text = "Your campaigns"
 	rl.theme_type_variation = "HeaderLabel"
 	box.add_child(rl)
 	_picker_recent = VBoxContainer.new()
 	box.add_child(_picker_recent)
+	var open_b := Button.new()
+	open_b.text = "Open a campaign…"
+	open_b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	open_b.pressed.connect(_open_campaign_dialog)
+	box.add_child(open_b)
+	var own := Label.new()
+	own.text = "Or build your own"
+	own.theme_type_variation = "HeaderLabel"
+	box.add_child(own)
+	var actions := HFlowContainer.new()
+	var new_b := Button.new()
+	new_b.text = "New campaign from scratch…"
+	new_b.tooltip_text = "An empty campaign: you choose the rules and add the maps, the people and the places"
+	new_b.pressed.connect(_new_campaign_dialog)
+	actions.add_child(new_b)
+	var imp := Button.new()
+	imp.text = "Import an old encounter…"
+	imp.tooltip_text = "An encounter file from before campaigns: opened as a campaign of its own"
+	imp.pressed.connect(_open_dialog)
+	actions.add_child(imp)
+	box.add_child(actions)
 	var home := Button.new()
-	home.text = "Home"
+	home.text = "‹ Home"
+	home.theme_type_variation = "ToolButton"
 	home.pressed.connect(func() -> void: go_home.emit())
 	box.add_child(home)
 	return panel
@@ -352,19 +636,30 @@ func _show_picker(on: bool) -> void:
 	if _picker == null:
 		return
 	_picker.visible = on
+	_sync_chrome()
 	if not on:
 		return
-	for c in _picker_recent.get_children():
-		_picker_recent.remove_child(c)
-		c.queue_free()
+	for box in [_picker_recent, _picker_continue]:
+		for c in box.get_children():
+			box.remove_child(c)
+			c.queue_free()
 	_refresh_packages()
+	var last := HomeScreen.last_campaign(app.recent())
+	if last != "":
+		var cont := Button.new()
+		cont.text = "Continue “%s”" % HomeScreen.campaign_title(last)
+		cont.tooltip_text = last
+		cont.theme_type_variation = "AccentButton"
+		cont.custom_minimum_size.y = 48
+		cont.pressed.connect(func() -> void: _open_path(last))
+		_picker_continue.add_child(cont)
 	var any := false
 	for p in app.recent():
-		if not (str(p).ends_with(".campaign") or str(p).ends_with(".encounter")):
+		if not (str(p).ends_with(".campaign") or str(p).ends_with(".encounter")) or str(p) == last:
 			continue
 		any = true
 		var b := Button.new()
-		b.text = str(p).get_file().get_basename().capitalize() + ("" if str(p).ends_with(".campaign") else "  (encounter)")
+		b.text = HomeScreen.campaign_title(str(p)) + ("" if str(p).ends_with(".campaign") else "  (an old encounter)")
 		b.tooltip_text = str(p)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var path := str(p)
@@ -372,7 +667,7 @@ func _show_picker(on: bool) -> void:
 		_picker_recent.add_child(b)
 	if not any:
 		var l := Label.new()
-		l.text = "Nothing yet."
+		l.text = "None yet: an adventure you start becomes one." if last == "" else "Only the one above."
 		l.theme_type_variation = "DimLabel"
 		_picker_recent.add_child(l)
 
@@ -386,8 +681,10 @@ func _prepare_lookup() -> void:
 
 
 func _reset_layout() -> void:
-	dock.layout = LayoutStore.table_layout()
-	dock.layout.changed.connect(func() -> void: _layout_save.start())
+	var layout := LayoutStore.table_mode_layout(ctx.mode)
+	layout.changed.connect(func() -> void: _layout_save.start())
+	_layouts[ctx.mode] = layout
+	dock.layout = layout
 	_layout_save.start()
 
 
@@ -408,7 +705,7 @@ func _build_menus() -> MenuBar:
 	_item(file, "Save campaign", M_SAVE, KEY_S, true)
 	_item(file, "Save campaign as…", M_SAVE_AS, KEY_S, true, true)
 	file.add_separator()
-	_item(file, "Add map as scene…", M_ADD_SCENE, KEY_M, true)
+	_item(file, "Add a map…", M_ADD_SCENE, KEY_M, true)
 	_item(file, "Import an encounter…", M_OPEN)
 	_item(file, "Export session recap…", M_RECAP)
 	file.add_separator()
@@ -453,7 +750,10 @@ func _build_menus() -> MenuBar:
 	_item(view_menu, "Zoom to fit", V_FIT, KEY_0, true)
 	_item(view_menu, "Zoom 100%", V_100, KEY_1, true)
 	view_menu.add_separator()
-	_item(view_menu, "Reset panel layout", V_DOCK)
+	_item(view_menu, "World — the party, the map, the reference", V_WORLD)
+	_item(view_menu, "Fight — turns, tokens, stat blocks", V_FIGHT)
+	_item(view_menu, "Prep — every pane", V_PREP)
+	_item(view_menu, "Reset this layout", V_DOCK)
 	view_menu.add_separator()
 	_item(view_menu, "Look up…", V_LOOKUP, KEY_L, true)
 	scale_menu = PopupMenu.new()
@@ -508,7 +808,7 @@ func _build_menus() -> MenuBar:
 
 	var net := PopupMenu.new()
 	net.name = "Network"
-	_check(net, "Host on this network", N_HOST, false)
+	_check(net, "Open to players on this network", N_HOST, false)
 	net.id_pressed.connect(_on_menu)
 	bar.add_child(net)
 
@@ -537,12 +837,94 @@ func _check(menu: PopupMenu, label: String, id: int, checked: bool, key := KEY_N
 	menu.set_item_checked(menu.get_item_index(id), checked)
 
 
-func _build_toolbar() -> HBoxContainer:
+## The top of the Table while a campaign is open: the campaign and its
+## session, the three modes (World — the party, the map, the reference;
+## Fight; Prep — every pane), what is on screen, who can join, save.
+func _build_session_bar() -> Control:
+	var panel := PanelContainer.new()
+	panel.theme_type_variation = "DockHeader"
 	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 2)
-	for entry in [["file-plus", M_NEW_CAMPAIGN, "New campaign (Ctrl/Cmd+N)"], ["folder-open", M_OPEN_CAMPAIGN, "Open a campaign (Ctrl/Cmd+O)"], ["save", M_SAVE, "Save the campaign (Ctrl/Cmd+S)"],
-			["map", M_ADD_SCENE, "Add a map as a scene (Ctrl/Cmd+M)"],
-			["undo-2", M_UNDO, "Undo (Ctrl/Cmd+Z)"], ["redo-2", M_REDO, "Redo (Shift+Ctrl/Cmd+Z)"]]:
+	bar.add_theme_constant_override("separation", 8)
+	panel.add_child(bar)
+	_campaign_label = Label.new()
+	_campaign_label.theme_type_variation = "HeaderLabel"
+	bar.add_child(_campaign_label)
+	_session_label = Label.new()
+	_session_label.theme_type_variation = "DimLabel"
+	# (it gives way first when the window is narrow)
+	_session_label.clip_text = true
+	_session_label.custom_minimum_size.x = 92
+	bar.add_child(_session_label)
+	_session_button = Button.new()
+	_session_button.tooltip_text = "Start the session: the clock and the recap begin, and the rules' once-a-session things refill"
+	_session_button.pressed.connect(_toggle_session)
+	bar.add_child(_session_button)
+	bar.add_child(VSeparator.new())
+	var group := ButtonGroup.new()
+	for m in [["world", "World", "The party, the map and everything to look up — exploring, talking, most of a session"],
+			["fight", "Fight", "Turns, tokens and stat blocks — a fight on the map"],
+			["prep", "Prep", "Every pane — maps and encounters, people, notes, characters, the compendium — for building between sessions"]]:
+		var b := Button.new()
+		b.text = m[1]
+		b.toggle_mode = true
+		b.button_group = group
+		b.tooltip_text = m[2]
+		b.focus_mode = Control.FOCUS_NONE
+		var mode: String = m[0]
+		b.pressed.connect(func() -> void: set_mode(mode))
+		bar.add_child(b)
+		mode_buttons[mode] = b
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(spacer)
+	scene_select = OptionButton.new()
+	scene_select.custom_minimum_size.x = 170
+	scene_select.clip_text = true
+	scene_select.set_meta("icon", "map")
+	scene_select.item_selected.connect(func(i: int) -> void:
+		var sid := str(scene_select.get_item_metadata(i))
+		if sid == "":
+			_show_maps_pane()
+		elif sid.begins_with("map:"):
+			ctx.say(maps.show_map(sid.substr(4)))
+		else:
+			ctx.set_scene(sid))
+	# (with no map at all the one item is always selected: pressing it goes to the maps)
+	scene_select.pressed.connect(func() -> void:
+		if ctx.encounter().scenes.is_empty() and (ctx.campaign == null or ctx.campaign.maps.is_empty()):
+			scene_select.get_popup().hide.call_deferred()
+			_show_maps_pane())
+	bar.add_child(scene_select)
+	_show_players = Button.new()
+	_show_players.text = "Show to players"
+	_show_players.tooltip_text = "You are looking at a map the players are not: put it on their screens too"
+	_show_players.visible = false
+	_show_players.pressed.connect(func() -> void:
+		if has_scene():
+			ctx.commands.activate_scene(ctx.scene_id))
+	bar.add_child(_show_players)
+	_fight_button = Button.new()
+	_fight_button.text = "End the fight"
+	_fight_button.tooltip_text = "The fight is over: its creatures and its map go, the party keeps its wounds, and the map before comes back"
+	_fight_button.visible = false
+	_fight_button.pressed.connect(_end_fight)
+	bar.add_child(_fight_button)
+	host_button = Button.new()
+	host_button.toggle_mode = true
+	host_button.set_meta("icon", "scan")
+	host_button.theme_type_variation = "ToolButton"
+	host_button.focus_mode = Control.FOCUS_NONE
+	host_button.tooltip_text = "Whether players can join from their phones"
+	host_button.toggled.connect(func(on: bool) -> void: _set_hosting(on))
+	bar.add_child(host_button)
+	var how := Button.new()
+	how.text = "How to join"
+	how.theme_type_variation = "ToolButton"
+	how.focus_mode = Control.FOCUS_NONE
+	how.tooltip_text = "What the players do on their phones, and this table's address"
+	how.pressed.connect(_join_info)
+	bar.add_child(how)
+	for entry in [["save", M_SAVE, "Save the campaign (Ctrl/Cmd+S)"], ["undo-2", M_UNDO, "Undo (Ctrl/Cmd+Z)"], ["redo-2", M_REDO, "Redo (Shift+Ctrl/Cmd+Z)"]]:
 		var fb := Button.new()
 		fb.set_meta("icon", entry[0])
 		fb.tooltip_text = entry[2]
@@ -550,13 +932,19 @@ func _build_toolbar() -> HBoxContainer:
 		fb.focus_mode = Control.FOCUS_NONE
 		fb.pressed.connect(_on_menu.bind(entry[1]))
 		bar.add_child(fb)
-		if entry[0] == "map":
-			bar.add_child(VSeparator.new())
-	bar.add_child(VSeparator.new())
+	return panel
+
+
+## The map's tools, for a fight and for prep: select, place tokens, fog, …,
+## and seeing the scene as a player would.
+func _build_toolbar() -> HBoxContainer:
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 2)
 	var group := ButtonGroup.new()
 	for t in TableTools.all_tools():
 		var b := Button.new()
 		b.set_meta("icon", t.icon)
+		b.text = t.label
 		b.toggle_mode = true
 		b.button_group = group
 		b.tooltip_text = "%s (%s)\n%s" % [t.label, t.key, t.hint]
@@ -565,37 +953,12 @@ func _build_toolbar() -> HBoxContainer:
 		b.pressed.connect(_select_tool.bind(t.name))
 		bar.add_child(b)
 		tool_buttons[t.name] = b
-	host_button = Button.new()
-	host_button.text = "Host"
-	host_button.set_meta("icon", "scan")
-	host_button.toggle_mode = true
-	host_button.tooltip_text = "Host this encounter on the local network so players can join"
-	host_button.theme_type_variation = "ToolButton"
-	host_button.focus_mode = Control.FOCUS_NONE
-	host_button.toggled.connect(func(on: bool) -> void: _set_hosting(on))
-	bar.add_child(host_button)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(spacer)
-	var l := Label.new()
-	l.text = "Scene"
-	bar.add_child(l)
-	scene_select = OptionButton.new()
-	scene_select.custom_minimum_size.x = 180
-	scene_select.item_selected.connect(func(i: int) -> void:
-		var sid := str(scene_select.get_item_metadata(i))
-		if sid == "":
-			_show_maps_pane()
-		else:
-			ctx.set_scene(sid))
-	# (with no scene the one item is always selected: pressing it opens the maps)
-	scene_select.pressed.connect(func() -> void:
-		if ctx.encounter().scenes.is_empty():
-			scene_select.get_popup().hide.call_deferred()
-			_show_maps_pane())
-	bar.add_child(scene_select)
 	var l2 := Label.new()
-	l2.text = "See as"
+	l2.text = "Preview as"
+	l2.theme_type_variation = "DimLabel"
 	bar.add_child(l2)
 	viewpoint_select = OptionButton.new()
 	viewpoint_select.custom_minimum_size.x = 120
@@ -657,20 +1020,32 @@ func _refresh_scene_select() -> void:
 		return
 	scene_select.clear()
 	var e := ctx.encounter()
-	var i := 0
+	var shown := {}
 	for s in e.scenes:
-		scene_select.add_item(("● " if str(s.id) == e.active_scene_id else "") + str(s.get("name", s.id)))
+		var i := scene_select.item_count
+		scene_select.add_item(("● " if str(s.id) == e.active_scene_id else "   ") + str(s.get("name", s.id)))
 		scene_select.set_item_metadata(i, str(s.id))
 		if str(s.id) == ctx.scene_id:
 			scene_select.select(i)
-		i += 1
-	# none yet: say so, and choosing it opens the maps (playtest 1: "the drop-down does nothing")
-	if e.scenes.is_empty():
-		scene_select.add_item("No scene yet — show a map…")
+		shown[str(s.get("map", ""))] = true
+	# the campaign's maps not up yet: choosing one puts it on screen
+	if ctx.campaign != null:
+		for m in ctx.campaign.maps:
+			if not shown.has(str(m.get("id", ""))):
+				var i := scene_select.item_count
+				scene_select.add_item("   %s  (%s)" % [str(m.get("name", "")), "the region" if str(m.get("role", "")) == "regional" else "a map"])
+				scene_select.set_item_metadata(i, "map:" + str(m.get("id", "")))
+	# nothing at all: say so, and choosing it goes to where maps are added (playtest 1: "the drop-down does nothing")
+	if scene_select.item_count == 0:
+		scene_select.add_item("No map yet — add one…")
 		scene_select.set_item_metadata(0, "")
 		scene_select.select(0)
+	elif ctx.scene_id == "" or e.scene(ctx.scene_id).is_empty():
+		scene_select.select(-1)
 	scene_select.disabled = false
-	scene_select.tooltip_text = "The scene the Table is looking at (● is the one the players see)" if not e.scenes.is_empty() else "Show a map from the campaign's library as a scene"
+	scene_select.tooltip_text = "What is on screen, and the campaign's other maps: pick one to put it up (● is the one the players see)"
+	if _show_players != null:
+		_show_players.visible = has_scene() and ctx.scene_id != e.active_scene_id
 
 
 func _refresh_viewpoints() -> void:
@@ -750,7 +1125,7 @@ func _select_tool(tool_name: String) -> void:
 	view.set_tool(TableTools.make(tool_name, ctx))
 	if tool_buttons.has(tool_name):
 		(tool_buttons[tool_name] as Button).button_pressed = true
-	tool_options.visible = tool_name == "token"
+	_sync_chrome()
 	for t in TableTools.all_tools():
 		if t.name == tool_name:
 			ctx.say(t.hint)
@@ -824,7 +1199,7 @@ func _update_menus() -> void:
 			b.set_meta("tip", b.tooltip_text)
 		var needs_map: bool = str(tname) != "select"
 		b.disabled = needs_map and not has_scene
-		b.tooltip_text = str(b.get_meta("tip")) + ("\n\nShow a map first (the Maps pane, or the Scene drop-down)." if b.disabled else "")
+		b.tooltip_text = str(b.get_meta("tip")) + ("\n\nPut a map on screen first (\"On screen\" at the top)." if b.disabled else "")
 	if not has_scene and _tool_name != "" and _tool_name != "select":
 		_select_tool("select")
 	# the package it came from, and whether there is a newer one to take
@@ -851,10 +1226,12 @@ func has_scene() -> bool:
 
 ## Bring the Maps pane forward: where a scene is made from a library map.
 func _show_maps_pane() -> void:
-	for p in _panes:
-		if p is DockPane and str((p as DockPane).name) == "Maps" and dock != null:
-			dock.set_control_as_current_tab(p)
-	ctx.say("Pick a map in the Maps pane and press Show (add one with Add map… if the library is empty).")
+	if ctx.campaign != null and not ctx.campaign.maps.is_empty() and scene_select != null and scene_select.is_visible_in_tree():
+		scene_select.show_popup()
+		ctx.say("Pick a map to put it on screen.")
+		return
+	_reveal_pane("Maps")
+	ctx.say("This campaign has no maps yet: add one with Add map… in the Maps pane (or File → Add a map…).")
 
 
 func _menu(p_name: String) -> PopupMenu:
@@ -882,7 +1259,7 @@ func _on_menu(id: int) -> void:
 		M_OPEN: _open_dialog()
 		M_SAVE: _save(false)
 		M_SAVE_AS: _save(true)
-		M_ADD_SCENE: _add_scene_dialog()
+		M_ADD_SCENE: _add_map_dialog() if ctx.campaign != null else _add_scene_dialog()
 		M_NEW_CAMPAIGN: _new_campaign_dialog()
 		M_OPEN_CAMPAIGN: _open_campaign_dialog()
 		M_SAVE_CAMPAIGN: _save(false)
@@ -936,9 +1313,17 @@ func _on_menu(id: int) -> void:
 		V_FIT: view.zoom_to_fit()
 		V_100: view.set_zoom(1.0)
 		V_DOCK: _reset_layout()
+		V_WORLD: set_mode("world")
+		V_FIGHT: set_mode("fight")
+		V_PREP: set_mode("prep")
 		V_LOOKUP:
-			_prepare_lookup()
-			lookup.open()
+			# the Reference pane's search where it is up; the popup elsewhere
+			if ctx.mode != "prep" or not dock.layout.is_tab_hidden("Reference"):
+				_reveal_pane("Reference")
+				reference.focus_search()
+			else:
+				_prepare_lookup()
+				lookup.open()
 		V_SCALE_UP: app.step_ui_scale(true)
 		V_SCALE_DOWN: app.step_ui_scale(false)
 		S_SHOW:
@@ -979,6 +1364,8 @@ func _set_hosting(on: bool) -> void:
 		host.kernel = ctx.kernel
 		host.plugins = ctx.host
 		host.apply_request = _apply_player_request
+		# what the campaign showed the players in earlier sessions: their Journal keeps it
+		host.journal_source = func() -> Array: return ctx.campaign.journal if ctx.campaign != null else []
 		host.log.connect(ctx.say)
 		host.announcer.answered.connect(func(ip: String) -> void:
 			ctx.say("Answered a player looking for tables at %s" % ip)
@@ -1006,7 +1393,8 @@ func _set_hosting(on: bool) -> void:
 		host = null
 		bonjour.unregister()
 		_refresh_online()
-	host_button.set_pressed_no_signal(host != null)
+	_update_session_bar()
+	_update_banner()
 	var net := _menu("Network")
 	if net != null:
 		net.set_item_checked(net.get_item_index(N_HOST), host != null)
@@ -1033,6 +1421,8 @@ func _refresh_online() -> void:
 			players.online[p] = true
 	players.refresh()
 	campaign_panel.refresh()
+	_update_session_bar()
+	_update_banner()
 
 
 # ================================================================== campaign ==
@@ -1083,9 +1473,8 @@ func _from_package_dialog(path := "") -> void:
 		if not whole.ok:
 			_info("%s is damaged and will not start: %s.\n\nDownload it again." % [str(info.name), str(whole.why)])
 			return
-		# what is inside, and under whose terms, before anything is copied
-		_confirm("Start '%s'?\n\n%s" % [str(info.name), package_summary(path, whole)], func() -> void:
-			_start_package(path, info)))
+		# what it is, what to call it, and (a press away) what is inside and under whose terms
+		_package_dialog(path, info, whole))
 
 
 ## What a DM reads before starting a package: what it holds and the
@@ -1104,15 +1493,96 @@ static func package_summary(path: String, whole: Dictionary) -> String:
 	return "\n".join(lines)
 
 
-func _start_package(path: String, info: Dictionary) -> void:
-	_prompt("Start '%s'" % str(info.name), "Call this campaign", str(info.name), func(v: String) -> void:
-		var dest := App.campaigns_dir(app.prefs).path_join(v.strip_edges() if v.strip_edges() != "" else str(info.name))
-		var r := CampaignPackage.instance(path, dest, v)
-		if not r.ok:
-			_info("Could not start it: " + str(r.why))
-			return
-		_open_campaign_path(str(r.path))
-		ctx.say("'%s' is yours now, in %s. The package is untouched." % [str(r.name), ProjectSettings.globalize_path(dest)]))
+## One dialog to start a package: the adventure's own pitch first, the
+## name of the campaign it becomes, and — folded away — what is inside
+## and under whose terms. (Playtest 1 / J1: licences came first, the pitch
+## not at all, and the text ran off the screen.)
+func _package_dialog(path: String, info: Dictionary, whole: Dictionary) -> ConfirmationDialog:
+	var d := ConfirmationDialog.new()
+	d.title = "Start “%s”" % str(info.name)
+	d.ok_button_text = "Start"
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	var pitch := RichTextLabel.new()
+	pitch.bbcode_enabled = true
+	pitch.fit_content = true
+	pitch.scroll_active = false
+	pitch.custom_minimum_size = Vector2(520, 0)
+	var authors := ", ".join(PackedStringArray(info.get("authors", []))) if info.get("authors") is Array else ""
+	pitch.text = "[b]%s[/b]  %s%s\n\n%s" % [str(info.name), str(info.package_version), ("  ·  by " + authors) if authors != "" else "",
+		ViewRenderer.markdown_to_bbcode(str(info.description)) if str(info.description) != "" else "[i]No description.[/i]"]
+	box.add_child(pitch)
+	var row := HBoxContainer.new()
+	var nl := Label.new()
+	nl.text = "Call your campaign"
+	row.add_child(nl)
+	var name_edit := LineEdit.new()
+	name_edit.name = "CampaignName"
+	name_edit.text = free_campaign_name(App.campaigns_dir(app.prefs), str(info.name))
+	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_edit.select_all_on_focus = true
+	row.add_child(name_edit)
+	box.add_child(row)
+	var note := Label.new()
+	note.text = "It becomes a campaign of your own, in %s. The file you started it from is never changed." % ProjectSettings.globalize_path(App.campaigns_dir(app.prefs))
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size.x = 520
+	note.theme_type_variation = "DimLabel"
+	box.add_child(note)
+	var more := Button.new()
+	more.name = "Inside"
+	more.text = "▸ What is inside, and the licences"
+	more.theme_type_variation = "ToolButton"
+	more.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	box.add_child(more)
+	var inside := Label.new()
+	inside.name = "InsideText"
+	inside.text = package_summary(path, whole)
+	inside.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inside.custom_minimum_size.x = 520
+	inside.theme_type_variation = "DimLabel"
+	inside.visible = false
+	box.add_child(inside)
+	more.pressed.connect(func() -> void:
+		inside.visible = not inside.visible
+		more.text = ("▾ " if inside.visible else "▸ ") + "What is inside, and the licences"
+		d.reset_size())
+	d.add_child(box)
+	d.confirmed.connect(func() -> void: _start_package(path, info, name_edit.text))
+	name_edit.text_submitted.connect(func(_t: String) -> void:
+		d.hide()
+		_start_package(path, info, name_edit.text))
+	d.confirmed.connect(d.queue_free)
+	d.canceled.connect(d.queue_free)
+	d.close_requested.connect(d.queue_free)
+	add_child(d)
+	d.popup_centered_clamped(Vector2i(600, 0), 0.9)
+	name_edit.grab_focus.call_deferred()
+	return d
+
+
+## `wanted`, or "wanted 2", "wanted 3"…: a name no campaign folder has yet.
+static func free_campaign_name(dir: String, wanted: String) -> String:
+	var n := 1
+	var v := wanted
+	while DirAccess.dir_exists_absolute(dir.path_join(v)):
+		n += 1
+		v = "%s %d" % [wanted, n]
+	return v
+
+
+func _start_package(path: String, info: Dictionary, p_name: String) -> void:
+	var v := p_name.strip_edges() if p_name.strip_edges() != "" else str(info.name)
+	var dest := App.campaigns_dir(app.prefs).path_join(v)
+	if DirAccess.dir_exists_absolute(dest):
+		_info("You already have a campaign called “%s”. Start this one under another name." % v)
+		return
+	var r := CampaignPackage.instance(path, dest, v)
+	if not r.ok:
+		_info("Could not start it: " + str(r.why))
+		return
+	_open_campaign_path(str(r.path))
+	ctx.say("'%s' is yours now, in %s. The package is untouched." % [str(r.name), ProjectSettings.globalize_path(dest)])
 
 
 ## The rulesets installed here, {id: version}, for a package's requirements.
@@ -1276,6 +1746,7 @@ func _open_campaign(c: Campaign) -> void:
 	if host == null and bool(app.prefs.get("auto_host", true)) and not App.no_auto_host:
 		_set_hosting(true)
 	ctx.say("Campaign '%s' open: %d players, %d characters, session %d" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
+	set_mode("fight" if not _live_fight().is_empty() else "world")
 	_update_menus()
 
 
@@ -1467,6 +1938,24 @@ func _new_encounter_dialog() -> void:
 
 
 ## Pick a map file, then which of its levels, and add it as a scene.
+## A map into the campaign (its library, and its folder), then on screen.
+func _add_map_dialog() -> void:
+	var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.hexmap ; Hex maps", "*.json ; Map JSON"])
+	fd.file_selected.connect(func(path: String) -> void:
+		var form := PropertyForm.new()
+		form.build([{"key": "role", "label": "It is", "type": "enum", "options": ["a battle map (fog of war)", "the region (places and the party on it)"]}],
+			{"role": "the region (places and the party on it)" if ctx.campaign.maps.is_empty() else "a battle map (fog of war)"})
+		_form_dialog("Add " + path.get_file().get_basename(), form, func(v: Dictionary) -> void:
+			var why := maps.add_map(path, "regional" if str(v.role).begins_with("the region") else "battle")
+			if why != "" and not why.begins_with("added"):
+				_info(why)
+				return
+			ctx.say(why if why != "" else "Added")
+			if maps.selected_map != "":
+				maps.show_map(maps.selected_map)))
+	fd.popup_centered_ratio(0.7)
+
+
 func _add_scene_dialog() -> void:
 	var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.hexmap ; Hex maps", "*.json ; Map JSON"])
 	fd.file_selected.connect(func(path: String) -> void:
@@ -1519,6 +2008,9 @@ func _open_dialog() -> void:
 func _open_path(path: String) -> void:
 	if path.ends_with(".campaign"):
 		_open_campaign_path(path)
+		return
+	if path.ends_with("." + CampaignPackage.EXT):
+		_from_package_dialog(path)
 		return
 	var err: Array = []
 	var e := Encounter.load_file(path, err)
@@ -1685,7 +2177,7 @@ func _exit_tree() -> void:
 		host = null
 	bonjour.unregister()
 	if dock != null and is_instance_valid(dock):
-		LayoutStore.save(dock.layout, LayoutStore.table_path())
+		LayoutStore.save(dock.layout, LayoutStore.table_path(ctx.mode))
 	_native_menus.free_menus()
 	if app != null and app.theme_changed.is_connected(_on_theme_changed):
 		app.theme_changed.disconnect(_on_theme_changed)
@@ -1851,41 +2343,49 @@ func _refresh_packages() -> void:
 	for c in _picker_packages.get_children():
 		_picker_packages.remove_child(c)
 		c.queue_free()
-	var dir := App.packages_dir()
-	var da := DirAccess.open(dir)
-	if da == null:
-		return
-	var found := []
-	da.list_dir_begin()
-	var n := da.get_next()
-	while n != "":
-		if not da.current_is_dir() and n.ends_with("." + CampaignPackage.EXT):
-			var info := CampaignPackage.read(dir.path_join(n))
-			if info.ok:
-				found.append(info)
-		n = da.get_next()
-	da.list_dir_end()
+	var found := found_packages([App.packages_dir(), OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)])
 	if found.is_empty():
 		return
 	var head := Label.new()
-	head.text = "Campaigns to start"
+	head.text = "Adventures to start"
 	head.theme_type_variation = "HeaderLabel"
 	_picker_packages.add_child(head)
-	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a.name) < str(b.name))
 	for info in found:
-		var row := HBoxContainer.new()
-		var text := Label.new()
 		var unmet := CampaignPackage.unmet(info, _installed_rulesets(), App.version())
-		text.text = "%s %s%s" % [str(info.name), str(info.package_version), ("  ·  " + str(unmet[0])) if not unmet.is_empty() else ""]
-		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		text.tooltip_text = str(info.description)
-		if not unmet.is_empty():
-			text.theme_type_variation = "DimLabel"
-		row.add_child(text)
-		var start := Button.new()
-		start.text = "Start"
-		start.disabled = not unmet.is_empty()
+		var b := Button.new()
+		var pitch := str(info.description).strip_edges().get_slice("\n", 0)
+		if pitch.length() > 110:
+			pitch = pitch.left(107) + "…"
+		b.text = "Start “%s”  %s\n%s" % [str(info.name), str(info.package_version), str(unmet[0]) if not unmet.is_empty() else pitch]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.custom_minimum_size.y = 52
+		b.tooltip_text = str(info.path)
+		b.disabled = not unmet.is_empty()
 		var path := str(info.path)
-		start.pressed.connect(func() -> void: _from_package_dialog(path))
-		row.add_child(start)
-		_picker_packages.add_child(row)
+		b.pressed.connect(func() -> void: _from_package_dialog(path))
+		_picker_packages.add_child(b)
+
+
+## The packages in these folders, readable, the newest version of each once
+## (the library's copy before a download of the same), by name.
+static func found_packages(dirs: Array) -> Array:
+	var by_id := {}
+	for dir in dirs:
+		if str(dir) == "":
+			continue
+		var da := DirAccess.open(str(dir))
+		if da == null:
+			continue
+		for n in da.get_files():
+			if not n.ends_with("." + CampaignPackage.EXT):
+				continue
+			var info := CampaignPackage.read(str(dir).path_join(n))
+			if not info.ok:
+				continue
+			var have: Dictionary = by_id.get(str(info.id), {})
+			if have.is_empty() or CampaignPackage._compare(str(info.package_version), str(have.package_version)) > 0:
+				by_id[str(info.id)] = info
+	var out := by_id.values()
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a.name).naturalnocasecmp_to(str(b.name)) < 0)
+	return out

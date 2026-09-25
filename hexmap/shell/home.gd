@@ -1,13 +1,23 @@
 class_name HomeScreen
 extends Control
-## The first screen: pick a mode, or reopen something recent. Laid out for a
+## The first screen: what people come to do — carry on with their campaign,
+## run a game, join one, draw maps — and what they had open. Laid out for a
 ## finger as much as a mouse — big targets, one column, nothing that needs a
 ## hover or a right-click — because on a phone this is the Player's front
-## door too.
+## door too. (Playtest 1: "Editor / Table / Player" meant nothing to a DM
+## who came to run a game.)
 
 signal open_mode(mode: String, arg: String)
 
 const MODE_ICONS := {"editor": "pencil", "table": "hexagon", "player": "eye"}
+## What each mode is for, in the words of someone who wants it.
+const MODE_TEXT := {
+	"table": ["Run a game", "Start an adventure or open your campaign: the party, the people, the places and the maps, on your screen and your players' phones."],
+	"player": ["Join a game", "Play from your phone or laptop: the DM's table on this network, your character, your view of the map."],
+	"editor": ["Draw maps", "Terrain, props, walls and lights, for your games; export to other VTTs and print."],
+}
+## Most wanted first; what this device cannot do goes last.
+const MODE_ORDER := ["table", "player", "editor"]
 
 var app: App
 var _recent_box: VBoxContainer
@@ -46,14 +56,32 @@ func _build() -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(sub)
 
-	for m in App.MODES:
+	# the campaign last opened, one press away (U3: pick up where we left off)
+	var last := last_campaign(app.recent())
+	if last != "" and App.mode_available("table"):
+		var cont := Button.new()
+		cont.name = "Continue"
+		cont.text = "Continue “%s”\nThe campaign you had open last" % campaign_title(last)
+		cont.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		cont.custom_minimum_size = Vector2(0, 64)
+		cont.theme_type_variation = "AccentButton"
+		cont.set_meta("icon", "folder-open")
+		cont.tooltip_text = last
+		cont.pressed.connect(func() -> void: open_mode.emit("table", last))
+		column.add_child(cont)
+
+	var order: Array = MODE_ORDER.filter(func(m: String) -> bool: return App.mode_available(m)) + MODE_ORDER.filter(func(m: String) -> bool: return not App.mode_available(m))
+	for m in order:
 		var b := Button.new()
 		b.name = "Mode_" + m
-		b.text = "%s\n%s" % [App.mode_label(m), App.mode_blurb(m)]
+		b.text = "%s\n%s" % MODE_TEXT[m]
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		b.custom_minimum_size = Vector2(0, 64)
 		b.set_meta("icon", MODE_ICONS[m])
 		b.disabled = not App.mode_available(m)
+		if b.disabled:
+			b.tooltip_text = "Not on this device"
 		b.pressed.connect(func() -> void: open_mode.emit(m, ""))
 		column.add_child(b)
 
@@ -70,7 +98,20 @@ func _build() -> void:
 		if not names.has(str(p).get_file()):
 			examples.append(p)
 	if not examples.is_empty():
-		_file_list(column, "Examples", examples)
+		_file_list(column, "Example maps", examples)
+
+
+## The most recent campaign still on disk, or "".
+static func last_campaign(recent: Array) -> String:
+	for p in recent:
+		if str(p).ends_with(".campaign"):
+			return str(p)
+	return ""
+
+
+## "our_chapel.campaign" → "Our Chapel".
+static func campaign_title(path: String) -> String:
+	return path.get_file().get_basename().replace("_", " ").capitalize()
 
 
 ## "UI size  −  100%  +": the same preference every mode's View menu has.
@@ -114,7 +155,7 @@ func _file_list(column: VBoxContainer, title: String, paths: Array) -> VBoxConta
 	column.add_child(box)
 	for p in paths:
 		var b := Button.new()
-		b.text = str(p).get_file()
+		b.text = campaign_title(str(p)) + "  (campaign)" if str(p).ends_with(".campaign") else str(p).get_file()
 		b.tooltip_text = str(p)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.theme_type_variation = "ToolButton"

@@ -27,6 +27,10 @@ var _tables_label: Label
 var _known: ItemList
 var _diag: Label
 var _diag_timer := 0.0
+## What a player needs only when the table is not found: the address box,
+## the network's details (playtest 1: developer information on the first screen).
+var _trouble: VBoxContainer
+var _known_label: Label
 var browser := Discovery.Browser.new()
 var _browsing := false
 var _players: ItemList
@@ -52,8 +56,20 @@ var _pane: ScrollContainer
 var _pane_box: VBoxContainer
 var _sheet_button: Button
 var _table_button: Button
+## What the DM has shown this player: pictures, places, people, notes.
+var _journal_button: Button
+## The full-screen card of something the DM just showed.
+var _shown: PanelContainer
+var _shown_box: VBoxContainer
+## Handouts already seen (a new one pops up; the ones there on joining do not).
+var _seen_handouts: Dictionary = {}
+var _handouts_primed := false
+var _shown_handout: Dictionary = {}
 var _renderers: Array = []
 var _seen_prompts: Dictionary = {}
+## Whether the first view of this session was looked at (to open the
+## character maker for a player with none).
+var _greeted := false
 
 
 func _ready() -> void:
@@ -168,16 +184,13 @@ func _build_join() -> Control:
 	column.add_theme_constant_override("separation", 12)
 	var center := _scrolling_column(column)
 	var title := Label.new()
-	title.text = "Player"
+	title.text = "Join a game"
 	title.theme_type_variation = "HeaderLabel"
 	column.add_child(title)
-	var stamp := Label.new()
-	stamp.text = App.build_stamp()
-	stamp.theme_type_variation = "DimLabel"
-	column.add_child(stamp)
 	var h := Label.new()
-	h.text = "Join a table"
+	h.text = "On the same Wi-Fi as the DM's computer, tap the DM's table. Then pick your name, and make your character (or take the one the DM made)."
 	h.theme_type_variation = "DimLabel"
+	h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(h)
 	_tables_label = Label.new()
 	_tables_label.text = "Listening for tables on this network…"
@@ -185,13 +198,42 @@ func _build_join() -> Control:
 	column.add_child(_tables_label)
 	_tables = ItemList.new()
 	_tables.custom_minimum_size = Vector2(0, 100)
-	# A tap picks (fills the address, Join connects); a double tap connects.
-	_tables.item_selected.connect(func(i: int) -> void: _pick_table(_tables.get_item_metadata(i)))
-	_tables.item_activated.connect(func(i: int) -> void:
+	# a tap joins
+	_tables.item_selected.connect(func(i: int) -> void:
 		_pick_table(_tables.get_item_metadata(i))
 		_join_address())
 	column.add_child(_tables)
 	browser.updated.connect(_refresh_tables)
+	_known_label = Label.new()
+	_known_label.text = "Tables you have joined before"
+	_known_label.theme_type_variation = "DimLabel"
+	column.add_child(_known_label)
+	_known = ItemList.new()
+	_known.custom_minimum_size = Vector2(0, 100)
+	_known.item_selected.connect(func(i: int) -> void:
+		_pick_table(_known.get_item_metadata(i))
+		_join_address())
+	column.add_child(_known)
+	var status := Label.new()
+	status.name = "JoinStatus"
+	status.theme_type_variation = "DimLabel"
+	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	column.add_child(status)
+	# the table not listed: its address, and what the network is doing
+	var trouble := _big(Button.new(), "Trouble joining?")
+	trouble.name = "Trouble"
+	trouble.theme_type_variation = "ToolButton"
+	column.add_child(trouble)
+	_trouble = VBoxContainer.new()
+	_trouble.add_theme_constant_override("separation", 8)
+	_trouble.visible = false
+	trouble.pressed.connect(func() -> void: _trouble.visible = not _trouble.visible)
+	column.add_child(_trouble)
+	var help := Label.new()
+	help.text = "Check this phone is on the same Wi-Fi as the DM's computer (not mobile data, not a guest network). If the table still is not listed, type the address the DM's screen shows under How to join."
+	help.theme_type_variation = "DimLabel"
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_trouble.add_child(help)
 	var row := HBoxContainer.new()
 	_address = LineEdit.new()
 	_address.placeholder_text = "Table address"
@@ -214,22 +256,15 @@ func _build_join() -> Control:
 	join.theme_type_variation = "AccentButton"
 	join.pressed.connect(_join_address)
 	row.add_child(join)
-	column.add_child(row)
-	var h2 := Label.new()
-	h2.text = "Tables you have joined before"
-	h2.theme_type_variation = "DimLabel"
-	column.add_child(h2)
-	_known = ItemList.new()
-	_known.custom_minimum_size = Vector2(0, 100)
-	_known.item_selected.connect(func(i: int) -> void: _pick_table(_known.get_item_metadata(i)))
-	_known.item_activated.connect(func(i: int) -> void:
-		_pick_table(_known.get_item_metadata(i))
-		_join_address())
-	column.add_child(_known)
+	_trouble.add_child(row)
 	_diag = Label.new()
 	_diag.theme_type_variation = "DimLabel"
 	_diag.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	column.add_child(_diag)
+	_trouble.add_child(_diag)
+	var stamp := Label.new()
+	stamp.text = App.build_stamp()
+	stamp.theme_type_variation = "DimLabel"
+	_trouble.add_child(stamp)
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 8)
 	var home := _big(Button.new(), "Home")
@@ -247,11 +282,6 @@ func _build_join() -> Control:
 	bigger.pressed.connect(func() -> void: app.step_ui_scale(true))
 	row2.add_child(bigger)
 	column.add_child(row2)
-	var status := Label.new()
-	status.name = "JoinStatus"
-	status.theme_type_variation = "DimLabel"
-	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	column.add_child(status)
 	return center
 
 
@@ -380,6 +410,12 @@ func _build_play() -> Control:
 	_table_button.toggle_mode = true
 	_table_button.pressed.connect(func() -> void: set_pane("table" if pane_mode != "table" else ""))
 	top.add_child(_table_button)
+	_journal_button = _big(Button.new(), "Journal")
+	_journal_button.theme_type_variation = "ToolButton"
+	_journal_button.toggle_mode = true
+	_journal_button.tooltip_text = "What the DM has shown you: places, people, pictures, notes"
+	_journal_button.pressed.connect(func() -> void: set_pane("journal" if pane_mode != "journal" else ""))
+	top.add_child(_journal_button)
 	_center = HBoxContainer.new()
 	_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_center.add_theme_constant_override("separation", 0)
@@ -462,6 +498,9 @@ func _refresh_known() -> void:
 	for t in app.tables():
 		var i := _known.add_item("%s  —  %s:%d" % [str(t.get("name", "")), str(t.get("address", "")), int(t.get("port", 0))])
 		_known.set_item_metadata(i, t)
+	_known.visible = _known.item_count > 0
+	if _known_label != null:
+		_known_label.visible = _known.visible
 
 
 ## Where this device is and what discovery has done, so a player and a
@@ -486,7 +525,7 @@ func _pick_table(t: Dictionary) -> void:
 	for a in t.get("addresses", []):
 		if str(a) != str(t.get("address", "")):
 			_alternatives.append(str(a))
-	_join_status("%s — tap Join" % str(t.get("name", "")))
+	_join_status("%s — joining" % str(t.get("name", "")))
 
 
 func _join_address() -> void:
@@ -596,6 +635,10 @@ func _start(player_id: String) -> void:
 
 
 func _bind(s: Session) -> void:
+	_greeted = false
+	_seen_handouts.clear()
+	_handouts_primed = false
+	_close_shown()
 	if session != null and session != s:
 		session.leave()
 	session = s
@@ -606,6 +649,13 @@ func _bind(s: Session) -> void:
 			_leave()
 			_join_status(reason))
 	session.view_changed.connect(_on_view)
+	# a picture shown before its art arrived: drawn again when it lands
+	if s.has_signal("assets_ready"):
+		s.assets_ready.connect(func() -> void:
+			if is_showing_handout():
+				show_handout(_shown_handout)
+			if pane_mode == "journal":
+				_render_pane())
 	if display_mode:
 		tool = null
 		view.set_handler(null)
@@ -652,6 +702,7 @@ func _layout_pane() -> void:
 	_pane.custom_minimum_size.x = 360 if wide else 0
 	_sheet_button.button_pressed = pane_mode == "sheet"
 	_table_button.button_pressed = pane_mode == "table"
+	_journal_button.button_pressed = pane_mode == "journal"
 	_sheet_button.visible = not display_mode
 
 
@@ -671,6 +722,20 @@ func _on_view() -> void:
 	var prompts: Array = v.get("prompts", [])
 	_table_button.text = "Table" + (" (%d)" % prompts.size() if not prompts.is_empty() else "")
 	_sheet_button.text = "Sheet" if session.my_actors().is_empty() else "Sheet (%d)" % session.my_actors().size()
+	# something the DM just showed: on the whole screen, and kept in the Journal
+	var shown := handouts()
+	_journal_button.text = "Journal" if shown.is_empty() else "Journal (%d)" % shown.size()
+	var newest := {}
+	for h in shown:
+		var hid := str(h.get("id", ""))
+		if not _seen_handouts.has(hid):
+			_seen_handouts[hid] = true
+			if _handouts_primed:
+				newest = h
+	if not v.is_empty():
+		_handouts_primed = true
+	if not newest.is_empty():
+		show_handout(newest)
 	var fresh := false
 	for p in prompts:
 		if not _seen_prompts.has(str(p.get("id", ""))):
@@ -679,6 +744,12 @@ func _on_view() -> void:
 	if fresh and pane_mode != "table" and not display_mode:
 		set_pane("table")
 		return
+	# joined with no character: straight to where one is made
+	if not _greeted and not display_mode and not v.is_empty():
+		_greeted = true
+		if session.my_actors().is_empty() and session.role == Views.ROLE_PLAYER and pane_mode != "table":
+			set_pane("table")
+			return
 	_render_pane()
 	_refresh_bars()
 
@@ -718,13 +789,133 @@ func _render_pane() -> void:
 						if why != "":
 							_say(why))
 					_pane_box.add_child(b)
+		"journal":
+			var list := handouts()
+			if list.is_empty():
+				_pane_text("Nothing yet. What the DM shows you — places, people, pictures, notes — is kept here.", "dim")
+			list.reverse()
+			for h in list:
+				_pane_text(str(h.get("title", "")), "header")
+				var tex := _picture_texture(str(h.get("image", "")))
+				if tex != null:
+					var pic := Button.new()
+					pic.flat = true
+					pic.icon = tex
+					pic.expand_icon = true
+					pic.custom_minimum_size = Vector2(0, 200)
+					pic.tooltip_text = "See it on the whole screen"
+					var hd: Dictionary = h
+					pic.pressed.connect(func() -> void: show_handout(hd))
+					_pane_box.add_child(pic)
+				if str(h.get("text", "")).strip_edges() != "":
+					_pane_rich(str(h.text))
 		"table":
+			if session.my_actors().is_empty() and not display_mode and session.role == Views.ROLE_PLAYER:
+				_pane_text("You have no character yet", "header")
+				_pane_text("Make one under New character below — or, if the DM made yours, ask them to give it to you. Then Sheet shows it.", "dim")
 			_pane_render(_table_schema(v), v)
 			# a plugin's status view binds to its own data (me, role, actors as a
 			# list, state…), not to the raw projection
 			for stv in v.get("status", []):
 				_pane_text(str(stv.get("plugin", "")), "header")
 				_pane_render(stv.get("schema", {}), stv.get("data", {}))
+
+
+## What the DM has shown this viewer, oldest first: this session's (in the
+## log) and the campaign's earlier ones (the view's journal), once each.
+func handouts() -> Array:
+	var out := []
+	var seen := {}
+	if session == null:
+		return out
+	for h in session.view.get("journal", []):
+		if h is Dictionary and not seen.has(str(h.get("id", ""))):
+			seen[str(h.get("id", ""))] = true
+			out.append(h)
+	for h in session.view.get("log", []):
+		if h is Dictionary and str(h.get("kind", "")) == "handout" and not seen.has(str(h.get("id", ""))):
+			seen[str(h.get("id", ""))] = true
+			out.append(h)
+	return out
+
+
+## Something the DM showed, on the whole screen until closed.
+func show_handout(h: Dictionary) -> void:
+	_shown_handout = h
+	if _shown == null:
+		_shown = PanelContainer.new()
+		_shown.name = "Shown"
+		_shown.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var margin := MarginContainer.new()
+		for side in ["left", "right", "top", "bottom"]:
+			margin.add_theme_constant_override("margin_" + side, 16)
+		_shown.add_child(margin)
+		_shown_box = VBoxContainer.new()
+		_shown_box.add_theme_constant_override("separation", 10)
+		margin.add_child(_shown_box)
+		add_child(_shown)
+	for c in _shown_box.get_children():
+		_shown_box.remove_child(c)
+		c.queue_free()
+	var head := Label.new()
+	head.text = str(h.get("title", "")) if str(h.get("title", "")) != "" else "From the DM"
+	head.theme_type_variation = "HeaderLabel"
+	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_shown_box.add_child(head)
+	var tex := _picture_texture(str(h.get("image", "")))
+	if tex != null:
+		var tr := TextureRect.new()
+		tr.name = "Picture"
+		tr.texture = tex
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tr.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		tr.size_flags_stretch_ratio = 2.0
+		_shown_box.add_child(tr)
+	if str(h.get("text", "")).strip_edges() != "":
+		var scroll := ScrollContainer.new()
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		var rt := RichTextLabel.new()
+		rt.bbcode_enabled = true
+		rt.fit_content = true
+		rt.scroll_active = false
+		rt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rt.text = ViewRenderer.markdown_to_bbcode(str(h.text))
+		scroll.add_child(rt)
+		_shown_box.add_child(scroll)
+	var close := _big(Button.new(), "Close — it is in your Journal" if not display_mode else "Close")
+	close.name = "CloseShown"
+	close.pressed.connect(_close_shown)
+	_shown_box.add_child(close)
+	_shown.visible = true
+	_restyle()
+
+
+func _close_shown() -> void:
+	if _shown != null:
+		_shown.visible = false
+
+
+func is_showing_handout() -> bool:
+	return _shown != null and _shown.visible
+
+
+## A picture from the table's art (fetched with its packs), or null.
+func _picture_texture(ref: String) -> Texture2D:
+	if ref == "" or app == null or app.packs == null:
+		return null
+	return app.packs.picture_texture(ref, 1024.0)
+
+
+func _pane_rich(text: String) -> void:
+	var rt := RichTextLabel.new()
+	rt.bbcode_enabled = true
+	rt.fit_content = true
+	rt.scroll_active = false
+	rt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rt.text = ViewRenderer.markdown_to_bbcode(text)
+	_pane_box.add_child(rt)
 
 
 func _pane_text(text: String, style := "") -> void:
