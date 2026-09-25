@@ -309,6 +309,29 @@ func test_table_hosts_player_joins() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_net.json"))
 
 
+## The Bonjour helper (dns-sd, avahi-publish) outlives a Table that is
+## killed unless something stops it: a watchdog does.
+func test_bonjour_helper_dies_with_the_table() -> void:
+	if OS.has_feature("windows") or OS.has_feature("mobile") or not FileAccess.file_exists("/bin/sleep"):
+		skip("no /bin/sh helpers here")
+		return
+	var parent := OS.create_process("/bin/sleep", ["30"])
+	var child := OS.create_process("/bin/sleep", ["60"])
+	var dog := Bonjour.watchdog(parent, child)
+	check(parent > 0 and child > 0 and dog > 0, "a stand-in table, a helper, and the watchdog")
+	OS.delay_msec(300)
+	check(OS.is_process_running(child), "the helper runs while the table does")
+	OS.kill(parent)
+	var t0 := Time.get_ticks_msec()
+	# (is_process_running reaps the stand-in, as its real parent would the Table)
+	while Time.get_ticks_msec() - t0 < 8000 and (OS.is_process_running(child) or OS.is_process_running(parent)):
+		OS.delay_msec(100)
+	check(not OS.is_process_running(child), "and stops when the table is gone (%d ms)" % (Time.get_ticks_msec() - t0))
+	if OS.is_process_running(child):
+		OS.kill(child)
+	OS.kill(dog)
+
+
 func test_responsive_layout() -> void:
 	# UI scale: points on a phone, but never fewer than 360 points across.
 	check(App.density_scale(160, Vector2(1920, 1080)) == 1.0, "desktop density: no scaling")

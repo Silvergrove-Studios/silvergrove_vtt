@@ -38,6 +38,9 @@ that.
 - Rulesets: a `party` view kind, form choices from the view's own data,
   and a view kind this Table does not know is kept, not refused.
 - Fixed: a package could be started over a campaign of the same name.
+- Fixed: a Table that ended without closing (killed, crashed) left its
+  Bonjour registration running, and phones listed a table that was not
+  there; a watchdog now stops it.
 
 ## 2.1.0 — 2026-09-24
 

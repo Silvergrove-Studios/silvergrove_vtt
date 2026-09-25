@@ -9,6 +9,10 @@ extends RefCounted
 
 var pid := -1
 var tool := ""
+## Stops the registration when this process is gone, however it went (a
+## crash, a kill): an orphaned `dns-sd -R` would go on announcing a table
+## that is not there (playtest 1's phones listed three).
+var watchdog_pid := -1
 
 
 func available() -> bool:
@@ -36,7 +40,16 @@ func register(p_name: String, port: int) -> bool:
 		"avahi-publish":
 			args = PackedStringArray(["-s", p_name, Mdns.SERVICE.trim_suffix(".local"), str(port), "name=" + p_name, "v=1"])
 	pid = OS.create_process(tool, args)
+	if pid > 0:
+		watchdog_pid = watchdog(OS.get_process_id(), pid)
 	return pid > 0
+
+
+## A shell that waits for `parent` to end and then stops `child`. Its pid.
+static func watchdog(parent: int, child: int) -> int:
+	if OS.has_feature("windows"):
+		return -1
+	return OS.create_process("/bin/sh", ["-c", "while kill -0 %d 2>/dev/null; do sleep 1; done; kill %d 2>/dev/null" % [parent, child]])
 
 
 func registered() -> bool:
@@ -46,4 +59,7 @@ func registered() -> bool:
 func unregister() -> void:
 	if pid > 0:
 		OS.kill(pid)
+	if watchdog_pid > 0:
+		OS.kill(watchdog_pid)
 	pid = -1
+	watchdog_pid = -1
