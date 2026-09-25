@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased — the web Table
+## 2.3.0 — 2026-09-25
 
-The response to the second playtest (`docs/playtest-2.md`,
+The web Table: the response to the second playtest (`docs/playtest-2.md`,
 `docs/playtest-3.md`): Hexmap runs the game and serves the screens people
 look at as web pages. The DM's screen opens in a browser on the computer
 that runs the game; players open an address or scan a code on any phone
