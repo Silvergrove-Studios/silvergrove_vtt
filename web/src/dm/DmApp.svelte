@@ -66,7 +66,12 @@
   // a fight that starts brings its order beside the map; one that ends puts the party back
   $effect(() => {
     const live = !!fight;
-    if (live && !wasLive) side = 'fight';
+    if (live && !wasLive) {
+      side = 'fight';
+      // the fight's card gives way to its map
+      card = '';
+      history = [];
+    }
     if (!live && wasLive && side === 'fight') side = 'party';
     wasLive = live;
   });

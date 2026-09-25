@@ -218,8 +218,9 @@ await step('the chapel: the DM starts the fight', async () => {
   await dm.locator('.book').getByRole('button', { name: /^The ruined chapel/ }).first().click();
   await dm.getByRole('button', { name: 'Start the fight' }).click();
   await dm.locator('.fightbar').waitFor({ timeout: 8000 });
-  await dm.waitForTimeout(1200);
-  await dm.getByRole('button', { name: 'Close the card' }).click();
+  // the fight's card gives way to its map by itself
+  await dm.locator('.reader').waitFor({ state: 'detached', timeout: 5000 });
+  await dm.waitForTimeout(800);
   await shot(dm, 'dm_fight');
 });
 

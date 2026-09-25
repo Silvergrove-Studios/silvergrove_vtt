@@ -104,6 +104,21 @@
     if (tab === 'chat' || (wide && side === 'chat')) seenChat = chatCount;
   });
 
+  // my turn: said, and felt on a phone
+  let wasMine = false;
+  $effect(() => {
+    const mine = turn.mine && String(game.scene.turns?.mode ?? 'free') !== 'free';
+    if (mine && !wasMine) {
+      notice(turn.text);
+      try {
+        navigator.vibrate?.(180);
+      } catch {
+        /* not a phone */
+      }
+    }
+    wasMine = mine;
+  });
+
   onMount(() => {
     const mq = window.matchMedia('(min-width: 980px)');
     const fit = () => (wide = mq.matches);
