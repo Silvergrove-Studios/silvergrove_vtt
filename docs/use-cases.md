@@ -146,6 +146,29 @@ arrives in a village, talks to people, asks around, travels on.
   DM's notes never go with it; the card says who has seen it.
 - **Steps (DM):** *Show the players ▾* → everyone, or one of them. **≤ 2.**
 
+## U11 — A player keeps notes
+
+*A player writes down what Marta said, and shares a theory with the DM.*
+
+- **Starts:** a session running, the player on their phone.
+- **Ends:** the note is kept (between sessions too), private, or read by
+  whom they chose.
+- **Must be true:** only its writer changes a note; the DM never sees a
+  private one; what the DM showed is there to look up until taken back.
+- **Steps (player):** *Journal* → *New note* (or *Add a note on this*) →
+  write → tick who may read it. **≤ 3.**
+
+## U12 — The DM arranges the book
+
+*The DM wants the adventure's contents their way: Act 1, Act 2, a rules
+cheat sheet.*
+
+- **Starts:** the Reference pane.
+- **Ends:** folders of the DM's own with the places, people, notes and
+  rules in them; sections renamed.
+- **Steps:** select a section → *New folder in it* → name it → drag
+  things into it. **≤ 4.**
+
 ## Questions for review
 
 1. **Are these the right jobs?** Anything missing (e.g. running a game

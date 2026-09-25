@@ -130,6 +130,21 @@ party is), `sessions` and `runtime`. Every other field is as before.
   campaign's record: a scene made over the map afresh (a package just
   started, a copy) shows them where they were.
 - `party`: where the party is (a map and a cell), for the marker.
+- `player_notes`: the players' own notes (`PlayerNotes`), written on
+  their phones and kept here: `{id, owner, title, text, folder, about,
+  share, created, updated}`. A note is private to its `owner` unless
+  `share` names `"gm"`, players, or `"all"`; the Table never shows a
+  private one, and only its owner changes it. `folder` is the player's own
+  grouping; `about` is what it is a note on (the `ref` of something the DM
+  showed). Never in a package or a fresh copy.
+- `contents`: the DM's arrangement of the Reference pane's contents:
+  `titles` (a section's name, by key: `notes`, `party`, `places`,
+  `people`, `handouts`, `shown`, `from_players`, `pictures`, `maps`,
+  `rules`), `folders` (`{id, title, parent}` — a parent is `""`, a
+  `"section:<key>"` or a `"folder:<id>"`), `in` (a thing's ref → the
+  folder it is filed in; a rules entry is pinned there and stays in the
+  glossary) and `order` (the top level). A package carries it, so the
+  DMs who start an adventure get its author's arrangement.
 - `sessions`: the sessions played, `n` with `started`/`ended`, the
   `recap` kept at the end, and `file` for version-1 sessions that lived
   in their own encounter files.

@@ -31,6 +31,11 @@ var announcer := Discovery.Announcer.new()
 ## handouts): each client's view carries the entries it may see, so a
 ## player's Journal keeps what the DM has shown them. Set by the Table.
 var journal_source: Callable = Callable()
+## The players' own notes (PlayerNotes), kept by the campaign: the live
+## array, which a player's note intent changes. Set by the Table, with
+## `notes_changed`, called after a change so the campaign is saved.
+var notes_source: Callable = Callable()
+var notes_changed: Callable = Callable()
 var _server := TCPServer.new()
 var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
 var _listening := false
@@ -243,6 +248,7 @@ func projection(c: Dictionary) -> Dictionary:
 	var pid := "" if _is_gm(c) else str(c.player)
 	var role := Views.ROLE_GM if _is_gm(c) else (str(c.role) if c.role != "" else Views.ROLE_PLAYER)
 	var out := Views.project(kernel, plugins, pid, role)
+	out.notes = PlayerNotes.for_viewer(notes_source.call(), pid, role) if notes_source.is_valid() else []
 	out.journal = []
 	if journal_source.is_valid():
 		for entry in journal_source.call():
@@ -406,6 +412,18 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			return _gm_intent(intent)
 		"contribute":
 			return kernel.pending.contribute(str(intent.get("roll", "")), pid, str(intent.get("name", "")), str(intent.get("expr", "")))
+		"note":
+			# a player's own notes: theirs to write, keep private or share
+			if gm:
+				return "the DM's notes are kept on the Table"
+			if not notes_source.is_valid():
+				return "this table keeps no notes (open a campaign)"
+			var why := PlayerNotes.apply(notes_source.call(), intent, pid, state.encounter.players)
+			if why == "":
+				if notes_changed.is_valid():
+					notes_changed.call()
+				_views_dirty = true
+			return why
 		"character":
 			# a player brings their own character: adopted as theirs, checked
 			# by the rulesets like any actor

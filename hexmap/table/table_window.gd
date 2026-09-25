@@ -1366,6 +1366,12 @@ func _set_hosting(on: bool) -> void:
 		host.apply_request = _apply_player_request
 		# what the campaign showed the players in earlier sessions: their Journal keeps it
 		host.journal_source = func() -> Array: return ctx.campaign.journal if ctx.campaign != null else []
+		# the players' own notes, kept in the campaign (never shown here unless shared with the DM)
+		host.notes_source = func() -> Array: return ctx.campaign.player_notes if ctx.campaign != null else []
+		host.notes_changed = func() -> void:
+			if ctx.campaign != null:
+				ctx.campaign.touch()
+				ctx.campaign_changed.emit()
 		host.log.connect(ctx.say)
 		host.announcer.answered.connect(func(ip: String) -> void:
 			ctx.say("Answered a player looking for tables at %s" % ip)

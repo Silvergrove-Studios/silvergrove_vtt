@@ -37,6 +37,17 @@ that.
   village, an inn) with its own card.
 - Rulesets: a `party` view kind, form choices from the view's own data,
   and a view kind this Table does not know is kept, not refused.
+- **Players' notes**: on the phone, the Journal is the player's own tree
+  — their notes (in folders of their own, and on the things they were
+  shown), what the DM has shown them, and what other players shared —
+  with a search. A note is private until shared with the DM, some
+  players or everyone; the Table keeps them in the campaign and never
+  shows a private one.
+- **The DM's own contents**: folders of your own in the Reference pane's
+  contents, nested, named and renamed; sections renamed and reordered;
+  things filed by dragging or from their card; rules pinned into a folder.
+- A package never carries a group's play: players' notes, what was
+  shown, what the sessions banked.
 - Fixed: a package could be started over a campaign of the same name.
 - Fixed: a Table that ended without closing (killed, crashed) left its
   Bonjour registration running, and phones listed a table that was not

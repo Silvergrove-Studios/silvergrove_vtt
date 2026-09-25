@@ -22,6 +22,33 @@ func test_json_doc() -> void:
 	check(JsonDoc.new_id("t").begins_with("t_") and JsonDoc.new_id("t").length() == 10, "short ids")
 
 
+## The players' own notes: private unless shared, only their writer changes
+## them, and the DM never reads a private one.
+func test_player_notes() -> void:
+	var players := [{"id": "pl_a", "name": "Ana"}, {"id": "pl_b", "name": "Ben"}, {"id": "pl_c", "name": "Cal"}]
+	var notes := []
+	check(PlayerNotes.apply(notes, {"op": "save", "note": {"id": "pn_1", "title": "Suspects", "text": "The reeve?", "folder": "Mystery"}}, "pl_a", players) == "", "Ana writes a note")
+	var n: Dictionary = notes[0]
+	check(n.owner == "pl_a" and n.share == [] and n.folder == "Mystery" and str(n.created) != "", "hers, private, in her folder")
+	check(PlayerNotes.can_see(n, "pl_a", Views.ROLE_PLAYER) and not PlayerNotes.can_see(n, "pl_b", Views.ROLE_PLAYER) and not PlayerNotes.can_see(n, "", Views.ROLE_GM) and not PlayerNotes.can_see(n, "", Views.ROLE_DISPLAY),
+		"a private note: Ana alone reads it — not Ben, not the DM, not a display")
+	check(PlayerNotes.apply(notes, {"op": "save", "note": {"id": "pn_1", "title": "Mine now"}}, "pl_b", players) != "" and n.title == "Suspects", "Ben cannot change it")
+	check(PlayerNotes.apply(notes, {"op": "delete", "id": "pn_1"}, "pl_b", players) != "" and notes.size() == 1, "nor delete it")
+	check(PlayerNotes.apply(notes, {"op": "save", "note": {"id": "pn_1", "title": "Suspects", "text": "The reeve!", "folder": "Mystery", "share": ["gm", "pl_b", "pl_a", "nobody"]}}, "pl_a", players) == "", "she shares it")
+	check(n.share == ["gm", "pl_b"] and n.text == "The reeve!", "with the DM and Ben (not herself, not strangers)")
+	check(PlayerNotes.can_see(n, "", Views.ROLE_GM) and PlayerNotes.can_see(n, "pl_b", Views.ROLE_PLAYER) and not PlayerNotes.can_see(n, "pl_c", Views.ROLE_PLAYER), "the DM and Ben read it; Cal does not")
+	check(PlayerNotes.share_list(["pl_b", "all"], players, "pl_a") == ["all"] and PlayerNotes.can_see({"owner": "pl_a", "share": ["all"]}, "pl_c", Views.ROLE_PLAYER), "shared with everyone: everyone")
+	check(PlayerNotes.for_viewer(notes, "pl_c", Views.ROLE_PLAYER).is_empty() and PlayerNotes.for_viewer(notes, "pl_b", Views.ROLE_PLAYER).size() == 1, "each viewer gets what they may read")
+	check(PlayerNotes.apply(notes, {"op": "save", "note": {"id": "bad", "title": "x"}}, "pl_a", players) != "" and PlayerNotes.apply(notes, {"op": "save", "note": {"id": "pn_2"}}, "", players) != "", "a note needs an id and a writer")
+	check(PlayerNotes.apply(notes, {"op": "save", "note": {"id": "pn_3", "text": "x".repeat(30000)}}, "pl_b", players) == "" and str(PlayerNotes.find(notes, "pn_3").text).length() == PlayerNotes.MAX_TEXT, "a note is kept to a sane size")
+	check(PlayerNotes.apply(notes, {"op": "delete", "id": "pn_1"}, "pl_a", players) == "" and PlayerNotes.find(notes, "pn_1").is_empty(), "Ana deletes hers")
+	check(PlayerNotes.new_id().begins_with("pn_") and PlayerNotes.new_id() != PlayerNotes.new_id(), "note ids")
+	var c := Campaign.create("Notes")
+	check(c.player_notes.is_empty() and c.doc.has("player_notes"), "a campaign keeps them")
+	c.doc.erase("player_notes")
+	check(c.player_notes.is_empty(), "and one from before them gets an empty list")
+
+
 func test_encounter_document() -> void:
 	var m := _chapel()
 	var e := Encounter.create("Chapel Ambush")

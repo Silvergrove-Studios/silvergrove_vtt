@@ -58,6 +58,9 @@ var _sheet_button: Button
 var _table_button: Button
 ## What the DM has shown this player: pictures, places, people, notes.
 var _journal_button: Button
+## The player's own book (PlayerJournal): kept, not rebuilt, so typing in a
+## note survives the views that arrive meanwhile.
+var _journal: PlayerJournal
 ## The full-screen card of something the DM just showed.
 var _shown: PanelContainer
 var _shown_box: VBoxContainer
@@ -635,6 +638,12 @@ func _start(player_id: String) -> void:
 
 
 func _bind(s: Session) -> void:
+	# a new table: a new journal
+	if _journal != null:
+		if _journal.get_parent() != null:
+			_journal.get_parent().remove_child(_journal)
+		_journal.queue_free()
+		_journal = null
 	_greeted = false
 	_seen_handouts.clear()
 	_handouts_primed = false
@@ -710,7 +719,8 @@ func _clear_pane() -> void:
 	_renderers.clear()
 	for c in _pane_box.get_children():
 		_pane_box.remove_child(c)
-		c.queue_free()
+		if c != _journal:
+			c.queue_free()
 
 
 ## The table sent a new projection: redraw the pane, badge the buttons,
@@ -755,6 +765,11 @@ func _on_view() -> void:
 
 
 func _render_pane() -> void:
+	# the journal is kept on screen and told, so a note being typed is not lost
+	if pane_mode == "journal" and session != null and _journal != null and _journal.get_parent() == _pane_box and _pane_box.get_child_count() == 1:
+		_journal.session = session
+		_journal.refresh()
+		return
 	_clear_pane()
 	if session == null or pane_mode == "":
 		return
@@ -790,25 +805,13 @@ func _render_pane() -> void:
 							_say(why))
 					_pane_box.add_child(b)
 		"journal":
-			var list := handouts()
-			if list.is_empty():
-				_pane_text("Nothing yet. What the DM shows you — places, people, pictures, notes — is kept here.", "dim")
-			list.reverse()
-			for h in list:
-				_pane_text(str(h.get("title", "")), "header")
-				var tex := _picture_texture(str(h.get("image", "")))
-				if tex != null:
-					var pic := Button.new()
-					pic.flat = true
-					pic.icon = tex
-					pic.expand_icon = true
-					pic.custom_minimum_size = Vector2(0, 200)
-					pic.tooltip_text = "See it on the whole screen"
-					var hd: Dictionary = h
-					pic.pressed.connect(func() -> void: show_handout(hd))
-					_pane_box.add_child(pic)
-				if str(h.get("text", "")).strip_edges() != "":
-					_pane_rich(str(h.text))
+			if _journal == null:
+				_journal = PlayerJournal.new()
+				_journal.send = func(payload: Dictionary) -> void: _send_intent(payload)
+			_journal.session = session
+			_journal.packs = app.packs if app != null else null
+			_pane_box.add_child(_journal)
+			_journal.refresh()
 		"table":
 			if session.my_actors().is_empty() and not display_mode and session.role == Views.ROLE_PLAYER:
 				_pane_text("You have no character yet", "header")

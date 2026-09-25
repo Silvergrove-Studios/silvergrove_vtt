@@ -266,9 +266,50 @@ func test_table_hosts_player_joins() -> void:
 	check(not player.handouts().any(func(h: Dictionary) -> bool: return str(h.title) == "Ben's secret"), "never what was shown to Ben")
 	player._close_shown()
 	player.set_pane("journal")
-	check(player._pane_box.find_children("*", "Label", true, false).any(func(l: Label) -> bool: return l.text == "For Ana"), "her Journal keeps them")
+	check(player._journal != null and player._journal.row_for("shown:note:ana") != null and player._journal.row_for("shown:note:ben") == null, "her Journal keeps them: %s" % [player._journal.rows() if player._journal != null else []])
 	player.set_pane("")
 	check(Sharing.unshare(table.ctx, "note:ana") == "" and pump.call(func() -> bool: return player.handouts().size() == 1), "taken back: gone from her Journal")
+	# her own notes: written on the phone, kept by the Table, private until she shares one
+	player.set_pane("journal")
+	var jr: PlayerJournal = player._journal
+	check(jr != null and jr.is_inside_tree(), "her Journal is her own tree")
+	var nid := jr.new_note()
+	var title_edit := jr._card.find_child("Title", true, false) as LineEdit
+	var text_edit := jr._card.find_child("Text", true, false) as TextEdit
+	title_edit.text = "Suspects"
+	text_edit.text = "The reeve is hiding something."
+	text_edit.focus_exited.emit()
+	var kept := func() -> Dictionary: return PlayerNotes.find(table.ctx.campaign.player_notes, nid)
+	check(pump.call(func() -> bool: return str(kept.call().get("text", "")) == "The reeve is hiding something."), "written on her phone, kept by the Table in the campaign")
+	check(str(kept.call().owner) == ana_id and (kept.call().share as Array).is_empty(), "hers, and private")
+	table.reference.refresh_list()
+	check(table.reference.row_for("pnote:" + nid) == null, "the DM's screen does not list a private note")
+	check(pump.call(func() -> bool: return jr.row_for("mine:" + nid) != null), "in her tree, under My notes: %s" % [jr.rows()])
+	check(jr.row_for("shown:note:runes") != null, "beside what the DM showed her")
+	# shared with the DM: the DM reads it, Ben does not
+	jr.set_share(nid, "gm", true)
+	check(pump.call(func() -> bool: return (kept.call().share as Array) == ["gm"]), "shared with the DM")
+	table.reference.refresh_list()
+	check(table.reference.row_for("pnote:" + nid) != null, "and it is on the DM's screen, From the players")
+	var ben_view: Dictionary = table.host.projection({"player": ben_id, "role": Views.ROLE_PLAYER, "hello": true, "joined": true})
+	check(not (ben_view.get("notes", []) as Array).any(func(n: Dictionary) -> bool: return str(n.id) == nid), "Ben's view does not carry it")
+	jr.set_share(nid, ben_id, true)
+	check(pump.call(func() -> bool: return (table.host.projection({"player": ben_id, "role": Views.ROLE_PLAYER}).get("notes", []) as Array).any(func(n: Dictionary) -> bool: return str(n.id) == nid)), "shared with Ben too: now his view carries it")
+	# a note on something shown, in a folder of her own; search
+	var on_it := jr.new_note("note:runes", "The runes")
+	var folder_edit := jr._card.find_child("Folder", true, false) as LineEdit
+	folder_edit.text = "Chapel"
+	folder_edit.focus_exited.emit()
+	check(pump.call(func() -> bool: return str(PlayerNotes.find(table.ctx.campaign.player_notes, on_it).get("folder", "")) == "Chapel" and str(PlayerNotes.find(table.ctx.campaign.player_notes, on_it).get("about", "")) == "note:runes"), "a note on the runes, in her Chapel folder")
+	jr.refresh_tree()
+	check(Array(jr.rows()).has("Chapel") and jr.row_for("shown:note:runes").get_children().any(func(r: TreeItem) -> bool: return str(r.get_metadata(0)) == "mine:" + on_it), "her folder, and her note under what it is on")
+	jr._search.text = "reeve"
+	jr.refresh_tree()
+	check(jr.row_for("mine:" + nid) != null and jr.row_for("mine:" + on_it) == null, "a search over her journal")
+	jr._search.text = ""
+	jr.delete_note(on_it)
+	check(pump.call(func() -> bool: return PlayerNotes.find(table.ctx.campaign.player_notes, on_it).is_empty()), "deleted, from the Table too")
+	player.set_pane("")
 	check(table.players.online.size() == 1 and table.players.list.get_item_text(0).begins_with("●"), "the table shows Ana online")
 	check(player.view.canvas.tokens_in_view().size() == 2, "Ana sees the party")
 	var pmap: HexMap = player.view.canvas.map

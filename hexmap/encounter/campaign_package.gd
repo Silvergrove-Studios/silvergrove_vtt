@@ -140,6 +140,8 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 	c.doc.name = wanted
 	c.doc.runtime = {}
 	c.doc.sessions = []
+	# (a package from before strip_play may still carry its author's)
+	strip_play(c.doc)
 	c.doc.clock = {"session": 0, "day": int(c.clock.get("day", 1)), "minute": int(c.clock.get("minute", 0))}
 	c.doc.package = {"id": str(info.id), "version": str(info.package_version), "name": str(info.name),
 		"tested_with": JsonDoc.deep(info.tested_with)}
@@ -153,6 +155,25 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 	out.name = wanted
 	out.ok = true
 	return out
+
+
+## What a group's play left in a campaign that is theirs and no one
+## else's: the players' notes, what the DM showed them (journal handouts
+## with a `ref`), and what the sessions banked (entries stamped with a
+## `session`); a note's record of the session it was handed out in. What
+## the author prepared stays.
+static func strip_play(doc: Dictionary) -> void:
+	doc.player_notes = []
+	var kept := []
+	for j in doc.get("journal", []):
+		if not (j is Dictionary):
+			continue
+		if j.has("session") or (str(j.get("kind", "")) == "handout" and str(j.get("ref", "")) != ""):
+			continue
+		var e: Dictionary = JsonDoc.deep(j)
+		e.erase("handed")
+		kept.append(e)
+	doc.journal = kept
 
 
 ## Write a package from a campaign: the document without its play state,
@@ -176,6 +197,7 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 	var doc: Dictionary = JsonDoc.deep(campaign.doc)
 	doc.runtime = {}
 	doc.sessions = []
+	strip_play(doc)
 	doc.erase("package")
 	# the author's own authoring and play are not the package's
 	doc.erase("source_of")

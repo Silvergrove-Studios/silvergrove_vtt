@@ -86,6 +86,20 @@ entries with players, and control over who can see what*.
 | W9 | players meet the network first | *Join a game*: one line of what to do, the tables on the network (a tap joins), tables joined before; the address and the network's details behind *Trouble joining?*; a player with no character is taken to where one is made | done |
 | W10 | a village to talk in | *The Ruined Chapel* 0.3.0: Thornwick (the village, the inn, the ford, the hermit's hut, the chapel) with descriptions, the DM's notes and pictures; Marta, the reeve, Brother Aldous and Pip with what the players may know, what they know and the DCs; rumours; the reeve's notice and the runestone as handouts; a *Start here* for the new screens | done |
 
+### Wave 2b (2026-09-25): the players' own notes, and the DM's own contents
+
+The user, after wave 2: *players should have private notes too (stored on
+the DM's computer is fine) and share notes with players or the DM; look
+up what they have been shown (unless it was taken back) and keep their
+own tree*; *the DM should make folder structures in the tree, with names
+they can change, and change the default ones too*.
+
+| # | what | change | status |
+|---|---|---|---|
+| W11 | players' notes | on the phone, *Journal* is the player's own tree: **My notes** (in folders of their own; a note can be *on* something the DM showed, and sits under it), **From the DM** (places, people, pictures, handouts — as long as they are shown), **From other players**; one search. A note is private until shared — with the DM, some players, or everyone (check boxes); the Table keeps them in the campaign and never shows a private one; notes shared with the DM are in the contents under *From the players* | done |
+| W12 | the DM's own contents | folders of the DM's own — at the top, in a section, in each other — named and renamed on their card; the sections renamed (and given their own names back) and reordered; things filed into folders by dragging or from their card's *Folder*; rules pinned into a folder as a cheat sheet; kept with the campaign and carried by a package | done |
+| W13 | a package never carries play | a package (and a campaign started from an older one) drops the players' notes, what the author's players were shown, and what the author's sessions banked; what the author prepared stays | done |
+
 ## Playtest 2: the script
 
 For the DM (on the laptop), with *The Ruined Chapel* 0.3.0 in Downloads:
@@ -97,7 +111,9 @@ For the DM (on the laptop), with *The Ruined Chapel* 0.3.0 in Downloads:
 5. Run the chapel fight, and end it.
 6. End the session.
 
-For each player (on a phone, same Wi-Fi): open Hexmap → *Join a game* → tap the DM's table → pick your name → make a character. Then play; look at what the DM shows you, and your Journal.
+For each player (on a phone, same Wi-Fi): open Hexmap → *Join a game* → tap the DM's table → pick your name → make a character. Then play; look at what the DM shows you, and your Journal: write a note, keep one private, share one with the DM and one with another player, and find something the DM showed you earlier.
+
+For the DM, also: make a folder of your own in the contents (select a section → *New folder in it*), rename it, drag a place and a rule into it, and rename a section.
 
 What to note: where you hesitated, what you looked for and could not find, anything the phones showed that they should not have, anything that took more than a couple of clicks.
 

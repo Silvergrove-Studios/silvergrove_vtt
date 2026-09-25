@@ -56,6 +56,8 @@ static func create(p_name: String) -> Campaign:
 		"clock": {"session": 0, "day": 1, "minute": 0},
 		"tracks": {},
 		"journal": [],
+		# the players' own notes (PlayerNotes): each private to its writer unless shared
+		"player_notes": [],
 		# the campaign's maps (places), by id; prepared encounters (recipes for
 		# a scene over a map); places on regional maps; where the party is
 		"maps": [],
@@ -90,6 +92,13 @@ var resources: Dictionary:
 	get: return doc.resources
 var journal: Array:
 	get: return doc.journal
+## The players' own notes (PlayerNotes); a campaign from before them gets
+## an empty list.
+var player_notes: Array:
+	get:
+		if not (doc.get("player_notes") is Array):
+			doc.player_notes = []
+		return doc.player_notes
 var clock: Dictionary:
 	get: return doc.clock
 var encounters: Array:
@@ -519,6 +528,7 @@ static func duplicate_to(source: Campaign, dest: String, p_name: String, fresh :
 		c.doc.runtime = {}
 		c.doc.sessions = []
 		c.doc.journal = []
+		c.doc.player_notes = []
 		c.doc.players = []
 		c.doc.resources = {}
 		c.doc.clock = {"session": 0, "day": 1, "minute": 0}

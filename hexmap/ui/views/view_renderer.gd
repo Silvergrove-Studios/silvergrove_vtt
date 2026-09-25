@@ -253,7 +253,8 @@ func _build(node: Variant, ctx: Dictionary, depth: int) -> Control:
 				if c != null:
 					box.add_child(c)
 				i += 1
-			if items.is_empty() and n.has("empty"):
+			# nothing shown (none there, or none passing the item's `if`): say so
+			if box.get_child_count() == 0 and n.has("empty"):
 				var l := Label.new()
 				l.text = str(n.empty)
 				l.theme_type_variation = "DimLabel"

@@ -764,6 +764,53 @@ func test_world_mode() -> void:
 	await tree.process_frame
 	check(_find_button(ref, "Mother Hessa") != null, "with Hessa among the people here")
 	check(ref.row_for("place:" + thornwick) != null and ref.row_for("place:" + thornwick).get_children().any(func(row: TreeItem) -> bool: return str(row.get_metadata(0)) == "actor:a_hessa"), "and under the village in the contents")
+	# the DM's own folders: made, named, nested; things filed in them; the sections renamed and moved
+	var act := ref.new_folder("", "Act 1")
+	var village := ref.new_folder("folder:" + act, "The village")
+	ref.file("place:" + thornwick, village)
+	ref.rename("section:places", "Locations")
+	ref.refresh_list()
+	var rows2 := Array(ref.rows()).map(func(r: String) -> String: return r.strip_edges())
+	check(rows2.has("Act 1") and rows2.has("The village") and rows2.has("Locations") and not rows2.has("Places"), "a folder, a folder in it, and Places renamed Locations: %s" % [rows2])
+	check(ref._container_of(ref.row_for("place:" + thornwick)) == "folder:" + village and ref._container_of(ref.row_for("place:" + ruins)) == "section:places", "Thornwick filed in The village; the chapel still in Locations")
+	check(ref.folder_path(village) == "Act 1 / The village", "folders have paths")
+	check(str(ref.drop_plan(ref.row_for("folder:" + act), 0, "place:" + ruins).get("op", "")) == "file", "a thing dropped on a folder is filed there")
+	check(ref.drop_plan(ref.row_for("section:places"), 0, "place:" + thornwick) == {"op": "file", "ref": "place:" + thornwick, "folder": ""}, "and dropped on its own section goes back")
+	check(ref.drop_plan(ref.row_for("section:people"), 0, "place:" + ruins).is_empty(), "but a place does not go among the people")
+	check(ref.drop_plan(ref.row_for("folder:" + village), 0, "folder:" + act).is_empty(), "nor a folder inside its own")
+	check(str(ref.drop_plan(ref.row_for("section:people"), 0, "folder:" + village).get("op", "")) == "nest", "a folder may go in a section")
+	ref.apply_drop(ref.drop_plan(ref.row_for("section:maps"), -1, "folder:" + act))
+	check(ref.top_order().find("folder:" + act) == ref.top_order().find("section:maps") - 1, "dropped above Maps, Act 1 is just above it: %s" % [ref.top_order()])
+	ref.refresh_list()
+	ref.apply_drop(ref.drop_plan(ref.row_for("section:party"), -1, "section:places"))
+	check(ref.top_order().find("section:places") == ref.top_order().find("section:party") - 1, "and the sections can be put in another order: %s" % [ref.top_order()])
+	if rules:
+		ref.file("entry:creatures/wolf", act)
+		ref.refresh_list()
+		check(ref._container_of(ref.row_for("entry:creatures/wolf")) == "folder:" + act, "a rule pinned to a folder, for the table")
+		ref.file("entry:creatures/wolf", "")
+	# a folder's card renames it; a section's gives back its own name
+	ref.open("folder:" + act)
+	var rn := ref._card.find_child("Rename", true, false) as LineEdit
+	rn.text = "Act One"
+	rn.text_submitted.emit(rn.text)
+	check(str(ref.folder(act).title) == "Act One", "renamed from its card")
+	ref.open("place:" + ruins)
+	await tree.process_frame
+	var fold := ref._card.find_child("Folder", true, false) as OptionButton
+	check(fold != null and fold.get_item_text(0) == "(its own section: Locations)" and fold.item_count == 3, "a thing's card says where it is filed, and offers the folders")
+	if fold != null:
+		for i in fold.item_count:
+			if str(fold.get_item_metadata(i)) == act:
+				fold.select(i)
+				fold.item_selected.emit(i)
+	check(str(ref.layout()["in"].get("place:" + ruins, "")) == act, "filed from its card")
+	# deleting a folder: its folder moves up, what was in it goes back
+	ref.delete_folder(act)
+	check(ref.folder(act).is_empty() and str(ref.folder(village).parent) == "" and not ref.layout()["in"].has("place:" + ruins) and ref.layout()["in"].has("place:" + thornwick), "Act One deleted: The village moves to the top, the chapel goes back to Locations")
+	ref.rename("section:places", "")
+	check(ref.section_title("places") == "Places" and str(ctx.campaign.doc.contents.folders[0].title) == "The village", "names given back; the arrangement is the campaign's")
+	ref.delete_folder(village)
 	if rules:
 		# the Party pane: the ruleset's party view; a name opens the sheet beside it
 		await tree.process_frame
@@ -983,6 +1030,9 @@ func test_campaign_packages() -> void:
 	author.actors["a_pc"] = {"id": "a_pc", "kind": "pc", "name": "Ana's ranger", "owner": "pl_a"}
 	author.actors["a_npc"] = {"id": "a_npc", "kind": "npc", "name": "The harbourmaster"}
 	author.journal.append({"id": "j_1", "kind": "note", "title": "Ana's secret", "text": "…", "session": 1})
+	author.journal.append({"id": "j_shown", "kind": "handout", "title": "The harbour", "text": "Gulls.", "audience": "all", "ref": "place:pl_x"})
+	author.journal.append({"id": "j_prepared", "kind": "handout", "title": "A letter", "text": "Come quickly.", "audience": "gm"})
+	author.doc.player_notes = [{"id": "pn_a", "owner": "pl_a", "title": "My theory", "text": "The harbourmaster did it.", "share": []}]
 	author.doc.sessions.append({"n": 1, "recap": "# Session 1"})
 	author.doc.runtime = {"scenes": []}
 	check(ContentImport.write_pack(home.path_join("source/packs/reach"), {"id": "reach", "name": "Reach content", "plugin": "sample.degrees"},
@@ -1078,6 +1128,9 @@ func test_campaign_packages() -> void:
 	check(str(mine.doc.package.id) == "sunken-reach" and str(mine.doc.package.version) == "1.2.0", "it remembers the package it came from")
 	check(mine.doc.runtime.is_empty() and (mine.doc.sessions as Array).is_empty() and int(mine.clock.session) == 0, "with none of the author's play")
 	check((mine.doc.players as Array).is_empty() and not mine.actors.has("a_pc") and mine.actors.has("a_npc"), "no other table's party; the NPCs stay")
+	var kept_journal: Array = mine.journal.map(func(j: Dictionary) -> String: return str(j.id))
+	check(mine.player_notes.is_empty() and not kept_journal.has("j_1") and not kept_journal.has("j_shown") and kept_journal.has("j_prepared"),
+		"no player's notes and nothing the author's players were shown or banked; the author's prepared handout stays: %s" % [kept_journal])
 	check(mine.encounters.size() == 1 and mine.maps.size() == 1 and mine.packs.size() == 1, "the adventure came whole")
 	check((mine.encounters[0].played as Array).is_empty() and not mine.doc.has("source_of"), "none of it marked played by the author's table, and not the author's working copy")
 	check(FileAccess.file_exists(home.path_join("mine/maps/ruined_chapel.hexmap")) and FileAccess.file_exists(home.path_join("mine/packs/reach/pack.json")), "its maps and content are in the DM's folder")

@@ -13,7 +13,9 @@ extends VBoxContainer
 ## marker and its card opens; select a character and their sheet does.
 ##
 ## Refs: "actor:<id>", "place:<id>", "note:<id>", "handout:<id>",
-## "picture:<pack:asset>", "map:<id>", "entry:<collection>/<id>".
+## "picture:<pack:asset>", "map:<id>", "entry:<collection>/<id>",
+## "pnote:<id>" (a player's note shared with the DM; private ones never
+## show here).
 
 var ctx: TableContext
 ## The ref of the card open now ("" for none) and the ones before it.
@@ -37,6 +39,17 @@ var _refresh_queued := false
 var _open_collections: Dictionary = {}
 ## What the card's Show the players menu shares: {ref, title, text, image}.
 var _shareable: Dictionary = {}
+## Which section each thing listed belongs to (for filing it back).
+var _item_section: Dictionary = {}
+## Sections and folders folded or open, as the DM left them.
+var _collapsed: Dictionary = {}
+var _delete_armed := ""
+
+## The built-in sections: [key, title], in their order. The DM may rename
+## them (layout().titles) and put folders among and inside them.
+const SECTIONS := [["notes", "Notes for you"], ["party", "The party"], ["places", "Places"], ["people", "People"],
+	["handouts", "Handouts"], ["shown", "Shown to the players"], ["from_players", "From the players"], ["pictures", "Pictures"],
+	["maps", "Maps"], ["rules", "Rules"]]
 
 const KINDS_PEOPLE := ["npc", "environment", "hazard", "custom"]
 const KINDS_PARTY := ["pc", "companion"]
@@ -68,6 +81,8 @@ func _init(p_ctx: TableContext) -> void:
 		if ref != "":
 			open(ref))
 	_tree.item_collapsed.connect(_on_collapsed)
+	# things dragged onto folders; folders into folders; the top reordered
+	_tree.set_drag_forwarding(_drag_data, _can_drop, _drop)
 	split.add_child(_tree)
 	var card_box := VBoxContainer.new()
 	card_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -153,41 +168,50 @@ func focus_search() -> void:
 # ------------------------------------------------------------- the contents --
 
 ## The campaign's contents matching the search (all of them when it is
-## empty), then the rules: a glossary of every collection, or the matches.
+## empty), in the DM's own arrangement: the sections (renamed as the DM
+## likes), the DM's folders among and inside them, what was filed into the
+## folders, and the rules — a glossary of every collection, or the matches.
 func refresh_list() -> void:
 	_tree.clear()
 	var root := _tree.create_item()
 	if ctx.state == null:
 		return
 	var q := _search.text.strip_edges().to_lower()
+	var lay := layout()
+	var groups := {}
+	_item_section.clear()
 	for g in contents(q):
-		if (g.items as Array).is_empty():
-			continue
-		var head := _heading(root, str(g.title))
-		head.collapsed = bool(g.get("collapsed", false)) and q == ""
-		for it in g.items:
-			_add_row(head, it)
-	if q == "":
-		var colls := _collections()
-		if not colls.is_empty():
-			var rules := _heading(root, "Rules")
-			rules.collapsed = _open_collections.is_empty()
-			for coll in colls:
-				var node := _tree.create_item(rules)
-				node.set_text(0, "%s  %d" % [_collection_title(coll), ctx.kernel.comp.count(coll)])
-				node.set_metadata(0, "")
-				node.set_selectable(0, false)
-				node.set_meta("collection", coll)
-				if _open_collections.has(coll):
-					_fill_collection(node, coll)
-					node.collapsed = false
-				else:
-					_tree.create_item(node).set_text(0, "…")
-					node.collapsed = true
-	else:
+		groups[str(g.key)] = g.items
+	# what the DM filed into a folder leaves its section for it
+	var filed := {}
+	for key in groups:
+		var keep := []
+		for it in groups[key]:
+			_item_section[str(it.ref)] = key
+			var f := str(lay["in"].get(str(it.ref), ""))
+			if f != "" and not folder(f).is_empty():
+				if not filed.has(f):
+					filed[f] = []
+				filed[f].append(it)
+			else:
+				keep.append(it)
+		groups[key] = keep
+	# rules pinned to a folder (they stay in the glossary too)
+	for ref in lay["in"]:
+		var f := str(lay["in"][ref])
+		if str(ref).begins_with("entry:") and not folder(f).is_empty() and ctx.kernel != null:
+			var coll := str(ref).substr(6).get_slice("/", 0)
+			var en := ctx.kernel.comp.get_entry(coll, str(ref).substr(7 + coll.length()))
+			if not en.is_empty() and (q == "" or str(en.get("name", "")).to_lower().contains(q)):
+				if not filed.has(f):
+					filed[f] = []
+				filed[f].append({"label": str(en.get("name", "")), "ref": str(ref)})
+	for node in top_order():
+		_build_node(root, node, groups, filed, q)
+	if q != "":
 		var matches := rules_matches(q)
 		if not matches.is_empty():
-			var rules := _heading(root, "Rules")
+			var rules := _heading(root, section_title("rules"), "section:rules")
 			for it in matches:
 				_add_row(rules, it)
 		if _first_ref(root) == "":
@@ -198,12 +222,56 @@ func refresh_list() -> void:
 	_select_current()
 
 
-func _heading(parent: TreeItem, text: String) -> TreeItem:
+## A section or a folder, with its folders and what is in it. An empty
+## section is left out; an empty folder shows (the DM just made it) unless
+## searching.
+func _build_node(parent: TreeItem, node: String, groups: Dictionary, filed: Dictionary, q: String) -> void:
+	var kind := node.get_slice(":", 0)
+	var key := node.substr(kind.length() + 1)
+	if node == "section:rules":
+		if q == "":
+			_build_rules(parent)
+		return
+	var head := _heading(parent, section_title(key) if kind == "section" else str(folder(key).get("title", "")), node)
+	head.collapsed = bool(_collapsed.get(node, key in ["shown", "pictures"])) and q == ""
+	for f in child_folders(node):
+		_build_node(head, "folder:" + str(f.id), groups, filed, q)
+	var items: Array = groups.get(key, []) if kind == "section" else filed.get(key, [])
+	for it in items:
+		_add_row(head, it)
+	if head.get_child_count() == 0 and (q != "" or kind == "section"):
+		parent.remove_child(head)
+		head.free()
+
+
+func _build_rules(parent: TreeItem) -> void:
+	var colls := _collections()
+	if colls.is_empty():
+		return
+	var rules := _heading(parent, section_title("rules"), "section:rules")
+	rules.collapsed = bool(_collapsed.get("section:rules", _open_collections.is_empty()))
+	for coll in colls:
+		var node := _tree.create_item(rules)
+		node.set_text(0, "%s  %d" % [_collection_title(coll), ctx.kernel.comp.count(coll)])
+		node.set_metadata(0, "")
+		node.set_selectable(0, false)
+		node.set_meta("collection", coll)
+		if _open_collections.has(coll):
+			_fill_collection(node, coll)
+			node.collapsed = false
+		else:
+			_tree.create_item(node).set_text(0, "…")
+			node.collapsed = true
+
+
+## A section's or folder's row: the DM's to open (rename, add a folder),
+## to fold, and to drop things on.
+func _heading(parent: TreeItem, text: String, node := "") -> TreeItem:
 	var h := _tree.create_item(parent)
 	h.set_text(0, text)
-	h.set_selectable(0, false)
-	h.set_custom_color(0, Color(0.62, 0.64, 0.7))
-	h.set_metadata(0, "")
+	h.set_selectable(0, node != "")
+	h.set_custom_color(0, Color(0.62, 0.64, 0.7) if not node.begins_with("folder:") else Color(0.78, 0.7, 0.5))
+	h.set_metadata(0, node)
 	return h
 
 
@@ -215,9 +283,14 @@ func _add_row(parent: TreeItem, it: Dictionary) -> void:
 		_add_row(row, child)
 
 
-## Opening a rules collection in the contents fills it.
+## Folding is remembered; opening a rules collection fills it.
 func _on_collapsed(item: TreeItem) -> void:
-	if item == null or item.collapsed or not item.has_meta("collection"):
+	if item == null:
+		return
+	var meta := str(item.get_metadata(0))
+	if is_node(meta):
+		_collapsed[meta] = item.collapsed
+	if item.collapsed or not item.has_meta("collection"):
 		return
 	var coll := str(item.get_meta("collection"))
 	if _open_collections.has(coll):
@@ -227,6 +300,263 @@ func _on_collapsed(item: TreeItem) -> void:
 		item.remove_child(c)
 		c.free()
 	_fill_collection(item, coll)
+
+
+# ------------------------------------------------- the DM's own arrangement --
+
+## The DM's arrangement of the contents, kept in the campaign (and so in a
+## package, for the DMs who start it): {titles: {section: name}, folders:
+## [{id, title, parent}], in: {ref: folder id}, order: [top-level nodes]}.
+## A folder's parent is "" (the top), "section:<key>" or "folder:<id>".
+func layout() -> Dictionary:
+	if ctx.campaign == null:
+		return {"titles": {}, "folders": [], "in": {}, "order": []}
+	var lay: Variant = ctx.campaign.doc.get("contents")
+	if not (lay is Dictionary):
+		lay = {}
+		ctx.campaign.doc.contents = lay
+	for k in ["titles", "in"]:
+		if not (lay.get(k) is Dictionary):
+			lay[k] = {}
+	for k in ["folders", "order"]:
+		if not (lay.get(k) is Array):
+			lay[k] = []
+	return lay
+
+
+static func is_node(meta: String) -> bool:
+	return meta.begins_with("section:") or meta.begins_with("folder:")
+
+
+func section_title(key: String) -> String:
+	var t := str(layout().titles.get(key, ""))
+	if t != "":
+		return t
+	for s in SECTIONS:
+		if s[0] == key:
+			return str(s[1])
+	return key
+
+
+func folder(id: String) -> Dictionary:
+	for f in layout().folders:
+		if f is Dictionary and str(f.get("id", "")) == id:
+			return f
+	return {}
+
+
+func child_folders(node: String) -> Array:
+	return layout().folders.filter(func(f: Variant) -> bool: return f is Dictionary and str(f.get("parent", "")) == node)
+
+
+## The top of the contents, in the DM's order: the sections, then the DM's
+## top-level folders, each where it was put.
+func top_order() -> Array:
+	var lay := layout()
+	var all := []
+	for s in SECTIONS:
+		all.append("section:" + str(s[0]))
+	for f in lay.folders:
+		if f is Dictionary and str(f.get("parent", "")) == "":
+			all.append("folder:" + str(f.id))
+	var out := []
+	for n in lay.order:
+		if all.has(str(n)) and not out.has(str(n)):
+			out.append(str(n))
+	for n in all:
+		if not out.has(n):
+			out.append(n)
+	return out
+
+
+## A new folder, at the top ("") or in a section or folder. Its id.
+func new_folder(parent := "", title := "New folder") -> String:
+	var lay := layout()
+	var id := JsonDoc.new_id("f")
+	lay.folders.append({"id": id, "title": title, "parent": parent if (parent == "" or not folder(parent.substr(7)).is_empty() or parent.begins_with("section:")) else ""})
+	_changed()
+	return id
+
+
+## Rename a section (an empty name gives it back its own) or a folder.
+func rename(node: String, title: String) -> void:
+	var lay := layout()
+	var t := title.strip_edges()
+	if node.begins_with("section:"):
+		var key := node.substr(8)
+		if t == "":
+			lay.titles.erase(key)
+		else:
+			lay.titles[key] = t
+	elif node.begins_with("folder:"):
+		var f := folder(node.substr(7))
+		if f.is_empty():
+			return
+		f.title = t if t != "" else "Untitled folder"
+	_changed()
+
+
+## File a thing into a folder, or ("") back into its own section. A rules
+## entry is pinned there (and stays in the glossary).
+func file(ref: String, folder_id: String) -> void:
+	var lay := layout()
+	if folder_id == "" or folder(folder_id).is_empty():
+		lay["in"].erase(ref)
+	else:
+		lay["in"][ref] = folder_id
+	_changed()
+
+
+## Move a folder into a section or another folder, or to the top (""). "" or why.
+func move_folder(id: String, parent: String) -> String:
+	var f := folder(id)
+	if f.is_empty():
+		return "no such folder"
+	var p := parent
+	while p.begins_with("folder:"):
+		if p == "folder:" + id:
+			return "a folder cannot go inside itself"
+		p = str(folder(p.substr(7)).get("parent", ""))
+	f.parent = parent
+	_changed()
+	return ""
+
+
+## Put a top-level section or folder at a place in the order.
+func move_top(node: String, index: int) -> void:
+	var lay := layout()
+	var order := top_order()
+	order.erase(node)
+	order.insert(clampi(index, 0, order.size()), node)
+	lay.order = order
+	if node.begins_with("folder:"):
+		folder(node.substr(7)).parent = ""
+	_changed()
+
+
+## Delete a folder: its folders move up to where it was, and what was
+## filed in it goes back to its own section.
+func delete_folder(id: String) -> void:
+	var lay := layout()
+	var f := folder(id)
+	if f.is_empty():
+		return
+	for sub in child_folders("folder:" + id):
+		sub.parent = str(f.get("parent", ""))
+	for ref in lay["in"].keys():
+		if str(lay["in"][ref]) == id:
+			lay["in"].erase(ref)
+	lay.folders.erase(f)
+	lay.order.erase("folder:" + id)
+	if current == "folder:" + id:
+		current = ""
+	_changed()
+
+
+## "Act 1 / Thornwick": where a folder is.
+func folder_path(id: String) -> String:
+	var parts := PackedStringArray()
+	var f := folder(id)
+	var guard := 0
+	while not f.is_empty() and guard < 32:
+		parts.insert(0, str(f.get("title", "")))
+		var p := str(f.get("parent", ""))
+		if p.begins_with("section:"):
+			parts.insert(0, section_title(p.substr(8)))
+			break
+		f = folder(p.substr(7)) if p.begins_with("folder:") else {}
+		guard += 1
+	return " / ".join(parts)
+
+
+func _changed() -> void:
+	if ctx.campaign != null:
+		ctx.campaign.touch()
+	_queue_refresh()
+
+
+# ------------------------------------------------------------ drag and drop --
+
+func _drag_data(at: Vector2) -> Variant:
+	var it := _tree.get_item_at_position(at)
+	if it == null:
+		return null
+	var meta := str(it.get_metadata(0))
+	if meta == "" or (meta.begins_with("section:") and it.get_parent() != _tree.get_root()):
+		return null
+	var l := Label.new()
+	l.text = it.get_text(0)
+	_tree.set_drag_preview(l)
+	_tree.drop_mode_flags = Tree.DROP_MODE_ON_ITEM | Tree.DROP_MODE_INBETWEEN
+	return {"contents": meta}
+
+
+func _can_drop(at: Vector2, data: Variant) -> bool:
+	return data is Dictionary and (data as Dictionary).has("contents") and not drop_plan(_tree.get_item_at_position(at), _tree.get_drop_section_at_position(at), str(data.contents)).is_empty()
+
+
+func _drop(at: Vector2, data: Variant) -> void:
+	_tree.drop_mode_flags = 0
+	if not (data is Dictionary) or not (data as Dictionary).has("contents"):
+		return
+	apply_drop(drop_plan(_tree.get_item_at_position(at), _tree.get_drop_section_at_position(at), str(data.contents)))
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_DRAG_END and _tree != null:
+		_tree.drop_mode_flags = 0
+
+
+## What dropping `what` (a ref, "folder:<id>" or "section:<key>") on a row
+## would do — {op: file|nest|top, …} — or {} when it may not go there.
+## `section` is the Tree's drop section: -1 above, 0 on, 1 below.
+func drop_plan(onto: TreeItem, section: int, what: String) -> Dictionary:
+	if onto == null or what == "":
+		return {}
+	var target := str(onto.get_metadata(0))
+	var top_level := onto.get_parent() == _tree.get_root()
+	if what.begins_with("section:") or (what.begins_with("folder:") and section != 0):
+		# the order at the top
+		if not top_level or not is_node(target) or target == what:
+			return {}
+		var order := top_order()
+		order.erase(what)
+		var at := order.find(target)
+		return {"op": "top", "node": what, "index": at + (1 if section > 0 else 0)}
+	if what.begins_with("folder:"):
+		if not is_node(target) or target == "section:rules":
+			return {}
+		var p := target
+		while p.begins_with("folder:"):
+			if p == what:
+				return {}
+			p = str(folder(p.substr(7)).get("parent", ""))
+		return {"op": "nest", "node": what, "parent": target}
+	# a thing: into the folder it is dropped on (or the one holding the row
+	# it is dropped on), or back to its own section
+	var into := target if is_node(target) else _container_of(onto)
+	if into.begins_with("folder:"):
+		return {"op": "file", "ref": what, "folder": into.substr(7)}
+	if into.begins_with("section:") and (into.substr(8) == str(_item_section.get(what, "")) or (what.begins_with("entry:") and into == "section:rules")):
+		return {"op": "file", "ref": what, "folder": ""}
+	return {}
+
+
+func apply_drop(plan: Dictionary) -> void:
+	match str(plan.get("op", "")):
+		"file": file(str(plan.ref), str(plan.folder))
+		"nest": ctx.say(move_folder(str(plan.node).substr(7), str(plan.parent)))
+		"top": move_top(str(plan.node), int(plan.index))
+
+
+func _container_of(item: TreeItem) -> String:
+	var p := item.get_parent()
+	while p != null:
+		var meta := str(p.get_metadata(0))
+		if is_node(meta):
+			return meta
+		p = p.get_parent()
+	return ""
 
 
 func _fill_collection(node: TreeItem, coll: String) -> void:
@@ -249,8 +579,8 @@ static func _collection_title(coll: String) -> String:
 	return {"rules": "Rules glossary", "magic_items": "Magic items", "weapon_properties": "Weapon properties"}.get(coll, coll.replace("_", " ").capitalize())
 
 
-## [{title, items: [{label, ref, children}], collapsed}] — the campaign's own
-## things whose name (or words) match `q`; everything when it is empty.
+## [{key, items: [{label, ref, children}]}] — the campaign's own things, by
+## section, whose name (or words) match `q`; everything when it is empty.
 func contents(q: String) -> Array:
 	var e := ctx.encounter()
 	var party := []
@@ -283,7 +613,13 @@ func contents(q: String) -> Array:
 	var shown := []
 	var pictures := []
 	var maps := []
+	var from_players := []
 	if ctx.campaign != null:
+		for n in PlayerNotes.for_viewer(ctx.campaign.player_notes, "", Views.ROLE_GM):
+			var hay := ("%s %s %s" % [str(n.get("title", "")), str(n.get("text", "")), str(n.get("folder", ""))]).to_lower()
+			if q == "" or hay.contains(q):
+				var title := str(n.get("title", "")) if str(n.get("title", "")) != "" else str(n.get("text", "")).left(40)
+				from_players.append({"label": "%s  — %s" % [title, str(e.player(str(n.get("owner", ""))).get("name", "a player"))], "ref": "pnote:" + str(n.get("id", ""))})
 		for p in ctx.campaign.places:
 			var pid := str(p.get("id", ""))
 			var here := []
@@ -318,9 +654,9 @@ func contents(q: String) -> Array:
 			if q == "" or str(m.get("name", "")).to_lower().contains(q):
 				maps.append({"label": "%s  · %s" % [str(m.get("name", "")), "the region" if str(m.get("role", "")) == "regional" else "a battle map"], "ref": "map:" + str(m.get("id", ""))})
 	shown.reverse()
-	return [{"title": "Notes for you", "items": notes}, {"title": "The party", "items": party}, {"title": "Places", "items": places},
-		{"title": "People", "items": people}, {"title": "Handouts", "items": handouts}, {"title": "Shown to the players", "items": shown, "collapsed": true},
-		{"title": "Pictures", "items": pictures, "collapsed": true}, {"title": "Maps", "items": maps}]
+	return [{"key": "notes", "items": notes}, {"key": "party", "items": party}, {"key": "places", "items": places},
+		{"key": "people", "items": people}, {"key": "handouts", "items": handouts}, {"key": "shown", "items": shown},
+		{"key": "from_players", "items": from_players}, {"key": "pictures", "items": pictures}, {"key": "maps", "items": maps}]
 
 
 ## Rules entries matching `q`: a few from every collection, as "Name (spells)".
@@ -371,8 +707,9 @@ func _first_ref(item: TreeItem) -> String:
 	if item == null:
 		return ""
 	for c in item.get_children():
-		if str(c.get_metadata(0)) != "":
-			return str(c.get_metadata(0))
+		var meta := str(c.get_metadata(0))
+		if meta != "" and not is_node(meta):
+			return meta
 		var f := _first_ref(c)
 		if f != "":
 			return f
@@ -463,6 +800,9 @@ func _exists(ref: String) -> bool:
 		"place": return not place(id).is_empty()
 		"note", "handout": return not _journal_entry(id).is_empty()
 		"picture": return ctx.art != null and not ctx.art.picture(id).is_empty()
+		"pnote": return ctx.campaign != null and PlayerNotes.can_see(PlayerNotes.find(ctx.campaign.player_notes, id), "", Views.ROLE_GM)
+		"section": return SECTIONS.any(func(sec: Array) -> bool: return sec[0] == id)
+		"folder": return not folder(id).is_empty()
 		"map": return ctx.campaign != null and not ctx.campaign.map_entry(id).is_empty()
 		"entry": return ctx.kernel != null and not ctx.kernel.comp.get_entry(id.get_slice("/", 0), id.substr(id.find("/") + 1)).is_empty()
 	return false
@@ -481,6 +821,8 @@ func _clear_card() -> void:
 
 func _render_card() -> void:
 	_clear_card()
+	if current != "" and not is_node(current) and current.get_slice(":", 0) in ["actor", "place", "note", "handout", "picture", "map", "entry", "pnote"] and _exists(current) and ctx.campaign != null:
+		call_deferred("_folder_row_last", current)
 	_back.disabled = history.is_empty()
 	if ctx.state == null or current == "" or not _exists(current):
 		_title.text = "Reference"
@@ -494,6 +836,8 @@ func _render_card() -> void:
 		"note": _note_card(id)
 		"handout": _handout_card(id)
 		"picture": _picture_card(id)
+		"pnote": _player_note_card(id)
+		"section", "folder": _node_card(current)
 		"map": _map_card(id)
 		"entry": _entry_card(id.get_slice("/", 0), id.substr(id.find("/") + 1))
 
@@ -725,6 +1069,117 @@ func _picture_card(ref: String) -> void:
 			var r: String = u[0]
 			_button(flow, str(u[1]), "Open its card", func() -> void: open(r))
 		_card.add_child(flow)
+
+
+## A player's note shared with the DM: read, not changed (it is theirs).
+func _player_note_card(nid: String) -> void:
+	var n := PlayerNotes.find(ctx.campaign.player_notes, nid)
+	_title.text = str(n.get("title", "")) if str(n.get("title", "")) != "" else "A player's note"
+	var e := ctx.encounter()
+	var by := str(e.player(str(n.get("owner", ""))).get("name", "a player"))
+	var share: Array = n.get("share", [])
+	var others := share.filter(func(s: Variant) -> bool: return str(s) != "gm" and str(s) != "all").map(func(s: Variant) -> String: return str(e.player(str(s)).get("name", s)))
+	var whom := "everyone" if share.has("all") else ("you" + (" and " + ", ".join(PackedStringArray(others)) if not others.is_empty() else ""))
+	_dim("%s's note, shared with %s%s" % [by, whom, (" · in " + str(n.folder)) if str(n.get("folder", "")) != "" else ""])
+	var about := str(n.get("about", ""))
+	if about != "" and _exists(about):
+		var actions := HFlowContainer.new()
+		_button(actions, "Open what it is about", "The card this note is on", func() -> void: open(about))
+		_card.add_child(actions)
+	_rich(str(n.get("text", "")))
+
+
+## A section or one of the DM's folders: its name, a folder inside it, and
+## (a folder) what is in it and deleting it.
+func _node_card(node: String) -> void:
+	var is_folder := node.begins_with("folder:")
+	var id := node.substr(7) if is_folder else node.substr(8)
+	_title.text = str(folder(id).get("title", "")) if is_folder else section_title(id)
+	_dim(("A folder of yours, in %s." % (folder_path(id).get_base_dir() if folder_path(id).contains("/") else "the contents")) if is_folder
+		else "A section of the contents%s." % ("" if not layout().titles.has(id) else " (its own name: %s)" % str(SECTIONS.filter(func(sec: Array) -> bool: return sec[0] == id)[0][1])))
+	var row := HBoxContainer.new()
+	var l := Label.new()
+	l.text = "Name"
+	l.theme_type_variation = "DimLabel"
+	row.add_child(l)
+	var name_edit := LineEdit.new()
+	name_edit.name = "Rename"
+	name_edit.text = _title.text
+	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var commit := func() -> void:
+		if name_edit.text.strip_edges() != _title.text:
+			rename(node, name_edit.text)
+	name_edit.text_submitted.connect(func(_t: String) -> void: commit.call())
+	name_edit.focus_exited.connect(commit)
+	row.add_child(name_edit)
+	_card.add_child(row)
+	var actions := HFlowContainer.new()
+	if node != "section:rules":
+		_button(actions, "New folder in it", "A folder of your own inside this one", func() -> void:
+			var fid := new_folder(node)
+			open("folder:" + fid))
+	if not is_folder and layout().titles.has(id):
+		_button(actions, "Its own name", "Call this section what it was called", func() -> void:
+			rename(node, "")
+			_render_card())
+	if is_folder:
+		_button(actions, "Delete this folder" if _delete_armed != node else "Press again to delete it", "What is in it goes back where it came from", func() -> void:
+			if _delete_armed != node:
+				_delete_armed = node
+				_render_card()
+				return
+			_delete_armed = ""
+			delete_folder(id))
+	_card.add_child(actions)
+	_dim("Drag things onto a folder to file them there, and folders onto folders or sections to nest them; drag a section or a folder above or below another to change the order. Rules dragged into a folder stay in the glossary too.")
+	if is_folder:
+		var inside := []
+		for ref in layout()["in"]:
+			if str(layout()["in"][ref]) == id:
+				inside.append(str(ref))
+		if not inside.is_empty():
+			_subhead("In it")
+			var flow := HFlowContainer.new()
+			for ref in inside:
+				var r := str(ref)
+				var row_item := row_for(r)
+				_button(flow, row_item.get_text(0) if row_item != null else r, "Open it", func() -> void: open(r))
+			_card.add_child(flow)
+
+
+func _folder_row_last(ref: String) -> void:
+	if ref == current and _card.find_child("Folder", true, false) == null:
+		_folder_row(ref)
+
+
+## Which folder a thing is filed in: its own section, or one of the DM's
+## folders (a rules entry: pinned to one, or none).
+func _folder_row(ref: String) -> void:
+	var row := HBoxContainer.new()
+	var l := Label.new()
+	l.text = "Folder"
+	l.theme_type_variation = "DimLabel"
+	row.add_child(l)
+	var ob := OptionButton.new()
+	ob.name = "Folder"
+	ob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var own := str(_item_section.get(ref, ""))
+	ob.add_item("(none: only in the rules)" if ref.begins_with("entry:") else ("(its own section: %s)" % section_title(own) if own != "" else "(its own section)"))
+	ob.set_item_metadata(0, "")
+	var now := str(layout()["in"].get(ref, ""))
+	var folders: Array = layout().folders.duplicate()
+	folders.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return folder_path(str(a.id)).naturalnocasecmp_to(folder_path(str(b.id))) < 0)
+	for f in folders:
+		var i := ob.item_count
+		ob.add_item(folder_path(str(f.id)))
+		ob.set_item_metadata(i, str(f.id))
+		if str(f.id) == now:
+			ob.select(i)
+	if ob.item_count == 1:
+		ob.tooltip_text = "Make folders of your own: open a section in the contents and press New folder in it"
+	ob.item_selected.connect(func(i: int) -> void: file(ref, str(ob.get_item_metadata(i))))
+	row.add_child(ob)
+	_card.add_child(row)
 
 
 func _map_card(mid: String) -> void:
