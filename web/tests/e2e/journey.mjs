@@ -94,6 +94,8 @@ await step('the DM invites: a code and an address', async () => {
 await step('the DM starts the session', async () => {
   await dm.getByRole('button', { name: /Start session/ }).first().click();
   await dm.getByText(/Session 1/).first().waitFor({ timeout: 5000 });
+  // the next step points at what the adventure says to read first, by its own title
+  await dm.locator('.guide').getByRole('button', { name: 'Open “Introduction”' }).waitFor({ timeout: 5000 });
 });
 
 await step('a place’s card, from the book', async () => {

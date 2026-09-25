@@ -87,13 +87,22 @@
     if (!session.open) return { key: 'session', text: 'Start the session when everyone is here: what happens is kept as the session’s.', button: `Start session ${Number(session.n ?? 0) + 1}`, act: () => dmOp('session', { do: 'start' }) };
     const withoutCharacter = game.players.filter((p) => online.has(String(p.id)) && !people.some((a) => a.kind === 'pc' && String(a.owner ?? '') === String(p.id)));
     if (withoutCharacter.length)
-      return { key: `chars:${withoutCharacter.map((p) => p.id).join(',')}`, text: `${withoutCharacter.map((p) => p.name).join(' and ')} ${withoutCharacter.length > 1 ? 'are' : 'is'} making a character on their own screen. Meanwhile, read what the adventure says first.`, button: startHere() ? 'Open “Start here”' : undefined, act: () => open(startHere()) };
-    return { key: 'play', text: 'Tap a place on the map to open its card; “Show the players” puts its picture and words on their screens.', button: startHere() ? 'Open “Start here”' : undefined, act: () => open(startHere()) };
+      return { key: `chars:${withoutCharacter.map((p) => p.id).join(',')}`, text: `${withoutCharacter.map((p) => p.name).join(' and ')} ${withoutCharacter.length > 1 ? 'are' : 'is'} making a character on their own screen. Meanwhile, read what the adventure says first.`, button: startHere() ? `Open “${startTitle()}”` : undefined, act: () => open(startHere()) };
+    return { key: 'play', text: 'Tap a place on the map to open its card; “Show the players” puts its picture and words on their screens.', button: startHere() ? `Open “${startTitle()}”` : undefined, act: () => open(startHere()) };
   });
 
+  // the note the adventure says to read first (tagged "start"), whatever its title
+  function startNote(): Dict | undefined {
+    return ((dm.journal as Dict[]) ?? []).find((j) => ((j.tags as string[]) ?? []).includes('start'));
+  }
+
   function startHere(): string {
-    const n = ((dm.journal as Dict[]) ?? []).find((j) => ((j.tags as string[]) ?? []).includes('start'));
+    const n = startNote();
     return n ? `note:${n.id}` : '';
+  }
+
+  function startTitle(): string {
+    return String(startNote()?.title || 'Start here');
   }
 
   function open(ref: string): void {

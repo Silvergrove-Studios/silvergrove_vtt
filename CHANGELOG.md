@@ -8,6 +8,8 @@
   regional map should not have any grid at all"). Its cells still place
   things, unseen; the Table, the web screens and the SVG and PDF exports
   draw none, and a token dropped on it stays where it was let go.
+- The DM's next step names what the adventure says to read first by its
+  own title (*Open “Introduction”*), not always *Start here*.
 
 ## 2.3.0 — 2026-09-25
 
