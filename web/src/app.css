@@ -46,6 +46,8 @@ body {
 
 #app {
   height: 100%;
+  /* a phone's browser bars come and go: the page is what is visible */
+  height: 100dvh;
 }
 
 h1,
