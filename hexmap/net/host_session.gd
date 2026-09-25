@@ -56,6 +56,7 @@ var _listening := false
 var _views_dirty := false
 var _scenes_dirty := false
 var _dm_dirty := false
+var _last_dm_ms := 0
 var _last_scene_ms := 0
 
 ## Colours given to players who join by name, in turn.
@@ -253,8 +254,10 @@ func poll(delta := 0.0) -> void:
 		for c in _clients:
 			if c.joined and bool(c.web):
 				_send_scene(c)
-	if _dm_dirty:
+	# (and the DM's screen its campaign state, as often)
+	if _dm_dirty and Time.get_ticks_msec() - _last_dm_ms >= 150:
 		_dm_dirty = false
+		_last_dm_ms = Time.get_ticks_msec()
 		for c in _clients:
 			if c.joined and c.role == Views.ROLE_DM:
 				_send_dm(c)
@@ -302,6 +305,8 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		_scenes_dirty = true
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
+		# the DM's screen draws the party (hit points, conditions) from its state too
+		_dm_dirty = true
 	# a picture shown: phones that lack its pack (one added since they joined) fetch it
 	if t == "log.add" and str(ev.get("entry", {}).get("image", "")) != "":
 		var listing := pack_listing()

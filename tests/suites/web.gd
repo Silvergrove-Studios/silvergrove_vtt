@@ -221,6 +221,10 @@ func test_web_clients_on_the_host() -> void:
 	check(_pump(host, [dm], func() -> bool: return str(dm.last("scene").scene.id) == crypt), "the DM looks at another scene; the players' stays")
 	ana.send({"t": "intent", "intent": {"kind": "dm", "op": "launch"}})
 	check(_pump(host, [ana], func() -> bool: return not ana.last("refused").is_empty()), "a player's DM operation is refused")
+	# the rules change something (hit points in a fight): the DM's screen hears it too
+	var dm_before := dm.count("dm")
+	kernel.commit([{"t": "log.add", "entry": {"id": "n_hp", "kind": "note", "text": "a goblin is hurt", "audience": "gm"}}], "Note")
+	check(_pump(host, [dm], func() -> bool: return dm.count("dm") > dm_before), "a rules change: the DM's state again (its party view draws from it)")
 	# chat: to everyone, to some players (the DM reads it), privately among players
 	var ben := "pl_393eb25a"
 	ana.send({"t": "intent", "intent": {"kind": "chat", "text": "Hello all", "to": "all"}})
