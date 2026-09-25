@@ -136,6 +136,29 @@ await step('Ana’s character sheet', async () => {
   await shot(ana, 'ana_sheet');
 });
 
+await step('the DM makes a folder of their own and files someone in it', async () => {
+  const answer = (text) => dm.once('dialog', (d) => d.accept(text));
+  const people = dm.locator('.book .group').filter({ has: dm.locator('.head .title', { hasText: /^People$/ }) }).first();
+  await people.locator('.head').hover();
+  await people.getByRole('button', { name: 'Arrange People' }).click();
+  answer('Suspects');
+  await dm.getByRole('menuitem', { name: 'New folder inside' }).click();
+  await dm.locator('.book').getByText('Suspects').waitFor({ timeout: 5000 });
+  await dm.locator('.book').getByRole('button', { name: /^Reeve Hollis Dunmore/ }).first().click();
+  const option = await dm.locator('.file select option', { hasText: 'Suspects' }).first().getAttribute('value');
+  await dm.locator('.file select').selectOption(option ?? '');
+  await dm.waitForFunction(() => Object.values(window.hexmap.game.dm.contents?.in ?? {}).length > 0, null, { timeout: 5000 });
+  const folder = dm.locator('.book .group.folder').filter({ hasText: 'Suspects' }).first();
+  await folder.getByText('Reeve Hollis Dunmore').waitFor({ timeout: 5000 });
+  await folder.locator('.head').first().hover();
+  await folder.getByRole('button', { name: 'Arrange Suspects' }).click();
+  answer('The reeve’s circle');
+  await dm.getByRole('menuitem', { name: 'Rename' }).click();
+  await dm.locator('.book').getByText('The reeve’s circle').waitFor({ timeout: 5000 });
+  await shot(dm, 'dm_folders');
+  await dm.getByRole('button', { name: 'Close the card' }).click();
+});
+
 let cara = null;
 await step('a new player makes a character with the wizard', async () => {
   cara = await open(info.player, { width: 390, height: 844 }, 'cara');
