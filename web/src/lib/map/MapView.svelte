@@ -54,14 +54,19 @@
 
   let host: HTMLDivElement;
   let canvas: HTMLCanvasElement;
-  let width = $state(300);
-  let height = $state(200);
+  // 0 until the page says how big the view is: a fit before that would
+  // fit a made-up size and stay small
+  let width = $state(0);
+  let height = $state(0);
   let dpr = $state(1);
   const cam: Camera = $state({ x: 0, y: 0, scale: 40 });
   let hover = $state<Cell | null>(null);
   let drag = $state<{ id: string; pos: Vec } | null>(null);
   let artTick = $state(0);
   let fitted = '';
+  // the camera is still the one fit() chose (nobody has panned or zoomed
+  // since): a resize fits again, with the same `first`
+  let auto = { on: false, first: false };
 
   const prep = $derived(map && scene?.id ? prepare(map, scene, gm) : null);
   const tokens = $derived(((scene?.tokens as Dict[]) ?? []) as Dict[]);
@@ -104,6 +109,7 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       return;
     }
+    if (width <= 0 || height <= 0) return;
     ensureTerrain();
     drawFrame({
       ctx,
@@ -162,6 +168,7 @@
       const sx = width / 2 + (p.x - cam.x) * cam.scale;
       const sy = height / 2 + (p.y - cam.y) * cam.scale;
       if (sx < width * 0.18 || sx > width * 0.82 || sy < height * 0.18 || sy > height * 0.82) {
+        auto.on = false;
         cam.x = p.x;
         cam.y = p.y;
       }
@@ -197,6 +204,7 @@
         cam.y = p.y;
       }
     }
+    auto = { on: true, first };
   }
 
   export function centerOnToken(id: string): void {
@@ -206,9 +214,11 @@
     cam.x = p.x;
     cam.y = p.y;
     cam.scale = Math.max(cam.scale, clampScale(48));
+    auto.on = false;
   }
 
   function zoomAt(sx: number, sy: number, scale: number): void {
+    auto.on = false;
     const w = toWorld(sx, sy);
     cam.scale = clampScale(scale);
     cam.x = w.x - (sx - width / 2) / cam.scale;
@@ -262,6 +272,7 @@
     if (pinch && pointers.size >= 2) {
       const [a, b] = [...pointers.values()];
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      auto.on = false;
       cam.scale = clampScale((pinch.scale * Math.hypot(a.x - b.x, a.y - b.y)) / pinch.d);
       cam.x = pinch.world.x - (mid.x - width / 2) / cam.scale;
       cam.y = pinch.world.y - (mid.y - height / 2) / cam.scale;
@@ -275,6 +286,7 @@
     if (press.token && !picking && canDrag(press.token)) {
       drag = { id: String(press.token.id), pos: toWorld(p.x, p.y) };
     } else {
+      auto.on = false;
       cam.x = press.cam.x - dx / cam.scale;
       cam.y = press.cam.y - dy / cam.scale;
     }
@@ -327,6 +339,7 @@
     const zoom = e.ctrlKey || e.deltaMode !== 0 || (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 40);
     if (zoom) zoomAt(p.x, p.y, cam.scale * Math.exp(-e.deltaY * (e.ctrlKey ? 0.012 : 0.0016) * (e.deltaMode === 1 ? 30 : 1)));
     else {
+      auto.on = false;
       cam.x += e.deltaX / cam.scale;
       cam.y += e.deltaY / cam.scale;
     }
@@ -356,6 +369,7 @@
       canvas.height = Math.floor(height * dpr);
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
+      if (auto.on && !pressing) fit(auto.first);
       schedule();
     });
     ro.observe(host);

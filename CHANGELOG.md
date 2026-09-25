@@ -10,6 +10,10 @@
   draw none, and a token dropped on it stays where it was let go.
 - The DM's next step names what the adventure says to read first by its
   own title (*Open “Introduction”*), not always *Start here*.
+- The web screens' map opens showing the whole map: it could fit itself
+  to a made-up size before the page had measured its own, and open small
+  in the middle. It stays fitted when the window or a pane changes size,
+  until someone pans or zooms.
 
 ## 2.3.0 — 2026-09-25
 

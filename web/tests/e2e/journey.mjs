@@ -61,6 +61,14 @@ const ben = await open(info.player, { width: 1280, height: 800 }, 'ben');
 
 await step('the DM’s screen opens', async () => {
   await dm.getByText('Invite players').first().waitFor({ timeout: 10000 });
+  // the first view is the whole map, fitted to the space it has (not to a
+  // size from before the page had one): showing the whole map changes nothing
+  const px = () => dm.evaluate(() => document.querySelector('canvas')?.pxPerHex?.() ?? 0);
+  await dm.waitForTimeout(400);
+  const first = await px();
+  await dm.getByRole('button', { name: 'Show the whole map' }).click();
+  const whole = await px();
+  if (!(whole > 0) || Math.abs(first - whole) > whole * 0.02) throw new Error(`the first view is not the whole map: ${first} px a cell, the whole map ${whole}`);
   await shot(dm, 'dm_first');
 });
 
