@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — in testing (dev builds)
+## 2.2.0 — 2026-09-25
 
 The Table as a DM's screen, after the first playtest: most of a session
 is talk, exploring and looking things up, and the Table now leads with
