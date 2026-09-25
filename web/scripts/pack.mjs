@@ -22,7 +22,8 @@ function walk(dir) {
 }
 
 const files = {};
-const mtime = new Date('2026-01-01T00:00:00Z');
+// (a zip keeps local time: the same wall-clock date gives the same bytes in every time zone)
+const mtime = new Date(2026, 0, 1, 0, 0, 0);
 for (const p of walk(dist)) {
   const rel = relative(dist, p).split(sep).join('/');
   // already-compressed files are stored as they are
