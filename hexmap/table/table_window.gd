@@ -571,12 +571,13 @@ func _toggle_session() -> void:
 func _join_info() -> void:
 	var name := ctx.campaign.name if ctx.campaign != null else ctx.encounter().name
 	if host == null:
-		_info("The table is closed to players right now. Press \"Closed\" at the top to open it; then, on each phone: open Hexmap → Join a game → pick \"%s\"." % name)
+		_info("The table is closed to players right now. Press \"Closed\" at the top to open it; then players open its address in a browser (Invite players on your screen shows it, with a code to scan).")
 		return
 	var info := _host_info()
 	var here: Array = info.get("connected", [])
-	_info("On each player's phone (on the same Wi-Fi as this computer):\n\n1. Open Hexmap and tap Join a game.\n2. Pick \"%s\" from the list.\n3. Pick their name, then make a character (or take the one you made).\n\nIf the table is not listed, they can type this address: %s\n\nJoined now: %s\n\nA second DM on another laptop joins with the co-DM code %s." % [
-		name, str(info.get("address", "")), ", ".join(PackedStringArray(here)) if not here.is_empty() else "nobody yet", str(info.get("code", ""))])
+	var web := ", ".join(host.join_urls()) if host.web != null else ""
+	_info("On each player's phone or computer (on the same Wi-Fi as this one), in any browser:\n\n1. Open %s — or scan the code that Invite players shows on your screen.\n2. Type their name (or tap it, if they have played here before).\n3. Make a character (or take the one you made).\n\nIn the Hexmap app instead: Join a game → \"%s\" (or type %s).\n\nJoined now: %s\n\nA second DM on another laptop joins with the co-DM code %s." % [
+		web if web != "" else "the address your screen shows", name, str(info.get("address", "")), ", ".join(PackedStringArray(here)) if not here.is_empty() else "nobody yet", str(info.get("code", ""))])
 
 
 ## The first screen of the Table: carry on with the last campaign, start an

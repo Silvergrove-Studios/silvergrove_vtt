@@ -29,7 +29,8 @@ func _init() -> void:
 			print("FAIL missing from the pack: ", p)
 			bad += 1
 	# Files the app reads itself must be there raw.
-	for p in ["res://hexmap/ui/icons/eye.svg", "res://hexmap/ui/icons/hexagon.svg", "res://hexmap/ui/fonts/Inter-Regular.ttf", "res://hexmap/ui/fonts/JetBrainsMono-Regular.ttf"]:
+	for p in ["res://hexmap/ui/icons/eye.svg", "res://hexmap/ui/icons/hexagon.svg", "res://hexmap/ui/fonts/Inter-Regular.ttf", "res://hexmap/ui/fonts/JetBrainsMono-Regular.ttf",
+			"res://hexmap/ui/fonts/Fraunces-Variable.woff2", "res://webclient.zip"]:
 		if FileAccess.file_exists(p) and FileAccess.get_file_as_bytes(p).size() > 100:
 			print("ok   ", p)
 		else:
