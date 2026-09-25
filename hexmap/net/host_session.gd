@@ -36,10 +36,30 @@ var journal_source: Callable = Callable()
 ## `notes_changed`, called after a change so the campaign is saved.
 var notes_source: Callable = Callable()
 var notes_changed: Callable = Callable()
+## The web clients' HTTP side (WebServer): their files, art and map files.
+var web: WebServer
+## What the DM's own web screen gives to join as the DM: made by the Table,
+## put in the address it opens on this machine. "" refuses it.
+var dm_token := ""
+## (event: Dictionary) -> String: add a player who joined by name (the
+## Table runs it as a command). Without it the event is applied as is.
+var add_player: Callable = Callable()
+## (intent: Dictionary) -> String: a DM operation from the web DM screen.
+var dm_handler: Callable = Callable()
+## () -> Dictionary: what the web DM screen shows of the campaign.
+var dm_state_source: Callable = Callable()
+## () -> Array: the chat banked from sessions before (the campaign's).
+var chat_source: Callable = Callable()
 var _server := TCPServer.new()
 var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
 var _listening := false
 var _views_dirty := false
+var _scenes_dirty := false
+var _dm_dirty := false
+var _last_scene_ms := 0
+
+## Colours given to players who join by name, in turn.
+const PLAYER_COLORS := ["#4f9cf6", "#e67e22", "#2ecc71", "#e74c3c", "#9b59b6", "#f1c40f", "#1abc9c", "#ec87c0"]
 
 
 func _init(p_state: EncounterState, p_packs: PackLibrary) -> void:
@@ -47,8 +67,9 @@ func _init(p_state: EncounterState, p_packs: PackLibrary) -> void:
 	packs = p_packs
 
 
-## Listen on `p_port` (0 for any free port) and start announcing.
-func start(p_port := Protocol.DEFAULT_PORT, announce := true) -> Error:
+## Listen on `p_port` (0 for any free port) and start announcing; serve
+## the web clients on `web_port` (-1: not at all).
+func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebServer.DEFAULT_PORT) -> Error:
 	var err := _server.listen(p_port)
 	if err != OK and p_port != 0:
 		# Busy: the OS may hand us another.
@@ -59,9 +80,23 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true) -> Error:
 	_listening = true
 	cogm_code = "%04d" % (randi() % 10000)
 	state.applied.connect(_on_applied)
+	if web_port >= 0:
+		web = WebServer.new()
+		web.art_source = func(pack: String, file: String) -> PackedByteArray:
+			if packs == null or packs.pack_dir(pack) == "" or not packs.pack_files(pack).has(file):
+				return PackedByteArray()
+			return FileAccess.get_file_as_bytes(packs.pack_dir(pack).path_join(file))
+		web.map_file_source = func(mid: String, file: String) -> PackedByteArray:
+			var m: HexMap = state.maps.get(mid)
+			return m.asset_bytes(file) if m != null and m.asset_refs().has(file) else PackedByteArray()
+		web.config_source = func() -> Dictionary:
+			return {"ws_port": port, "name": announcer.name, "protocol": Protocol.VERSION}
+		if web.start(web_port) != OK:
+			web = null
 	if announce:
+		announcer.web_port = web.port if web != null else 0
 		announcer.start(state.encounter.name, port)
-	log.emit("Hosting on port %d" % port)
+	log.emit("Hosting on port %d" % port + (", web on %d" % web.port if web != null else ""))
 	return OK
 
 
@@ -72,6 +107,9 @@ func stop() -> void:
 		(c.peer as WebSocketPeer).close()
 	_clients.clear()
 	_server.stop()
+	if web != null:
+		web.stop()
+		web = null
 	announcer.stop()
 	if state.applied.is_connected(_on_applied):
 		state.applied.disconnect(_on_applied)
@@ -92,11 +130,28 @@ func set_state(p_state: EncounterState) -> void:
 		state.applied.connect(_on_applied)
 		announcer.name = state.encounter.name
 		for c in _clients:
-			_send(c, Protocol.welcome(state.encounter, c.role == Views.ROLE_COGM))
+			_send(c, Protocol.welcome(state.encounter, _is_gm(c)))
+		_scenes_dirty = true
+		_dm_dirty = true
 
 
 func _is_gm(c: Dictionary) -> bool:
-	return c.role == Views.ROLE_COGM
+	return c.role == Views.ROLE_COGM or c.role == Views.ROLE_DM
+
+
+## Is the client on this machine (the DM's own browser)?
+static func is_local_address(ip: String) -> bool:
+	return ip == "127.0.0.1" or ip == "::1" or ip == "::ffff:127.0.0.1"
+
+
+## The web address players open: one per network this machine is on.
+func join_urls() -> PackedStringArray:
+	return WebServer.urls(web.port) if web != null else PackedStringArray()
+
+
+## The DM's web screen changed what it shows: send it again (soon).
+func refresh_dm() -> void:
+	_dm_dirty = true
 
 
 ## The co-GMs joined right now.
@@ -126,13 +181,15 @@ func poll(delta := 0.0) -> void:
 	if not _listening:
 		return
 	announcer.poll(delta)
+	if web != null:
+		web.poll()
 	while _server.is_connection_available():
 		var peer := WebSocketPeer.new()
 		peer.inbound_buffer_size = Protocol.BUFFER_SIZE
 		peer.outbound_buffer_size = Protocol.BUFFER_SIZE
 		peer.max_queued_packets = 4096
 		if peer.accept_stream(_server.take_connection()) == OK:
-			_clients.append({"peer": peer, "player": "", "role": "", "hello": false, "joined": false})
+			_clients.append({"peer": peer, "player": "", "role": "", "hello": false, "joined": false, "web": false, "scene": ""})
 	var gone := []
 	for c in _clients:
 		var peer: WebSocketPeer = c.peer
@@ -155,6 +212,18 @@ func poll(delta := 0.0) -> void:
 		for c in _clients:
 			if c.joined:
 				_send_view(c)
+	# web clients get the scene whole, a few times a second at most
+	if _scenes_dirty and Time.get_ticks_msec() - _last_scene_ms >= 50:
+		_scenes_dirty = false
+		_last_scene_ms = Time.get_ticks_msec()
+		for c in _clients:
+			if c.joined and bool(c.web):
+				_send_scene(c)
+	if _dm_dirty:
+		_dm_dirty = false
+		for c in _clients:
+			if c.joined and c.role == Views.ROLE_DM:
+				_send_dm(c)
 
 
 func _player_name(pid: String) -> String:
@@ -167,6 +236,9 @@ func _send(c: Dictionary, msg: Dictionary) -> void:
 
 func _broadcast(msg: Dictionary, gm_only := false) -> void:
 	for c in _clients:
+		# (web clients hold no document: they get snapshots, not events)
+		if bool(c.web) and str(msg.get("t", "")) == "event":
+			continue
 		if c.hello and (not gm_only or _is_gm(c)):
 			_send(c, msg)
 
@@ -190,8 +262,10 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		_broadcast(Protocol.event(ev), true)
 		for msg in _audience_events(ev, inv):
 			for c in _clients:
-				if c.hello and not _is_gm(c):
+				if c.hello and not _is_gm(c) and not bool(c.web):
 					_send(c, Protocol.event(msg))
+	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t) or t.begins_with("token.") or t == "checkpoint.restore":
+		_scenes_dirty = true
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
 	# a picture shown: phones that lack its pack (one added since they joined) fetch it
@@ -249,6 +323,14 @@ func projection(c: Dictionary) -> Dictionary:
 	var role := Views.ROLE_GM if _is_gm(c) else (str(c.role) if c.role != "" else Views.ROLE_PLAYER)
 	var out := Views.project(kernel, plugins, pid, role)
 	out.notes = PlayerNotes.for_viewer(notes_source.call(), pid, role) if notes_source.is_valid() else []
+	# the chat of sessions before, as far as this viewer may read it
+	out.chat_history = []
+	if chat_source.is_valid():
+		var hist: Array = chat_source.call()
+		for i in range(maxi(0, hist.size() - 400), hist.size()):
+			var m: Variant = hist[i]
+			if m is Dictionary and Views.can_see(str(m.get("audience", "all")), pid, role):
+				out.chat_history.append(JsonDoc.deep(m))
 	out.journal = []
 	if journal_source.is_valid():
 		for entry in journal_source.call():
@@ -268,6 +350,25 @@ func _send_view(c: Dictionary) -> void:
 		_send(c, Protocol.view(projection(c)))
 
 
+## A web client's scene: the one the players see (the DM's: the one they
+## chose), whole, as they may see it.
+func _send_scene(c: Dictionary) -> void:
+	var e := state.encounter
+	var sid := str(c.get("scene", ""))
+	if sid == "" or e.scene(sid).is_empty() or not _is_gm(c):
+		sid = e.active_scene_id
+	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c)) if sid != "" else {},
+		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
+	if _is_gm(c):
+		msg.scenes = e.scenes.map(func(s: Dictionary) -> Dictionary: return {"id": str(s.id), "name": str(s.get("name", "")), "map": str(s.get("map", "")), "active": str(s.id) == e.active_scene_id})
+	_send(c, msg)
+
+
+func _send_dm(c: Dictionary) -> void:
+	if dm_state_source.is_valid():
+		_send(c, {"t": "dm", "state": dm_state_source.call()})
+
+
 func _handle(c: Dictionary, msg: Dictionary) -> void:
 	var t := str(msg.t)
 	if not c.hello and t != "hello":
@@ -275,6 +376,7 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 		return
 	match t:
 		"hello":
+			c.web = bool(msg.get("web", false))
 			if int(msg.get("version", 0)) != Protocol.VERSION:
 				var why := "this table speaks protocol %d, you speak %d" % [Protocol.VERSION, int(msg.get("version", 0))]
 				_send(c, Protocol.error(why))
@@ -290,8 +392,20 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if not Protocol.ROLES.has(role):
 				_send(c, Protocol.error("unknown role '%s'" % role))
 				return
+			# someone new to the table joins by name: found if they were here before, added if not
+			if role == Views.ROLE_PLAYER and pid == "" and str(msg.get("name", "")).strip_edges() != "":
+				var why := ""
+				var r := _player_by_name(str(msg.name))
+				pid = str(r.get("id", ""))
+				why = str(r.get("why", ""))
+				if why != "":
+					_send(c, Protocol.error(why))
+					return
 			if role == Views.ROLE_PLAYER and state.encounter.player(pid).is_empty():
 				_send(c, Protocol.error("no such player"))
+				return
+			if role == Views.ROLE_DM and (dm_token == "" or str(msg.get("token", "")) != dm_token or not is_local_address((c.peer as WebSocketPeer).get_connected_host())):
+				_send(c, Protocol.error("the DM's screen opens from the Table on this computer"))
 				return
 			if role == Views.ROLE_COGM and (cogm_code == "" or str(msg.get("code", "")) != cogm_code):
 				_send(c, Protocol.error("co-GMs join with the code shown on the table"))
@@ -303,12 +417,17 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			c.player = pid
 			c.role = role
 			c.joined = true
-			if role == Views.ROLE_COGM:
+			if _is_gm(c):
 				# the whole scene, now that they may see it
 				_send(c, Protocol.welcome(state.encounter, true))
-			_send(c, {"t": "joined", "player": pid, "role": role})
+			_send(c, {"t": "joined", "player": pid, "role": role, "name": _player_name(pid) if pid != "" else ""})
 			_send_view(c)
-			var who := _player_name(pid) if pid != "" else ("a co-GM (%s)" if role == Views.ROLE_COGM else "a display (%s)") % str(c.get("name", ""))
+			if bool(c.web):
+				_send_scene(c)
+			if role == Views.ROLE_DM:
+				_send_dm(c)
+			_scenes_dirty = true
+			var who := _player_name(pid) if pid != "" else ("the DM's screen" if role == Views.ROLE_DM else ("a co-GM (%s)" if role == Views.ROLE_COGM else "a display (%s)") % str(c.get("name", "")))
 			log.emit("%s joined" % who)
 			if pid != "":
 				client_joined.emit(pid)
@@ -338,7 +457,10 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if why != "":
 				_send(c, Protocol.refused(ev, why))
 		"need":
-			_serve(c, msg)
+			if str(msg.get("kind", "")) == "scene":
+				_send_scene(c)
+			else:
+				_serve(c, msg)
 		"ping":
 			_send(c, {"t": "pong"})
 
@@ -412,6 +534,22 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			return _gm_intent(intent)
 		"contribute":
 			return kernel.pending.contribute(str(intent.get("roll", "")), pid, str(intent.get("name", "")), str(intent.get("expr", "")))
+		"chat":
+			return _chat(c, intent)
+		"dm":
+			if c.role != Views.ROLE_DM:
+				return "only the DM's screen does that"
+			if str(intent.get("op", "")) == "view_scene":
+				# which scene this DM screen looks at (the players see the active one)
+				c.scene = str(intent.get("scene", ""))
+				_send_scene(c)
+				return ""
+			if not dm_handler.is_valid():
+				return "no DM operations here"
+			var why_dm := str(dm_handler.call(intent))
+			_dm_dirty = true
+			_scenes_dirty = true
+			return why_dm
 		"note":
 			# a player's own notes: theirs to write, keep private or share
 			if gm:
@@ -444,6 +582,51 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				log.emit("%s brought %s" % [_player_name(pid), str(actor.name)])
 			return why
 	return "unknown intent '%s'" % str(intent.get("kind", ""))
+
+
+## A player found by name (as typed, any case), or added: {id} or {why}.
+func _player_by_name(p_name: String) -> Dictionary:
+	var wanted := p_name.strip_edges().left(40)
+	if wanted == "":
+		return {"why": "type your name"}
+	for p in state.encounter.players:
+		if str(p.get("name", "")).strip_edges().to_lower() == wanted.to_lower():
+			return {"id": str(p.id)}
+	var pid := JsonDoc.new_id("pl")
+	var ev := {"t": "player.add", "player": {"id": pid, "name": wanted, "color": PLAYER_COLORS[state.encounter.players.size() % PLAYER_COLORS.size()]}}
+	var why := str(add_player.call(ev)) if add_player.is_valid() else _apply_plain(ev)
+	if why != "":
+		return {"why": why}
+	log.emit("%s is new at the table" % wanted)
+	return {"id": pid}
+
+
+## A chat message: {text, to: "all" | ["gm", player ids…], private}. To
+## everyone; to some players (the DM reads it too); or, `private`, to some
+## players and not the DM. Kept in the log (so in the campaign), and a
+## viewer sees what their audience lets them.
+func _chat(c: Dictionary, intent: Dictionary) -> String:
+	var text := str(intent.get("text", "")).strip_edges().left(2000)
+	if text == "":
+		return "say something"
+	var gm := _is_gm(c)
+	var from := "gm" if gm else str(c.player)
+	var to: Variant = intent.get("to", "all")
+	var audience := "all"
+	var names := []
+	if to is Array and not (to as Array).is_empty() and not (to as Array).has("all"):
+		var ids := []
+		for x in to:
+			var k := str(x)
+			if k != "gm" and not state.encounter.player(k).is_empty() and not ids.has(k):
+				ids.append(k)
+		if not gm and not ids.has(from):
+			ids.append(from)
+		var private := bool(intent.get("private", false)) and not gm and not (to as Array).has("gm")
+		audience = ("private:" if private else "players:") + ",".join(PackedStringArray(ids))
+		names = (to as Array).map(func(x: Variant) -> String: return "the DM" if str(x) == "gm" else _player_name(str(x)))
+	var entry := {"id": JsonDoc.new_id("m"), "kind": "chat", "from": from, "text": text, "audience": audience, "to": names, "at": JsonDoc.now()}
+	return kernel.commit([{"t": "log.add", "entry": entry}], "Chat", {"by": from}, audience)
 
 
 ## What a co-GM may drive besides actions: {op: next|previous|checkpoint|restore|trigger|bulk, …}.

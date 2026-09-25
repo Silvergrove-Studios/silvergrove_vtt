@@ -64,6 +64,8 @@ class Announcer extends RefCounted:
 	## A query (ours or mDNS) was answered, with the asker's address.
 	signal answered(ip: String)
 	var name := ""
+	## Where the table's web clients are served (0: nowhere): phones open it.
+	var web_port := 0
 	var port := Protocol.DEFAULT_PORT
 	var every := 1.0
 	## Also a Bonjour service, so routers that reflect mDNS between their
@@ -121,7 +123,7 @@ class Announcer extends RefCounted:
 		var host := OS.get_environment("HOSTNAME")
 		if host == "":
 			host = OS.get_environment("COMPUTERNAME")
-		return Protocol.encode(Protocol.announcement(name, port, host, App.local_ipv4()))
+		return Protocol.encode(Protocol.announcement(name, port, host, App.local_ipv4(), web_port))
 
 	func poll(delta: float) -> void:
 		if not _ok:

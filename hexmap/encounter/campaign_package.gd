@@ -158,12 +158,13 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 
 
 ## What a group's play left in a campaign that is theirs and no one
-## else's: the players' notes, what the DM showed them (journal handouts
+## else's: the players' notes, their chat, what the DM showed them (journal handouts
 ## with a `ref`), and what the sessions banked (entries stamped with a
 ## `session`); a note's record of the session it was handed out in. What
 ## the author prepared stays.
 static func strip_play(doc: Dictionary) -> void:
 	doc.player_notes = []
+	doc.chat_log = []
 	var kept := []
 	for j in doc.get("journal", []):
 		if not (j is Dictionary):

@@ -47,6 +47,9 @@ var _banner: PanelContainer
 var _banner_label: Label
 var _banner_action: Button
 var _banner_hidden := false
+## The DM's web screen (WebDm) and the token its address carries.
+var web_dm: WebDm
+var _dm_token := ""
 var _campaign_label: Label
 var _session_label: Label
 var _session_button: Button
@@ -92,6 +95,8 @@ func _ready() -> void:
 	if app == null:
 		app = App.new()
 	ctx.app = app
+	_dm_token = "%08x%08x" % [randi(), randi()]
+	web_dm = WebDm.new(self)
 	# a dialog closing (a native file dialog above all, on macOS) can leave the
 	# Table's window not the key window: it then ignores clicks and hover until
 	# the app menu is used (playtest 1). Every dialog hands focus back.
@@ -118,7 +123,8 @@ func _ready() -> void:
 		_update_session_bar()
 		_update_banner()
 		if host != null:
-			host.refresh_views())
+			host.refresh_views()
+			host.refresh_dm())
 	_update_menus()
 	_autosave.wait_time = AUTOSAVE_SECONDS
 	_autosave.timeout.connect(_autosave_now)
@@ -191,6 +197,8 @@ func _on_encounter_changed(what: String, scene_id: String) -> void:
 	if what in ["clock", "scenes", "active_scene", "players", "actors", "restore", "encounter"]:
 		_update_session_bar()
 		_update_banner()
+		if host != null:
+			host.refresh_dm()
 	_update_title()
 	_update_menus()
 
@@ -1372,6 +1380,12 @@ func _set_hosting(on: bool) -> void:
 			if ctx.campaign != null:
 				ctx.campaign.touch()
 				ctx.campaign_changed.emit()
+		# the web screens: the DM's own (a token in its address), players who join by name, the chat kept
+		host.dm_token = _dm_token
+		host.add_player = func(ev: Dictionary) -> String: return ctx.commands.run(ev, "%s joins" % str(ev.player.get("name", "")))
+		host.dm_handler = func(intent: Dictionary) -> String: return web_dm.op(intent)
+		host.dm_state_source = func() -> Dictionary: return web_dm.state()
+		host.chat_source = func() -> Array: return ctx.campaign.chat_log if ctx.campaign != null else []
 		host.log.connect(ctx.say)
 		host.announcer.answered.connect(func(ip: String) -> void:
 			ctx.say("Answered a player looking for tables at %s" % ip)
@@ -1404,6 +1418,22 @@ func _set_hosting(on: bool) -> void:
 	var net := _menu("Network")
 	if net != null:
 		net.set_item_checked(net.get_item_index(N_HOST), host != null)
+
+
+## The DM's web screen on this machine, with its token; "" when not hosting.
+func dm_url() -> String:
+	if host == null or host.web == null:
+		return ""
+	return "http://localhost:%d/dm#t=%s" % [host.web.port, _dm_token]
+
+
+## Open the DM's web screen in the browser.
+func open_dm_screen() -> void:
+	var url := dm_url()
+	if url == "":
+		ctx.say("Start hosting first: the DM's screen is served by the table")
+		return
+	OS.shell_open(url)
 
 
 ## "192.168.1.5:47777" — the address to type when discovery does not work.

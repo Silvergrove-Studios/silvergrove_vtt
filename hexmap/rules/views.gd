@@ -7,7 +7,8 @@ extends RefCounted
 ## Table's own panels.
 ##
 ## Audience strings on records and log entries: "all", "gm", "owner:<pid>",
-## "players:<pid>,<pid>" (the players named, and the GM).
+## "players:<pid>,<pid>" (the players named, and the GM), "private:<pid>,<pid>"
+## (the players named, not the GM: what players say among themselves).
 ## An actor's `audience.fields` maps field paths (within ext or derived,
 ## "ext/x/secret") to "gm" | "owner" | "all"; fields not listed are "all"
 ## for player characters and "gm" for everything else.
@@ -15,12 +16,17 @@ extends RefCounted
 const ROLE_PLAYER := "player"
 const ROLE_DISPLAY := "display"
 const ROLE_GM := "gm"
+## The DM's own web screen, on the Table's machine: the GM's audience.
+const ROLE_DM := "dm"
 ## A co-GM client: projected with ROLE_GM, joins with the table's code.
 const ROLE_COGM := "cogm"
 
 
 ## May `player_id` with `role` see something whose audience is `audience`?
 static func can_see(audience: String, player_id: String, role: String) -> bool:
+	# what players say among themselves, and not to the DM, is theirs
+	if audience.begins_with("private:"):
+		return role == ROLE_PLAYER and audience.substr(8).split(",").has(player_id)
 	if role == ROLE_GM:
 		return true
 	match audience:
@@ -29,6 +35,8 @@ static func can_see(audience: String, player_id: String, role: String) -> bool:
 	if audience.begins_with("owner:"):
 		return role == ROLE_PLAYER and audience.substr(6) == player_id
 	if audience.begins_with("players:"):
+		return role == ROLE_PLAYER and audience.substr(8).split(",").has(player_id)
+	if audience.begins_with("private:"):
 		return role == ROLE_PLAYER and audience.substr(8).split(",").has(player_id)
 	return false
 

@@ -21,6 +21,10 @@ extends RefCounted
 ##            | {kind: asset, map, file}       a map's own file (a backdrop image)
 ##            | {kind: comp, req, collection, id | query}   a compendium entry or page
 ##   ping     {}
+##   (web clients: hello {web: true}; join {role: player, name} adds or
+##   finds a player by name; join {role: dm, token} is the DM's own screen,
+##   on this machine; intent {kind: chat, text, to, private};
+##   intent {kind: dm, op, …}; need {kind: scene})
 ## host → client
 ##   welcome  {version, encounter}            the document without its rules blocks
 ##   joined   {player, role}                  the join was accepted
@@ -34,9 +38,11 @@ extends RefCounted
 ##   comp     {req, collection, entry | page}   what was asked for, under the viewer's audience
 ##   error    {why}                           then the host closes
 ##   pong     {}
+##   scene    {scene, players, clock, online, scenes?}   a web client's scene (WebScene), for it
+##   dm       {state}                          the DM's web screen: the campaign as it shows it
 
 const VERSION := 2
-const ROLES := ["player", "display", "cogm"]
+const ROLES := ["player", "display", "cogm", "dm"]
 ## Events clients apply themselves; everything else reaches them as a view.
 const SCENE_EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
 	"token.add", "token.remove", "token.set", "element.set", "fog.set", "fog.reveal", "fog.hide", "turns.set",
@@ -125,8 +131,11 @@ static func error(why: String) -> Dictionary:
 ## The announcement a Table multicasts: enough to list it and connect.
 ## `addresses` are all of the table's IPv4 addresses: the packet's source
 ## is whichever the sender's kernel chose, not always the one that works.
-static func announcement(p_name: String, port: int, host_name: String, addresses: PackedStringArray = []) -> Dictionary:
-	return {"hexmap": VERSION, "name": p_name, "port": port, "host": host_name, "addresses": Array(addresses)}
+static func announcement(p_name: String, port: int, host_name: String, addresses: PackedStringArray = [], web_port := 0) -> Dictionary:
+	var out := {"hexmap": VERSION, "name": p_name, "port": port, "host": host_name, "addresses": Array(addresses)}
+	if web_port > 0:
+		out.web = web_port
+	return out
 
 
 static func parse_announcement(text: String) -> Dictionary:

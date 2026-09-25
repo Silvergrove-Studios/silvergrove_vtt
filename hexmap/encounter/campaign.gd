@@ -58,6 +58,8 @@ static func create(p_name: String) -> Campaign:
 		"journal": [],
 		# the players' own notes (PlayerNotes): each private to its writer unless shared
 		"player_notes": [],
+		# the chat and the rolls of sessions past, each with its session and audience
+		"chat_log": [],
 		# the campaign's maps (places), by id; prepared encounters (recipes for
 		# a scene over a map); places on regional maps; where the party is
 		"maps": [],
@@ -99,6 +101,16 @@ var player_notes: Array:
 		if not (doc.get("player_notes") is Array):
 			doc.player_notes = []
 		return doc.player_notes
+## The chat and rolls of the sessions played, oldest first (what a
+## session's log said, kept when it ends); newer campaigns get it empty.
+var chat_log: Array:
+	get:
+		if not (doc.get("chat_log") is Array):
+			doc.chat_log = []
+		return doc.chat_log
+
+## How much chat a campaign keeps.
+const CHAT_KEPT := 5000
 var clock: Dictionary:
 	get: return doc.clock
 var encounters: Array:
@@ -341,6 +353,17 @@ func begin_session(e: Encounter, campaign_path := "", full := false, bump := tru
 func bank(e: Encounter, encounter_path := "") -> Dictionary:
 	var summary := _take_state(e)
 	var session := int(e.clock.get("session", int(clock.get("session", 0)) + 1))
+	# the chat and the rolls, kept in order with their audiences
+	var have := {}
+	for m in chat_log:
+		have[str(m.get("id", ""))] = true
+	for entry in e.log:
+		if str(entry.get("kind", "")) in ["chat", "roll"] and not have.has(str(entry.get("id", ""))):
+			var m: Dictionary = JsonDoc.deep(entry)
+			m.session = session
+			chat_log.append(m)
+	if chat_log.size() > CHAT_KEPT:
+		doc.chat_log = chat_log.slice(chat_log.size() - CHAT_KEPT)
 	for entry in e.log:
 		if not JOURNAL_KINDS.has(str(entry.get("kind", ""))):
 			continue
@@ -529,6 +552,7 @@ static func duplicate_to(source: Campaign, dest: String, p_name: String, fresh :
 		c.doc.sessions = []
 		c.doc.journal = []
 		c.doc.player_notes = []
+		c.doc.chat_log = []
 		c.doc.players = []
 		c.doc.resources = {}
 		c.doc.clock = {"session": 0, "day": 1, "minute": 0}

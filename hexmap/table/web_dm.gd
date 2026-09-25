@@ -1,0 +1,181 @@
+class_name WebDm
+extends RefCounted
+## The DM's web screen, as the Table sees it: what it is shown of the
+## campaign (`state`) and what it may do (`op`). The screen reads the
+## rules through its projection (a GM view, like a co-DM's) and the scene
+## as a snapshot (WebScene); this is the rest — the places, the people and
+## what the DM knows of them, the maps and the prepared fights, the
+## journal, the pictures, the DM's own arrangement of the contents, what
+## has been shown — and the operations behind its buttons, run through the
+## Table's own panes and commands so the Godot Table and the web screen
+## stay one table.
+
+var win: TableWindow
+
+
+func _init(p_win: TableWindow) -> void:
+	win = p_win
+
+
+# ------------------------------------------------------------------ state --
+
+## Everything the DM's web screen draws that is not in its view or scene.
+func state() -> Dictionary:
+	var ctx := win.ctx
+	var c := ctx.campaign
+	var e := ctx.encounter()
+	var n := int(e.clock.get("session", 0))
+	var open := c != null and n > 0 and not c.session_entry(n).is_empty() and not c.session_entry(n).has("ended")
+	var out := {"campaign": {"name": c.name if c != null else e.name, "id": c.id if c != null else "", "saved": not ctx.campaign_dirty()},
+		"session": {"n": n, "open": open, "day": int(e.clock.get("day", 1)), "minute": int(e.clock.get("minute", 0))},
+		"hosting": {"urls": Array(win.host.join_urls()) if win.host != null else [], "online": Array(win.host.connected_players()) if win.host != null else []},
+		"places": [], "maps": [], "encounters": [], "people": [], "journal": [], "pictures": [], "shown": [],
+		"contents": {}, "player_notes": [], "party": {}, "party_views": [], "cards": {}, "sections": []}
+	if c == null:
+		return out
+	for p in c.places:
+		var marker := {}
+		for sc in e.scenes:
+			var tk := Encounter.token_in(sc, str(p.get("id", "")))
+			if not tk.is_empty():
+				marker = {"scene": str(sc.id), "hidden": bool(tk.get("hidden", false))}
+		out.places.append({"id": str(p.id), "name": str(p.get("name", "")), "kind": str(p.get("kind", "place")), "target": str(p.get("target", "")),
+			"map": str(p.get("map", "")), "cell": str(p.get("cell", "")), "text": str(p.get("text", "")), "notes": str(p.get("notes", "")),
+			"image": str(p.get("image", "")), "marker": marker})
+	var shown_maps := {}
+	for sc in e.scenes:
+		shown_maps[str(sc.get("map", ""))] = str(sc.id)
+	for m in c.maps:
+		out.maps.append({"id": str(m.id), "name": str(m.get("name", "")), "role": str(m.get("role", "battle")), "scene": str(shown_maps.get(str(m.id), ""))})
+	for enc in c.encounters:
+		var live: Dictionary = enc.get("live", {}) if enc.get("live") is Dictionary else {}
+		out.encounters.append({"id": str(enc.id), "name": str(enc.get("name", "")), "map": str(enc.get("map", "")), "notes": str(enc.get("notes", "")),
+			"live": live.duplicate(true), "creatures": JsonDoc.deep(enc.get("creatures", []))})
+	for aid in e.actors:
+		var a: Dictionary = e.actors[aid]
+		var kind := str(a.get("kind", ""))
+		if kind in ["pc", "companion"] or bool(a.get("persistent", false)) or c.actors.has(aid):
+			out.people.append({"id": str(aid), "name": str(a.get("name", "")), "kind": kind, "owner": str(a.get("owner", "")),
+				"place": str(a.get("place", "")), "image": str(a.get("image", "")), "public": str(a.get("public", "")), "notes": str(a.get("notes", ""))})
+	out.journal = JsonDoc.deep(win.reference.journal())
+	out.pictures = CampaignPictures.all(ctx)
+	for h in Sharing.handouts(ctx):
+		out.shown.append({"id": str(h.get("id", "")), "ref": str(h.get("ref", "")), "title": str(h.get("title", "")),
+			"audience": str(h.get("audience", "gm")), "words": Sharing.audience_words(ctx, str(h.get("audience", "gm")))})
+	out.contents = JsonDoc.deep(win.reference.layout())
+	out.sections = win.reference.SECTIONS.map(func(s: Array) -> Dictionary: return {"key": s[0], "title": win.reference.section_title(str(s[0]))})
+	out.player_notes = PlayerNotes.for_viewer(c.player_notes, "", Views.ROLE_GM)
+	out.party = JsonDoc.deep(c.doc.get("party", {})) if c.doc.get("party") is Dictionary else {}
+	if ctx.host != null and ctx.kernel != null:
+		var projection := Views.project(ctx.kernel, ctx.host, "", Views.ROLE_GM)
+		var ids := ctx.host.plugins.keys()
+		ids.sort()
+		for pid in ids:
+			var p: PluginHost.Plugin = ctx.host.plugins[pid]
+			var kind := "party" if p.views.has("party") else ("gm" if p.views.has("gm") else "")
+			if kind != "":
+				out.party_views.append({"plugin": str(pid), "schema": p.views[kind], "data": Views.status_data(ctx.kernel, projection, str(pid), "", Views.ROLE_GM)})
+		out.cards = EntryCard.cards_of(ctx.host)
+	return out
+
+
+# -------------------------------------------------------------------- ops --
+
+## What the DM's web screen asked for: {op, …}. "" or why not.
+func op(intent: Dictionary) -> String:
+	var ctx := win.ctx
+	if ctx.campaign == null:
+		return "no campaign is open"
+	var maps := win.maps
+	match str(intent.get("op", "")):
+		"show_map":
+			return maps.show_map(str(intent.get("map", "")))
+		"activate_scene":
+			return ctx.commands.activate_scene(str(intent.get("scene", "")))
+		"go_place":
+			return maps.go_to_place(str(intent.get("place", "")))
+		"launch":
+			return maps.launch(str(intent.get("encounter", "")))
+		"end_fight":
+			for enc in ctx.campaign.encounters:
+				if enc.get("live") is Dictionary and not (enc.live as Dictionary).is_empty():
+					return maps.return_from(str(enc.id))
+			return "no fight is running"
+		"turns":
+			var sid := ctx.encounter().active_scene_id
+			match str(intent.get("do", "")):
+				"start": return ctx.commands.start_turns(sid)
+				"next": return ctx.commands.next_turn()
+				"previous": return ctx.commands.previous_turn()
+				"end": return ctx.commands.stop_turns()
+				"mode": return ctx.commands.set_turn_mode(str(intent.get("mode", "free")))
+			return "unknown turns step"
+		"token":
+			var changes := {}
+			for k in ["hidden", "pos"]:
+				if intent.has(k):
+					changes[k] = intent[k]
+			if changes.is_empty():
+				return "nothing to change"
+			var scene := str(intent.get("scene", ctx.encounter().active_scene_id))
+			return ctx.commands.run({"t": "token.set", "scene": scene, "id": str(intent.get("id", "")), "changes": changes}, "Token")
+		"party_move":
+			var cell: Array = intent.get("cell", [])
+			if cell.size() != 2:
+				return "where?"
+			return maps.set_party(Vector2i(int(cell[0]), int(cell[1])))
+		"share":
+			return Sharing.share(ctx, str(intent.get("ref", "")), str(intent.get("title", "")), str(intent.get("text", "")), str(intent.get("image", "")), str(intent.get("audience", "all")))
+		"unshare":
+			return Sharing.unshare(ctx, str(intent.get("ref", "")))
+		"stop_showing":
+			var said := win.reference.stop_showing(str(intent.get("id", "")))
+			return "" if said == "Taken back" else said
+		"place_set":
+			var p := win.reference.place(str(intent.get("place", "")))
+			if p.is_empty():
+				return "no such place"
+			for k in ["text", "notes", "image", "name"]:
+				if intent.has(k):
+					p[k] = str(intent[k])
+			ctx.campaign.touch()
+			ctx.campaign_changed.emit()
+			return ""
+		"actor_set":
+			var changes := {}
+			for k in ["notes", "public", "place", "image"]:
+				if intent.has(k):
+					changes[k] = str(intent[k])
+			return ctx.commands.run({"t": "actor.set", "id": str(intent.get("actor", "")), "changes": changes}, "Notes")
+		"folder":
+			return _folder(intent)
+		"session":
+			if str(intent.get("do", "")) == "start":
+				return ctx.start_session()
+			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all") if ctx.campaign_is_live() else "")
+			return str(r.get("error", ""))
+		"save":
+			return ctx.save_campaign()
+	return "unknown DM operation '%s'" % str(intent.get("op", ""))
+
+
+## The DM's own folders in the contents: new, rename, file, move, delete.
+func _folder(intent: Dictionary) -> String:
+	var ref := win.reference
+	match str(intent.get("do", "")):
+		"new":
+			ref.new_folder(str(intent.get("parent", "")), str(intent.get("title", "New folder")))
+		"rename":
+			ref.rename(str(intent.get("node", "")), str(intent.get("title", "")))
+		"file":
+			ref.file(str(intent.get("ref", "")), str(intent.get("folder", "")))
+		"move":
+			return ref.move_folder(str(intent.get("id", "")), str(intent.get("parent", "")))
+		"top":
+			ref.move_top(str(intent.get("node", "")), int(intent.get("index", 0)))
+		"delete":
+			ref.delete_folder(str(intent.get("id", "")))
+		_:
+			return "unknown folder step"
+	win.ctx.campaign_changed.emit()
+	return ""
