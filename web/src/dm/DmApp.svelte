@@ -14,6 +14,7 @@
   import Book from './Book.svelte';
   import Card from './Card.svelte';
   import Invite from './Invite.svelte';
+  import Modal from '../common/Modal.svelte';
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
   import { comp, connect, dmOp, game, intent, join, notice, playerColors, request, type Dict } from '../lib/game.svelte';
@@ -57,6 +58,10 @@
   const chatCount = $derived((((game.view.log as Dict[]) ?? []).filter((e) => e?.kind === 'chat' || e?.kind === 'roll')).length);
   const activeToken = $derived(currentTurnTokens((game.scene.turns ?? {}) as Dict, (game.scene.tokens as Dict[]) ?? [])[0] ?? '');
   const people = $derived((dm.people as Dict[]) ?? []);
+  // what the rules ask the DM (a monster's opportunity attack): answered here, first come
+  const prompts = $derived(((game.view.prompts as Dict[]) ?? []).map((p, i) => ({ p, i })).filter(({ p }) => p && String(p.to ?? 'gm') === 'gm'));
+  let putOff = $state<string[]>([]);
+  const asking = $derived(prompts.find(({ p }) => !putOff.includes(String(p.id))));
 
   // a fight that starts brings its order beside the map; one that ends puts the party back
   $effect(() => {
@@ -305,6 +310,11 @@
     </div>
   </main>
   {#if inviting}<Invite onclose={() => (inviting = false)} />{/if}
+  {#if asking}
+    <Modal title="The rules ask you" onclose={() => (putOff = [...putOff, String(asking.p.id)])}>
+      <View node={{ type: 'prompt', bind: `/prompts/${asking.i}` }} ctx={game.view} />
+    </Modal>
+  {/if}
 {/if}
 
 <style>

@@ -30,6 +30,7 @@ async function open(url, viewport, name) {
     if (m.type() === 'error') problems.push(`${name} console: ${m.text()}`);
   });
   await page.goto(url);
+  pages.push([name, page]);
   return page;
 }
 
@@ -39,6 +40,8 @@ async function shot(page, label) {
   await page.screenshot({ path: `${out}/${String(n).padStart(2, '0')}_${label}.png` });
 }
 
+const pages = [];
+
 async function step(label, f) {
   process.stdout.write(`${label} … `);
   try {
@@ -47,6 +50,8 @@ async function step(label, f) {
   } catch (e) {
     console.log('FAILED');
     problems.push(`${label}: ${String(e.message ?? e).split('\n')[0]}`);
+    // what each screen showed when it failed
+    for (const [name, p] of pages) await p.screenshot({ path: `${out}/failed_${label.replace(/[^a-z0-9]+/gi, '_').slice(0, 40)}_${name}.png` }).catch(() => {});
   }
 }
 
@@ -121,6 +126,84 @@ await step('Ana’s character sheet', async () => {
   await ana.getByRole('tab', { name: /Character/ }).click();
   await ana.getByText('Wren').first().waitFor({ timeout: 5000 });
   await shot(ana, 'ana_sheet');
+});
+
+let cara = null;
+await step('a new player makes a character with the wizard', async () => {
+  cara = await open(info.player, { width: 390, height: 844 }, 'cara');
+  await cara.locator('#name').fill('Cara');
+  await cara.getByRole('button', { name: 'Join' }).click();
+  await cara.getByText('Make your character').waitFor({ timeout: 10000 });
+  const row = (label) => cara.locator('.wizard .row').filter({ hasText: label });
+  await row('Name').locator('input').fill('Tamsin');
+  for (const [label, pick] of [['Species', 'Human'], ['Background', 'Soldier'], ['Class', 'Fighter']]) {
+    // (the choices come from the table: the select is drawn again when they arrive)
+    await cara.waitForFunction(
+      (lab) => {
+        const r = [...document.querySelectorAll('.wizard .row')].find((x) => x.textContent?.includes(lab));
+        const sel = r?.querySelector('select');
+        return !!sel && !sel.disabled && sel.options.length > 1;
+      },
+      label,
+      { timeout: 8000 },
+    );
+    await row(label).locator('select').selectOption({ label: pick });
+  }
+  await shot(cara, 'cara_wizard');
+  await cara.getByRole('button', { name: 'Next' }).click();
+  const scores = { Strength: 15, Dexterity: 13, Constitution: 14, Intelligence: 8, Wisdom: 12, Charisma: 10 };
+  for (const [label, v] of Object.entries(scores)) await row(label).locator('input').fill(String(v));
+  await cara.getByRole('button', { name: 'Next' }).click();
+  await row('Skills').locator('input').fill('Athletics, Perception');
+  await cara.getByRole('button', { name: 'Submit' }).click();
+  await cara.getByText('Human Fighter 1').first().waitFor({ timeout: 10000 });
+  await shot(cara, 'cara_sheet');
+});
+
+await step('the DM asks the party for a roll; the players answer', async () => {
+  await dm.getByRole('tab', { name: 'Party' }).click();
+  const before = await dm.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length);
+  await dm.getByRole('button', { name: 'Ask', exact: true }).click();
+  for (const p of [ana, ben, cara]) {
+    if (!p) continue;
+    await p.getByRole('dialog', { name: 'The DM asks' }).waitFor({ timeout: 8000 });
+  }
+  await shot(ana, 'ana_asked');
+  for (const p of [ana, ben, cara]) if (p) await p.getByRole('button', { name: 'Answer' }).click();
+  await dm.waitForFunction((n) => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length >= n + 3, before, { timeout: 10000 });
+  await dm.getByRole('tab', { name: /Chat/ }).click();
+  await shot(dm, 'dm_rolls');
+});
+
+await step('the DM moves the party along the road', async () => {
+  const where = await dm.evaluate(() => {
+    const t = (window.hexmap.game.scene.tokens ?? []).find((x) => (x.tags ?? []).includes('party'));
+    const c = document.querySelector('canvas');
+    return t && c?.screenOf ? { id: t.id, pos: t.pos, at: c.screenOf(t.id), px: c.pxPerHex() } : null;
+  });
+  if (!where) throw new Error('no party marker');
+  await dm.mouse.move(where.at.x, where.at.y);
+  await dm.mouse.down();
+  await dm.mouse.move(where.at.x - 10, where.at.y, { steps: 3 });
+  await dm.mouse.move(where.at.x - where.px * 2.2, where.at.y, { steps: 8 });
+  await dm.mouse.up();
+  await dm.waitForFunction(
+    ([id, x]) => {
+      const t = (window.hexmap.game.scene.tokens ?? []).find((k) => k.id === id);
+      return t && t.pos[0] < x - 1;
+    },
+    [where.id, where.pos[0]],
+    { timeout: 5000 },
+  );
+});
+
+await step('a place marked on the players’ map', async () => {
+  await dm.locator('.book').getByRole('button', { name: /^The ford/ }).first().click();
+  await dm.getByText('The players can see it on the map').click();
+  await ana.waitForFunction(() => (window.hexmap.game.scene.tokens ?? []).some((t) => t.name === 'The ford'), null, { timeout: 5000 });
+  await dm.getByRole('button', { name: 'Close the card' }).click();
+  await ana.getByRole('tab', { name: /Map/ }).click();
+  await shot(ana, 'ana_ford_marked');
 });
 
 await step('the chapel: the DM starts the fight', async () => {

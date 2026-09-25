@@ -36,10 +36,10 @@ macOS, Windows and Linux; playing works on those and on iOS and Android.
 | W2 | the map canvas: terrain, props, walls, lights, tokens, fog, backdrops; pan and zoom by mouse and touch | web | done — Canvas 2D; pack SVGs rasterised once per size; terrain cached; follows the player's own token |
 | W3 | the view renderer: rulesets' sheets, party views, cards, forms, wizards, pickers, prompts | web | done — every widget type, forms, wizards, pickers, prompts |
 | W4 | the player's screen: join, map, character, journal (their notes and what they were shown), chat, what the DM shows | web | done — join by name or a tap, map, character (or the maker), table, chat, journal, what the DM shows |
-| W5 | the DM's screen: party, map, the book (contents, cards that read well and pop out), showing players things, chat and rolls, sessions, the fight | web | done (first cut) — book with folders, cards that pop out, show the players, chat, the fight bar and order, stat blocks, targets picked on the map, a next-step note |
-| R1 | NPCs and creatures as stat blocks | srd5e | |
-| R2 | giving an item: a manual act for the DM | srd5e | |
-| R3 | the adventure: a regional map that looks like a region, a cover image | srd5e (package) | |
-| G1 | Godot: Home and the first screens restyled; adventure covers; the running-game window; *Join a game* opens the web client | host | |
-| T1 | tests: Godot suites for the host; web unit tests; end-to-end in a browser; CI | both | in progress — Godot suites, 30 web unit tests, `tools/web_host.gd` + `tests/e2e/journey.mjs` (Chrome, the whole journey), CI job for the web |
-| D1 | docs, the playtest-3 script, a build for testers | both | |
+| W5 | the DM's screen: party, map, the book (contents, cards that read well and pop out), showing players things, chat and rolls, sessions, the fight | web | done — book with folders, cards that pop out, show the players, chat, the fight bar and order, stat blocks, targets picked on the map, a next-step note, the rules' questions to the DM |
+| R1 | NPCs and creatures as stat blocks | srd5e | done — derived.block carries the lines; the sheet is a stat block for a creature or a person made from one; a damage-or-healing form for the DM |
+| R2 | giving an item: a manual act for the DM | srd5e | done — give_item (said in the log); Give an item / Give a magic item on a sheet for the DM; players add gear but no magic items |
+| R3 | the adventure: a regional map that looks like a region, a cover image | srd5e (package) | done — The Vale of Thornwick, painted, in place of the forest road; a cover; Start here written for the web screen (built to try out; the package's version waits on a decision) |
+| G1 | Godot: Home and the first screens restyled; adventure covers; the running-game window; *Join a game* opens the web client | host | done — Home and the picker restyled (Fraunces, cards, covers); the running panel; the DM's screen opens as the campaign opens; Join a game offers the browser; End the fight's loot wording |
+| T1 | tests: Godot suites for the host; web unit tests; end-to-end in a browser; CI | both | done — Godot suites (11,516 checks), 30 web unit tests, `tools/web_host.gd` + `web/tests/e2e/journey.mjs` (21 steps in Chrome: joining, showing, chat, character making, a roll asked, the party moved, a place revealed, the fight with an attack picked on the map), CI job for the web |
+| D1 | docs, the playtest-3 script, a build for testers | both | in progress — `docs/playtest-3.md`, README, CHANGELOG; the build for testers waits on a version decision |

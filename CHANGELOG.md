@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased — the web Table
+
+The response to the second playtest (`docs/playtest-2.md`,
+`docs/playtest-3.md`): Hexmap runs the game and serves the screens people
+look at as web pages. The DM's screen opens in a browser on the computer
+that runs the game; players open an address or scan a code on any phone
+or computer, with nothing to install.
+
+- **The DM's screen** (browser): the book on the left — the campaign's
+  contents in the DM's own folders, and the rules — with cards that read
+  well (a picture, boxed read-aloud text, the DM's notes, who is there)
+  and pop out into a window of their own; the map the players see in the
+  middle (drag to pan, wheel or pinch to zoom, tap a place for its card);
+  the party, *Ask for a roll*, and the chat and rolls on the right. *Show
+  the players* on a card. A fight: *Start the fight* on its place, a bar
+  over the map (round, whose turn, *Next turn*, *End the fight*), the
+  order, stat blocks, targets picked on the map with a banner that says
+  so. A next-step note addressed to the DM, and the rules' questions to
+  the DM. *Invite players*: a code to scan, the address, a player's
+  screen on the same computer.
+- **The players' screens** (browser, phone or computer): join by name or
+  a tap; the map through their characters' eyes (following their token,
+  or the party on the region); their character (or the character maker);
+  the table (whose turn, questions for them, rolls to help); chat —
+  everyone, the DM, some players, privately between players — and the
+  Journal. What the DM shows comes up over everything.
+- **The Hexmap window** while a game runs: that it runs, *Open the DM's
+  screen*, where players join, who is here; the full Table a press away.
+- **Chat** is kept in the campaign, with the rolls.
+- **Home and Run a game** restyled: names in a display face (Fraunces),
+  choices as cards, adventures with their covers. A campaign package may
+  carry a cover.
+- A launched fight brings the party's tokens onto its map.
+- A map's backdrop picture travels with it into campaigns and packages.
+- *End the fight* says loot is the DM's to give by hand.
+- The host: an HTTP side door beside the WebSocket serving the web client
+  (`webclient.zip`, built from `web/`), pack art and map files; joining by
+  name; the DM's own screen by a token, from this computer only; scene
+  snapshots filtered for each viewer.
+
 ## 2.2.0 — 2026-09-25
 
 The Table as a DM's screen, after the first playtest: most of a session

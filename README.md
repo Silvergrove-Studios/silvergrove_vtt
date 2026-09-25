@@ -110,7 +110,16 @@ Space+drag or middle-drag pans, the wheel zooms, Ctrl/Cmd+0 fits.
 
 ## Using the table
 
-Pick Table on the home screen and start a campaign (or
+**Running a game** (`docs/playtest-3.md`): *Run a game* on the home
+screen, start an adventure or continue your campaign, and your screen as
+the DM opens in the browser — the book, the map the players see, the
+party and the chat, the fight. The Hexmap window then says the game is
+running and where players join: they open that address (or scan the code
+*Invite players* shows) in any browser on the same network. Keep the
+window open; it runs the game. The web screens are built from `web/`
+(`web/README.md`).
+
+**The full Table**, for preparing: pick Table on the home screen and start a campaign (or
 `./run.sh table reach.campaign`). The campaign is the document: its
 **Party** and **NPCs** panes show every character's sheet as the rules
 plugin draws it, editable by the DM between sessions; **Notes** holds
@@ -141,7 +150,12 @@ is how to write one.
 
 ## Using the player
 
-On the Table, press **Host** (or Network → Host on this network); the
+Players usually need nothing but a browser: the address the DM's screen
+shows (*Invite players*), on a phone or a computer. The Hexmap app's
+*Join a game* finds tables too — tap one to play in the app, or play it
+in your browser.
+
+In the app: on the Table, press **Host** (or Network → Host on this network); the
 status bar shows the address. On the Player, tables on the wifi appear by
 themselves — tap one, or type that address — then pick who you are. You
 get the scene the table is showing, through your tokens: fog, their

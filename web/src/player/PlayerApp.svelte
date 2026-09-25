@@ -57,6 +57,8 @@
   const turn = $derived(turnSummary(game.scene, game.me));
   const mine = $derived(myActors());
   const myTokens = $derived(((game.scene.tokens as Dict[]) ?? []).filter((t) => String(t.owner ?? '') === game.me));
+  // what the map keeps in view: my token, or on the region the party's marker
+  const followed = $derived(String(myTokens[0]?.id ?? ((game.scene.tokens as Dict[]) ?? []).find((t) => Array.isArray(t.tags) && t.tags.includes('party'))?.id ?? ''));
   const prompts = $derived(((game.view.prompts as Dict[]) ?? []).filter((p) => p && typeof p === 'object'));
   const promptIndex = $derived(prompts.findIndex((p) => String(p.id) === asked));
   const chatCount = $derived((((game.view.log as Dict[]) ?? []).filter((e) => e?.kind === 'chat' || e?.kind === 'roll')).length);
@@ -210,8 +212,8 @@
           {selected}
           activeToken={''}
           picking={pick ? pickWords(pick) : ''}
-          centerOn={myTokens[0]?.id ?? ((game.scene.tokens as Dict[]) ?? []).find((t) => Array.isArray(t.tags) && t.tags.includes('party'))?.id ?? ''}
-          follow={myTokens[0]?.id ?? ''}
+          centerOn={followed}
+          follow={followed}
           canDrag={(t) => String(t.owner ?? '') === game.me}
           {onTokenClick}
           {onCellClick}

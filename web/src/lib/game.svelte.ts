@@ -254,13 +254,13 @@ export function handouts(): Dict[] {
   return [...byKey.values()];
 }
 
-/** The chat and rolls this viewer may read: the campaign's earlier sessions, then this one's log. */
+/** The chat, the rolls and what the rules said (an item given, an action taken) this viewer may read: the campaign's earlier sessions, then this one's log. */
 export function chatLog(): Dict[] {
   const seen = new Set<string>();
   const out: Dict[] = [];
   for (const e of [...((game.view.chat_history as Dict[]) ?? []), ...((game.view.log as Dict[]) ?? [])]) {
     if (!e || typeof e !== 'object') continue;
-    if (e.kind !== 'chat' && e.kind !== 'roll') continue;
+    if (e.kind !== 'chat' && e.kind !== 'roll' && !(e.kind === 'note' && e.text)) continue;
     const id = String(e.id ?? '');
     if (id && seen.has(id)) continue;
     if (id) seen.add(id);
