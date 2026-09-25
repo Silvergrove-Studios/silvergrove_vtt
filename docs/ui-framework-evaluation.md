@@ -46,6 +46,10 @@ Two things in the architecture matter a great deal here:
 
 ## What the product needs from a UI stack
 
+0. **The same platforms as today (a fixed requirement, not a trade-off):**
+   a game is **hosted** on macOS, Windows or Linux, and **played** on
+   macOS, Windows, Linux, iOS or Android. Every option must keep all of
+   these.
 1. **App-like DM screens, cheap to make friendly**: typography (a
    display face, readable body text), rich formatted text (stat blocks,
    descriptions), lists, trees and forms, pop-out windows, drag and drop,
@@ -57,7 +61,8 @@ Two things in the architecture matter a great deal here:
    lights, fog and vision; smooth pan and zoom, touch on phones.
 4. **The rules sandbox (Luau) stays sealed**, and runs only on the host.
 5. **Works offline on a LAN**, hosted by the DM's laptop.
-6. **Desktop builds** for macOS, Windows, Linux.
+6. **Desktop builds** for macOS, Windows, Linux (the host, and players on
+   laptops).
 7. **Text input on phones** that works: chat, notes, names.
 8. **Cost and risk of change**, and keeping what the 11,430 checks prove.
 9. Accessibility and other languages, eventually.
@@ -91,6 +96,9 @@ panes or in-window menu bar on the DM's screen, real windows for pop-outs
 (Godot supports separate OS windows on desktop). Serve the phone client
 as a Godot web export from the Table, beside the native apps.
 
+- **Platforms:** as today — the host on all three desktops; players on
+  the desktop apps, the Android app, the iOS app (which needs Apple's
+  distribution to reach testers), or the web export in a phone's browser.
 - **For:** no rewrite; one language; the tests stay; the map canvas stays.
 - **Against:** the slowest way to make friendly, text-heavy UI, and the
   lowest ceiling for it; the phone client's text entry on the web stays
@@ -109,6 +117,13 @@ players open an address (or scan a QR code the Table shows)
 and are in; the DM's screen opens in a browser window (a thin desktop
 shell such as Tauri can come later).
 
+- **Platforms:** the host is the Godot app on macOS, Windows and Linux,
+  as now, and the DM's screen is a browser window on the same machine.
+  Players play in a browser on any of the five — macOS, Windows, Linux,
+  iOS, Android — with nothing to install, so the iOS distribution problem
+  goes away. If a store app is wanted later, the same web client can be
+  wrapped (as an installable web app, or in a native shell) without a
+  rewrite.
 - **For:** the UI moves to the platform every successful VTT uses (Roll20,
   Foundry VTT, Owlbear Rodeo). Typography, rich text, forms, pop-outs
   (browser windows), drag and drop, accessibility and phone text entry
@@ -134,6 +149,8 @@ Everything in TypeScript: the kernel on Node (inside Electron or a small
 server), Luau compiled to WebAssembly for the plugins, the UIs as in B,
 the map editor on the web too.
 
+- **Platforms:** the host in Electron (or Node) on the three desktops;
+  players in a browser on all five.
 - **For:** one language and one runtime; the cleanest end state; could
   later run with no install at all.
 - **Against:** everything rewritten, about 38,000 lines, and 11,430 checks
@@ -146,6 +163,8 @@ the map editor on the web too.
 One Dart codebase for desktop and phone apps with good widgets and a
 custom canvas.
 
+- **Platforms:** Flutter builds for all five, host and player; iOS still
+  needs Apple's distribution.
 - **For:** better app widgets than Godot, and still native apps.
 - **Against:** a full rewrite, like C, and players still install an app
   (the iPhone problem stays); smaller ecosystem for this kind of product.
@@ -158,6 +177,8 @@ benefit B gets from the user's own browser.
 
 | need | A. Godot, redesigned | B. Godot host + web UIs | C. all web | D. Flutter |
 |---|---|---|---|---|
+| host on macOS / Windows / Linux | yes | yes | yes | yes |
+| play on macOS / Windows / Linux / iOS / Android | yes (iOS via Apple's store) | yes (a browser on each) | yes (a browser) | yes (iOS via Apple's store) |
 | friendly, text-heavy DM screens | possible, slow | strong | strong | good |
 | players in without installing | web export: heavy, weak text entry | yes (a link or QR code) | yes | no |
 | same-computer join | fixable | yes (another tab) | yes | fixable |
