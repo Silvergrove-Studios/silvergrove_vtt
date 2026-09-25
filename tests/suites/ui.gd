@@ -36,9 +36,14 @@ func test_theme_builder() -> void:
 		check(_contrast(ThemeBuilder.c(t, "accent_text"), ThemeBuilder.c(t, "accent")) >= 4.5, "%s accent button text" % name)
 		check(_contrast(ThemeBuilder.c(t, "text"), ThemeBuilder.c(t, "bg_deep")) >= 7.0, "%s text in inputs" % name)
 	check(ThemeBuilder.tokens("nope") == ThemeBuilder.tokens("slate"), "unknown theme falls back to slate")
-	for f in ["Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "JetBrainsMono-Regular.ttf"]:
+	for f in ["Inter-Regular.ttf", "Inter-Medium.ttf", "Inter-SemiBold.ttf", "JetBrainsMono-Regular.ttf", "Fraunces-Variable.woff2"]:
 		var font := ThemeBuilder.font(f)
-		check(font != null and font != ThemeDB.fallback_font, "font %s loads" % f)
+		check(font != null and font != ThemeDB.fallback_font, "font %s loads (in a build too: the file travels raw)" % f)
+		# read raw at run time, so kept as a file, not imported (an imported font leaves no file in an export)
+		var imp := "res://hexmap/ui/fonts/%s.import" % f
+		if FileAccess.file_exists(imp):
+			check(FileAccess.get_file_as_string(imp).contains("importer=\"keep\""), "%s is kept as a file, not imported" % f)
+	check(ThemeBuilder.display() is FontVariation, "titles have their display face")
 
 
 func test_ui_icons() -> void:
