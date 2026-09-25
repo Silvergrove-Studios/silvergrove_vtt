@@ -289,6 +289,20 @@ func plugin_settings(pid: String) -> Dictionary:
 	return {}
 
 
+## One of a plugin's settings for this campaign (the plugin listed if it
+## was not). The caller checks the value against the plugin's schema.
+func set_plugin_setting(pid: String, key: String, value: Variant) -> void:
+	for p in plugins:
+		if p is Dictionary and str(p.get("id", "")) == pid:
+			if not (p.get("settings") is Dictionary):
+				p["settings"] = {}
+			p.settings[key] = value
+			touch()
+			return
+	plugins.append({"id": pid, "settings": {key: value}})
+	touch()
+
+
 func touch() -> void:
 	dirty = true
 	doc.meta.modified = JsonDoc.now()

@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+The team's notes on making a character in the third playtest
+(`docs/playtest-3.md`, T1–T6), on the web screens and the plugin API.
+
+- **A wizard that follows the answers.** A step or a field can depend on
+  what was chosen before (`if`, and `{expr}` properties that see
+  `@values` and `@chosen`, the record an answer picked: the class, with
+  its skill choices and spell counts). *Next* waits until the step is
+  right and says what is missing; a field can be `required` and carry
+  `help`.
+- **Picking from a list with descriptions** (`choose`): skills, spells,
+  equipment packages: a counter that counts down, what is had already
+  ticked and locked, nothing past the limit, a "?" for an entry's card.
+- **Ability scores** (`scores`): a point buy with − / + that cannot go
+  wrong and the points left in view, a fixed array or rolled numbers
+  given once each, or typed; what each stat is for, the key ones marked,
+  a suggestion, a background's increases, the final scores and their
+  modifiers.
+- **Rules settings** on the DM's screen: each ruleset's settings as a
+  choice, a switch or a number (an enum's `enumNames` label its
+  choices); a change reloads the rules and every screen follows.
+- **Leaving and coming back** (a bug): a player whose connection drops —
+  a phone in another app — stays on their screen and rejoins by itself
+  (only a refused join goes back to the join screen); a reload returns
+  to the same player and tab, and a wizard keeps its step and answers.
+- **Rules text reads well**: the SRDs' tables are drawn as tables (web
+  and the Table), with their captions. Cards can have a `title` (with
+  room for an icon), labelled `facts` and `tags`.
+- A picker's query can be worked out from the data (a class's spells up
+  to the level it casts), with a line under each name (`sub`) and a "?"
+  (`detail`).
+- A `field` on a sheet shows its value when its tab opens and follows it
+  as the table changes it (it showed nothing after a tab switch).
+
 ## 2.3.1 — 2026-09-25
 
 After the DM's first notes in the third playtest (`docs/playtest-3.md`).

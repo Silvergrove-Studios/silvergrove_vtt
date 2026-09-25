@@ -45,6 +45,7 @@ const compWaiting = new Map<string, (reply: Dict) => void>();
 let compSeq = 0;
 const mapsAsked = new Set<string>();
 let joinMsg: Msg | null = null;
+let byName = '';
 
 export function notice(text: string, kind: 'info' | 'error' = 'info'): void {
   const id = ++noticeSeq;
@@ -85,16 +86,22 @@ export async function connect(role: 'player' | 'dm'): Promise<boolean> {
   conn.greeting = [hello()];
   conn.onstatus = (s) => {
     game.status = s;
-    if (s === 'closed') game.joined = false;
+    // a player who was in stays on their screen while the page reconnects
+    // and joins again by itself (a phone that went to another app, a wifi
+    // blip): only a join the table turns down goes back to the join screen
+    if (s === 'closed' && !joinMsg) game.joined = false;
+    if (s === 'open' && joinMsg) game.joining = true;
   };
   conn.onmessage = handle;
   conn.connect();
   return true;
 }
 
-/** Join: a player by name (a new name is a new player) or by id; the DM with the token. */
+/** Join: a player by name (a new name is a new player) or by id; the DM with the token.
+ * By id with a name too, a table that no longer has that id is joined by the name. */
 export function join(opts: { name?: string; player?: string; token?: string }): void {
   joinMsg = game.role === 'dm' ? { t: 'join', role: 'dm', token: opts.token ?? '' } : { t: 'join', role: 'player', player: opts.player ?? '', name: opts.name ?? '' };
+  byName = opts.player && opts.name ? opts.name : '';
   game.joining = true;
   game.error = '';
   if (conn) {
@@ -108,6 +115,7 @@ export function leave(): void {
   if (conn) conn.greeting = [hello()];
   game.joined = false;
   game.me = '';
+  keepSession('');
   try {
     localStorage.removeItem('hexmap.name');
   } catch {
@@ -132,7 +140,10 @@ function handle(m: Msg): void {
       game.joining = false;
       game.error = '';
       conn?.send({ t: 'need', kind: 'packs' });
-      if (game.role === 'player') remember(String(m.name ?? ''));
+      if (game.role === 'player') {
+        remember(String(m.name ?? ''));
+        keepSession(game.me);
+      }
       break;
     case 'view':
       game.view = (m.view as Dict) ?? {};
@@ -168,16 +179,30 @@ function handle(m: Msg): void {
       notice(String(m.why ?? 'Refused'), 'error');
       break;
     case 'error':
+      if ((game.joining || !game.joined) && byName) {
+        // this tab's player is not at this table (another campaign now): by the name instead
+        const name = byName;
+        keepSession('');
+        join({ name });
+        break;
+      }
       if (game.joining || !game.joined) {
         // a join the table turned down: back to the join screen, saying why
         game.joining = false;
+        game.joined = false;
         joinMsg = null;
+        keepSession('');
         if (conn) conn.greeting = [hello()];
       }
       game.error = String(m.why ?? 'The table refused');
       notice(game.error, 'error');
       break;
   }
+}
+
+/** For tests: the socket drops as a phone's does (in another app, a Wi-Fi blip); the page reconnects by itself. */
+export function dropConnection(): void {
+  conn?.ws?.close();
 }
 
 export function wantMap(id: string): void {
@@ -267,6 +292,25 @@ export function chatLog(): Dict[] {
     out.push(e);
   }
   return out;
+}
+
+/** The player this browser tab joined as, so a reload (a phone that
+ * dropped the page while in another app) comes straight back in. */
+function keepSession(player: string): void {
+  try {
+    if (player) sessionStorage.setItem('hexmap.player', player);
+    else sessionStorage.removeItem('hexmap.player');
+  } catch {
+    /* private mode */
+  }
+}
+
+export function sessionPlayer(): string {
+  try {
+    return sessionStorage.getItem('hexmap.player') ?? '';
+  } catch {
+    return '';
+  }
 }
 
 /** A player remembers the name they joined with, for next time. */

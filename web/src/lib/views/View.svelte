@@ -33,6 +33,13 @@
     else ui.intent(payload);
   }
 
+  /** A property that is a literal, or a node's value ({expr}, {bind}, {text}). */
+  function prop(node: Dict, key: string): string {
+    const v = node[key];
+    if (v && typeof v === 'object' && !Array.isArray(v)) return textOf(valueOf(v, ctx, 'text'));
+    return v === undefined || v === null ? '' : String(v);
+  }
+
   function items(v: any): any[] {
     if (Array.isArray(v)) return v;
     if (v && typeof v === 'object') return Object.values(v);
@@ -69,14 +76,30 @@
     ui.intent(putValue(fillIntent(f.submit ?? {}, ctx), $state.snapshot(formValues), '$values'));
   }
 
-  // a form's starting values, once
-  let seeded = false;
+  // a form's starting values, once for each form drawn here (a tab switch
+  // draws another in this place: it starts from its own)
+  let seededFor = '';
   $effect.pre(() => {
-    if (seeded || !n) return;
+    if (!n || (type !== 'prompt' && type !== 'form' && type !== 'field')) return;
+    const key = JSON.stringify(n);
+    if (key === seededFor) return;
+    seededFor = key;
     const src = type === 'prompt' ? prompted((valueOf(n, ctx) as Dict) ?? {}).values : type === 'form' ? n.values : null;
     if (src && typeof src === 'object') for (const [k, v] of Object.entries(clone(src))) formValues[k] = v;
     if (type === 'field') fieldValue = n.bind ? clone(valueOf({ bind: n.bind }, ctx)) : n.value;
-    seeded = true;
+  });
+
+  // a field follows its value as the table changes it (the DM gives gold, a
+  // level raises a score), not only as it was when drawn
+  let boundWas: string | undefined;
+  $effect(() => {
+    if (type !== 'field' || !n?.bind) return;
+    const v = valueOf({ bind: n.bind }, ctx);
+    const s = JSON.stringify(v ?? null);
+    if (s !== boundWas) {
+      boundWas = s;
+      fieldValue = clone(v);
+    }
   });
 
   function trackBoxes(rec: Dict): { mark: 'marked' | 'open' | 'crossed' }[] {
@@ -246,6 +269,41 @@
     <Picker node={n} {ctx} />
   {:else if type === 'wizard'}
     <Wizard node={n} {ctx} />
+  {:else if type === 'title'}
+    {@const s = textOf(valueOf(n, ctx, 'text'))}
+    {@const sub = prop(n, 'sub')}
+    {@const iconRef = prop(n, 'icon')}
+    {@const iconUrl = iconRef ? imageUrl(iconRef) : ''}
+    <div class="titlebar">
+      {#if iconUrl}<img class="icon" src={iconUrl} alt="" />{/if}
+      <div class="titles">
+        <h3 class="title">{s}</h3>
+        {#if sub}<p class="sub">{sub}</p>{/if}
+      </div>
+    </div>
+  {:else if type === 'facts'}
+    <dl class="facts">
+      {#each items(n.items) as it, i (i)}
+        {#if it && typeof it === 'object' && shown(it, ctx)}
+          {@const v = textOf(valueOf(it, ctx, 'text'))}
+          {#if v !== ''}
+            <div class="fact">
+              <dt>{it.label ?? ''}</dt>
+              <dd>{#if it.rich}<span class="prose">{@html markdown(v)}</span>{:else}{v}{/if}</dd>
+            </div>
+          {/if}
+        {/if}
+      {/each}
+    </dl>
+  {:else if type === 'tags'}
+    <div class="tags">
+      {#each items(n.items) as it, i (i)}
+        {#if it && typeof it === 'object' && shown(it, ctx)}
+          {@const v = textOf(valueOf(it, ctx, 'text'))}
+          {#if v !== ''}<span class="tag" class:accent={it.tone === 'accent'}>{v}</span>{/if}
+        {/if}
+      {/each}
+    </div>
   {:else if type === 'image'}
     {@const ref = textOf(valueOf(n, ctx, 'src'))}
     {@const url = ref ? imageUrl(ref) : ''}
@@ -308,6 +366,71 @@
     font-weight: 650;
   }
   /* a sheet's or a card's name: the display face */
+  .titlebar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .titlebar .icon {
+    width: 48px;
+    height: 48px;
+    flex: none;
+    object-fit: contain;
+    border-radius: 10px;
+    background: var(--panel-2);
+  }
+  .titlebar .title {
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    line-height: 1.15;
+    margin: 0;
+    color: var(--heading);
+  }
+  .titlebar .sub {
+    margin: 2px 0 0;
+    color: var(--accent);
+    font-size: 0.92rem;
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px 16px;
+    margin: 4px 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border-soft);
+  }
+  .fact dt {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .fact dd {
+    margin: 2px 0 0;
+  }
+  .fact dd .prose :global(p) {
+    margin: 0;
+  }
+  .tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 0.78rem;
+    font-weight: 650;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .tag.accent {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
   .header {
     margin: 0;
     font-family: var(--font-display);

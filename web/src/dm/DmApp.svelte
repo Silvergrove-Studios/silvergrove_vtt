@@ -15,6 +15,7 @@
   import Card from './Card.svelte';
   import Invite from './Invite.svelte';
   import Modal from '../common/Modal.svelte';
+  import RulesSettings from './RulesSettings.svelte';
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
   import { comp, connect, dmOp, game, intent, join, notice, playerColors, request, type Dict } from '../lib/game.svelte';
@@ -30,6 +31,7 @@
   let history = $state<string[]>([]);
   let side = $state<'party' | 'chat' | 'fight'>('party');
   let inviting = $state(false);
+  let rulesOpen = $state(false);
   let bookOpen = $state(false);
   let selected = $state('');
   let pick = $state<Dict | null>(null);
@@ -221,6 +223,9 @@
         {:else}
           <span class="dim saved">Saved</span>
         {/if}
+        {#if ((dm.rules as Dict[]) ?? []).length}
+          <button type="button" class="quiet" title="How the rules are played at this table: how characters are made, optional rules" onclick={() => (rulesOpen = true)}>Rules settings</button>
+        {/if}
       </div>
       <div class="players">
         {#each game.players as p (p.id)}
@@ -324,6 +329,7 @@
     </div>
   </main>
   {#if inviting}<Invite onclose={() => (inviting = false)} />{/if}
+  {#if rulesOpen}<RulesSettings onclose={() => (rulesOpen = false)} />{/if}
   {#if asking}
     <Modal title="The rules ask you" onclose={() => (putOff = [...putOff, String(asking.p.id)])}>
       <View node={{ type: 'prompt', bind: `/prompts/${asking.i}` }} ctx={game.view} />

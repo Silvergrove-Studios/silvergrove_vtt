@@ -52,7 +52,12 @@ is `tests/plugins/sample.ordered`: read it first.
   `override` (last wins).
 - **settings**: a JSON schema and defaults; a campaign's `plugins`
   list overrides the defaults per plugin. Read them with
-  `hm.settings.get(key, default)`.
+  `hm.settings.get(key, default)`. The DM changes them in *Rules
+  settings* on the DM's screen (strings, booleans and numbers: a
+  property's `title` says what it is, an `enum`'s `enumNames` how each
+  choice reads); a change is kept in the campaign and the rules are
+  loaded again with it, so a view built from a setting shows the new
+  one.
 - **depends** and **overrides** are how rulesets layer: a house-rules
   plugin depends on its base, runs after it (its hooks see what the
   base's did to the payload), and may declare that for some hooks the
@@ -306,7 +311,11 @@ Values: `text` (literal), `bind` (a JSON pointer, `"/derived/evade"`),
 `*italic*`, `# headings`, `- ` bullets, paragraphs.
 
 Widgets: `column`, `row`, `section {title}`, `tabs {tabs = {{title,
-children}}}`, `text {style = header|dim|mono}`, `number` (a typed number
+children}}}`, `text {style = header|dim|mono}`, `title {sub, icon}` (a
+card's heading: the name, a line under it, an icon — a pack ref — when
+there is one), `facts {items = {{label, text | bind | expr, if, rich}}}`
+(labelled facts, an empty one left out), `tags {items = {{text | expr,
+if, tone = "accent"}}}`, `number` (a typed number
 with its breakdown as tooltip), `pool {spend, gain}` (intents for the
 − / + buttons), `track {on_mark, on_clear}`, `effects`, `list {bind,
 item, empty}` (the item schema sees `@item` and `@index`), `cards
@@ -316,21 +325,65 @@ intent, cost, enabled = "<expr>", accent}`, `action_bar {actions}`,
 with its own `fields` is a repeater: an array of records, one sub-form
 each), `log {limit}`, `spacer`, and:
 
-- `picker {label, bind | collection, query, fields, per_page, search,
-  multi, on_pick}` — a searchable list to choose from: a bound list of
-  strings or `{id, name}` records, or a compendium collection the
-  client fetches from the Table a page at a time (under its audience).
-  A choice sends `on_pick` with `@pick` (the record) and `@pick_id`; with
-  `multi`, a Done button sends `@picks` (the ids). This is how a Player
-  picks a feat, prepares spells, or an encounter builder lists monsters.
-- `wizard {label, steps = {{title, text, fields}}, submit}` — one step
-  at a time with Back and Next; the last step's Submit sends `submit`
-  with `"$values"` replaced by every step's values merged.
+- `picker {label, bind | collection, query, fields, sort, per_page,
+  search, multi, sub, detail, on_pick}` — a searchable list to choose
+  from: a bound list of strings or `{id, name}` records, or a compendium
+  collection the client fetches from the Table a page at a time (under
+  its audience). A query's `{expr = "…"}` values are worked out from the
+  data (`level = {max = {expr = "@derived.spell.classes.druid.max_level"}}`:
+  a class's spells up to the level it casts). `sub` is a line under each
+  name (an Expr over `@item`), `detail` a collection whose card a "?"
+  opens. A choice sends `on_pick` with `@pick` (the record) and
+  `@pick_id`; with `multi`, a Done button sends `@picks` (the ids). This
+  is how a Player picks a feat, prepares spells, or an encounter builder
+  lists monsters.
+- `wizard {label, steps = {{title, text, fields, if}}, submit,
+  submit_label}` — one step at a time with Back and Next; the last
+  step's Submit sends `submit` with `"$values"` replaced by the values
+  of every step and field that applies. A step's or a field's `if`, and
+  any field property written `{expr = "…", default = …}`, see the view's
+  data and `@values` (the answers so far) and `@chosen` (for an answer
+  picked from a compendium `collection` or a list of records, that
+  whole record: the class chosen, with what the class entry carries).
+  Next waits until the step's fields are right — a `required` field
+  filled (`required_text` says so), a `scores` or `choose` field
+  complete — and says what is missing; a field's `help` is a line under
+  its label. The step and the answers are kept in the browser until the
+  wizard is done (a phone that drops the page comes back to them).
 - `image {bind | src, height}` — pack art by ref (`pack:asset`).
 - `field {label, bind, kind, on_change, options, min, max}` — one value
   edited in place (`kind` is a form field type); a change sends
   `on_change` with `"$value"` replaced. Sheets edited on the phone are
   fields and forms whose intents are actions that commit `actor.set`.
+
+Besides `string`, `text`, `int`, `float`, `bool`, `enum`, `color`, `vec2`
+and `list`, a form or wizard field may be:
+
+- `choose {options | collection + query, count | min + max, single,
+  allowed, fixed, fixed_label, what, fields, sub, detail, search}` —
+  some of a list of described options: records `{id, name, text, tag,
+  sub}`, or a collection's entries (their `fields` fetched with the
+  name and text, `sub` an Expr over `@item` for the line under each).
+  `allowed` limits what may be chosen, `fixed` is had already (shown
+  ticked and locked, not counted), `count` how many to choose (the
+  counter counts down; nothing past it can be picked), `single` just
+  one. Its value: a list of ids, or one id with `single`. `detail`
+  names a collection whose card a "?" opens. Skills, spells, an
+  equipment package.
+- `scores {stats, method, point_buy, array, rolled, manual, primary,
+  suggest, who, bonus}` — numbers for named stats (`{id, name, text,
+  uses}`), made by `method`: `point_buy` (`{budget, min, max, cost}`:
+  − / + that never go out of range or past the budget), `array` (the
+  numbers, each given to one stat), `rolled` (`{values, roll}`: the
+  numbers the table rolled, and the intent that rolls them), or
+  `manual` (`{min, max}`, typed). `primary` marks what the choice
+  before wants (a class's key abilities) and `suggest` fills it in
+  (`who` names it: "Suggested for a Druid"). `bonus {among, patterns,
+  cap, source}`: increases on some of the stats (+2 and +1, or +1 to
+  each of three). Its value: `{method, base, bonus, final}`. The client
+  keeps it within the method; the plugin checks it again.
+
+A client that does not know a field type shows a line of text for it.
 
 A form or wizard field may take its choices from the compendium instead
 of a fixed list: `{key = "class", label = "Class", type = "enum",

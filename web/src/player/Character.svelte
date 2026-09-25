@@ -25,6 +25,16 @@
 
   const makers = $derived(status.flatMap((s) => wizards(s.schema).map((w) => ({ w, data: s.data as Dict }))));
 
+  // a character made: the maker's kept answers are done with
+  $effect(() => {
+    if (mine.length === 0 || !game.me) return;
+    try {
+      for (const k of Object.keys(localStorage)) if (k.startsWith(`hexmap.wizard/${game.me}/`)) localStorage.removeItem(k);
+    } catch {
+      /* private mode */
+    }
+  });
+
   const DEFAULT_SHEET: Dict = {
     type: 'column',
     children: [

@@ -198,12 +198,21 @@ await step('a new player makes a character with the wizard', async () => {
     await row(label).locator('select').selectOption({ label: pick });
   }
   await shot(cara, 'cara_wizard');
-  await cara.getByRole('button', { name: 'Next' }).click();
-  const scores = { Strength: 15, Dexterity: 13, Constitution: 14, Intelligence: 8, Wisdom: 12, Charisma: 10 };
-  for (const [label, v] of Object.entries(scores)) await row(label).locator('input').fill(String(v));
-  await cara.getByRole('button', { name: 'Next' }).click();
-  await row('Skills').locator('input').fill('Athletics, Perception');
-  await cara.getByRole('button', { name: 'Submit' }).click();
+  const next = cara.locator('.wizard .nav button.accent');
+  await next.click();
+  // ability scores: a point buy, started where a fighter wants them, the soldier's +2/+1 placed
+  await cara.getByText('Suggested for a Fighter').waitFor({ timeout: 8000 });
+  await cara.getByText('All spent ✓').waitFor({ timeout: 5000 });
+  await shot(cara, 'cara_scores');
+  await next.click();
+  // skills: the soldier's two already, two of the fighter's to choose
+  await cara.getByText('From your background').first().waitFor({ timeout: 5000 });
+  for (const s of ['Perception', 'Survival']) await cara.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
+  await next.click();
+  // equipment: the fighter's package A, the soldier's package A
+  for (const r of await cara.getByRole('radio', { name: /^Package A/ }).all()) await r.click();
+  await shot(cara, 'cara_equipment');
+  await next.click();
   await cara.getByText('Human Fighter 1').first().waitFor({ timeout: 10000 });
   await shot(cara, 'cara_sheet');
 });

@@ -139,24 +139,80 @@ static func fill_intent(template: Variant, ctx: Dictionary) -> Variant:
 
 
 ## The little markdown rules text uses, as BBCode: **bold**, *italic*,
-## `# headings` (bold), `- ` bullets, paragraphs kept. Anything that
-## looks like BBCode already is escaped first.
+## `# headings` (bold), `- ` bullets, paragraphs kept, and the SRDs'
+## tables (`|a|b|` rows under a `|---|` line; the "Table: …" line before
+## one in bold). Anything that looks like BBCode already is escaped first.
 static func markdown_to_bbcode(md: String) -> String:
 	var s := md.replace("[", "[lb]")
 	var out := PackedStringArray()
-	for line in s.split("\n"):
-		var t := line
-		if t.begins_with("#"):
+	var lines := s.split("\n")
+	var i := 0
+	while i < lines.size():
+		var t := lines[i]
+		if _md_row(t) and i + 1 < lines.size() and _md_rule(lines[i + 1]):
+			var rows: Array = []
+			while i < lines.size() and _md_row(lines[i]):
+				rows.append(lines[i])
+				i += 1
+			out.append(_md_table(rows))
+			continue
+		if t.strip_edges().begins_with("Table: "):
+			t = "[b]" + t.strip_edges().substr(7) + "[/b]"
+		elif t.begins_with("#"):
 			t = "[b]" + t.lstrip("#").strip_edges() + "[/b]"
 		elif t.begins_with("- ") or t.begins_with("* "):
 			t = "  • " + t.substr(2)
 		out.append(t)
+		i += 1
 	s = "\n".join(out)
 	var bold := RegEx.create_from_string("\\*\\*(.+?)\\*\\*")
 	s = bold.sub(s, "[b]$1[/b]", true)
 	var italic := RegEx.create_from_string("(^|[^\\*])\\*([^\\*\\n]+?)\\*")
 	s = italic.sub(s, "$1[i]$2[/i]", true)
 	return s
+
+
+static func _md_row(line: String) -> bool:
+	return line.strip_edges().begins_with("|")
+
+
+static func _md_rule(line: String) -> bool:
+	var t := line.strip_edges().replace("|", "").replace(":", "").replace("-", "").strip_edges()
+	return line.contains("---") and t == ""
+
+
+static func _md_cells(line: String) -> PackedStringArray:
+	var t := line.strip_edges()
+	if t.begins_with("|"):
+		t = t.substr(1)
+	if t.ends_with("|"):
+		t = t.substr(0, t.length() - 1)
+	var out := PackedStringArray()
+	for c in t.split("|"):
+		out.append(c.strip_edges())
+	return out
+
+
+## A table as BBCode: the header in bold (none when its cells are empty),
+## rows with nothing in them left out, short rows padded.
+static func _md_table(rows: Array) -> String:
+	var head := _md_cells(str(rows[0]))
+	var body: Array = []
+	for r in rows.slice(2 if rows.size() > 1 and _md_rule(str(rows[1])) else 1):
+		var c := _md_cells(str(r))
+		if not "".join(c).is_empty():
+			body.append(c)
+	var width := head.size()
+	for r in body:
+		width = maxi(width, (r as PackedStringArray).size())
+	var out := "[table=%d]" % width
+	if not "".join(head).is_empty():
+		for k in width:
+			out += "[cell][b]%s[/b]   [/cell]" % (head[k] if k < head.size() else "")
+	for r in body:
+		for k in width:
+			out += "[cell]%s   [/cell]" % ((r as PackedStringArray)[k] if k < (r as PackedStringArray).size() else "")
+	return out + "[/table]"
 
 
 static func _text(v: Variant) -> String:
@@ -280,6 +336,9 @@ func _build(node: Variant, ctx: Dictionary, depth: int) -> Control:
 		"picker": return _picker(n, ctx)
 		"wizard": return _wizard(n, ctx)
 		"image": return _image(n, ctx)
+		"title": return _title(n, ctx)
+		"facts": return _facts(n, ctx)
+		"tags": return _tags(n, ctx)
 		"field": return _field(n, ctx)
 	return _fallback(n)
 
@@ -607,7 +666,8 @@ func _picker(n: Dictionary, ctx: Dictionary) -> Control:
 			if not comp_source.is_valid():
 				status.text = "No compendium here"
 				return
-			var query: Dictionary = (n.get("query", {}) as Dictionary).duplicate(true) if n.get("query") is Dictionary else {}
+			# (its `{expr}` values worked out from the data: a class's spells up to the level it casts)
+			var query: Dictionary = resolve_props((n.get("query", {}) as Dictionary).duplicate(true), ctx) if n.get("query") is Dictionary else {}
 			if q != "":
 				query.text = q
 			query.per_page = int(n.get("per_page", 25))
@@ -704,23 +764,40 @@ func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
 	nav.add_child(next)
 	box.add_child(nav)
 	var form_ref := [null]
+	# a step's or a field's `if`, and `{expr}` properties, see the answers
+	# so far (@values) and the records they picked (@chosen)
+	var chosen := {}
+	var wctx := func() -> Dictionary:
+		var d := ctx.duplicate()
+		d["values"] = values
+		d["chosen"] = chosen
+		return d
+	var visible := func() -> Array:
+		var c: Dictionary = wctx.call()
+		return steps.filter(func(st: Variant) -> bool: return st is Dictionary and (not st.has("if") or Expr.truthy(Expr.evaluate(str(st["if"]), c))))
+	var fields_of := func(step: Dictionary) -> Array:
+		var c: Dictionary = wctx.call()
+		var out: Array = []
+		for f in step.get("fields", []):
+			if f is Dictionary and f.has("key") and (not f.has("if") or Expr.truthy(Expr.evaluate(str(f["if"]), c))):
+				out.append(_with_options(resolve_props(JsonDoc.deep(f), c), c))
+		return out
 	var show := func() -> void:
 		for c in holder.get_children():
 			holder.remove_child(c)
 			c.queue_free()
-		if steps.is_empty():
+		var vis: Array = visible.call()
+		if vis.is_empty():
 			title.text = str(n.get("label", ""))
 			next.disabled = true
 			back.disabled = true
 			return
+		at[0] = clampi(at[0], 0, vis.size() - 1)
 		var i: int = at[0]
-		var step: Dictionary = steps[i] if steps[i] is Dictionary else {}
-		title.text = "%s%s (%d/%d)" % [(str(n.label) + ": ") if n.has("label") else "", str(step.get("title", "")), i + 1, steps.size()]
+		var step: Dictionary = vis[i]
+		title.text = "%s%s (%d/%d)" % [(str(n.label) + ": ") if n.has("label") else "", str(step.get("title", "")), i + 1, vis.size()]
 		var pf := PropertyForm.new()
-		var fields: Array = []
-		for f in step.get("fields", []):
-			if f is Dictionary and f.has("key"):
-				fields.append(_with_options(JsonDoc.deep(f), ctx))
+		var fields: Array = fields_of.call(step)
 		pf.build(fields, values)
 		holder.add_child(pf)
 		form_ref[0] = pf
@@ -732,11 +809,31 @@ func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
 			holder.add_child(t)
 			holder.move_child(t, 0)
 		back.disabled = i == 0
-		next.text = str(n.get("submit_label", "Submit")) if i == steps.size() - 1 else str(n.get("next_label", "Next"))
+		next.text = str(n.get("submit_label", "Submit")) if i == vis.size() - 1 else str(n.get("next_label", "Next"))
+	var keep_form := func() -> void:
+		if form_ref[0] != null and is_instance_valid(form_ref[0]):
+			var got: Dictionary = (form_ref[0] as PropertyForm).get_values()
+			for k in got:
+				values[k] = got[k]
 	var keep := func() -> void:
-		if form_ref[0] != null:
-			for k in (form_ref[0] as PropertyForm).get_values():
-				values[k] = (form_ref[0] as PropertyForm).get_values()[k]
+		keep_form.call()
+		# the record behind an answer picked from the compendium: the step
+		# is drawn again when it comes (a phone asks the Table for it), with
+		# what was typed kept
+		if comp_source.is_valid():
+			for st in steps:
+				for f in (st.get("fields", []) if st is Dictionary else []):
+					if f is Dictionary and str(f.get("collection", "")) != "" and str(f.get("type", "")) != "choose" and values.get(f.get("key")) is String and str(values[f.key]) != "":
+						var key := str(f.key)
+						var want := str(values[key])
+						if chosen.get(key) is Dictionary and str(chosen[key].get("id", "")) == want:
+							continue
+						comp_source.call(str(f.collection), {"id": want}, func(reply: Dictionary) -> void:
+							if reply.get("entry") is Dictionary and str(values.get(key, "")) == want and not (chosen.get(key) is Dictionary and str(chosen[key].get("id", "")) == want):
+								chosen[key] = reply.entry
+								if is_instance_valid(box):
+									keep_form.call()
+									show.call())
 	back.pressed.connect(func() -> void:
 		keep.call()
 		at[0] = maxi(0, at[0] - 1)
@@ -744,13 +841,106 @@ func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
 	var tpl: Variant = n.get("submit", {})
 	next.pressed.connect(func() -> void:
 		keep.call()
-		if at[0] < steps.size() - 1:
+		var vis: Array = visible.call()
+		if at[0] < vis.size() - 1:
 			at[0] += 1
 			show.call()
 			return
-		intent.emit(_put_value(fill_intent(tpl, ctx), values.duplicate(true), "$values")))
+		# the answers of the steps and fields that apply
+		var answers := {}
+		for st in vis:
+			for f in fields_of.call(st):
+				answers[f.key] = JsonDoc.deep(values.get(f.key))
+		intent.emit(_put_value(fill_intent(tpl, ctx), answers, "$values")))
 	show.call()
 	return box
+
+
+# ------------------------------------------------------ title, facts, tags --
+
+## A property that is a literal, or a node's value ({expr}, {bind}, {text}).
+static func _prop(n: Dictionary, key: String, ctx: Dictionary) -> String:
+	var v: Variant = n.get(key)
+	if v is Dictionary:
+		return _text(value_of(v, ctx, "text"))
+	return "" if v == null else str(v)
+
+
+## A card's heading: the name, a line under it, and an icon when there is one.
+func _title(n: Dictionary, ctx: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 10)
+	var icon := _prop(n, "icon", ctx)
+	if icon != "":
+		row.add_child(_image({"src": icon, "height": 48}, ctx))
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var t := Label.new()
+	t.theme_type_variation = "HeaderLabel"
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	t.text = _text(value_of(n, ctx, "text"))
+	col.add_child(t)
+	var sub := _prop(n, "sub", ctx)
+	if sub != "":
+		var s := Label.new()
+		s.theme_type_variation = "DimLabel"
+		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		s.text = sub
+		col.add_child(s)
+	row.add_child(col)
+	return row
+
+
+## Labelled facts in two columns (a spell's casting time, range, …); an
+## item whose value is empty is left out.
+func _facts(n: Dictionary, ctx: Dictionary) -> Control:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	for it in n.get("items", []):
+		if not (it is Dictionary) or (it.has("if") and not Expr.truthy(Expr.evaluate(str(it["if"]), ctx))):
+			continue
+		var v := _text(value_of(it, ctx, "text"))
+		if v == "":
+			continue
+		var l := Label.new()
+		l.theme_type_variation = "DimLabel"
+		l.text = str(it.get("label", ""))
+		grid.add_child(l)
+		if bool(it.get("rich", false)):
+			var rt := RichTextLabel.new()
+			rt.bbcode_enabled = true
+			rt.fit_content = true
+			rt.scroll_active = false
+			rt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			rt.text = markdown_to_bbcode(v)
+			grid.add_child(rt)
+		else:
+			var val := Label.new()
+			val.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			val.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			val.text = v
+			grid.add_child(val)
+	return grid
+
+
+## Short tags in a row (Concentration, Ritual); an empty one is left out.
+func _tags(n: Dictionary, ctx: Dictionary) -> Control:
+	var flow := HFlowContainer.new()
+	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for it in n.get("items", []):
+		if not (it is Dictionary) or (it.has("if") and not Expr.truthy(Expr.evaluate(str(it["if"]), ctx))):
+			continue
+		var v := _text(value_of(it, ctx, "text"))
+		if v == "":
+			continue
+		var l := Label.new()
+		l.theme_type_variation = "DimLabel"
+		l.text = "[%s]" % v
+		flow.add_child(l)
+	return flow
 
 
 # --------------------------------------------------------------- image --
@@ -782,6 +972,24 @@ func _image(n: Dictionary, ctx: Dictionary) -> Control:
 ## imported. The answer may come from the Table (a phone asks), so the
 ## form is built at once and filled when each reply lands.
 ## A field whose choices come `from` the data: made an enum over them.
+## Every `{expr = "…"}` among a field's properties, worked out against the
+## context (a wizard's: the view's data, @values, @chosen). An `if` is left
+## as it is, to be asked where it applies.
+static func resolve_props(v: Variant, ctx: Dictionary) -> Variant:
+	if v is Array:
+		return (v as Array).map(func(x: Variant) -> Variant: return resolve_props(x, ctx))
+	if v is Dictionary:
+		var d: Dictionary = v
+		if d.get("expr") is String and d.keys().all(func(k: Variant) -> bool: return str(k) == "expr" or str(k) == "default"):
+			var r: Variant = Expr.evaluate(str(d.expr), ctx)
+			return d.get("default") if r == null else r
+		var out := {}
+		for k in d:
+			out[k] = d[k] if str(k) == "if" else resolve_props(d[k], ctx)
+		return out
+	return v
+
+
 static func _with_options(field: Dictionary, ctx: Dictionary) -> Dictionary:
 	if field.get("from") is Dictionary:
 		field.options = options_from(field.from, ctx)
@@ -820,9 +1028,10 @@ func _fill_choices(fields: Array, pf: PropertyForm) -> void:
 		if not (f is Dictionary) or str((f as Dictionary).get("collection", "")) == "":
 			continue
 		var field: Dictionary = f
+		var choose := str(field.get("type", "")) == "choose"
 		var q: Dictionary = field.get("query", {}) if field.get("query") is Dictionary else {}
 		var req: Dictionary = {"text": str(q.get("text", "")), "per_page": int(field.get("limit", 200)), "page": 1,
-			"fields": ["name"], "sort": str(q.get("sort", "name"))}
+			"fields": ["name", "text"] if choose else ["name"], "sort": str(q.get("sort", "name"))}
 		if q.get("filter") is Dictionary:
 			req.filter = q.filter
 		comp_source.call(str(field.collection), {"query": req}, func(reply: Dictionary) -> void:
@@ -830,11 +1039,12 @@ func _fill_choices(fields: Array, pf: PropertyForm) -> void:
 				return
 			var options := []
 			for e in reply.page.get("entries", []):
-				options.append({"id": str(e.get("id", "")), "name": str(e.get("name", e.get("id", "")))})
-			if bool(field.get("optional", false)):
+				options.append({"id": str(e.get("id", "")), "name": str(e.get("name", e.get("id", ""))), "text": str(e.get("text", ""))})
+			if bool(field.get("optional", false)) and not choose:
 				options.push_front({"id": "", "name": str(field.get("none_label", "—"))})
 			field.options = options
-			field.type = "enum"
+			if not choose:
+				field.type = "enum"
 			var keep := pf.get_values()
 			pf.build(pf._schema, keep))
 

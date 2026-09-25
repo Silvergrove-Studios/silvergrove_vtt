@@ -30,7 +30,7 @@ func state() -> Dictionary:
 		"session": {"n": n, "open": open, "day": int(e.clock.get("day", 1)), "minute": int(e.clock.get("minute", 0))},
 		"hosting": {"urls": Array(win.host.join_urls()) if win.host != null else [], "online": Array(win.host.connected_players()) if win.host != null else []},
 		"places": [], "maps": [], "encounters": [], "people": [], "journal": [], "pictures": [], "shown": [],
-		"contents": {}, "player_notes": [], "party": {}, "party_views": [], "cards": {}, "sections": []}
+		"contents": {}, "player_notes": [], "party": {}, "party_views": [], "cards": {}, "sections": [], "rules": []}
 	if c == null:
 		return out
 	for p in c.places:
@@ -76,7 +76,88 @@ func state() -> Dictionary:
 			if kind != "":
 				out.party_views.append({"plugin": str(pid), "schema": p.views[kind], "data": Views.status_data(ctx.kernel, projection, str(pid), "", Views.ROLE_GM)})
 		out.cards = EntryCard.cards_of(ctx.host)
+		out.rules = rules_settings()
 	return out
+
+
+## Each loaded ruleset's settings, as its manifest declares them, with the
+## campaign's values over the defaults: the DM's *Rules settings*.
+func rules_settings() -> Array:
+	var out := []
+	var ctx := win.ctx
+	if ctx.host == null:
+		return out
+	var ids := ctx.host.plugins.keys()
+	ids.sort()
+	for pid in ids:
+		var p: PluginHost.Plugin = ctx.host.plugins[pid]
+		var schema: Variant = p.manifest.get("settings", {}).get("schema", {}) if p.manifest.get("settings") is Dictionary else {}
+		var props: Variant = schema.get("properties", {}) if schema is Dictionary else {}
+		if not (props is Dictionary) or props.is_empty():
+			continue
+		var items := []
+		for key in props:
+			var d: Variant = props[key]
+			if not (d is Dictionary) or not ["string", "boolean", "integer", "number"].has(str(d.get("type", ""))):
+				continue
+			var item := {"key": str(key), "title": str(d.get("title", key)), "type": str(d.type), "value": JsonDoc.deep(p.settings.get(key, d.get("default")))}
+			if d.has("description"):
+				item.description = str(d.description)
+			if d.get("enum") is Array:
+				item.enum = JsonDoc.deep(d.enum)
+				item.labels = JsonDoc.deep(d.enumNames) if d.get("enumNames") is Array and (d.enumNames as Array).size() == (d.enum as Array).size() else JsonDoc.deep(d.enum)
+			for bound in ["minimum", "maximum"]:
+				if d.has(bound):
+					item[bound] = d[bound]
+			items.append(item)
+		if not items.is_empty():
+			out.append({"plugin": str(pid), "name": str(p.manifest.get("name", pid)), "settings": items})
+	return out
+
+
+## A ruleset setting from the DM's screen: checked against the plugin's
+## schema, kept in the campaign, the rules loaded again with it (a view
+## built from a setting shows the new one), every screen sent afresh.
+func set_rule(pid: String, key: String, value: Variant) -> String:
+	var ctx := win.ctx
+	if ctx.host == null or not ctx.host.plugins.has(pid):
+		return "no ruleset '%s' here" % pid
+	var item := {}
+	for group in rules_settings():
+		if str(group.plugin) == pid:
+			for it in group.settings:
+				if str(it.key) == key:
+					item = it
+	if item.is_empty():
+		return "'%s' has no setting '%s'" % [pid, key]
+	var v: Variant = value
+	match str(item.type):
+		"boolean":
+			if not (v is bool):
+				return "%s: on or off" % str(item.title)
+		"integer", "number":
+			if not (v is float or v is int):
+				return "%s: a number" % str(item.title)
+			if str(item.type) == "integer":
+				v = int(v)
+			if item.has("minimum") and float(v) < float(item.minimum):
+				return "%s: at least %s" % [str(item.title), str(item.minimum)]
+			if item.has("maximum") and float(v) > float(item.maximum):
+				return "%s: at most %s" % [str(item.title), str(item.maximum)]
+		_:
+			v = str(v)
+	if item.has("enum") and not (item.enum as Array).has(v):
+		return "%s: not one of the choices" % str(item.title)
+	ctx.campaign.set_plugin_setting(pid, key, v)
+	ctx.reload_plugins()
+	# the host speaks for the rules loaded now
+	if win.host != null:
+		win.host.plugins = ctx.host
+		win.host.kernel = ctx.kernel
+		win.host.refresh_views()
+		win.host.refresh_dm()
+	ctx.campaign_changed.emit()
+	return ""
 
 
 # -------------------------------------------------------------------- ops --
@@ -149,6 +230,8 @@ func op(intent: Dictionary) -> String:
 			return ctx.commands.run({"t": "actor.set", "id": str(intent.get("actor", "")), "changes": changes}, "Notes")
 		"folder":
 			return _folder(intent)
+		"rules_setting":
+			return set_rule(str(intent.get("plugin", "")), str(intent.get("key", "")), intent.get("value"))
 		"session":
 			if str(intent.get("do", "")) == "start":
 				return ctx.start_session()

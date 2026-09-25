@@ -90,6 +90,31 @@ first two; the third is in Hexmap 2.3.1.
 | D2 | the forest road used as a regional map does not match one (a log two cells long, a village one cell wide, tents shown but not the chapel); "the forest road IS a battle map" | A true regional map: *The Vale of Thornwick*, painted at one scale — the village a cluster of roofs, the chapel a ruined church on its hill, the hut under an oak, the goblins' tents in the trees — each beside its place's marker. The forest road is a battle map again, for the optional fight at the goblins' lookout. |
 | D3 | a regional map may be hex when travel is measured, but for many campaigns it should have no grid at all | Hexmap 2.3.1: Map settings → *Show the grid* (off: no grid drawn, in the editor, the Table, the web screens and the SVG and PDF exports). In 2.3.0 the vale hides its grid with a clear grid colour. |
 
+## The team's notes: making a character (an Android phone, in the browser)
+
+Hexmap 2.3.1 hosting *Android test* (The Ruined Chapel 0.5.0) on the
+DM's Mac; the team made Lia, an elf druid, on a phone's browser. What
+they said, and what the `character-maker` branches (both repositories)
+do about it:
+
+| # | the team said | response |
+|---|---|---|
+| T1 | a proper UI for ability scores: the DM picks point buy (default), the standard array or rolled scores, following the standard rules; friendly to players who aren't math-inclined; error-proofed; what the abilities are for | A `scores` field: point buy with a points-left counter and − / + that cannot go wrong, the standard array assigned by tapping, or six 4d6-drop-lowest rolls made by the table (in the log, once) and assigned the same way. Each ability says what it measures and what it is for; the class's key abilities are marked and *Suggested for a Fighter* fills them in. The background's +2/+1 (or +1/+1/+1) is chosen there, with the final scores and modifiers shown. The ruleset checks everything again. The DM chooses the method in *Rules settings* on the DM's screen. |
+| T2 | leaving the window and coming back on the ability step went back to the first step (a bug) | A dropped connection no longer sends a player back to the join screen (the play screen stays, *Reconnecting…*), and the character maker keeps its step and answers across a reload. |
+| T3 | typing skills is crazy: a list with descriptions | The class's skill choices as a list with each skill's ability and what it is for; the background's skills already ticked; *Choose 2* counts down. |
+| T4 | no starting equipment or starting gold | The class's and the background's equipment packages (A, B …) or the gold instead, from the SRD; the items go into the inventory. |
+| T5 | the spell selector: only the spells I'm eligible for; the DM can add any spell | A caster picks cantrips and spells in the maker from the class's list at the levels it can cast, as many as the class allows; the Spells tab offers the same, and the ruleset refuses more. *Give a spell (any list)* is the DM's. |
+| T6 | the spell description was poorly formatted ASCII; room for an icon | Rules text renders its tables. A spell reads as a card: its name with room for an icon, level and school, casting time, range, components and duration as facts, Concentration and Ritual as tags, the text, *Using a Higher-Level Spell Slot*. |
+
+## Observations
+
+- **The Android app is redundant for players.** Since 2.3.0 a player
+  joins in the phone's browser; the APK's Player can only join as a
+  player the DM already added (it has no join-by-name) and makes no
+  character. Tabled for now (the user): retire it (and the iOS build),
+  or make it a launcher that finds tables on the Wi-Fi and opens the
+  browser page.
+
 ## Known gaps
 
 - Only the Table can edit maps and prepare places and fights (the full

@@ -377,6 +377,54 @@ func test_table_window() -> void:
 
 
 ## The Table is campaign-first: the picker until a campaign opens, the
+## The DM's Rules settings (the web DM screen): a ruleset's settings as
+## its manifest declares them, the campaign's values over the defaults; a
+## change checked against the schema, kept in the campaign, the rules
+## loaded again with it, and a hosting table speaking for the new ones.
+func test_rules_settings_from_the_dm_screen() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://table_rules_settings_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_table_rules.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	var c := Campaign.create("Settings")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1", "ext": {"sample.ordered": {"level": 2, "stats": {"agi": 2, "str": 1, "wit": 0}}}}
+	c.plugins.append({"id": "sample.ordered"})
+	check(c.save(dir.path_join("settings.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("settings.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var groups := win.web_dm.rules_settings()
+	var mine: Dictionary = groups.filter(func(g: Dictionary) -> bool: return g.plugin == "sample.ordered")[0] if not groups.filter(func(g: Dictionary) -> bool: return g.plugin == "sample.ordered").is_empty() else {}
+	var crit: Dictionary = {}
+	for it in mine.get("settings", []):
+		if it.key == "critical_on":
+			crit = it
+	check(not crit.is_empty() and int(crit.value) == 20 and crit.type == "integer" and int(crit.minimum) == 1 and int(crit.maximum) == 20, "the DM sees the ruleset's settings, the defaults where the campaign names none (%s)" % str(crit))
+	check(win.web_dm.state().rules is Array and not (win.web_dm.state().rules as Array).is_empty(), "and they travel in the DM screen's state")
+	win._set_hosting(true)
+	var old_host := ctx.host
+	check(win.web_dm.op({"op": "rules_setting", "plugin": "sample.ordered", "key": "critical_on", "value": 19}) == "", "a setting changed from the DM's screen")
+	check(int(ctx.campaign.plugin_settings("sample.ordered").get("critical_on", 0)) == 19, "kept in the campaign")
+	check(ctx.host != old_host and int(ctx.host.plugins["sample.ordered"].settings.critical_on) == 19, "the rules loaded again with it")
+	check(win.host != null and win.host.plugins == ctx.host, "the hosting table speaks for the rules loaded now")
+	check(ctx.encounter().actors.has("a_h") and ctx.encounter().actor("a_h").derived.has("sample.ordered"), "the party is still there, derived by the new rules")
+	check(win.web_dm.op({"op": "rules_setting", "plugin": "sample.ordered", "key": "critical_on", "value": 25}).contains("at most 20"), "out of range: refused")
+	check(win.web_dm.op({"op": "rules_setting", "plugin": "sample.ordered", "key": "critical_on", "value": "high"}).contains("a number"), "not a number: refused")
+	check(win.web_dm.op({"op": "rules_setting", "plugin": "sample.ordered", "key": "nope", "value": 1}).contains("no setting"), "a setting it does not have: refused")
+	check(win.web_dm.op({"op": "rules_setting", "plugin": "nobody", "key": "x", "value": 1}).contains("no ruleset"), "a ruleset not loaded: refused")
+	check(int(ctx.campaign.plugin_settings("sample.ordered").critical_on) == 19, "and nothing changed by the refusals")
+	win._set_hosting(false)
+	win.queue_free()
+	await tree.process_frame
+
+
 ## campaign as the live document, edits between sessions saved and
 ## restored, the session ritual, close back to the picker.
 func test_campaign_first() -> void:

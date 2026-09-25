@@ -2,11 +2,14 @@ class_name PropertyForm
 extends GridContainer
 ## A two-column form built from a schema, used by the inspector and the
 ## export dialogs. Schema entries:
-##   { key, label, type: float|int|bool|enum|color|string|text|vec2|list,
-##     min, max, step, options: [..] (enum), suffix, tooltip,
+##   { key, label, type: float|int|bool|enum|color|string|text|vec2|list|choose|scores,
+##     min, max, step, options: [..] (enum, choose), suffix, tooltip,
 ##     fields: [..] (list: the sub-form each item is edited with) }
 ## A `list` is a repeater: its value is an array of records, one sub-form
-## per item with add and remove.
+## per item with add and remove. `choose` and `scores` are the plugins'
+## (docs/plugin-authoring.md): some of a list of options, as check boxes
+## (or one, `single`); numbers for named stats under a method, as spin
+## boxes. The web screens draw both more fully; the rules check either.
 ## Emits value_changed(key, value) as the user edits; get_values() reads
 ## the whole form.
 
@@ -58,6 +61,14 @@ func _make_control(item: Dictionary) -> Control:
 			sb.select_all_on_focus = true
 			sb.value_changed.connect(func(v: float) -> void: _emit(key, int(v) if item.type == "int" else v))
 			return sb
+		"choose":
+			var ch := ChooseField.new(item)
+			ch.changed.connect(func() -> void: _emit(key, ch.get_value()))
+			return ch
+		"scores":
+			var sc := ScoresField.new(item)
+			sc.changed.connect(func() -> void: _emit(key, sc.get_value()))
+			return sc
 		"list":
 			var rep := ListField.new()
 			rep.fields = item.get("fields", []) if item.get("fields") is Array else []
@@ -151,6 +162,10 @@ func set_values(values: Dictionary) -> void:
 				(ctl.get_node("y") as SpinBox).set_value_no_signal(float(a[1]))
 			"list":
 				(ctl as ListField).set_values(v if v is Array else [])
+			"choose":
+				(ctl as ChooseField).set_value(v)
+			"scores":
+				(ctl as ScoresField).set_value(v)
 			_:
 				(ctl as LineEdit).text = str(v if v != null else "")
 	_updating = false
@@ -183,6 +198,8 @@ func get_values() -> Dictionary:
 			"text": out[key] = (ctl as TextEdit).text
 			"vec2": out[key] = [(ctl.get_node("x") as SpinBox).value, (ctl.get_node("y") as SpinBox).value]
 			"list": out[key] = (ctl as ListField).get_values()
+			"choose": out[key] = (ctl as ChooseField).get_value()
+			"scores": out[key] = (ctl as ScoresField).get_value()
 			_: out[key] = (ctl as LineEdit).text
 	return out
 
@@ -249,3 +266,222 @@ class ListField extends VBoxContainer:
 
 	func count() -> int:
 		return _rows.size()
+
+
+## Some of a list of options ({id, name, text, tag} records or strings):
+## check boxes, as many as `count` (or `max`) allows, those `fixed` ticked
+## and locked, those `allowed` leaves out not shown; `single`, a list to
+## pick one from. Its value: the ids (or the one id).
+class ChooseField extends VBoxContainer:
+	signal changed
+	var item: Dictionary
+	var _boxes: Dictionary = {}
+	var _pick: OptionButton
+	var _ids: Array = []
+
+	func _init(p_item: Dictionary) -> void:
+		item = p_item
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var allowed: Variant = item.get("allowed")
+		var fixed: Array = item.get("fixed", []) if item.get("fixed") is Array else []
+		if bool(item.get("single", false)):
+			_pick = OptionButton.new()
+			_pick.add_item("Choose…")
+			_ids.append("")
+		for o in item.get("options", []):
+			var id := str(o.get("id", o.get("name", ""))) if o is Dictionary else str(o)
+			if allowed is Array and not (allowed as Array).has(id) and not fixed.has(id):
+				continue
+			var label := str(o.get("name", id)) if o is Dictionary else id
+			if o is Dictionary and str(o.get("tag", "")) != "":
+				label += "  (%s)" % str(o.tag)
+			if _pick != null:
+				_pick.add_item(label)
+				_ids.append(id)
+				continue
+			var cb := CheckBox.new()
+			cb.text = label
+			cb.tooltip_text = str(o.get("text", "")) if o is Dictionary else ""
+			if fixed.has(id):
+				cb.button_pressed = true
+				cb.disabled = true
+				cb.text += "  — " + str(item.get("fixed_label", "yours already"))
+			else:
+				cb.toggled.connect(func(_on: bool) -> void:
+					_limit()
+					changed.emit())
+			_boxes[id] = cb
+			add_child(cb)
+		if _pick != null:
+			_pick.item_selected.connect(func(_i: int) -> void: changed.emit())
+			add_child(_pick)
+
+	func _most() -> int:
+		if item.has("count") and item.count != null:
+			return int(item.count)
+		return int(item.get("max", 1 << 30)) if item.get("max") != null else 1 << 30
+
+	func _limit() -> void:
+		var fixed: Array = item.get("fixed", []) if item.get("fixed") is Array else []
+		var full: bool = (get_value() as Array).size() >= _most()
+		for id in _boxes:
+			var cb: CheckBox = _boxes[id]
+			if not fixed.has(id):
+				cb.disabled = full and not cb.button_pressed
+
+	func set_value(v: Variant) -> void:
+		if _pick != null:
+			_pick.select(maxi(0, _ids.find(str(v if v != null else ""))))
+			return
+		var fixed: Array = item.get("fixed", []) if item.get("fixed") is Array else []
+		var want: Array = v if v is Array else []
+		for id in _boxes:
+			if not fixed.has(id):
+				(_boxes[id] as CheckBox).set_pressed_no_signal(want.has(id))
+		_limit()
+
+	func get_value() -> Variant:
+		if _pick != null:
+			return _ids[_pick.selected] if _pick.selected >= 0 and _pick.selected < _ids.size() else ""
+		var fixed: Array = item.get("fixed", []) if item.get("fixed") is Array else []
+		var out := []
+		for id in _boxes:
+			if not fixed.has(id) and (_boxes[id] as CheckBox).button_pressed:
+				out.append(id)
+		return out
+
+
+## Numbers for named stats (`stats`: {id, name, text}) under a `method`:
+## a point buy (spin boxes from its minimum to its maximum, the points
+## left said), a fixed array or rolled numbers (each used once, said), or
+## typed (`manual`). A background's bonus goes where the class wants it
+## (+2 on its key ability when offered, +1 on the next). Its value:
+## {method, base, bonus, final}.
+class ScoresField extends VBoxContainer:
+	signal changed
+	var item: Dictionary
+	var _spins: Dictionary = {}
+	var _finals: Dictionary = {}
+	var _note: Label
+	# a bonus given with the value (the answers so far): kept, not worked out again
+	var _given_bonus: Dictionary = {}
+
+	func _init(p_item: Dictionary) -> void:
+		item = p_item
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_note = Label.new()
+		_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_note.theme_type_variation = "DimLabel"
+		add_child(_note)
+		var grid := GridContainer.new()
+		grid.columns = 3
+		add_child(grid)
+		var lo := 1
+		var hi := 30
+		var m := str(item.get("method", "manual"))
+		if m == "point_buy":
+			var pb: Dictionary = item.get("point_buy", {}) if item.get("point_buy") is Dictionary else {}
+			lo = int(pb.get("min", 8))
+			hi = int(pb.get("max", 15))
+		elif _pool().size() > 0:
+			lo = int(_pool().min())
+			hi = int(_pool().max())
+		elif m == "manual" and item.get("manual") is Dictionary:
+			lo = int(item.manual.get("min", 1))
+			hi = int(item.manual.get("max", 30))
+		for st in item.get("stats", []):
+			if not (st is Dictionary) or str(st.get("id", "")) == "":
+				continue
+			var name := Label.new()
+			name.text = str(st.get("name", st.id))
+			name.tooltip_text = str(st.get("text", ""))
+			name.mouse_filter = Control.MOUSE_FILTER_STOP
+			grid.add_child(name)
+			var sb := SpinBox.new()
+			sb.min_value = lo
+			sb.max_value = hi
+			sb.step = 1
+			sb.value_changed.connect(func(_v: float) -> void:
+				_refresh()
+				changed.emit())
+			grid.add_child(sb)
+			_spins[str(st.id)] = sb
+			var fin := Label.new()
+			grid.add_child(fin)
+			_finals[str(st.id)] = fin
+		set_value(null)
+
+	func _pool() -> Array:
+		var m := str(item.get("method", ""))
+		if m == "array":
+			return item.get("array", []) if item.get("array") is Array else []
+		if m == "rolled" and item.get("rolled") is Dictionary and item.rolled.get("values") is Array:
+			return item.rolled.values
+		return []
+
+	func _cost(score: int) -> int:
+		var pb: Dictionary = item.get("point_buy", {}) if item.get("point_buy") is Dictionary else {}
+		var cost: Dictionary = pb.get("cost", {}) if pb.get("cost") is Dictionary else {"8": 0, "9": 1, "10": 2, "11": 3, "12": 4, "13": 5, "14": 7, "15": 9}
+		return int(cost.get(str(score), 99))
+
+	func _bonus() -> Dictionary:
+		var b: Variant = item.get("bonus")
+		if not (b is Dictionary) or not (b.get("among") is Array) or (b.among as Array).size() < 2:
+			return {}
+		var among: Array = b.among
+		var primary: Array = item.get("primary", []) if item.get("primary") is Array else []
+		var two := ""
+		for p in primary:
+			if among.has(p) and two == "":
+				two = str(p)
+		if two == "":
+			two = str(among[0])
+		var one := ""
+		for p in primary + among:
+			if str(p) != two and among.has(p) and one == "":
+				one = str(p)
+		return {two: 2, one: 1}
+
+	func set_value(v: Variant) -> void:
+		var base: Dictionary = v.get("base", {}) if v is Dictionary and v.get("base") is Dictionary else {}
+		_given_bonus = (v.bonus as Dictionary).duplicate() if v is Dictionary and v.get("bonus") is Dictionary else {}
+		var sug: Dictionary = item.get("suggest", {}) if item.get("suggest") is Dictionary else {}
+		var pool := _pool().duplicate()
+		pool.sort()
+		pool.reverse()
+		var i := 0
+		for id in _spins:
+			var sb: SpinBox = _spins[id]
+			var start: Variant = base.get(id, sug.get(id, pool[i] if i < pool.size() else (sb.min_value if str(item.get("method", "")) == "point_buy" else 10)))
+			sb.set_value_no_signal(float(start))
+			i += 1
+		_refresh()
+
+	func _refresh() -> void:
+		var fin: Dictionary = get_value().final
+		for id in _finals:
+			var f := int(fin.get(id, 10))
+			(_finals[id] as Label).text = "→ %d (%s%d)" % [f, "+" if f >= 10 else "", floori((f - 10) / 2.0)]
+		match str(item.get("method", "manual")):
+			"point_buy":
+				var pb: Dictionary = item.get("point_buy", {}) if item.get("point_buy") is Dictionary else {}
+				var spent := 0
+				for id in _spins:
+					spent += _cost(int((_spins[id] as SpinBox).value))
+				_note.text = "Point buy: %d of %d points spent." % [spent, int(pb.get("budget", 27))]
+			"array", "rolled":
+				var pool := _pool()
+				_note.text = ("Use each of %s once." % ", ".join(pool.map(func(x: Variant) -> String: return str(int(x))))) if not pool.is_empty() else "Roll the scores first (on the player's screen)."
+			_:
+				_note.text = "Type each score."
+
+	func get_value() -> Dictionary:
+		var base := {}
+		for id in _spins:
+			base[id] = int((_spins[id] as SpinBox).value)
+		var bonus := _given_bonus if not _given_bonus.is_empty() else _bonus()
+		var cap := int((item.bonus as Dictionary).get("cap", 20)) if item.get("bonus") is Dictionary else 20
+		var final := {}
+		for id in base:
+			final[id] = mini(cap, int(base[id]) + int(bonus.get(id, 0))) if int(bonus.get(id, 0)) > 0 else int(base[id])
+		return {"method": str(item.get("method", "manual")), "base": base, "bonus": bonus, "final": final}

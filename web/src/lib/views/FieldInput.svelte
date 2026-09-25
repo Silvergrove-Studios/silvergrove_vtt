@@ -7,9 +7,18 @@
 -->
 <script lang="ts">
   import Form from './Form.svelte';
+  import ScoresField from './ScoresField.svelte';
+  import ChooseField from './ChooseField.svelte';
   import { optionValue, optionLabel, type Dict } from './viewlib';
+  import type { Choice } from './fieldcheck';
 
-  let { field, value = $bindable(), commit }: { field: Dict; value: any; commit?: (v: any) => void } = $props();
+  let {
+    field,
+    value = $bindable(),
+    commit,
+    ctx = {},
+    options = $bindable(),
+  }: { field: Dict; value: any; commit?: (v: any) => void; ctx?: Dict; options?: Choice[] | null } = $props();
 
   const type = $derived(String(field.type ?? 'string'));
   const id = `f${Math.random().toString(36).slice(2, 9)}`;
@@ -36,7 +45,11 @@
   }
 </script>
 
-{#if type === 'int' || type === 'float'}
+{#if type === 'scores'}
+  <ScoresField {field} bind:value {ctx} />
+{:else if type === 'choose'}
+  <ChooseField {field} bind:value bind:options />
+{:else if type === 'int' || type === 'float'}
   <span class="num">
     <input
       {id}

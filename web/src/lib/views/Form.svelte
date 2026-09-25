@@ -3,14 +3,23 @@
   control. Values start as the host's form would have them (a number 0 or
   its minimum, a choice its first option, …) so a form sent untouched says
   what the Godot one would. A field may take its choices from a compendium
-  `collection` (fetched here) or `from` the data (worked out before).
+  `collection` (fetched here) or `from` the data (worked out before). With
+  a `ctx` (a wizard's: its answers and the view's data), a field's `if`
+  can hide it; `scores` and `choose` fields take the whole width.
 -->
 <script lang="ts">
   import FieldInput from './FieldInput.svelte';
   import { viewUi } from './context';
-  import { optionValue, type Dict } from './viewlib';
+  import { optionValue, shown, type Dict } from './viewlib';
+  import type { Choice } from './fieldcheck';
 
-  let { fields, values = $bindable({}), onchange }: { fields: Dict[]; values?: Dict; onchange?: (key: string, v: any) => void } = $props();
+  let {
+    fields,
+    values = $bindable({}),
+    onchange,
+    ctx = null,
+    options = $bindable(),
+  }: { fields: Dict[]; values?: Dict; onchange?: (key: string, v: any) => void; ctx?: Dict | null; options?: Record<string, Choice[] | null> } = $props();
 
   const ui = viewUi();
   let loaded = $state<Record<string, Dict[]>>({});
@@ -38,6 +47,10 @@
         return Array.isArray(v) ? v : [0, 0];
       case 'list':
         return Array.isArray(v) ? v.map((x) => (x && typeof x === 'object' ? x : {})) : [];
+      case 'choose':
+        return f.single ? String(v ?? f.default ?? '') : Array.isArray(v) ? v.map(String) : [];
+      case 'scores':
+        return v && typeof v === 'object' ? v : null;
       default:
         return String(v ?? f.default ?? '');
     }
@@ -46,8 +59,8 @@
   /** The fields as drawn: a collection's choices once they have come. */
   const drawn = $derived(
     fields
-      .filter((f) => f && typeof f === 'object' && 'key' in f)
-      .map((f) => (f.collection ? { ...f, type: 'enum', options: loaded[f.key] ?? [], loading: !loaded[f.key] } : f)),
+      .filter((f) => f && typeof f === 'object' && 'key' in f && (!ctx || shown(f, ctx)))
+      .map((f) => (f.collection && f.type !== 'choose' ? { ...f, type: 'enum', options: loaded[f.key] ?? [], loading: !loaded[f.key] } : f)),
   );
 
   // start every value off as the host's form would
@@ -61,7 +74,7 @@
   // fields whose choices are a collection's entries, as this viewer may see them
   $effect(() => {
     for (const f of fields) {
-      if (!f?.collection || loaded[f.key]) continue;
+      if (!f?.collection || f.type === 'choose' || loaded[f.key]) continue;
       const q: Dict = f.query && typeof f.query === 'object' ? f.query : {};
       const req: Dict = { text: String(q.text ?? ''), per_page: Number(f.limit ?? 200), page: 1, fields: ['name'], sort: String(q.sort ?? 'name') };
       if (q.filter && typeof q.filter === 'object') req.filter = q.filter;
@@ -76,10 +89,15 @@
 
 <div class="form">
   {#each drawn as f (f.key)}
-    <div class="row" class:wide={f.type === 'list' || f.type === 'text'}>
-      <label for={undefined} class="label" title={f.tooltip ?? ''}>{f.label ?? f.key}</label>
+    <div class="row" class:wide={f.type === 'list' || f.type === 'text' || f.type === 'scores' || f.type === 'choose'}>
+      {#if f.label !== ''}<label for={undefined} class="label" class:strong={f.type === 'scores' || f.type === 'choose'} title={f.tooltip ?? ''}>{f.label ?? f.key}</label>{/if}
+      {#if f.help}<p class="help">{f.help}</p>{/if}
       <div class="control">
-        <FieldInput field={f} bind:value={values[f.key]} commit={(v) => onchange?.(f.key, v)} />
+        {#if options}
+          <FieldInput field={f} bind:value={values[f.key]} bind:options={options[f.key]} ctx={ctx ?? {}} commit={(v) => onchange?.(f.key, v)} />
+        {:else}
+          <FieldInput field={f} bind:value={values[f.key]} ctx={ctx ?? {}} commit={(v) => onchange?.(f.key, v)} />
+        {/if}
       </div>
     </div>
   {/each}
@@ -104,6 +122,16 @@
   .label {
     color: var(--muted);
     font-size: 0.92rem;
+  }
+  .label.strong {
+    color: var(--heading);
+    font-weight: 650;
+    font-size: 1rem;
+  }
+  .help {
+    margin: 0;
+    font-size: 0.86rem;
+    color: var(--muted);
   }
   .control {
     min-width: 0;

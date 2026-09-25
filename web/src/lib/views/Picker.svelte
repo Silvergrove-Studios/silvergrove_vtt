@@ -1,11 +1,16 @@
 <!--
   A searchable list to choose from: a bound list (strings, or records with
   an id and a name) or a compendium collection fetched a page at a time.
-  Choosing sends on_pick with @pick (or, with multi, @picks on Done).
+  Choosing sends on_pick with @pick (or, with multi, @picks on Done). The
+  query's `{expr}` values are worked out from the data (a class's spells
+  up to the level it casts); `sub` is a line under each name (an Expr over
+  @item), `detail` a collection whose card a "?" opens.
 -->
 <script lang="ts">
   import { viewUi } from './context';
   import { fillIntent, optionId, optionLabel, valueOf, type Dict, clone } from './viewlib';
+  import { resolve } from './fieldcheck';
+  import { Expr } from '../expr';
 
   let { node, ctx }: { node: Dict; ctx: Dict } = $props();
   const ui = viewUi();
@@ -19,10 +24,11 @@
   function load(): void {
     const text = q.trim().toLowerCase();
     if (node.collection) {
-      const query: Dict = node.query && typeof node.query === 'object' ? clone(node.query) : {};
+      const query: Dict = node.query && typeof node.query === 'object' ? resolve(clone(node.query), ctx) : {};
       if (text) query.text = text;
       query.per_page = Number(node.per_page ?? 25);
       if (node.fields) query.fields = node.fields;
+      if (node.sort) query.sort = node.sort;
       const mine = ++seq;
       status = 'Looking…';
       ui.comp(String(node.collection), { query }).then((reply) => {
@@ -61,6 +67,10 @@
     ui.intent(fillIntent(node.on_pick ?? {}, { ...ctx, picks: [...chosen] }));
   }
 
+  function sub(it: any): string {
+    return node.sub && it && typeof it === 'object' ? Expr.evaluateText(String(node.sub), { ...ctx, item: it }) : '';
+  }
+
   function toggle(id: string): void {
     chosen = chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id];
   }
@@ -80,7 +90,13 @@
             <span>{optionLabel(it)}</span>
           </label>
         {:else}
-          <button type="button" class="opt" onclick={() => pick(it)}>{optionLabel(it)}</button>
+          <div class="row">
+            <button type="button" class="opt" onclick={() => pick(it)}>
+              <span class="name">{optionLabel(it)}</span>
+              {#if node.sub}<span class="sub">{sub(it)}</span>{/if}
+            </button>
+            {#if node.detail}<button type="button" class="more" aria-label={`Read ${optionLabel(it)}`} onclick={() => ui.intent({ kind: 'lookup', collection: String(node.detail), id: optionId(it) })}>?</button>{/if}
+          </div>
         {/if}
       </li>
     {/each}
@@ -122,5 +138,26 @@
   }
   .opt:hover {
     background: var(--hover);
+  }
+  .row {
+    display: flex;
+    gap: 4px;
+    align-items: stretch;
+  }
+  .row .opt {
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+  .sub {
+    font-size: 0.8rem;
+    color: var(--accent);
+  }
+  .more {
+    flex: none;
+    width: 40px;
+    padding: 0;
+    border-radius: 8px;
   }
 </style>

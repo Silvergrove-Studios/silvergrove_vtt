@@ -130,6 +130,10 @@ func test_view_helpers() -> void:
 	check(_find(r, "Label", "nothing here") != null, "a list with no data shows its empty text")
 	# rules text: markdown as the SRDs write it, rendered rich
 	check(ViewRenderer.markdown_to_bbcode("A **bold** and *italic* word\n# Heading\n- one\n[x]") == "A [b]bold[/b] and [i]italic[/i] word\n[b]Heading[/b]\n  • one\n[lb]x]", "markdown to BBCode, brackets escaped")
+	var tb := ViewRenderer.markdown_to_bbcode("Table: Skills\n\n|Skill|Ability|\n|---|---|\n|Acrobatics|**Dex**|\n|||\nAfter")
+	check(tb == "[b]Skills[/b]\n\n[table=2][cell][b]Skill[/b]   [/cell][cell][b]Ability[/b]   [/cell][cell]Acrobatics   [/cell][cell][b]Dex[/b]   [/cell][/table]\nAfter", "markdown tables to BBCode tables: the caption bold, the header bold, empty rows left out (%s)" % tb)
+	var nohead := ViewRenderer.markdown_to_bbcode("|||\n|---|---|\n|Hit Point Die|D8|")
+	check(nohead == "[table=2][cell]Hit Point Die   [/cell][cell]D8   [/cell][/table]", "a table with an empty header row has no header (%s)" % nohead)
 	r.render({"type": "text", "text": "**Casting Time:** Action", "rich": true}, {})
 	var rich := _find(r, "RichTextLabel", "")
 	check(rich != null and (rich as RichTextLabel).text == "[b]Casting Time:[/b] Action", "a rich text node is a RichTextLabel with BBCode")
@@ -297,5 +301,98 @@ func test_pickers_wizards_repeaters_and_fields() -> void:
 	r.packs.reload()
 	r.render({"type": "image", "bind": "/art"}, {"art": "dungeons_and_castles:goblin"})
 	check(_all(r, "TextureRect").size() == 1 or _find(r, "Label", "dungeons_and_castles:goblin") != null, "with packs: a texture when the art exists")
+	r.queue_free()
+	await tree.process_frame
+
+
+## A card's heading, facts and tags: the name with the line under it, the
+## labelled facts (an empty one left out), the tags that apply.
+func test_title_facts_and_tags() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	r.render({"type": "column", "children": [
+		{"type": "title", "bind": "/entry/name", "sub": {"expr": "'Level ' .. @entry.level .. ' ' .. @entry.school"}, "icon": {"bind": "/entry/icon"}},
+		{"type": "facts", "items": [
+			{"label": "Casting time", "bind": "/entry/casting_time"},
+			{"label": "Range", "text": "60 feet"},
+			{"label": "Material", "bind": "/entry/material"},
+			{"label": "Hidden", "text": "x", "if": "false"}]},
+		{"type": "tags", "items": [{"text": "Concentration", "if": "@entry.concentration"}, {"text": "Ritual", "if": "@entry.ritual"}]}]},
+		{"entry": {"name": "Faerie Fire", "level": 1, "school": "evocation", "casting_time": "Action", "material": "", "concentration": true, "ritual": false}})
+	check(_find(r, "Label", "Faerie Fire") != null and _find(r, "Label", "Level 1 evocation") != null, "the title and the line under it")
+	check(_all(r, "TextureRect").is_empty(), "no icon when the entry has none")
+	check(_find(r, "Label", "Casting time") != null and _find(r, "Label", "Action") != null and _find(r, "Label", "60 feet") != null, "the facts, labelled")
+	check(_find(r, "Label", "Material") == null and _find(r, "Label", "Hidden") == null, "an empty fact and one whose if is false are left out")
+	check(_find(r, "Label", "[Concentration]") != null and _find(r, "Label", "[Ritual]") == null, "the tags that apply")
+	check(_find(r, "Label", "title:") == null and _find(r, "Label", "facts:") == null, "none of them falls back to text")
+	r.queue_free()
+	await tree.process_frame
+
+
+## `choose` and `scores` fields on the desktop: check boxes that stop at
+## the count with what is had already ticked and locked; spin boxes under
+## the method with the background's bonus where the class wants it.
+func test_choose_and_scores_fields() -> void:
+	var pf := PropertyForm.new()
+	root.add_child(pf)
+	var skills := {"key": "skills", "label": "Skills", "type": "choose", "count": 2, "allowed": ["arcana", "nature", "perception"], "fixed": ["stealth"],
+		"options": [{"id": "arcana", "name": "Arcana"}, {"id": "nature", "name": "Nature"}, {"id": "perception", "name": "Perception"}, {"id": "stealth", "name": "Stealth"}, {"id": "athletics", "name": "Athletics"}]}
+	var abil := {"key": "abilities", "label": "Abilities", "type": "scores", "method": "point_buy", "stats": [{"id": "str", "name": "Strength"}, {"id": "dex", "name": "Dexterity"}, {"id": "wis", "name": "Wisdom"}],
+		"suggest": {"str": 8, "dex": 14, "wis": 15}, "primary": ["wis"], "bonus": {"among": ["dex", "con", "wis"], "cap": 20}}
+	var kit := {"key": "kit", "label": "Kit", "type": "choose", "single": true, "options": [{"id": "A", "name": "Package A"}, {"id": "B", "name": "155 GP"}]}
+	pf.build([skills, abil, kit], {"skills": ["arcana"]})
+	var boxes := _all(pf, "CheckBox")
+	check(boxes.size() == 4 and _find(pf, "CheckBox", "Athletics") == null, "the allowed options and the one had already, nothing else (%d boxes)" % boxes.size())
+	var stealth := _find(pf, "CheckBox", "Stealth") as CheckBox
+	check(stealth != null and stealth.button_pressed and stealth.disabled, "what is had already: ticked and locked")
+	(_find(pf, "CheckBox", "Nature") as CheckBox).button_pressed = true
+	check(pf.get_values().skills == ["arcana", "nature"], "two chosen: %s" % [pf.get_values().skills])
+	check((_find(pf, "CheckBox", "Perception") as CheckBox).disabled, "and no more can be")
+	var sc: Dictionary = pf.get_values().abilities
+	check(sc.method == "point_buy" and sc.base == {"str": 8, "dex": 14, "wis": 15}, "the scores start from the class's suggestion: %s" % [sc])
+	check(sc.bonus == {"wis": 2, "dex": 1} and sc.final.wis == 17 and sc.final.dex == 15, "the bonus goes on the class's key ability, then the next offered: %s" % [sc])
+	check(pf.get_values().kit == "", "a single choice starts unchosen")
+	var ob := _find(pf, "OptionButton") as OptionButton
+	ob.select(2)
+	check(pf.get_values().kit == "B", "and takes the id picked")
+	pf.queue_free()
+	await tree.process_frame
+
+
+## A wizard's steps and fields see the answers so far: a step whose `if`
+## is false is skipped, `{expr}` properties are worked out, and only the
+## answers of what applied are sent.
+func test_wizard_steps_follow_the_answers() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var sent := []
+	r.intent.connect(func(p: Dictionary) -> void: sent.append(p))
+	r.render({"type": "wizard", "steps": [
+		{"title": "Who", "fields": [{"key": "caster", "label": "Caster", "type": "bool"}]},
+		{"title": "Spells", "if": "@values.caster", "fields": [{"key": "spells", "label": "Spells", "type": "choose", "count": {"expr": "@values.caster ? 1 : 0"}, "options": ["a", "b"]}]},
+		{"title": "Done", "fields": [{"key": "note", "label": "Note", "type": "string"}]}],
+		"submit": {"kind": "action", "plugin": "p", "action": "make", "ctx": {"form": "$values"}}}, {})
+	await tree.process_frame
+	check(_find(r, "Label", "Who (1/3)") != null or _find(r, "Label", "Who") != null, "the first step")
+	_find(r, "Button", "Next").pressed.emit()
+	check(_find(r, "Label", "Done") != null and _find(r, "Label", "Spells") == null, "a step whose if is false is skipped")
+	_find(r, "Button", "Back").pressed.emit()
+	(_find(r, "CheckBox") as CheckBox).button_pressed = true
+	_find(r, "Button", "Next").pressed.emit()
+	check(_find(r, "Label", "Spells") != null, "and shown when the answers call for it")
+	(_find(r, "CheckBox", "a") as CheckBox).button_pressed = true
+	check((_find(r, "CheckBox", "b") as CheckBox).disabled, "its count worked out from the answers (one)")
+	_find(r, "Button", "Next").pressed.emit()
+	_find(r, "Button", "Submit").pressed.emit()
+	check(sent.size() == 1 and sent[0].ctx.form.spells == ["a"] and sent[0].ctx.form.caster == true, "the answers sent: %s" % [sent])
+	# the same wizard without the caster: the spells are not sent
+	sent.clear()
+	r.render({"type": "wizard", "steps": [
+		{"title": "Who", "fields": [{"key": "caster", "label": "Caster", "type": "bool"}]},
+		{"title": "Spells", "if": "@values.caster", "fields": [{"key": "spells", "label": "Spells", "type": "choose", "count": 1, "options": ["a", "b"]}]}],
+		"submit": {"kind": "action", "plugin": "p", "action": "make", "ctx": {"form": "$values"}}}, {})
+	await tree.process_frame
+	_find(r, "Button", "Submit").pressed.emit()
+	check(sent.size() == 1 and not sent[0].ctx.form.has("spells"), "a skipped step's fields are not sent: %s" % [sent])
 	r.queue_free()
 	await tree.process_frame

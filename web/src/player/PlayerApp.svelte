@@ -16,7 +16,7 @@
   import Character from './Character.svelte';
   import Journal from './Journal.svelte';
   import TablePane from './TablePane.svelte';
-  import { comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, type Dict } from '../lib/game.svelte';
+  import { comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, type Dict } from '../lib/game.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -24,10 +24,27 @@
   import { turnSummary } from '../lib/turns';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
-  let tab = $state<Tab>('map');
+  const TAB_KEYS: Tab[] = ['map', 'character', 'table', 'chat', 'journal'];
+  // the tab a reload comes back to (a phone may drop the page while it is in another app)
+  function savedTab(): Tab | null {
+    try {
+      const t = sessionStorage.getItem('hexmap.tab') as Tab | null;
+      return t && TAB_KEYS.includes(t) ? t : null;
+    } catch {
+      return null;
+    }
+  }
+  let tab = $state<Tab>(savedTab() ?? 'map');
   let name = $state(rememberedName());
   let wide = $state(false);
-  let side = $state<Exclude<Tab, 'map'>>('character');
+  let side = $state<Exclude<Tab, 'map'>>(((t) => (t && t !== 'map' ? t : 'character'))(savedTab()));
+  $effect(() => {
+    try {
+      sessionStorage.setItem('hexmap.tab', wide ? side : tab);
+    } catch {
+      /* private mode */
+    }
+  });
   let pick = $state<Dict | null>(null);
   let lookup = $state<{ collection: string; id: string } | null>(null);
   let lookingUp = $state(false);
@@ -125,7 +142,10 @@
     fit();
     mq.addEventListener('change', fit);
     void connect('player').then((ok) => {
-      if (ok && name.trim()) join({ name: name.trim() });
+      // this tab's player after a reload, else the name this browser remembers
+      const again = sessionPlayer();
+      if (ok && again) join({ player: again, name: name.trim() });
+      else if (ok && name.trim()) join({ name: name.trim() });
     });
     return () => mq.removeEventListener('change', fit);
   });

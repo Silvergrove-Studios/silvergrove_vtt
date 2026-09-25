@@ -35,5 +35,11 @@ an attack picked on the map — in Chrome, with screenshots:
 npm run e2e -- /tmp/host.json /tmp/journey
 ```
 
+`tests/e2e/maker.mjs <host.json> <out>` walks the character maker
+(host a package whose ruleset has one): a druid by point buy on a phone,
+the connection dropped and the page reloaded half way, skills, equipment,
+spells and a spell's card, then the DM's *Rules settings* switching to
+rolled scores and to the standard array.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).
