@@ -34,13 +34,39 @@ export function inAny(p: Vec, polys: number[][][]): boolean {
   return polys.some((poly) => Array.isArray(poly) && poly.length >= 3 && inPolygon(p, poly));
 }
 
-/** How the fog covers a cell for the viewer the snapshot was built for. */
-export function fogOf(grid: Grid, scene: Dict, cell: Cell, explored?: Set<string>): Fog {
+/** A test for "is this point in any of these polygons", with each one's
+ *  box tried first: in the dark a scene sends many small polygons, and a
+ *  phone asks this for every cell and along every wall. */
+export function polygonTest(polys: number[][][]): (p: Vec) => boolean {
+  const list = polys
+    .filter((poly) => Array.isArray(poly) && poly.length >= 3)
+    .map((poly) => {
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      for (const [x, y] of poly) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+      return { poly, x0, y0, x1, y1 };
+    });
+  return (p) => list.some((b) => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1 && inPolygon(p, b.poly));
+}
+
+/** How the fog covers a cell for the viewer the snapshot was built for.
+ *  (`tests`: the snapshot's sight and line of sight as polygonTest, when
+ *  asked for many cells.) */
+export function fogOf(grid: Grid, scene: Dict, cell: Cell, explored?: Set<string>, tests?: { seen: (p: Vec) => boolean; los: (p: Vec) => boolean }): Fog {
   if (!scene.fog) return 'seen';
   const c = grid.center(cell);
-  if (inAny(c, (scene.visible as number[][][]) ?? [])) return 'seen';
+  const seen = tests?.seen ?? ((p: Vec) => inAny(p, (scene.visible as number[][][]) ?? []));
+  const los = tests?.los ?? ((p: Vec) => inAny(p, (scene.los as number[][][]) ?? []));
+  if (seen(c)) return 'seen';
   const known = (explored ?? new Set<string>((scene.explored as string[]) ?? [])).has(cellKey(cell));
-  if (inAny(c, (scene.los as number[][][]) ?? [])) return 'dark';
+  if (los(c)) return 'dark';
   return known ? 'explored' : 'unseen';
 }
 
@@ -66,9 +92,10 @@ export interface FogPaths {
 export function fogPaths(grid: Grid, scene: Dict, gm: boolean, cellPath: (path: Path2D, cell: Cell) => void): FogPaths | null {
   if (!scene.fog) return null;
   const explored = new Set<string>((scene.explored as string[]) ?? []);
+  const tests = { seen: polygonTest((scene.visible as number[][][]) ?? []), los: polygonTest((scene.los as number[][][]) ?? []) };
   const out: FogPaths = { unseen: new Path2D(), dim: new Path2D(), dark: new Path2D(), darkDim: new Path2D() };
   for (const cell of grid.allCells()) {
-    const f = fogOf(grid, scene, cell, explored);
+    const f = fogOf(grid, scene, cell, explored, tests);
     if (f === 'seen') continue;
     const known = explored.has(cellKey(cell));
     // the DM's own view: only what the players have never found

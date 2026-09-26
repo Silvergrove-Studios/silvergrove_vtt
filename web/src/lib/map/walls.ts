@@ -7,7 +7,7 @@
 // tell why a player's screen was black: the walls were the why.)
 import { cellKey, type Grid, type Vec } from '../grid';
 import type { Dict } from '../game.svelte';
-import { inAny } from './sight';
+import { polygonTest } from './sight';
 
 export type WallKind = 'wall' | 'door' | 'secret' | 'window' | 'fence' | 'terrain' | 'ethereal' | 'other';
 
@@ -56,7 +56,8 @@ export function wallKind(w: Dict): WallKind {
  *  explored. Hidden walls never (the chapel's pillars are drawn by their
  *  props). */
 export function seenWalls(walls: Dict[], grid: Grid, visible: number[][][], explored: Set<string>): Dict[] {
-  const near = (p: Vec) => inAny(p, visible) || explored.has(cellKey(grid.cellAt(p)));
+  const inSight = polygonTest(visible);
+  const near = (p: Vec) => inSight(p) || explored.has(cellKey(grid.cellAt(p)));
   return walls.filter((w) => {
     if (w.hidden) return false;
     const pts = ((w.points as number[][]) ?? []).map((p) => ({ x: Number(p[0]), y: Number(p[1]) }));

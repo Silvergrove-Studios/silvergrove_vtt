@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid, cellKey } from '../src/lib/grid';
-import { UNSEEN_WORDS, fogOf, fogWords, ghostsOf, inAny, inPolygon } from '../src/lib/map/sight';
+import { UNSEEN_WORDS, fogOf, fogWords, ghostsOf, inAny, inPolygon, polygonTest } from '../src/lib/map/sight';
 
 describe('sight, from what the table sent', () => {
   const grid = new Grid({ columns: 10, rows: 6 });
@@ -20,6 +20,9 @@ describe('sight, from what the table sent', () => {
     expect(inPolygon({ x: 3, y: 1 }, box(0, 0, 2, 2))).toBe(false);
     expect(inAny({ x: 5, y: 1 }, [box(0, 0, 2, 2), box(4, 0, 6, 2)])).toBe(true);
     expect(inAny({ x: 5, y: 1 }, [])).toBe(false);
+    // the same answers with each polygon's box tried first (a triangle: its box is not all of it)
+    const test = polygonTest([box(0, 0, 2, 2), [[4, 0], [6, 0], [4, 2]], []]);
+    expect([test({ x: 1, y: 1 }), test({ x: 4.5, y: 0.5 }), test({ x: 5.8, y: 1.8 }), test({ x: 9, y: 9 })]).toEqual([true, true, false, false]);
   });
 
   it('says what the fog is over each cell: seen, too dark, seen before, or behind walls', () => {
