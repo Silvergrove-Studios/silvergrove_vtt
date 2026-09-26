@@ -306,14 +306,17 @@ static func _segment_hits_circle(a: Vector2, b: Vector2, c: Vector2, r: float) -
 	return (a + ab * t).distance_to(c) <= r
 
 
-## What lights a point: {level: bright | dim | dark, sources: [ids]}.
+## What lights a point: {level: bright | dim | dark, sources: [ids],
+## ambient}. It starts from the scene's own light (`ambient`: daylight is
+## bright everywhere, dim is dim) and the lights raise it.
 func light_at(scene_id: String, p: Variant) -> Dictionary:
 	var pt := point_of(scene_id, p)
+	var ambient := kernel.state.light_level(scene_id)
 	if pt == Vector2.INF:
-		return {"level": "dark", "sources": []}
+		return {"level": "dark", "sources": [], "ambient": ambient}
 	var lvl := kernel.state.effective_level(scene_id)
 	var segs: Array = Lighting.blocking_segments(lvl, {}, "light")
-	var best := "dark"
+	var best: String = {"daylight": "bright", "dim": "dim"}.get(ambient, "dark")
 	var sources := []
 	var lights := []
 	for l in lvl.get("lights", []):
@@ -333,30 +336,30 @@ func light_at(scene_id: String, p: Variant) -> Dictionary:
 			best = "bright"
 		elif best != "bright":
 			best = "dim"
-	return {"level": best, "sources": sources}
+	return {"level": best, "sources": sources, "ambient": ambient}
 
 
-## Whether a token sees another: within its vision, line of sight clear,
+## Whether a token sees another: it has eyes, the line of sight is clear
 ## and the target lit — unless the viewer sees in the dark: everywhere
-## (`vision.mode = "dark"`) or within `vision.dark_radius` of itself
-## (darkvision with a range), in which case `dark_sight` says so.
+## (`vision.mode = "dark"`) or within its darkvision (`vision.dark_radius`,
+## in its `units` on this map), in which case `dark_sight` says so. How far
+## is the light's to say, not the token's: in light, a line of sight is
+## enough.
 func can_see(scene_id: String, viewer: String, target: String) -> Dictionary:
 	var v := token(scene_id, viewer.trim_prefix("token:"))
 	var t := token(scene_id, target.trim_prefix("token:"))
 	if v.is_empty() or t.is_empty():
 		return {"sees": false, "why": "unknown token"}
-	var radius := float(v.get("vision", {}).get("radius", 0))
+	var eyes := Vision.eyes(v, grid(scene_id))
 	var d := distance(scene_id, "token:" + str(v.id), "token:" + str(t.id))
-	if d.edge > radius:
-		return {"sees": false, "why": "out of range", "distance": d}
+	if not eyes.sees:
+		return {"sees": false, "why": "no vision", "distance": d}
 	var los := line_of_sight(scene_id, "token:" + str(v.id), "token:" + str(t.id), false)
 	if not los.clear:
 		return {"sees": false, "why": "no line of sight", "distance": d, "cover": los.cover}
-	var mode := str(v.get("vision", {}).get("mode", "normal"))
 	var light := light_at(scene_id, "token:" + str(t.id))
-	if light.level == "dark" and mode != "dark":
-		var dark_radius := float(v.get("vision", {}).get("dark_radius", 0))
-		if d.edge <= dark_radius:
+	if light.level == "dark" and str(eyes.mode) != "dark":
+		if d.edge <= float(eyes.dark):
 			return {"sees": true, "distance": d, "cover": los.cover, "light": light, "dark_sight": true}
 		return {"sees": false, "why": "dark", "distance": d, "light": light}
 	return {"sees": true, "distance": d, "cover": los.cover, "light": light}

@@ -134,7 +134,7 @@ func test_wire_views_intents_and_roles() -> void:
 		if old.get_ready_state() == WebSocketPeer.STATE_CLOSED and refused[0] == "sent":
 			refused[0] = "closed: " + old.get_close_reason()
 		return refused[0] != "" and refused[0] != "sent", 3000)
-	check(refused[0].contains("protocol 2"), "…and told which protocol the table speaks: " + refused[0])
+	check(refused[0].contains("protocol %d" % Protocol.VERSION), "…and told which protocol the table speaks: " + refused[0])
 	old.close()
 	# Ana joins as a player
 	player._address.text = "127.0.0.1:%d" % table.host.port

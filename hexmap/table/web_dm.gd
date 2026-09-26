@@ -50,7 +50,7 @@ func state() -> Dictionary:
 	for enc in c.encounters:
 		var live: Dictionary = enc.get("live", {}) if enc.get("live") is Dictionary else {}
 		out.encounters.append({"id": str(enc.id), "name": str(enc.get("name", "")), "map": str(enc.get("map", "")), "notes": str(enc.get("notes", "")),
-			"live": live.duplicate(true), "creatures": JsonDoc.deep(enc.get("creatures", []))})
+			"live": live.duplicate(true), "creatures": JsonDoc.deep(enc.get("creatures", [])), "light": str(enc.get("light", ""))})
 	for aid in e.actors:
 		var a: Dictionary = e.actors[aid]
 		var kind := str(a.get("kind", ""))
@@ -180,6 +180,12 @@ func op(intent: Dictionary) -> String:
 		"end_fight":
 			var fight := maps.live_fight()
 			return maps.return_from(fight) if fight != "" else "no fight is running"
+		# the scene's light, from the map bar: daylight, dim, dark, or "" for the map's
+		"scene_light":
+			var light := str(intent.get("light", ""))
+			if light != "" and not Vision.LIGHT_LEVELS.has(light):
+				return "daylight, dim or dark"
+			return ctx.commands.set_scene_light(str(intent.get("scene", ctx.encounter().active_scene_id)), light)
 		"turns":
 			var sid := ctx.encounter().active_scene_id
 			match str(intent.get("do", "")):
@@ -247,6 +253,15 @@ func op(intent: Dictionary) -> String:
 					return "no such map"
 				fe.map = str(intent.map)
 				fe.level = _first_level(str(intent.map))
+			# its light, given to the scene when it starts ("" for the map's own)
+			if intent.has("light"):
+				var light := str(intent.light)
+				if light == "":
+					fe.erase("light")
+				elif Vision.LIGHT_LEVELS.has(light):
+					fe.light = light
+				else:
+					return "daylight, dim or dark"
 			# its creatures, as the card has them now (a line taken out, a count changed)
 			if intent.get("creatures") is Array:
 				var lines := []

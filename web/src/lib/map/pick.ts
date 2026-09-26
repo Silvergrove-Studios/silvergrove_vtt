@@ -77,8 +77,24 @@ export function withTarget(payload: Dict, target: string | Dict | string[], scen
   return out;
 }
 
-/** What the banner says while a pick is waiting. */
-export function pickWords(payload: Dict): string {
+/** The creatures a token pick may take: those on the map but the picker's
+ *  own token and the markers (a place, the party on a regional map). */
+export function pickables(tokens: Dict[], payload: Dict, gm = false): Dict[] {
+  const from = pickFrom(payload, tokens);
+  return tokens.filter((t) => {
+    const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
+    return String(t.id) !== from && (gm || !t.hidden) && !tags.includes('place') && !tags.includes('party');
+  });
+}
+
+/** What a token pick says when there is nothing in sight to pick: a
+ *  playtest's players were asked to tap a creature on a black map. */
+export const NOTHING_IN_SIGHT = 'Nothing in sight: walls or darkness block your view. Move, or ask the DM.';
+
+/** What the banner says while a pick is waiting; with the tokens on the
+ *  map (a player's), that there is nothing to pick when there isn't. */
+export function pickWords(payload: Dict, tokens?: Dict[]): string {
+  if (tokens && String(payload.pick ?? '') === 'token' && pickables(tokens, payload).length === 0) return NOTHING_IN_SIGHT;
   const many = pickCount(payload);
   if (many > 1) return `${String(payload.label ?? 'Choose')}: tap up to ${many} creatures on the map, then Done`;
   const what = String(payload.pick ?? 'target');

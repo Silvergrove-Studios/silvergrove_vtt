@@ -168,3 +168,33 @@ func test_phase_7b_budgets() -> void:
 	check(ms < _budget(25.0), "a picker's first page over 1,000 entries renders under 25 ms (%.2f)" % ms)
 	r.queue_free()
 	await tree.process_frame
+
+
+## Sight for a party of four: by day each sees the whole map in its line of
+## sight (every wall on it counts), in the dark its darkvision and the lit
+## places in its line of sight — the host works it out for every screen at
+## every move.
+func test_sight_budget() -> void:
+	if OS.has_feature("mobile"):
+		skip("budgets are for desktops")
+		return
+	var m := _chapel()
+	var st := EncounterState.new(Encounter.create("Sight"))
+	st.attach_map(m)
+	var sc := Encounter.new_scene(m, "ground", "G", "ruined_chapel.hexmap")
+	st.apply({"t": "scene.add", "scene": sc})
+	var g := m.grid
+	var eyes := []
+	for at in [Vector2i(3, 7), Vector2i(8, 7), Vector2i(12, 2), Vector2i(18, 13)]:
+		var tk := Encounter.new_token("E", g.cell_center(g.offset_to_axial(at.x, at.y)), {"owner": "pl_1", "vision": {"radius": 6, "dark_radius": 60, "units": "ft"}, "light": {"bright": 2, "dim": 4}})
+		st.apply({"t": "token.add", "scene": sc.id, "token": tk})
+		eyes.append(tk)
+	for light in ["daylight", "dark"]:
+		st.apply({"t": "scene.set", "id": sc.id, "changes": {"light": light}})
+		var v := {}
+		var t0 := Time.get_ticks_usec()
+		for i in 5:
+			v = Vision.of(st, sc.id, eyes)
+		var ms := (Time.get_ticks_usec() - t0) / 1000.0 / 5.0
+		say.call("  what four tokens see, %s: %d cells, %d polygons, %.1f ms" % [light, (v.cells as Array).size(), (v.polygons as Array).size(), ms])
+		check(not (v.cells as Array).is_empty() and ms < _budget(25.0), "four tokens' sight %s stays under 25 ms (%.1f)" % [light, ms])

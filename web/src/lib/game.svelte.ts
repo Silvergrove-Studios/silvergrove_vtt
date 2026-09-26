@@ -35,6 +35,8 @@ export const game = $state({
   // the DM seeing as a player: that player's snapshot of the scene, and who
   preview: null as Dict | null,
   previewAs: '',
+  // …and why each creature they don't see isn't there (token id → hidden | dark | walls | none)
+  previewWhy: {} as Record<string, string>,
   clock: {} as Dict,
   maps: {} as Record<string, Dict>,
   packs: {} as Record<string, Dict>,
@@ -161,6 +163,7 @@ function handle(m: Msg): void {
       if (m.scenes) game.scenes = m.scenes as Dict[];
       game.preview = (m.preview as Dict) ?? null;
       game.previewAs = String(m.preview_as ?? '');
+      game.previewWhy = (m.preview_why as Record<string, string>) ?? {};
       wantMap(String(game.scene.map ?? ''));
       break;
     case 'dm':

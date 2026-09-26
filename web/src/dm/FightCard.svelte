@@ -97,6 +97,18 @@
         {#each maps as m (m.id)}<option value={String(m.id)}>{m.name}</option>{/each}
       </select>
     </label>
+    <!-- the light it is fought in: by day the players see all in their line
+         of sight, in the dark only what lights and darkvision show -->
+    <label class="edit">
+      Light
+      <select value={String(fight.light ?? '')} disabled={live} onchange={(e) => dmOp('fight_set', { encounter: fightId, light: e.currentTarget.value })}>
+        <option value="">As the map</option>
+        <option value="daylight">Daylight</option>
+        <option value="dim">Dim</option>
+        <option value="dark">Dark</option>
+      </select>
+      {#if live}<span class="dim small">Under way: change it in the map's bar (Light).</span>{/if}
+    </label>
 
     <section>
       <h3>Creatures</h3>
@@ -182,6 +194,9 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+  }
+  .small {
+    font-size: 0.85rem;
   }
   h3 {
     font-size: 1rem;

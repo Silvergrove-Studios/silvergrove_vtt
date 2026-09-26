@@ -15,6 +15,10 @@ const V_THEME_BASE := 1000
 const V_SCALE_BASE := 1100
 var scale_menu: PopupMenu
 const V_PLAYER_BASE := 2000
+## Scene › Light: as the map, then Vision.LIGHT_LEVELS in order.
+const S_LIGHT_BASE := 2100
+const LIGHT_CHOICES := [["", "As the map"], ["daylight", "Daylight"], ["dim", "Dim"], ["dark", "Dark"]]
+var light_menu: PopupMenu
 
 var app: App
 var ctx := TableContext.new()
@@ -814,6 +818,14 @@ func _build_menus() -> MenuBar:
 	scene.add_separator()
 	_check(scene, "Fog of war", S_FOG, false, KEY_F, true)
 	_item(scene, "Reset fog (forget everything explored)", S_RESET_FOG)
+	# how lit the scene is: what the players see is the light's to say
+	light_menu = PopupMenu.new()
+	light_menu.name = "Light"
+	for i in LIGHT_CHOICES.size():
+		light_menu.add_radio_check_item(str(LIGHT_CHOICES[i][1]), S_LIGHT_BASE + i)
+	light_menu.id_pressed.connect(_on_menu)
+	scene.add_child(light_menu)
+	scene.add_submenu_node_item("Light", light_menu)
 	scene.id_pressed.connect(_on_menu)
 	bar.add_child(scene)
 
@@ -1202,6 +1214,14 @@ func _update_menus() -> void:
 	var scene_menu := _menu("Scene")
 	if scene_menu != null:
 		scene_menu.set_item_checked(scene_menu.get_item_index(S_FOG), ctx.scene_id != "" and ctx.state.fog_enabled(ctx.scene_id))
+	if light_menu != null:
+		var own := str(ctx.scene().get("light", "")) if ctx.scene_id != "" else ""
+		for li in LIGHT_CHOICES.size():
+			light_menu.set_item_checked(li, str(LIGHT_CHOICES[li][0]) == own)
+			light_menu.set_item_disabled(li, ctx.scene_id == "")
+		# "As the map" says what the map is
+		var map_light := str(ctx.state.level_for(ctx.scene_id).get("light", "daylight")) if ctx.scene_id != "" else "daylight"
+		light_menu.set_item_text(0, "As the map (%s)" % (map_light if Vision.LIGHT_LEVELS.has(map_light) else "daylight"))
 	var tm := _menu("Turns")
 	if tm != null:
 		var mode := str(ctx.encounter().turns.get("mode", "free"))
@@ -1276,6 +1296,12 @@ func _on_menu(id: int) -> void:
 		return
 	if id >= V_PLAYER_BASE and id < V_PLAYER_BASE + viewpoint_select.item_count:
 		_set_viewpoint(str(viewpoint_select.get_item_metadata(id - V_PLAYER_BASE)))
+		return
+	if id >= S_LIGHT_BASE and id < S_LIGHT_BASE + LIGHT_CHOICES.size():
+		if ctx.scene_id != "":
+			var why := ctx.commands.set_scene_light(ctx.scene_id, str(LIGHT_CHOICES[id - S_LIGHT_BASE][0]))
+			if why != "":
+				ctx.say(why)
 		return
 	var sid := ctx.scene_id
 	match id:

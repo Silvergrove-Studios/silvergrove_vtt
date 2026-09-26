@@ -129,8 +129,10 @@ token they own. The Table is authoritative: players send events as
 
 `Vision` computes what tokens see from the *effective* level (overrides
 merged, so an open door does not block) with `Lighting.visibility_polygon`
-against sight-blocking walls; fog is the set of cells a player's tokens have
-seen. `MapCanvas` takes the state as an optional input (`set_scene`) and a
+against sight-blocking walls, by the scene's light
+(`EncounterState.light_level`: daylight, dim or dark): in light, the whole
+line of sight; in the dark, a token's darkvision and the lit places in its
+line of sight. Fog is the set of cells a player's tokens have seen. `MapCanvas` takes the state as an optional input (`set_scene`) and a
 *viewpoint* — the GM sees everything; a player sees what their tokens can,
 fog for the rest, hidden tokens never. Editor and exports pass no state and
 are untouched.

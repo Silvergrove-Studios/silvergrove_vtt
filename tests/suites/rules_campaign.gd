@@ -405,14 +405,16 @@ func test_cogm_role() -> void:
 	var told := []
 	c.status.connect(func(t: String) -> void: told.append(t))
 	c.connect_to_host()
-	check(_pump(host, [c], func() -> bool: return c.state != null), "welcomed as anyone")
+	check(_pump(host, [c], func() -> bool: return c.state != null and c.maps_ready()), "welcomed as anyone")
 	check(not c.state.encounter.scene(sid).regions.has("r_gm") and not c.state.encounter.scene(sid).has("triggers"), "…without GM regions or triggers")
+	check((c.state.map_for(sid).level(0).notes as Array).is_empty(), "…and the map without the DM's notes on it")
 	c.join("", "cogm", "0000" if host.cogm_code != "0000" else "0001")
 	check(_pump(host, [c], func() -> bool: return told.any(func(t: String) -> bool: return t.contains("code"))), "the wrong code is refused")
 	c.join("", "cogm", host.cogm_code)
 	check(_pump(host, [c], func() -> bool: return c.joined and c.is_gm() and not c.view.is_empty()), "joined as co-GM with the code")
 	check(host.cogm_count() == 1 and host.connected_players().is_empty(), "the host counts a co-GM, not a player")
 	check(c.state.encounter.scene(sid).regions.has("r_gm") and c.state.encounter.scene(sid).triggers.size() == 1, "the co-GM holds the whole scene")
+	check(_pump(host, [c], func() -> bool: return c.state.map_for(sid) != null and not (c.state.map_for(sid).level(0).notes as Array).is_empty()), "and the map whole, notes and all")
 	check(c.view.role == "gm" and c.view.actors.has("a_g") and c.view.actors.a_g.ext.has("sample"), "and the GM projection: every actor, every field")
 	# a move of a token no player owns, a GM verb, an action for any actor
 	var to := g.cell_center(g.offset_to_axial(8, 7))

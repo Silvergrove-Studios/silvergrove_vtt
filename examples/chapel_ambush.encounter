@@ -152,6 +152,7 @@
       },
       "id": "s_b10e8ea8",
       "level": "ground",
+      "light": "dim",
       "map": "d74c4e99-3a49-4a88-8599-4d7798fe24fa",
       "map_path": "ruined_chapel.hexmap",
       "name": "Chapel at dusk",

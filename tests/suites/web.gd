@@ -121,6 +121,102 @@ func test_web_scene() -> void:
 	check(WebScene.build(st, "nope", ana, false).is_empty(), "no such scene: nothing")
 
 
+## The scene's light in the snapshot, and what it does to what a player is
+## sent: by day and at dusk a goblin in her line of sight however far, in
+## the dark only what her torch lights. And why the DM's See as leaves out
+## what it does.
+func test_web_scene_light() -> void:
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var ana := "pl_fe0170c1"
+	var snap := WebScene.build(st, sid, ana, false)
+	check(snap.light == "dim" and is_equal_approx(float(snap.darkness), 0.4), "the chapel at dusk: dim, a light darkness sheet (%s, %s)" % [snap.light, snap.darkness])
+	check((snap.los as Array).is_empty() and (snap.dark_sight as Array).is_empty() and not snap.has("light_set"), "in dim light what is in sight is seen: no line of sight apart, no darkvision")
+	var dm := WebScene.build(st, sid, "", true)
+	check(dm.light_set == "dim" and dm.map_light == "daylight" and is_equal_approx(float(dm.darkness), 0.2), "the DM's: the scene's own setting, the map's, and half the darkness")
+	# a goblin revealed in the courtyard, six hexes north of Ana's fighter in the open
+	var g := st.map_for(sid).grid
+	var fighter := st.tokens_owned_by(sid, ana)[0] as Dictionary
+	var north := Vision.token_pos(fighter) + Vector2(0, -5.6)
+	var gob := str(st.tokens(sid)[2].id)
+	st.apply({"t": "token.set", "scene": sid, "id": gob, "changes": {"hidden": false, "pos": [north.x, north.y]}})
+	var sent := func() -> Array: return (WebScene.build(st, sid, ana, false).tokens as Array).map(func(t: Dictionary) -> String: return str(t.id))
+	check((sent.call() as Array).has(gob), "at dusk a revealed goblin in her line of sight is sent, six hexes off")
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "daylight"}})
+	check((sent.call() as Array).has(gob), "by day too")
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "dark"}})
+	check(not (sent.call() as Array).has(gob), "in the dark her torch doesn't reach it: not sent")
+	var night := WebScene.build(st, sid, ana, false)
+	check(night.light == "dark" and is_equal_approx(float(night.darkness), 1.0) and not (night.los as Array).is_empty(), "the dark: the whole darkness sheet, and her line of sight apart from what she sees")
+	check(g.in_bounds(g.world_to_axial(north)), "(the goblin is on the map)")
+	# why the See as leaves each one out: too dark, walls, hidden
+	var inside := str(st.tokens(sid)[3].id)
+	st.apply({"t": "token.set", "scene": sid, "id": inside, "changes": {"hidden": false}})
+	var why := WebScene.unseen(st, sid, ana)
+	check(str(why.get(gob, "")) == "dark", "in her line of sight but unlit: dark (%s)" % [why])
+	check(str(why.get(inside, "")) == "walls", "inside the chapel, the door shut: walls")
+	check(str(why.get(str(st.tokens(sid)[4].id), "")) == "hidden", "one the DM hasn't revealed: hidden")
+	check(not why.has(str(fighter.id)) and not why.has(str(st.tokens(sid)[1].id)), "her own and the party's are always there")
+	check(str(WebScene.unseen(st, sid, "pl_nobody").get(gob, "")) == "none", "a player with nothing on the map to see through: none")
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "daylight"}})
+	check(not WebScene.unseen(st, sid, ana).has(gob), "by day she sees it: not in the list")
+
+
+## The light from the DM's screen: a fight's own (its card), given to the
+## scene it starts; the scene's (the map bar's Light), and the Godot
+## Table's Scene › Light. The party comes to the fight with its sight: a
+## character's darkvision over the token's, not instead of it.
+func test_light_from_the_dm_screen() -> void:
+	var dir := "user://web_light_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_web_light.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var c := Campaign.create("Lights")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	# a character whose ruleset says it sees 60 feet in the dark
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1", "token": {"vision": {"dark_radius": 60, "units": "ft"}}}
+	check(c.save(dir.path_join("lights.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("lights.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var mp := win.maps
+	check(mp.add_map(_example("ruined_chapel.hexmap")) == "", "the chapel in the library")
+	var mid := str(ctx.campaign.maps[0].id)
+	check(win.web_dm.op({"op": "new_fight", "id": "enc_night", "name": "At night", "map": mid}) == "", "a fight of the DM's own")
+	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_night", "light": "moonlight"}) != "", "a light that isn't one of the three is refused")
+	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_night", "light": "dark"}) == "" and str(ctx.campaign.encounter_entry("enc_night").light) == "dark", "the fight is in the dark")
+	var listed: Array = win.web_dm.state().encounters.filter(func(e: Dictionary) -> bool: return str(e.id) == "enc_night")
+	check(listed.size() == 1 and str(listed[0].light) == "dark", "and the DM's screen says so on its card")
+	check(mp.launch("enc_night") == "", "started")
+	var sid := str(ctx.campaign.encounter_entry("enc_night").live.scene)
+	check(str(ctx.encounter().scene(sid).get("light", "")) == "dark" and ctx.state.light_level(sid) == "dark", "its scene is dark, whatever the map says (the chapel is by day)")
+	var hero := ctx.state.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.get("actor", "")) == "a_h")
+	var hv: Dictionary = hero[0].vision if hero.size() == 1 else {}
+	check(float(hv.get("radius", 0)) == 6.0 and float(hv.get("dark_radius", 0)) == 60.0 and str(hv.get("units", "")) == "ft", "the hero's token: the character's darkvision over the token's sight (%s)" % [hv])
+	check(not ctx.state.explored(sid).is_empty(), "what the party sees as it arrives is explored")
+	# the map bar's Light: daylight, back to the map's, a word it doesn't know
+	check(win.web_dm.op({"op": "scene_light", "scene": sid, "light": "daylight"}) == "" and ctx.state.light_level(sid) == "daylight", "the DM makes it day")
+	var explored_by_day := ctx.state.explored(sid).size()
+	check(explored_by_day > 0, "(and what is seen by day is explored: %d cells)" % explored_by_day)
+	check(win.web_dm.op({"op": "scene_light", "scene": sid, "light": "bright"}) != "" and ctx.state.light_level(sid) == "daylight", "a light the table doesn't know is refused")
+	check(win.web_dm.op({"op": "scene_light", "scene": sid, "light": ""}) == "" and not ctx.encounter().scene(sid).has("light") and ctx.state.light_level(sid) == "daylight", "as the map: the scene's own setting goes, the chapel is by day")
+	ctx.history.undo()
+	check(ctx.state.light_level(sid) == "daylight" and str(ctx.encounter().scene(sid).get("light", "")) == "daylight", "one undo step each")
+	# the Godot Table's Scene › Light
+	ctx.set_scene(sid)
+	win._on_menu(TableWindow.S_LIGHT_BASE + 3)
+	check(ctx.state.light_level(sid) == "dark", "Scene › Light › Dark")
+	win._update_menus()
+	check(win.light_menu.is_item_checked(3) and win.light_menu.get_item_text(0) == "As the map (daylight)", "the menu shows it, and what the map is")
+	win.queue_free()
+	await tree.process_frame
+	for f in ["lights.campaign", "lights.campaign.autosave"]:
+		DirAccess.remove_absolute(dir.path_join(f))
+	DirAccess.remove_absolute(dir)
+
+
 ## A web client over a real socket: its messages, as they come.
 class WebClient:
 	var ws := WebSocketPeer.new()
@@ -227,6 +323,8 @@ func test_web_clients_on_the_host() -> void:
 	var preview: Dictionary = dm.last("scene").get("preview", {})
 	check((preview.get("tokens", []) as Array).size() < (dm.last("scene").scene.tokens as Array).size() and not (preview.tokens as Array).any(func(t: Dictionary) -> bool: return t.has("hidden")),
 		"her snapshot: fewer tokens than the DM's, nothing hidden among them")
+	var why: Dictionary = dm.last("scene").get("preview_why", {})
+	check(why.size() == 4 and why.values().all(func(w: String) -> bool: return w == "hidden"), "and why each one she doesn't see isn't there: the four goblins, hidden (%s)" % [why])
 	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "see_as", "player": ""}})
 	check(_pump(host, [dm], func() -> bool: return not dm.last("scene").has("preview")), "and back to the DM's own")
 	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "launch", "encounter": "e1"}})

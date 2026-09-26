@@ -38,10 +38,20 @@ extends RefCounted
 ##   comp     {req, collection, entry | page}   what was asked for, under the viewer's audience
 ##   error    {why}                           then the host closes
 ##   pong     {}
-##   scene    {scene, players, clock, online, scenes?}   a web client's scene (WebScene), for it
+##   scene    {scene, players, clock, online, scenes?, preview?, preview_as?, preview_why?}
+##                                             a web client's scene (WebScene), for it; the DM
+##                                             seeing as a player gets theirs and why each
+##                                             creature they don't see isn't there
 ##   dm       {state}                          the DM's web screen: the campaign as it shows it
+##
+## Version 3: sight follows the light. A scene is lit by daylight, dim light
+## or dark (its own `light`, else its map level's, else daylight), a
+## token's `vision` may be in `units`, and `radius` no longer limits how
+## far it sees. A client that works out its own sight (a Godot one) must
+## do it the table's way, so older ones are refused. A player's device is
+## sent a map without the DM's notes on it (player_map).
 
-const VERSION := 2
+const VERSION := 3
 const ROLES := ["player", "display", "cogm", "dm"]
 ## Events clients apply themselves; everything else reaches them as a view.
 const SCENE_EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
@@ -95,6 +105,9 @@ static func client_document(doc: Dictionary, gm := false) -> Dictionary:
 		out.campaign.ext = {}
 	if gm:
 		return out
+	# the encounter's own notes are the DM's
+	if out.get("notes") is Array:
+		out.notes = []
 	for sc in out.get("scenes", []):
 		sc.erase("triggers")
 		var regions: Dictionary = sc.get("regions", {})
@@ -105,6 +118,27 @@ static func client_document(doc: Dictionary, gm := false) -> Dictionary:
 		for key in cells.keys():
 			if not bool(cells[key].get("revealed", false)):
 				cells.erase(key)
+	return out
+
+
+## A map as a player's screen is sent it: without the DM's notes on it
+## (`gm_only`), but for those `shown` ("notes:<id>" refs a scene's
+## overrides reveal). The walls stay whole — a Godot client works out its
+## own sight from them, so the secret doors and the hidden walls that
+## block it must be there; the screens draw a closed secret door as a
+## plain wall and leave hidden walls out.
+static func player_map(doc: Dictionary, shown: Dictionary = {}) -> Dictionary:
+	var out: Dictionary = JsonDoc.deep(doc)
+	for lvl in out.get("levels", []):
+		if not (lvl is Dictionary):
+			continue
+		var kept := []
+		for n in lvl.get("notes", []):
+			if n is Dictionary and (not bool(n.get("gm_only", false)) or shown.has(LayerTree.ref("notes", str(n.get("id", ""))))):
+				kept.append(n)
+		lvl.notes = kept
+		# (and their leaves in the layer tree)
+		LayerTree.ensure(lvl)
 	return out
 
 

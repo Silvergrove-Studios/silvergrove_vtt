@@ -18,6 +18,11 @@ func test_canvas_encounter_view() -> void:
 		check(not bool(t.hidden), "seen tokens are not hidden")
 	var g := canvas.map.grid
 	var fighter: Dictionary = st.tokens_owned_by(sid, str(ana.id))[0]
+	# at night, with six hexes of darkvision: how far she sees is the dark's to say
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "dark"}})
+	st.apply({"t": "token.set", "scene": sid, "id": fighter.id, "changes": {"vision": {"radius": 6, "dark_radius": 6}}})
+	canvas.refresh()
+	check(is_equal_approx(canvas.darkness, 1.0), "the dark scene draws the whole darkness sheet for a player")
 	var own_cell := g.world_to_axial(Vision.token_pos(fighter))
 	check(canvas.fog_of(own_cell) == 0 and canvas.point_seen(Vision.token_pos(fighter)), "own cell is in sight")
 	var far := g.offset_to_axial(20, 14)
@@ -45,6 +50,7 @@ func test_canvas_encounter_view() -> void:
 	canvas.viewpoint = ""
 	canvas.refresh()
 	check(canvas.fog_of(inside) == 0 and canvas.fog_of(far) == 2, "the GM gets clear for explored and a hint for never-seen")
+	check(is_equal_approx(canvas.darkness, 0.5), "and half the darkness, to read the map by")
 	st.apply({"t": "fog.set", "scene": sid, "enabled": false})
 	canvas.viewpoint = str(ana.id)
 	canvas.refresh()

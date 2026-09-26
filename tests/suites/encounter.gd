@@ -321,6 +321,13 @@ func test_vision() -> void:
 	for w in m.level_by_id("ground").walls:
 		if w.get("door", "none") == "door":
 			door = w
+	# At night, the lights out and six hexes of darkvision: what the hero
+	# sees is what that reaches (in daylight it would be the whole map in
+	# its line of sight — layers_lighting.gd tests the light)
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "dark"}})
+	for l in m.level_by_id("ground").lights:
+		st.apply({"t": "element.set", "scene": sid, "ref": "lights:" + str(l.id), "changes": {"on": false}})
+	st.apply({"t": "token.set", "scene": sid, "id": hero, "changes": {"vision": {"radius": 6, "dark_radius": 6}}})
 	# The hero stands outside the west door; the goblin is inside the nave.
 	var inside := g.cell_center(g.offset_to_axial(7, 7))
 	var closed := Vision.of(st, sid, [st.token(sid, hero)])
@@ -331,12 +338,16 @@ func test_vision() -> void:
 	var opened := Vision.of(st, sid, [st.token(sid, hero)])
 	check(Vision.sees(opened.polygons, inside), "open door: sees into the nave")
 	check(opened.cells.size() > closed.cells.size(), "open door reveals more cells (%d > %d)" % [opened.cells.size(), closed.cells.size()])
-	# Vision is bounded by radius.
+	# In the dark, sight is bounded by the darkvision.
+	var far_seen := 0
 	for c in opened.cells:
-		check(g.cell_center(c).distance_to(Vision.token_pos(st.token(sid, hero))) <= 6.0 + 0.6, "seen cell within radius")
+		if g.cell_center(c).distance_to(Vision.token_pos(st.token(sid, hero))) > 6.0 + 0.6:
+			far_seen += 1
+	check(far_seen == 0, "every seen cell within the darkvision (%d beyond)" % far_seen)
 	# No vision, no polygon; two tokens, two polygons; sight vs light walls.
-	st.apply({"t": "token.set", "scene": sid, "id": hero, "changes": {"vision": {"radius": 0}}})
-	check(Vision.of(st, sid, [st.token(sid, hero)]).cells.is_empty(), "radius 0 sees nothing")
+	st.apply({"t": "token.set", "scene": sid, "id": hero, "changes": {"vision": {"radius": 0, "dark_radius": 6}}})
+	check(Vision.of(st, sid, [st.token(sid, hero)]).cells.is_empty(), "radius 0 sees nothing, darkvision or not")
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "daylight"}})
 	st.apply({"t": "token.set", "scene": sid, "id": hero, "changes": {"vision": {"radius": 3}}})
 	check(Vision.of(st, sid, st.tokens(sid)).polygons.size() == 2, "each seeing token gets a polygon")
 	var lvl := {"walls": [{"id": "w", "points": [[0, 0], [0, 2]], "blocks": {"sight": false, "light": true}, "door": "none", "state": "closed"}]}

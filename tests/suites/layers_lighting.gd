@@ -113,6 +113,122 @@ func test_lighting() -> void:
 	check(fan.uvs[0] == Vector2(0.5, 0.5), "centre uv")
 
 
+## A field for the light tests: 30 by 12 pointy hexes of five feet, a wall
+## across the lower rows at x 10 (row 8 is behind it, row 3 is not), and a
+## room at the east end with a door in its west wall and a brazier inside.
+## [state, scene id, map].
+func _field(map_light := "") -> Array:
+	var m := HexMap.create("Field", HexGrid.new(HexGrid.Orient.POINTY, HexGrid.Offset.ODD, 30, 12))
+	var lvl := m.level(0)
+	if map_light != "":
+		lvl.light = map_light
+	var solid := {"move": true, "sight": true, "light": true, "sound": true}
+	lvl.walls.append({"id": "w_low", "points": [[10, 5.0], [10, 12.0]], "blocks": solid, "door": "none", "state": "closed"})
+	lvl.walls.append({"id": "w_room", "points": [[20, 2.4], [20, 0.5], [26, 0.5], [26, 5.5], [20, 5.5], [20, 3.6]], "blocks": solid, "door": "none", "state": "closed"})
+	lvl.walls.append({"id": "w_door", "points": [[20, 2.4], [20, 3.6]], "blocks": solid, "door": "door", "state": "closed"})
+	lvl.lights.append({"id": "l_brazier", "pos": [23.0, 3.0], "bright": 1.5, "dim": 3.0, "color": "#ff9040", "on": true})
+	var st := EncounterState.new(Encounter.create("Light"))
+	st.attach_map(m)
+	var sc := Encounter.new_scene(m, str(lvl.id), "Field", "")
+	st.apply({"t": "scene.add", "scene": sc})
+	return [st, str(sc.id), m]
+
+
+## What a scene is lit by, and what its tokens see by it: by day and in dim
+## light everything in their line of sight, however far, walls permitting;
+## in the dark only their darkvision and the lit places in their line of
+## sight (a playtest's maps were black beyond six hexes, the sunlit road too).
+func test_light_levels() -> void:
+	var parts := _field()
+	var st: EncounterState = parts[0]
+	var sid: String = parts[1]
+	var m: HexMap = parts[2]
+	var g := m.grid
+	# which setting wins
+	check(st.light_level(sid) == "daylight", "a map that says nothing is lit by day")
+	m.level(0).light = "dark"
+	check(st.light_level(sid) == "dark", "the map's level says dark")
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "dim"}})
+	check(st.light_level(sid) == "dim", "the scene's own light wins over the map's")
+	check(st.validate({"t": "scene.set", "id": sid, "changes": {"light": "twilight"}}) != "", "a light that isn't daylight, dim or dark is refused")
+	check(st.validate({"t": "scene.set", "id": sid, "changes": {"light": null}}) == "", "null goes back to the map's")
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": null}})
+	check(st.light_level(sid) == "dark" and not st.encounter.scene(sid).has("light"), "and back to the map's it is")
+	m.level(0).light = "moonlit"
+	check(st.light_level(sid) == "daylight", "a map level's word that isn't one of the three is daylight")
+	m.level(0).erase("light")
+	check(is_equal_approx(Vision.darkness("daylight"), 0.0) and is_equal_approx(Vision.darkness("dim"), 0.4) and is_equal_approx(Vision.darkness("dark"), 1.0)
+		and is_equal_approx(Vision.darkness("dark", true), 0.5), "the darkness sheet: none, 0.4, whole; the DM's at half")
+	# two tokens: A in the open on row 3, B on row 8 behind the low wall
+	var at := func(col: int, row: int) -> Vector2: return g.cell_center(g.offset_to_axial(col, row))
+	var a := Encounter.new_token("A", at.call(2, 3), {"id": "t_a"})
+	var b := Encounter.new_token("B", at.call(2, 8), {"id": "t_b"})
+	st.apply({"t": "token.add", "scene": sid, "token": a})
+	st.apply({"t": "token.add", "scene": sid, "token": b})
+	var both := func() -> Dictionary: return Vision.of(st, sid, [st.token(sid, "t_a"), st.token(sid, "t_b")])
+	for light in ["daylight", "dim"]:
+		st.apply({"t": "scene.set", "id": sid, "changes": {"light": light}})
+		var v: Dictionary = both.call()
+		check(Vision.sees(v.polygons, at.call(17, 3)) and v.cells.has(g.offset_to_axial(17, 3)), "%s: fifteen hexes across the grass, seen" % light)
+		check(not Vision.sees(v.polygons, at.call(17, 8)) and not v.cells.has(g.offset_to_axial(17, 8)), "%s: not through the wall" % light)
+		check(v.los == v.polygons and (v.dark as Array).is_empty(), "%s: what is in the line of sight is seen" % light)
+	# in the dark: its own cell and no more, without a light or darkvision
+	st.apply({"t": "scene.set", "id": sid, "changes": {"light": "dark"}})
+	var alone := Vision.of(st, sid, [st.token(sid, "t_a")])
+	check(alone.cells.size() == 1 and alone.cells[0] == g.offset_to_axial(2, 3), "in the dark a token sees its own cell and no more: %s" % [alone.cells])
+	check(Vision.sees(alone.los, at.call(17, 3)), "though its line of sight goes on (the screens say it is too dark there)")
+	# a torch: as far as its light
+	st.apply({"t": "token.set", "scene": sid, "id": "t_a", "changes": {"light": {"bright": 2, "dim": 4}}})
+	var torch := Vision.of(st, sid, [st.token(sid, "t_a")])
+	check(torch.cells.has(g.offset_to_axial(5, 3)) and not torch.cells.has(g.offset_to_axial(7, 3)), "a torch's reach: three hexes off seen, five not")
+	check(Vision.sees(torch.polygons, at.call(17, 3)) == false, "and the far field stays dark")
+	# a brazier in the room: seen through the open door, not through its walls
+	var c := Encounter.new_token("C", at.call(13, 3), {"id": "t_c"})
+	st.apply({"t": "token.add", "scene": sid, "token": c})
+	var lit_door: Vector2 = at.call(21, 3)    # lit, in line with the door
+	var lit_corner: Vector2 = at.call(21, 1)  # lit, behind the room's west wall from C
+	var from_c := func() -> Dictionary: return Vision.of(st, sid, [st.token(sid, "t_c")])
+	check(not Vision.sees(from_c.call().polygons, lit_door), "the door shut: the brazier's light is not seen")
+	st.apply({"t": "element.set", "scene": sid, "ref": "walls:w_door", "changes": {"state": "open"}})
+	check(Vision.sees(from_c.call().polygons, lit_door), "the door open: the lit floor beyond it is")
+	check(not Vision.sees(from_c.call().polygons, lit_corner), "but not the lit corner behind the wall")
+	st.apply({"t": "element.set", "scene": sid, "ref": "lights:l_brazier", "changes": {"on": false}})
+	check(not Vision.sees(from_c.call().polygons, lit_door), "the brazier put out: dark again")
+	# a hidden token's torch lights nothing a player sees by
+	st.apply({"t": "token.set", "scene": sid, "id": "t_a", "changes": {"hidden": true}})
+	check(Vision.lights(st, sid, st.effective_level(sid)).is_empty(), "a hidden token's light and a light put out are not counted")
+	# darkvision in feet: 60 feet is twelve five-foot hexes
+	var d := Encounter.new_token("D", at.call(2, 1), {"id": "t_d", "vision": {"radius": 6, "dark_radius": 60, "units": "ft"}})
+	st.apply({"t": "token.add", "scene": sid, "token": d})
+	check(is_equal_approx(float(Vision.eyes(d, g).dark), 12.0), "60 ft of darkvision on a five-foot grid: 12 hexes")
+	var dv := Vision.of(st, sid, [st.token(sid, "t_d")])
+	check(dv.cells.has(g.offset_to_axial(13, 1)) and not dv.cells.has(g.offset_to_axial(15, 1)), "eleven hexes off seen, thirteen not")
+	check((dv.dark as Array).size() == 1, "the darkvision's reach, apart, for the screens to lift in grey")
+	# and on a map of 1.5 m hexes (the bog): the same 60 feet is 12.2 hexes
+	var bog := HexMap.load_file(example("bog_crossing.hexmap"))
+	var bst := EncounterState.new(Encounter.create("Bog"))
+	bst.attach_map(bog)
+	var bsc := Encounter.new_scene(bog, str(bog.level(0).id), "Bog at night", "bog_crossing.hexmap")
+	bsc.light = "dark"
+	bst.apply({"t": "scene.add", "scene": bsc})
+	var bg := bog.grid
+	var e_at := bg.cell_center(bg.offset_to_axial(1, 0))
+	var e := Encounter.new_token("E", e_at, {"id": "t_e", "vision": {"radius": 6, "dark_radius": 60, "units": "ft"}})
+	bst.apply({"t": "token.add", "scene": bsc.id, "token": e})
+	check(bg.units == "m" and is_equal_approx(bg.distance, 1.5) and absf(float(Vision.eyes(e, bg).dark) - 12.19) < 0.01, "60 ft on 1.5 m hexes: %.2f hexes" % float(Vision.eyes(e, bg).dark))
+	var ev := Vision.of(bst, str(bsc.id), [bst.token(str(bsc.id), "t_e")])
+	check(Vision.sees(ev.polygons, e_at + Vector2(0, 11)) and not Vision.sees(ev.polygons, e_at + Vector2(0, 13)), "eleven hexes off seen, thirteen not, on the bog too")
+	check(is_equal_approx(Vision.hexes_per("ft", HexGrid.new()), 0.2) and is_equal_approx(Vision.hexes_per("", bg), 1.0) and is_equal_approx(Vision.hexes_per("leagues", bg), 1.0),
+		"units: feet on five-foot hexes; none, or ones it can't turn into the map's, count as hexes")
+	# a token that sees in the dark (`mode: "dark"`) sees as by day
+	var f := Encounter.new_token("F", at.call(2, 3), {"id": "t_f", "vision": {"radius": 6, "mode": "dark"}})
+	st.apply({"t": "token.add", "scene": sid, "token": f})
+	check(Vision.sees(Vision.of(st, sid, [st.token(sid, "t_f")]).polygons, at.call(17, 3)), "mode dark: fifteen hexes off in the dark, seen")
+	# and nothing for a marker that sees nothing
+	st.apply({"t": "token.set", "scene": sid, "id": "t_f", "changes": {"vision": {"radius": 0, "mode": "dark"}}})
+	check(Vision.of(st, sid, [st.token(sid, "t_f")]).polygons.is_empty(), "radius 0 sees nothing, in any light")
+
+
 func test_tree_commands_and_picking() -> void:
 	var ctx := _ctx()
 	var lvl := ctx.level()

@@ -89,6 +89,7 @@ A level is a floor. Every map has at least one. Levels share the grid.
   "id": "ground",
   "name": "Ground floor",
   "elevation_range": [0, 2],
+  "light": "daylight",
   "terrain": { "0,0": { "t": "dungeons_and_castles:flagstone", "v": 2, "rot": 0, "z": 0 } },
   "props": [ … ],
   "walls": [ … ],
@@ -100,6 +101,14 @@ A level is a floor. Every map has at least one. Levels share the grid.
 
 `elevation_range` is `[bottom, top]` in hex units; a level with several
 storeys of headroom just has a taller range.
+
+`light` (optional): how the level is lit — `daylight` (the default when
+absent: out of doors by day), `dim` (dusk, dawn, a full moon) or `dark`
+(a crypt, a cellar, night). The Table's sight follows it: by day and in
+dim light a token sees everything in its line of sight, walls permitting;
+in the dark only what its darkvision reaches and what lights light. A
+scene can override it (`docs/encounter-format.md`). The editor sets it in
+*Level › Level settings…*.
 
 ### Layer tree
 

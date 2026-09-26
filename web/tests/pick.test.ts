@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
-import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../src/lib/map/pick';
+import { NOTHING_IN_SIGHT, pickCount, pickTarget, pickWords, pickables, togglePicked, withTarget } from '../src/lib/map/pick';
 
 describe('picking a target', () => {
   const grid = new Grid({ columns: 10, rows: 8 });
@@ -38,5 +38,21 @@ describe('picking a target', () => {
     expect(togglePicked(picked, 'token:d', 3)).toEqual(['token:a', 'token:b', 'token:c']);
     expect(togglePicked(picked, 'token:b', 3)).toEqual(['token:a', 'token:c']);
     expect(withTarget(bless, picked, 's1')).toEqual({ kind: 'action', ctx: { actor: 'hero', target: ['token:a', 'token:b', 'token:c'], scene: 's1' } });
+  });
+  it('says so when there is nothing in sight to pick (a playtest asked players to tap a creature on a black map)', () => {
+    const hero = { id: 'h', actor: 'hero' };
+    const marker = { id: 'party', tags: ['party'] };
+    const place = { id: 'inn', tags: ['place'] };
+    const lurker = { id: 'g', hidden: true };
+    const attack = { kind: 'action', pick: 'token', label: 'Attack', ctx: { actor: 'hero' } };
+    expect(pickables([hero, marker, place, lurker], attack)).toEqual([]);
+    expect(pickables([hero, marker, place, lurker], attack, true).map((t) => t.id)).toEqual(['g']);
+    expect(pickWords(attack, [hero, marker, place])).toBe(NOTHING_IN_SIGHT);
+    expect(NOTHING_IN_SIGHT).toBe('Nothing in sight: walls or darkness block your view. Move, or ask the DM.');
+    // a creature in sight (a friend's token counts), or a pick that isn't of a creature
+    expect(pickWords(attack, [hero, { id: 'ally', owner: 'pl_2' }])).toBe('Attack: tap a creature on the map');
+    expect(pickWords({ pick: 'cell', label: 'Move' }, [hero])).toBe('Move: tap a space on the map');
+    // the DM's banner, with no tokens given, is as it was
+    expect(pickWords(attack)).toBe('Attack: tap a creature on the map');
   });
 });
