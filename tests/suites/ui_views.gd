@@ -247,6 +247,18 @@ func test_pickers_wizards_repeaters_and_fields() -> void:
 	search.text = "tou"
 	search.text_changed.emit("tou")
 	check(lists[0].item_count == 1 and lists[0].get_item_text(0) == "Tough", "the search narrows the list")
+	# the words typed, in any order, each the start of a word (a playtest's DM found
+	# nothing for "Lantern, Hooded" nor "thieves' tools")
+	check(ViewRenderer.match_words("Lantern, Hooded", "hooded lan") and ViewRenderer.match_words("Lantern, Hooded", "Lantern, Hooded")
+		and ViewRenderer.match_words("Thieves' Tools", "thieves' tools") and ViewRenderer.match_words("Anything", ""), "every word typed starts one of the name's")
+	check(not ViewRenderer.match_words("Lantern, Hooded", "hooded lamp") and not ViewRenderer.match_words("Rope", "ope"), "and not a word it doesn't start")
+	# a `sub` beside each name (the price of what a player buys)
+	var shop := ViewRenderer.new()
+	root.add_child(shop)
+	shop.render({"type": "picker", "bind": "/gear", "sub": "@item.cost .. ' GP'", "on_pick": {}}, {"gear": [{"id": "rope", "name": "Rope", "cost": 1}, "Chalk"]})
+	var sl: ItemList = _all(shop, "ItemList")[0]
+	check(sl.get_item_text(0) == "Rope  ·  1 GP" and sl.get_item_text(1) == "Chalk", "the sub line beside a record's name: %s" % [sl.get_item_text(0)])
+	shop.queue_free()
 	lists[0].select(0)
 	lists[0].item_selected.emit(0)
 	check(sent.size() == 1 and sent[0].ctx.feat == "tough" and sent[0].ctx.name == "Tough" and sent[0].ctx.actor == "a_1", "a pick sends the intent with the record and its id: %s" % [sent])
@@ -285,7 +297,7 @@ func test_pickers_wizards_repeaters_and_fields() -> void:
 	check(_find(r, "Label", "New hero: Name (1/2)") != null and _find(r, "Button", "Back").disabled, "the first step, no way back")
 	(_all(r, "LineEdit")[0] as LineEdit).text = "Ana"
 	_find(r, "Button", "Next").pressed.emit()
-	check(_find(r, "Label", "New hero: Kind (2/2)") != null and _find(r, "Label", "Pick one") != null and _find(r, "Button", "Submit") != null, "the second step, with its text and Submit")
+	check(_find(r, "Label", "New hero: Kind (2/2)") != null and _find(r, "RichTextLabel", "Pick one") != null and _find(r, "Button", "Submit") != null, "the second step, with its text and Submit")
 	_find(r, "Button", "Back").pressed.emit()
 	check(_find(r, "Label", "New hero: Name (1/2)") != null and (_all(r, "LineEdit")[0] as LineEdit).text == "Ana", "back keeps what was typed")
 	_find(r, "Button", "Next").pressed.emit()
@@ -416,5 +428,43 @@ func test_wizard_steps_follow_the_answers() -> void:
 	await tree.process_frame
 	_find(r, "Button", "Submit").pressed.emit()
 	check(sent.size() == 1 and not sent[0].ctx.form.has("spells"), "a skipped step's fields are not sent: %s" % [sent])
+	r.queue_free()
+	await tree.process_frame
+
+
+## A step's text may be `{expr}` too, and an answer picked from a list of
+## records puts that record in @chosen, as on the web (the character maker's
+## weapons step says the packages chosen before it; its last step says what
+## the choices give).
+func test_wizard_text_and_chosen_records() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var sent := []
+	r.intent.connect(func(p: Dictionary) -> void: sent.append(p))
+	r.render({"type": "wizard", "steps": [
+		{"title": "Kit", "text": "Choose **one**.", "fields": [{"key": "kit", "label": "Kit", "type": "choose", "single": true, "options": [
+			{"id": "A", "name": "Package A", "text": "a sword and a shield"}, {"id": "B", "name": "Package B", "text": "a bow"}]}]},
+		{"title": "Weapons", "text": {"expr": "@chosen.kit != null ? 'Your package: ' .. @chosen.kit.text .. '.' : 'No package.'"},
+			"fields": [{"key": "note", "label": "Note", "type": "string"}]},
+		{"title": "Done", "text": {"expr": "'You wrote **' .. @values.note .. '**.'"}}],
+		"submit": {"kind": "action", "plugin": "p", "action": "make", "ctx": {"form": "$values"}}}, {})
+	await tree.process_frame
+	check(_find(r, "RichTextLabel", "Choose [b]one[/b].") != null, "a step's text reads as Markdown")
+	var pick := _find(r, "OptionButton") as OptionButton
+	pick.select(2)
+	_find(r, "Button", "Next").pressed.emit()
+	check(_find(r, "RichTextLabel", "Your package: a bow.") != null, "the next step's text, worked out from the record picked")
+	(_all(r, "LineEdit")[0] as LineEdit).text = "Hi"
+	_find(r, "Button", "Next").pressed.emit()
+	check(_find(r, "RichTextLabel", "You wrote [b]Hi[/b].") != null, "and from the answers: a last step with no fields")
+	_find(r, "Button", "Back").pressed.emit()
+	_find(r, "Button", "Back").pressed.emit()
+	pick = _find(r, "OptionButton") as OptionButton
+	pick.select(0)
+	_find(r, "Button", "Next").pressed.emit()
+	check(_find(r, "RichTextLabel", "No package.") != null, "nothing picked: no record")
+	_find(r, "Button", "Next").pressed.emit()
+	_find(r, "Button", "Submit").pressed.emit()
+	check(sent.size() == 1 and sent[0].ctx.form == {"kit": "", "note": "Hi"}, "the answers sent, as ever: %s" % [sent])
 	r.queue_free()
 	await tree.process_frame

@@ -10,7 +10,7 @@
   import { viewUi } from './context';
   import { Expr } from '../expr';
   import { markdown } from '../markdown';
-  import { type Dict } from './viewlib';
+  import { matchWords, type Dict } from './viewlib';
   import { allowedIds, chooseBounds, choiceList, fixedIds, picked, toggle, type Choice } from './fieldcheck';
 
   let { field, value = $bindable(), options = $bindable() }: { field: Dict; value: any; options?: Choice[] | null } = $props();
@@ -50,7 +50,8 @@
   const ids = $derived(picked(field, value));
   const bounds = $derived(chooseBounds(field));
   const full = $derived(!field.single && ids.length >= bounds[1]);
-  const shownList = $derived(q.trim() ? offered.filter((o) => `${o.name} ${o.sub ?? ''} ${o.tag ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())) : offered);
+  // (the words typed, in any order, each the start of a word: "hooded lan" finds "Lantern, Hooded")
+  const shownList = $derived(q.trim() ? offered.filter((o) => matchWords(`${o.name} ${o.sub ?? ''} ${o.tag ?? ''}`, q)) : offered);
 
   // what the options are, for the wizard's check
   $effect(() => {

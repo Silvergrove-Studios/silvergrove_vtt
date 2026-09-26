@@ -339,15 +339,20 @@ each), `log {limit}`, `spacer`, and:
   opens. A choice sends `on_pick` with `@pick` (the record) and
   `@pick_id`; with `multi`, a Done button sends `@picks` (the ids). This
   is how a Player picks a feat, prepares spells, or an encounter builder
-  lists monsters.
+  lists monsters. Its search, like a `choose` field's and a collection
+  query's `text`, takes the words typed in any order, each the start of a
+  word, punctuation aside: "hooded lan" finds "Lantern, Hooded".
 - `wizard {label, steps = {{title, text, fields, if}}, submit,
   submit_label}` — one step at a time with Back and Next; the last
   step's Submit sends `submit` with `"$values"` replaced by the values
   of every step and field that applies. A step's or a field's `if`, and
-  any field property written `{expr = "…", default = …}`, see the view's
-  data and `@values` (the answers so far) and `@chosen` (for an answer
-  picked from a compendium `collection` or a list of records, that
-  whole record: the class chosen, with what the class entry carries).
+  any field property or step `text` written `{expr = "…", default = …}`,
+  see the view's data and `@values` (the answers so far) and `@chosen`
+  (for an answer picked from a compendium `collection` or a list of
+  records, that whole record: the class chosen, with what the class entry
+  carries; the package picked, with its items). A step's text reads as
+  rules text does (`**bold**`, paragraphs), and a step may have no fields:
+  a last step that says what the answers give.
   Next waits until the step's fields are right — a `required` field
   filled (`required_text` says so), a `scores` or `choose` field
   complete — and says what is missing; a field's `help` is a line under

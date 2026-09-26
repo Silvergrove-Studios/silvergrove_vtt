@@ -166,17 +166,19 @@ await step('skills from a list: the criminal’s two locked, two of the druid’
   await next(lia).click();
 });
 
-await step('her class’s choice at level 1: a Primal Order', async () => {
-  await lia.getByText('What your class lets you choose at level 1.').waitFor({ timeout: 8000 });
-  await lia.getByRole('radio', { name: /^Warden/ }).click();
-  await shot(lia, 'lia_order');
-  await next(lia).click();
-});
-
+// (the packages before the class's choices, as the SRD 5.2 orders them: a
+// playtest's rogue mastered the Rapier, then found a Shortsword in its package)
 await step('equipment: the druid’s package A, the gold instead of the criminal’s', async () => {
   await row(lia, 'From your class').getByRole('radio', { name: /^Package A/ }).click();
   await row(lia, 'From your background').getByRole('radio', { name: /^50 GP instead/ }).click();
   await shot(lia, 'lia_equipment');
+  await next(lia).click();
+});
+
+await step('her class’s choice at level 1: a Primal Order', async () => {
+  await lia.getByText('What your class lets you choose at level 1.').waitFor({ timeout: 8000 });
+  await lia.getByRole('radio', { name: /^Warden/ }).click();
+  await shot(lia, 'lia_order');
   await next(lia).click();
 });
 
@@ -192,6 +194,15 @@ await step('spells: the druid’s cantrips and level 1 spells, one read as a car
   await lia.getByRole('button', { name: 'Close' }).first().click();
   for (const s of ['Cure Wounds', 'Entangle', 'Faerie Fire', 'Healing Word']) await lia.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
   await shot(lia, 'lia_spells');
+  await next(lia).click();
+});
+
+await step('the last step: what her choices give, the criminal’s Alert among them', async () => {
+  // (a playtest's criminal was never told of Alert)
+  await lia.getByText('From your background, Criminal:').waitFor({ timeout: 8000 });
+  expect((await lia.getByText('Initiative Proficiency.').count()) >= 1, 'Alert’s first benefit');
+  expect((await lia.getByText('From your class, Druid:').count()) === 1, 'the druid’s first features');
+  await shot(lia, 'lia_yours');
   await next(lia).click();
   await lia.getByText('Elf Druid 1').first().waitFor({ timeout: 10000 });
   await shot(lia, 'lia_sheet');
@@ -241,11 +252,13 @@ await step('a player rolls: the table rolls once, the DM sees it', async () => {
   await next(rolf).click();
   for (const s of ['Perception', 'Survival']) await rolf.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
   await next(rolf).click();
+  await rolf.getByRole('radio', { name: /^155 GP instead/ }).click({ timeout: 8000 });
+  await rolf.getByRole('radio', { name: /^50 GP instead/ }).click();
+  await next(rolf).click();
   await rolf.getByRole('radio', { name: /^Defense/ }).click({ timeout: 8000 });
   for (const w of ['Longsword', 'Greatsword', 'Longbow']) await rolf.getByRole('checkbox', { name: new RegExp(`^${w}`) }).click();
   await next(rolf).click();
-  await rolf.getByRole('radio', { name: /^155 GP instead/ }).click();
-  await rolf.getByRole('radio', { name: /^50 GP instead/ }).click();
+  await rolf.getByText('From your background, Soldier:').waitFor({ timeout: 8000 });
   await next(rolf).click();
   await rolf.getByText('Human Fighter 1').first().waitFor({ timeout: 10000 });
 });
