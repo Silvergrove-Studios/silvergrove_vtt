@@ -96,8 +96,9 @@
     wasLive = live;
   });
 
+  // (the fight side shows the chat too: read there as well)
   $effect(() => {
-    if (side === 'chat') seenChat = chatCount;
+    if (side === 'chat' || side === 'fight') seenChat = chatCount;
   });
 
   const guide = $derived.by((): { key: string; text: string; button?: string; act?: () => void } | null => {
@@ -382,10 +383,16 @@
             <Chat />
           {:else}
             <!-- the fight with the talk beneath it (a playtest's DM went between
-                 Fight and Chat dozens of times a fight) -->
+                 Fight and Chat dozens of times a fight); the talk a pane of its
+                 own, headed, so the stat block's clipped edge doesn't run into
+                 the roll cards (a playtest's DM took the chat for covering the
+                 monster's Use and Save buttons) -->
             <div class="fightside">
               <div class="fightpanel"><FightPanel {selected} onselect={(id) => (selected = id)} onopen={open} /></div>
-              <div class="fightchat"><Chat compact /></div>
+              <section class="fightchat" aria-labelledby="fightchat-head">
+                <h2 class="panehead" id="fightchat-head">Chat &amp; rolls</h2>
+                <Chat compact />
+              </section>
             </div>
           {/if}
         </div>
@@ -425,19 +432,37 @@
   }
   .fightside {
     height: 100%;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: minmax(0, 3fr) minmax(200px, 2fr);
     min-height: 0;
   }
   .fightpanel {
-    flex: 3 1 0;
     min-height: 0;
     overflow: hidden;
   }
   .fightchat {
-    flex: 2 1 0;
-    min-height: 180px;
-    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+    background: var(--panel);
+    border-top: 2px solid var(--border);
+  }
+  .fightchat > :global(.chat) {
+    flex: 1;
+    min-height: 0;
+  }
+  .panehead {
+    flex: none;
+    margin: 0;
+    padding: 7px 14px 5px;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border-soft);
   }
   .multi-pick {
     position: absolute;
