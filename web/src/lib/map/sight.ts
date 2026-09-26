@@ -73,7 +73,7 @@ export function fogPaths(grid: Grid, scene: Dict, gm: boolean, cellPath: (path: 
     const known = explored.has(cellKey(cell));
     // the DM's own view: only what the players have never found
     if (gm) {
-      if (!known && f !== 'dark') cellPath(out.unseen, cell);
+      if (!known) cellPath(out.unseen, cell);
       continue;
     }
     if (f === 'dark') cellPath(known ? out.darkDim : out.dark, cell);

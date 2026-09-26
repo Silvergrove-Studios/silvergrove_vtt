@@ -245,6 +245,9 @@ func op(intent: Dictionary) -> String:
 			var fe := ctx.campaign.encounter_entry(str(intent.get("encounter", "")))
 			if fe.is_empty():
 				return "no such fight"
+			# (checked before anything changes)
+			if intent.has("light") and str(intent.light) != "" and not Vision.LIGHT_LEVELS.has(str(intent.light)):
+				return "daylight, dim or dark"
 			for k in ["name", "notes"]:
 				if intent.has(k):
 					fe[k] = str(intent[k])
@@ -255,13 +258,10 @@ func op(intent: Dictionary) -> String:
 				fe.level = _first_level(str(intent.map))
 			# its light, given to the scene when it starts ("" for the map's own)
 			if intent.has("light"):
-				var light := str(intent.light)
-				if light == "":
+				if str(intent.light) == "":
 					fe.erase("light")
-				elif Vision.LIGHT_LEVELS.has(light):
-					fe.light = light
 				else:
-					return "daylight, dim or dark"
+					fe.light = str(intent.light)
 			# its creatures, as the card has them now (a line taken out, a count changed)
 			if intent.get("creatures") is Array:
 				var lines := []

@@ -185,7 +185,8 @@ func test_light_from_the_dm_screen() -> void:
 	check(mp.add_map(_example("ruined_chapel.hexmap")) == "", "the chapel in the library")
 	var mid := str(ctx.campaign.maps[0].id)
 	check(win.web_dm.op({"op": "new_fight", "id": "enc_night", "name": "At night", "map": mid}) == "", "a fight of the DM's own")
-	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_night", "light": "moonlight"}) != "", "a light that isn't one of the three is refused")
+	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_night", "name": "Moonlit", "light": "moonlight"}) != "" and str(ctx.campaign.encounter_entry("enc_night").name) == "At night",
+		"a light that isn't one of the three is refused, and nothing else changes with it")
 	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_night", "light": "dark"}) == "" and str(ctx.campaign.encounter_entry("enc_night").light) == "dark", "the fight is in the dark")
 	var listed: Array = win.web_dm.state().encounters.filter(func(e: Dictionary) -> bool: return str(e.id) == "enc_night")
 	check(listed.size() == 1 and str(listed[0].light) == "dark", "and the DM's screen says so on its card")
