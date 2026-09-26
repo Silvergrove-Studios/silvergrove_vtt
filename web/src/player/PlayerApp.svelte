@@ -77,13 +77,18 @@
   // for you, behind a pill (a playtest's player lost a half-placed portrait to one,
   // another a journal note's thread)
   let waitingHandout = $state<Dict | null>(null);
+  // when this screen was last pressed (a tap, a click)
+  let pressedAt = -Infinity;
   function busyHere(): boolean {
     const el = document.activeElement as HTMLElement | null;
     const typing = !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'range', 'file', 'submit'].includes((el as HTMLInputElement).type)));
     // (a message written but not yet sent counts too: playtest players' Send
     // clicks landed on a card that came up between typing and sending)
     const draft = (document.querySelector('[aria-label="Message"]') as HTMLTextAreaElement | HTMLInputElement | null)?.value?.trim() ?? '';
-    return typing || draft !== '' || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+    // (and a press just made: a card that came up as a click was on its way
+    // took the click and closed unseen)
+    const pressing = performance.now() - pressedAt < 800;
+    return typing || draft !== '' || pressing || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
   }
   let asked = $state<string>('');
   let selected = $state('');
@@ -195,13 +200,18 @@
     const fit = () => (wide = mq.matches);
     fit();
     mq.addEventListener('change', fit);
+    const press = () => (pressedAt = performance.now());
+    window.addEventListener('pointerdown', press, true);
     void connect('player').then((ok) => {
       // this tab's player after a reload, else the name this browser remembers
       const again = sessionPlayer();
       if (ok && again) join({ player: again, name: name.trim() });
       else if (ok && name.trim()) join({ name: name.trim() });
     });
-    return () => mq.removeEventListener('change', fit);
+    return () => {
+      mq.removeEventListener('change', fit);
+      window.removeEventListener('pointerdown', press, true);
+    };
   });
 
   function joinAs(opts: { name?: string; player?: string }): void {
@@ -397,8 +407,10 @@
   <!-- a question still waiting, whatever tab is open (three of a playtest's players
        missed the DM's roll request once its pop-up was closed) -->
   {#if waitingHandout && !showing}
-    <button type="button" class="accent waiting" onclick={() => ((showing = waitingHandout), (waitingHandout = null))}>
-      The DM is showing you something: look
+    <!-- (what a press does, with an eye: "…something: look" didn't read as a button to a playtest's player) -->
+    <button type="button" class="accent waiting look" onclick={() => ((showing = waitingHandout), (waitingHandout = null))}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /></svg>
+      See what the DM is showing ›
     </button>
   {:else if prompts.length && promptIndex < 0 && !showing}
     <!-- (the newest first: a playtest's player was sent to an old question left open, not the live one) -->
@@ -428,6 +440,22 @@
     border-radius: 999px;
     box-shadow: var(--shadow);
     max-width: calc(100% - 24px);
+  }
+  .waiting.look {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .waiting.look svg {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linejoin: round;
+    stroke-linecap: round;
   }
   .drag-tip {
     position: absolute;

@@ -17,10 +17,22 @@
   function key(e: KeyboardEvent): void {
     if (e.key === 'Escape' && !sticky) onclose?.();
   }
+
+  // a tap outside closes it only if it began outside too, and the card has
+  // been up half a second: one that came up while a click was on its way took
+  // that click and closed unseen (a playtest's player; what the DM shows is in
+  // the Journal all the same)
+  const upAt = performance.now();
+  let pressedOutside = false;
+  function outside(e: MouseEvent): void {
+    const closes = pressedOutside && e.target === e.currentTarget && performance.now() - upAt > 500;
+    pressedOutside = false;
+    if (closes && !sticky) onclose?.();
+  }
 </script>
 
 <svelte:window onkeydown={key} />
-<div class="backdrop" role="presentation" onclick={(e) => { if (e.target === e.currentTarget && !sticky) onclose?.(); }}>
+<div class="backdrop" role="presentation" onpointerdown={(e) => (pressedOutside = e.target === e.currentTarget)} onclick={outside}>
   <div class="modal" class:wide role="dialog" aria-modal="true" aria-label={title}>
     <header>
       <h2>{title}</h2>
