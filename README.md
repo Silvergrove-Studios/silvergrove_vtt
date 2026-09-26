@@ -99,7 +99,9 @@ Picking something in the left palette switches to the matching tool.
   is stacked there.
 - **Lights** cast shadows from anything whose wall type blocks light (closed
   doors included), so the preview shows where a torch actually reaches.
-- **Levels** (floors) are in the toolbar dropdown and the Level menu.
+- **Levels** (floors) are in the toolbar dropdown and the Level menu;
+  *Level settings…* names a level and says how it is lit — daylight,
+  dim or dark — which is what the players will see by at the table.
 - **View** toggles the grid, walls, lights, notes and GM-only objects, and
   the darkness slider previews where lights reach.
 
@@ -117,7 +119,11 @@ party and the chat, the fight. The Hexmap window then says the game is
 running and where players join: they open that address (or scan the code
 *Invite players* shows) in any browser on the same network. Keep the
 window open; it runs the game. The web screens are built from `web/`
-(`web/README.md`).
+(`web/README.md`). Over the map, *Light* says what the scene is lit by
+(by day the players see everything in their line of sight, in the dark
+only what lights and darkvision show), *Walls* draws every wall in its
+colour, and *See as* shows a player's screen with why they don't see
+what they don't.
 
 **The full Table**, for preparing: pick Table on the home screen and start a campaign (or
 `./run.sh table reach.campaign`). The campaign is the document: its
