@@ -95,6 +95,9 @@ await step('the adventure’s book opens with its introduction', async () => {
 await step('the DM invites: a code and an address', async () => {
   await dm.getByRole('button', { name: 'Invite players' }).first().click();
   await dm.getByText('Open a player’s screen on this computer').waitFor();
+  // one address in sight, the others folded away, and how players somewhere else join
+  await dm.getByText('Players somewhere else?').waitFor();
+  if ((await dm.locator('.invite .url').count()) !== 1) throw new Error('more than one address in sight');
   await shot(dm, 'dm_invite');
   await dm.getByRole('button', { name: 'Close' }).click();
 });
@@ -234,6 +237,8 @@ await step('the DM asks the party for a roll; the players answer', async () => {
   await dm.getByRole('tab', { name: 'Party' }).click();
   const before = await dm.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length);
   await dm.getByRole('button', { name: 'Ask', exact: true }).click();
+  // the form says it went
+  await dm.getByText('Done ✓').first().waitFor({ timeout: 5000 });
   for (const p of [ana, ben, cara]) {
     if (!p) continue;
     await p.getByRole('dialog', { name: 'The DM asks' }).waitFor({ timeout: 8000 });
@@ -274,6 +279,20 @@ await step('a place marked on the players’ map', async () => {
   await dm.getByRole('button', { name: 'Close the card' }).click();
   await ana.getByRole('tab', { name: /Map/ }).click();
   await shot(ana, 'ana_ford_marked');
+});
+
+await step('the book says which is which, and a search ends once used', async () => {
+  // "The ruined chapel" is a place and a picture: each says what it is
+  const book = dm.locator('aside.book');
+  const words = await book.locator('.item').filter({ has: dm.locator('.label', { hasText: /^The ruined chapel$/ }) }).locator('.kindword:not(.sr-only)').allTextContents();
+  if (!words.includes('place') || !words.includes('picture')) throw new Error(`the two say ${JSON.stringify(words)}`);
+  const search = dm.getByRole('searchbox', { name: 'Look up anything' });
+  await search.fill('Marta');
+  await search.press('Enter');
+  await dm.locator('.reader').waitFor({ timeout: 5000 });
+  if (await search.inputValue()) throw new Error('the search stayed once something was opened');
+  await shot(dm, 'dm_book_kinds');
+  await dm.getByRole('button', { name: 'Close the card' }).click();
 });
 
 await step('the chapel: the DM starts the fight', async () => {
@@ -390,8 +409,9 @@ await step('the DM makes a fight of their own: a goblin, started, ended', async 
   await shot(dm, 'dm_new_fight');
   await dm.getByRole('button', { name: 'Start the fight' }).click();
   await dm.locator('.fightbar').waitFor({ timeout: 10000 });
-  // the chat beside the fight
+  // the chat beside the fight, a pane of its own
   await dm.locator('.fightchat').getByLabel('Message').waitFor({ timeout: 5000 });
+  await dm.locator('.fightchat').getByRole('heading', { name: 'Chat & rolls' }).waitFor({ timeout: 5000 });
   await shot(dm, 'dm_new_fight_on');
   await dm.locator('.fightbar').getByRole('button', { name: 'End the fight' }).click();
   await dm.getByRole('dialog', { name: 'End the fight?' }).getByRole('button', { name: 'End the fight' }).click();
@@ -402,6 +422,21 @@ await step('Ana’s journal keeps what she was shown', async () => {
   await ana.getByRole('tab', { name: /Journal/ }).click();
   await ana.getByRole('button', { name: 'Thornwick' }).first().waitFor({ timeout: 5000 });
   await shot(ana, 'ana_journal');
+});
+
+await step('a reload keeps what Ana has read of the chat', async () => {
+  await ben.getByRole('tab', { name: /Chat/ }).click();
+  await ben.getByLabel('Message').fill('One more thing before we go.');
+  await ben.getByRole('button', { name: 'Send' }).click();
+  const badge = ana.getByRole('tab', { name: /Chat/ }).locator('.badge');
+  await badge.waitFor({ timeout: 5000 });
+  const before = await badge.textContent();
+  await ana.reload();
+  await ana.getByRole('tab', { name: /Journal/ }).waitFor({ timeout: 10000 });
+  await ana.waitForTimeout(1500);
+  const after = (await badge.count()) ? await badge.textContent() : '0';
+  // (a reload counted the whole log as new: a playtest's badge said 279)
+  if (after !== before) throw new Error(`Chat’s badge said ${before} before a reload and ${after} after`);
 });
 
 await browser.close();
