@@ -18,7 +18,8 @@
   import RulesSettings from './RulesSettings.svelte';
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
-  import { comp, connect, dmOp, game, intent, join, notice, playerColors, request, submit, type Dict } from '../lib/game.svelte';
+  import { chatLog, comp, connect, dmOp, game, intent, join, notice, playerColors, request, submit, type Dict } from '../lib/game.svelte';
+  import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -39,7 +40,6 @@
   let picked = $state<string[]>([]);
   let mapsMenu = $state(false);
   let guideGone = $state('');
-  let seenChat = $state(0);
   let wasLive = false;
 
   provideViewUi({
@@ -66,7 +66,13 @@
   const sceneName = $derived(String(game.scene.name ?? '') || String(((dm.maps as Dict[]) ?? []).find((m) => m.id === game.scene.map)?.name ?? ''));
   const online = $derived(new Set(game.online.map(String)));
   const session = $derived((dm.session ?? {}) as Dict);
-  const chatCount = $derived((((game.view.log as Dict[]) ?? []).filter((e) => e?.kind === 'chat' || e?.kind === 'roll')).length);
+  // what of the chat is new to the DM: the lines after the last one read,
+  // which this browser keeps (a reload counted the whole log as new: a
+  // playtest's badge said 279). The fight side shows the chat too.
+  const chatLines = $derived(chatIds(chatLog()));
+  let lastRead = $state<string | null>(null); // (null till the first view)
+  const unread = $derived(lastRead === null ? 0 : unreadAfter(chatLines, lastRead));
+  const chatShown = $derived(side === 'chat' || side === 'fight');
   const activeToken = $derived(currentTurnTokens((game.scene.turns ?? {}) as Dict, (game.scene.tokens as Dict[]) ?? [])[0] ?? '');
   // the fight panel follows the turn to a creature the DM runs (a playtest's DM
   // kept seeing the last creature tapped, not the one whose turn it was)
@@ -97,9 +103,15 @@
     wasLive = live;
   });
 
-  // (the fight side shows the chat too: read there as well)
   $effect(() => {
-    if (side === 'chat' || side === 'fight') seenChat = chatCount;
+    if (lastRead === null && 'log' in game.view) lastRead = startFrom(chatLines, loadRead(game.table, 'dm'));
+  });
+  $effect(() => {
+    const newest = chatLines[chatLines.length - 1] ?? '';
+    if (lastRead !== null && chatShown && newest !== '' && newest !== lastRead) lastRead = newest;
+  });
+  $effect(() => {
+    if (lastRead) saveRead(game.table, 'dm', lastRead);
   });
 
   const guide = $derived.by((): { key: string; text: string; button?: string; act?: () => void } | null => {
@@ -361,7 +373,7 @@
         <div class="tabs" role="tablist">
           <button type="button" role="tab" aria-selected={side === 'party'} class:on={side === 'party'} onclick={() => (side = 'party')}>Party</button>
           <button type="button" role="tab" aria-selected={side === 'chat'} class:on={side === 'chat'} onclick={() => (side = 'chat')}>
-            Chat &amp; rolls{#if side !== 'chat' && chatCount > seenChat}<span class="badge">{chatCount - seenChat}</span>{/if}
+            Chat &amp; rolls{#if !chatShown && unread > 0}<span class="badge">{unread}</span>{/if}
           </button>
           {#if fight}
             <button type="button" role="tab" aria-selected={side === 'fight'} class:on={side === 'fight'} onclick={() => (side = 'fight')}>Fight</button>

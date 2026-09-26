@@ -16,7 +16,8 @@
   import Character from './Character.svelte';
   import Journal from './Journal.svelte';
   import TablePane from './TablePane.svelte';
-  import { comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
+  import { chatLog, comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
+  import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -90,7 +91,6 @@
   let primed = false;
   const seenHandouts = new Set<string>();
   const seenPrompts = new Set<string>();
-  let seenChat = $state(0);
 
   provideViewUi({
     intent: (p) => {
@@ -115,7 +115,13 @@
   const followed = $derived(String(myTokens[0]?.id ?? ((game.scene.tokens as Dict[]) ?? []).find((t) => Array.isArray(t.tags) && t.tags.includes('party'))?.id ?? ''));
   const prompts = $derived(((game.view.prompts as Dict[]) ?? []).filter((p) => p && typeof p === 'object'));
   const promptIndex = $derived(prompts.findIndex((p) => String(p.id) === asked));
-  const chatCount = $derived((((game.view.log as Dict[]) ?? []).filter((e) => e?.kind === 'chat' || e?.kind === 'roll')).length);
+  // what of the chat is new to me: the lines after the last one read, which
+  // this browser keeps (a reload counted the whole log as new: a playtest's
+  // badge said 279)
+  const chatLines = $derived(chatIds(chatLog()));
+  let lastRead = $state<string | null>(null); // (null till the first view)
+  const unread = $derived(lastRead === null ? 0 : unreadAfter(chatLines, lastRead));
+  const chatShown = $derived(wide ? side === 'chat' : tab === 'chat');
 
   // something the DM just showed: over everything (the ones there on joining are in the Journal)
   $effect(() => {
@@ -158,7 +164,14 @@
   });
 
   $effect(() => {
-    if (tab === 'chat' || (wide && side === 'chat')) seenChat = chatCount;
+    if (lastRead === null && 'log' in game.view) lastRead = startFrom(chatLines, loadRead(game.table, game.me));
+  });
+  $effect(() => {
+    const newest = chatLines[chatLines.length - 1] ?? '';
+    if (lastRead !== null && chatShown && newest !== '' && newest !== lastRead) lastRead = newest;
+  });
+  $effect(() => {
+    if (lastRead && game.me) saveRead(game.table, game.me, lastRead);
   });
 
   // my turn: said, and felt on a phone
@@ -352,7 +365,7 @@
           <div class="sidetabs" role="tablist">
             {#each TABS.filter((t) => t.key !== 'map') as t (t.key)}
               <button type="button" role="tab" aria-selected={side === t.key} class:on={side === t.key} onclick={() => (side = t.key as typeof side)}>
-                {t.label}{#if t.key === 'chat' && chatCount > seenChat}<span class="badge">{chatCount - seenChat}</span>{/if}{#if t.key === 'table' && prompts.length}<span class="badge">{prompts.length}</span>{/if}
+                {t.label}{#if t.key === 'chat' && !chatShown && unread > 0}<span class="badge">{unread}</span>{/if}{#if t.key === 'table' && prompts.length}<span class="badge">{prompts.length}</span>{/if}
               </button>
             {/each}
           </div>
@@ -373,7 +386,7 @@
           <button type="button" role="tab" aria-selected={tab === t.key} class:on={tab === t.key} onclick={() => (tab = t.key)}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d={t.icon} /></svg>
             <span>{t.label}</span>
-            {#if t.key === 'chat' && chatCount > seenChat}<span class="badge">{chatCount - seenChat}</span>{/if}
+            {#if t.key === 'chat' && !chatShown && unread > 0}<span class="badge">{unread}</span>{/if}
             {#if t.key === 'table' && prompts.length}<span class="badge">{prompts.length}</span>{/if}
           </button>
         {/each}
