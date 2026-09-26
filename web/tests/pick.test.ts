@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
-import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../src/lib/map/pick';
+import { moveTo, moveWords, pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../src/lib/map/pick';
 import { FAN_SIZE, layout, tokenAt } from '../src/lib/map/render';
 
 describe('picking a target', () => {
@@ -56,6 +56,21 @@ describe('picking a target', () => {
     for (const id of ['ada', 'gob', 'jin']) expect(tokenAt(more.filter((t) => t.id !== 'ogre'), p3.get(id)!.pos, 0.25, p3)?.id).toBe(id);
     // a token being dragged is drawn where the pointer is: the others close up
     expect(layout(stack, grid, 'gob').get('ada')).toEqual({ pos: c, k: 1 });
+  });
+
+  it('moves a token armed with a tap to the centre of the cell tapped next', () => {
+    const grace = { id: 'g', name: 'Grace', pos: [grid.center({ q: 1, r: 1 }).x, grid.center({ q: 1, r: 1 }).y] };
+    expect(moveWords(grace)).toBe('Move Grace: tap where to go');
+    const target = grid.center({ q: 5, r: 1 });
+    // anywhere in the cell: its centre, four spaces off
+    expect(moveTo(grid, grace, { x: target.x + 0.2, y: target.y - 0.1 })).toEqual({ pos: [target.x, target.y], spaces: 4 });
+    // on a map drawn with no grid, where it was tapped
+    expect(moveTo(grid, grace, { x: target.x + 0.2, y: target.y }, false)?.pos).toEqual([target.x + 0.2, target.y]);
+    // off the map: nowhere
+    expect(moveTo(grid, grace, { x: -3, y: -3 })).toBeNull();
+    // on squares, a diagonal is a step
+    const squares = new Grid({ shape: 'square', columns: 10, rows: 8 });
+    expect(moveTo(squares, { pos: [0.5, 0.5] }, { x: 3.5, y: 2.5 })).toEqual({ pos: [3.5, 2.5], spaces: 3 });
   });
 
   it('never picks a hidden creature for a player, whatever was hit', () => {

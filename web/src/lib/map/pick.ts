@@ -81,6 +81,22 @@ export function withTarget(payload: Dict, target: string | Dict | string[], scen
   return out;
 }
 
+/** Where a tap sends a token armed to move (tap it, then where it goes: a
+ *  playtest's tablet player never managed to drag hers): the centre of the
+ *  cell tapped — or the point itself, `snap` off, on a map drawn with no
+ *  grid — and how many spaces that is from where it stands. null off the map. */
+export function moveTo(grid: Grid, token: Dict, at: Vec, snap = true): { pos: [number, number]; spaces: number } | null {
+  const cell = grid.cellAt(at);
+  if (!grid.inBounds(cell)) return null;
+  const c = snap ? grid.center(cell) : at;
+  return { pos: [c.x, c.y], spaces: grid.steps(grid.cellAt(tokenPos(token)), cell) };
+}
+
+/** What the banner says while a token waits to be moved. */
+export function moveWords(token: Dict): string {
+  return `Move ${String(token.name ?? 'your token')}: tap where to go`;
+}
+
 /** What the banner says while a pick is waiting. */
 export function pickWords(payload: Dict): string {
   const many = pickCount(payload);
