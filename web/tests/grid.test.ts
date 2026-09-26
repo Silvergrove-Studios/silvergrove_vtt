@@ -29,6 +29,15 @@ describe('Grid, as the host has it', () => {
     const f = new Grid({ orientation: 'flat', offset: 'even', columns: 6, rows: 6 });
     for (const c of f.allCells()) expect(f.cellAt(f.center(c))).toEqual(c);
   });
+  it('goes to the map’s column and row and back on an odd row, where they differ from axial', () => {
+    // (a playtest's party star was sent as axial q,r and read as column,row: it landed cells away)
+    for (const [col, row] of [[9, 7], [0, 1], [23, 15], [4, 8]]) {
+      const c = g.fromOffset(col, row);
+      expect(g.toOffset(g.cellAt(g.center(c)))).toEqual({ col, row });
+    }
+    const odd = g.fromOffset(9, 7);
+    expect([odd.q, odd.r]).not.toEqual([9, 7]);
+  });
   it('keys cells as the maps do', () => {
     expect(cellKey({ q: -1, r: 10 })).toBe('-1,10');
     expect(keyCell('-1,10')).toEqual({ q: -1, r: 10 });

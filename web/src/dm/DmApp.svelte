@@ -194,8 +194,11 @@
   function onTokenDrop(t: Dict, pos: [number, number]): void {
     const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
     if (tags.includes('party') && map) {
-      const c = new Grid(map.grid ?? {}).cellAt({ x: pos[0], y: pos[1] });
-      dmOp('party_move', { cell: [c.q, c.r] });
+      // the Table keeps the party's cell as the map's column and row (a
+      // playtest's star, sent axial, landed cells away on an odd row)
+      const g = new Grid(map.grid ?? {});
+      const o = g.toOffset(g.cellAt({ x: pos[0], y: pos[1] }));
+      dmOp('party_move', { cell: [o.col, o.row] });
       return;
     }
     request({ t: 'token.set', scene: String(game.scene.id ?? ''), id: String(t.id), changes: { pos } });

@@ -733,6 +733,12 @@ func test_campaign_first() -> void:
 	check(not ptk.is_empty() and bool(ptk.hidden) and (ptk.tags as Array).has("place") and place.map == rid and place.cell == "6,4", "a hidden marker token on the map, the record with its link")
 	check(mp.set_party(Vector2i(3, 4)) == "" and ctx.campaign.doc.party.cell == "3,4" and ctx.state.tokens(ctx.scene_id).any(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")), "the party marker")
 	check(mp.set_party(Vector2i(4, 4)) == "" and ctx.campaign.doc.party.cell == "4,4" and ctx.state.tokens(ctx.scene_id).filter(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")).size() == 1, "moved, not doubled")
+	# the DM's screen says the map's column and row (a playtest's star, sent as
+	# axial, landed cells away on an odd row)
+	check(win.web_dm.op({"op": "party_move", "cell": [9, 7]}) == "" and ctx.campaign.doc.party.cell == "9,7", "the DM's screen moves the party by column and row")
+	var road_grid := ctx.state.map_for(ctx.scene_id).grid
+	var star: Dictionary = ctx.state.tokens(ctx.scene_id).filter(func(t: Dictionary) -> bool: return (t.tags as Array).has("party"))[0]
+	check(Vision.token_pos(star).distance_to(road_grid.cell_center(road_grid.offset_to_axial(9, 7))) < 0.01, "and the star is on that cell, an odd row's")
 	var regional_scene := ctx.scene_id
 	# the markers are the campaign's: a scene made over the road afresh (a package started, a copy) shows them
 	var road_id := str(mp.shown_map_entry().id)
