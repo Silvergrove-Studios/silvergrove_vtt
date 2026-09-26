@@ -47,7 +47,7 @@ Invent these things together at the table; don't copy them from the rulebooks. W
 2. Then join the table as {{name}} and make your character on the site. Aim to have your character by {{t_character}}. Say hello in the chat when you arrive, and chat with the others while you wait (in character when it's roleplay; "OOC:" for questions and table talk — like a real table).
 3. The DM runs the adventure. Play all of it — the talking as much as the fighting. Roleplay with the people you meet (the DM plays them): ask questions, persuade, bargain, bluff, reassure, read people. When the DM asks for a check (Persuasion, Insight, Deception, Intimidation, Investigation…), make it through the site if you can. Talk in character with the other players too: introduce yourselves, get to know each other, argue, decide things together — and try a private word with the DM or another player if the site allows it. When there's a fight, take your turns through the site as much as you can (moving, attacking, rolling, casting spells) and say what you're doing in the chat. If you don't know how to do something on the site, try to find it; if you can't, ask in the chat — and note it.
 4. Keep an eye on the table the way a real player does: don't go quiet for more than a couple of minutes during play. While you wait, explore your character sheet, spells, journal and anything else the site offers.
-5. {{#session}}The DM will end the session (at the latest around {{t_end}}).{{/session}}{{#campaign}}The DM runs the adventure to its end, which should come by about {{t_end}}; you'll level up along the way when the DM says so.{{/campaign}} When the DM ends it — or at {{t_end}}, whatever is going on — stop playing, say goodbye in the chat, and write your review.
+5. {{#session}}The DM will end the session (at the latest around {{t_end}}).{{/session}}{{#campaign}}The DM runs the adventure to its end, which should come by about {{t_end}}; you'll level up along the way when the DM says so.{{/campaign}} When the DM ends it — or at {{t_end}}, whatever is going on — stop playing, say goodbye in the chat, and write your review, your improvements and your favourites.
 
 ## Keep a diary as you go
 In `diary.md`, write a short entry every few minutes (with the time): what you were trying to do, what you expected, what happened, how you felt, and the screenshot's file name when it helps. Write it in your own voice. This is the most valuable thing you'll give the makers — capture confusion the moment it happens, even small moments.
@@ -79,4 +79,12 @@ Write `review.md` by {{t_review}}, in your own voice, with these sections:
 12. The three things I'd fix first, and the three things I loved
 13. One line to the makers
 
-When the review is written, finish with a short summary (a few sentences) as your final answer.
+## Two more things, after your review
+By the same time, write two more files:
+- `improvements.md`: the improvements you'd suggest to the makers, as a list, the most important first, as many as you have. For each: what to change; why (what happened to you, with the screenshot's file name when there is one); and who it would help (new players, veterans, the DM, people on phones…). Big and small both count: a missing feature, a confusing word, a rule the site got wrong, something another site or game does better.
+- `favorites.md`: from your own screenshots, the one that best shows your favourite part of the evening and the one that best shows your least favourite part, written exactly like this:
+  Favourite: shots/042_the_bell_rings.png — one sentence on why
+  Least favourite: shots/017_black_map.png — one sentence on why
+  If none of your screenshots shows it, take one now that comes as close as you can, and say what it stands for.
+
+When the review, the improvements and the favourites are written, finish with a short summary (a few sentences) as your final answer.

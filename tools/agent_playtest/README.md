@@ -20,6 +20,8 @@ tools, can read and write only their own folder, and research D&D on the web.
   a shell: scripts with braces in them were refused by the shell's permission
   checks, which the agents took for clicks that didn't land.
 - `cast.json` — who plays: persona, device, model, seat port, camera roll.
+  `cast2.json` is another table (a warlock, a paladin, a sorcerer, a rogue,
+  and a DM who improvises fights): `setup.mjs --cast cast2.json`.
 - `briefs/` — the DM's and the players' briefs (a `session` or a whole
   `campaign`), and `resume.md` to bring an agent back after an interruption
   (its diary is its memory).
@@ -39,7 +41,9 @@ Everything a run did can be read back:
   (each table tool call, its script, how long, its answer), `log/page.jsonl`
   (the browser: scripts run, console, page errors, dialogs, the socket),
   `timelapse/` (the screen every two minutes), `shots/` (the agent's own
-  screenshots), `diary.md` and `review.md`;
+  screenshots), `diary.md`, `review.md`, `improvements.md` (what each
+  would change, most important first) and `favorites.md` (the screenshots of
+  their favourite and least favourite parts);
 - `timeline.mjs <run>` merges them into one timeline (`timeline.md`: every tool
   call too) and the story alone (`table.md`: chat, rolls, the DM's moves,
   refusals, who joined).

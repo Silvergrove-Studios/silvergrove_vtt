@@ -41,12 +41,30 @@ const when = (at) => new Date(/Z$|[+-]\d\d:\d\d$/.test(at) ? at : at.replace(' '
 const out = [];
 const add = (at, who, what) => out.push({ t: when(at), who, what });
 
+/** A roll as the table would say it: "d20 4 + 3 (charisma +1, proficiency +2) = 7, failure". */
+function rollWords(en) {
+  const r = en.result ?? {};
+  const main = (r.dice ?? []).filter((d) => d.group === 'main');
+  const kept = main.filter((d) => d.kept !== false).map((d) => d.face);
+  const dropped = main.filter((d) => d.kept === false).map((d) => d.face);
+  const dice = main.length ? `${main.length > 1 && !dropped.length ? main.length : ''}d${main[0].sides} ${kept.join(' + ')}${dropped.length ? ` (${dropped.join(', ')} not kept)` : ''}` : String(r.groups?.main?.expr ?? '');
+  const others = Object.entries(r.groups ?? {}).filter(([g]) => g !== 'main').map(([g, v]) => ` + ${g} ${v?.total ?? '?'}`).join('');
+  const mod = Number(r.modifier ?? 0);
+  const parts = (r.parts ?? []).filter((p) => Number(p.value)).map((p) => `${p.label} ${Number(p.value) > 0 ? '+' : ''}${p.value}`).join(', ');
+  const edge = en.spec?.why_adv ? `, with advantage (${en.spec.why_adv})` : en.spec?.why_dis ? `, with disadvantage (${en.spec.why_dis})` : '';
+  return `${dice}${others}${mod ? ` ${mod > 0 ? '+' : '−'} ${Math.abs(mod)}${parts ? ` (${parts})` : ''}` : ''} = ${r.total ?? '?'}${r.outcome ? `, ${r.outcome}` : ''}${edge}`;
+}
+
 // the table: players by id, from the events that add them
 // (and from a join answered by the table's "Ana joined", for players it had before the log)
 const names = {};
+// and the characters and creatures, for who rolled what
+const actorNames = {};
 let joining = '';
 for (const e of lines(hostLog)) {
   if (e.dir === 'event' && e.ev?.t === 'player.add') names[e.ev.player?.id] = e.ev.player?.name;
+  if (e.dir === 'event' && e.ev?.t === 'actor.add') actorNames[e.ev.actor?.id] = e.ev.actor?.name;
+  if (e.dir === 'event' && e.ev?.t === 'actor.set' && e.ev.changes?.name) actorNames[e.ev.id] = e.ev.changes.name;
   if (e.dir === 'in' && e.msg?.t === 'join') joining = String(e.msg.player ?? '');
   const joined = e.dir === 'note' && /^(.+) joined$/.exec(e.text ?? '');
   if (joined && joining && !names[joining]) names[joining] = joined[1];
@@ -71,7 +89,7 @@ for (const e of lines(hostLog)) {
     const ev = e.ev ?? {};
     if (ev.t === 'log.add') {
       const en = ev.entry ?? {};
-      if (en.kind === 'roll') add(e.at, 'table', `roll: ${one(en.label)} = ${en.result?.total ?? '?'}${en.result?.outcome ? ` (${en.result.outcome})` : ''}${en.audience && en.audience !== 'all' ? ` [${en.audience}]` : ''}`);
+      if (en.kind === 'roll') add(e.at, 'table', `roll: ${actorNames[en.actor] ? `${actorNames[en.actor]}, ` : ''}${one(en.label)}: ${rollWords(en)}${en.audience && en.audience !== 'all' ? ` [${en.audience}]` : ''}`);
       else if (en.kind !== 'chat') add(e.at, 'table', `${en.kind ?? 'log'}: ${one(en.text ?? en.title ?? '', 300)}`);
     } else if (['turns.start', 'turns.end', 'turns.advance', 'actor.add', 'token.add', 'scene.add', 'player.add'].includes(ev.t)) {
       add(e.at, 'table', `${ev.t} ${one(ev.actor?.name ?? ev.token?.name ?? ev.player?.name ?? ev.scene?.name ?? '', 80)}`);

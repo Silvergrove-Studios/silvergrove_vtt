@@ -45,7 +45,9 @@ while True:
         count = len(os.listdir(shots)) if os.path.isdir(shots) else 0
         review = os.path.exists(os.path.join(run, key, 'review.md'))
         if was.get(key) and not on:
-            print(f"{hm} {label} {'finished' if review else 'STOPPED without a review'}", flush=True)
+            # (and the two lists that come after the review: improvements, favourites)
+            lacking = [f for f in ('improvements.md', 'favorites.md') if not os.path.exists(os.path.join(run, key, f))]
+            print(f"{hm} {label} {'finished' if review else 'STOPPED without a review'}{(' — no ' + ', '.join(lacking)) if review and lacking else ''}", flush=True)
         if on and age >= 15 and key not in stale:
             print(f"{hm} {label}'s diary has been quiet for {age} min", flush=True)
             stale.add(key)
