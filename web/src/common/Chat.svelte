@@ -239,4 +239,38 @@
     flex: 1;
     min-width: 0;
   }
+  /* compact, beside the fight: the talk gets the room, not the box to write
+     in (a playtest's composer took 185 of the pane's 320 px). Who reads it
+     shows only when it isn't everyone. */
+  .compact .entries {
+    padding: 2px 12px;
+  }
+  .compact .compose {
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+    gap: 5px;
+  }
+  .compact .to {
+    gap: 4px;
+  }
+  .compact .chip {
+    min-height: 24px;
+    padding: 1px 9px;
+    font-size: 0.8rem;
+  }
+  .compact .hint,
+  .compact .who:not(.aimed) {
+    display: none;
+  }
+  .compact .who {
+    font-size: 0.8rem;
+  }
+  .compact .line {
+    gap: 6px;
+  }
+  .compact .line input,
+  .compact .line button {
+    min-height: 32px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
 </style>

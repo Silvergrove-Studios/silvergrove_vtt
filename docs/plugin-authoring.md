@@ -324,9 +324,13 @@ with its breakdown as tooltip), `pool {spend, gain}` (intents for the
 item, empty}` (the item schema sees `@item` and `@index`), `cards
 {on_tap}` (the tap sees `@card` and `@card_id`), `button {label,
 intent, cost, enabled = "<expr>", accent}`, `action_bar {actions}`,
-`tracker`, `prompt`, `form {fields, submit}` (a field of type `list`
-with its own `fields` is a repeater: an array of records, one sub-form
-each), `log {limit}`, `spacer`, and:
+`tracker`, `prompt`, `form {fields, values, submit, submit_label, keep,
+done}` (a field of type `list` with its own `fields` is a repeater: an
+array of records, one sub-form each; on the web screens a form the Table
+took starts over from its `values` and says `done` — "Done ✓" unless
+given — beside its button for a moment, and one refused keeps what was
+typed; `keep = true` keeps what was sent too, for a form sent again and
+again with a change or two), `log {limit}`, `spacer`, and:
 
 - `picker {label, bind | collection, query, fields, sort, per_page,
   search, multi, sub, detail, on_pick}` — a searchable list to choose

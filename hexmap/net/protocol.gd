@@ -16,7 +16,8 @@ extends RefCounted
 ##   hello    {version, name}                 first thing on connect
 ##   join     {player, role, code}            which player (or display, or co-GM with the code) this client is
 ##   request  {ev}                            a scene event the player asks for (a move)
-##   intent   {intent}                        a rules action: {kind: action|answer|focus|contribute, …}
+##   intent   {intent, req?}                  a rules action: {kind: action|answer|focus|contribute, …};
+##                                            with `req` (a string) the host answers done or refused with it
 ##   need     {kind: map, id} | {kind: packs} | {kind: file, pack, file}
 ##            | {kind: asset, map, file}       a map's own file (a backdrop image)
 ##            | {kind: comp, req, collection, id | query}   a compendium entry or page
@@ -30,7 +31,8 @@ extends RefCounted
 ##   joined   {player, role}                  the join was accepted
 ##   event    {ev}                            a scene event applied; apply it too
 ##   view     {view}                          the client's projection (Views.project)
-##   refused  {ev | intent, why}              the request was not applied
+##   refused  {ev | intent, why, req?}        the request was not applied (an intent's `req` with it)
+##   done     {req}                           the intent sent with `req` was taken (a form says so, and clears)
 ##   map      {id, doc}                       a map document
 ##   packs    {packs: [{id, version, manifest, files}]}
 ##   file     {pack, file, data}              base64 of one pack file
@@ -112,8 +114,17 @@ static func view(projection: Dictionary) -> Dictionary:
 	return {"t": "view", "view": projection}
 
 
-static func intent_refused(intent: Dictionary, why: String) -> Dictionary:
-	return {"t": "refused", "intent": intent, "why": why}
+## An intent refused, with the `req` it was sent with (if it had one).
+static func intent_refused(intent: Dictionary, why: String, req := "") -> Dictionary:
+	var out := {"t": "refused", "intent": intent, "why": why}
+	if req != "":
+		out.req = req
+	return out
+
+
+## The intent sent with `req` was taken: its screen may say so.
+static func done(req: String) -> Dictionary:
+	return {"t": "done", "req": req}
 
 
 static func event(ev: Dictionary) -> Dictionary:

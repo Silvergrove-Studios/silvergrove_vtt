@@ -41,6 +41,8 @@ func test_web_server() -> void:
 	check(str(get.call("/", "POST")).begins_with("HTTP/1.1 405"), "only GET and HEAD")
 	check(WebServer.address_rank("192.168.1.23") == 0 and WebServer.address_rank("10.5.91.189") == 0 and WebServer.address_rank("192.168.18.1") == 1
 		and WebServer.address_rank("100.99.188.26") == 2 and WebServer.address_rank("8.8.8.8") == 3, "the addresses players likely reach come first")
+	check(WebServer.address_kind("http://192.168.1.23:47780") == "a home or office network" and WebServer.address_kind("192.168.18.1") == "a virtual machine's (rarely right)"
+		and WebServer.address_kind("http://100.99.188.26:47780/") == "a VPN such as Tailscale" and WebServer.address_kind("8.8.8.8") == "another network", "and each said for what it is, as the web Invite says it")
 	# the web clients as the exports carry them: one zip
 	var zpath := "user://test_webclient.zip"
 	var zp := ZIPPacker.new()
@@ -268,6 +270,16 @@ func test_web_clients_on_the_host() -> void:
 	var labels := (rolls.call() as Array).map(func(x: Dictionary) -> String: return "%s|%s" % [x.label, x.audience])
 	check(labels.has("Ana: Stealth|all") and labels.has("The DM: 2d6|gm"), "Ana's for all, the DM's for the DM: %s" % [labels])
 	check((texts.call(ben_view) as Array).has("Hello all"), "what is said to everyone, everyone reads")
+	# an intent sent with a req hears back either way (a playtest's DM couldn't
+	# tell that "Give it" had worked: the form stayed filled in)
+	check(ana.count("done") == 0, "intents sent without one hear nothing when they are done, as before")
+	ana.send({"t": "intent", "req": "i7", "intent": {"kind": "chat", "text": "Numbered", "to": "all"}})
+	check(_pump(host, [ana], func() -> bool: return str(ana.last("done").get("req", "")) == "i7"), "one with a req, done: it hears so")
+	ana.send({"t": "intent", "req": "i8", "intent": {"kind": "roll", "expr": "lots of dice"}})
+	check(_pump(host, [ana], func() -> bool: return str(ana.last("refused").get("req", "")) == "i8"), "one refused: the refusal carries its req: %s" % [ana.last("refused")])
+	ana.send({"t": "intent", "req": "i9", "intent": "not a dictionary"})
+	check(_pump(host, [ana], func() -> bool: return str(ana.last("refused").get("req", "")) == "i9"), "one that is not an intent at all: refused, with its req")
+	check(ana.count("done") == 1, "and only the one done")
 	# a session ended but still open: its chat is in the campaign's history and
 	# still in the live log (a playtest's list put the evening above its first hour)
 	var banked: Array = [{"id": "m_old", "kind": "chat", "text": "Last week", "audience": "all", "session": 1}]

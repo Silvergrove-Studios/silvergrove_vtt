@@ -517,13 +517,19 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if pid != "":
 				client_joined.emit(pid)
 		"intent":
+			# an intent sent with a `req` hears back either way, done or refused
+			# with it (a playtest's DM couldn't tell that "Give it" had worked:
+			# the form stayed filled in)
+			var req := str(msg.req) if msg.get("req") != null else ""
 			var intent = msg.get("intent", {})
 			if not (intent is Dictionary):
-				_send(c, Protocol.intent_refused({}, "not an intent"))
+				_send(c, Protocol.intent_refused({}, "not an intent", req))
 				return
 			var why := _handle_intent(c, intent)
 			if why != "":
-				_send(c, Protocol.intent_refused(intent, why))
+				_send(c, Protocol.intent_refused(intent, why, req))
+			elif req != "":
+				_send(c, Protocol.done(req))
 		"request":
 			var ev = msg.get("ev", {})
 			if not (ev is Dictionary):

@@ -18,7 +18,8 @@
   import RulesSettings from './RulesSettings.svelte';
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
-  import { comp, connect, dmOp, game, intent, join, notice, playerColors, request, type Dict } from '../lib/game.svelte';
+  import { chatLog, comp, connect, dmOp, game, intent, join, notice, playerColors, request, submit, type Dict } from '../lib/game.svelte';
+  import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -39,7 +40,6 @@
   let picked = $state<string[]>([]);
   let mapsMenu = $state(false);
   let guideGone = $state('');
-  let seenChat = $state(0);
   let wasLive = false;
 
   provideViewUi({
@@ -48,6 +48,7 @@
       else if (p?.kind === 'show' && p.actor) open(`actor:${p.actor}`);
       else intent(p);
     },
+    submit,
     pick: (p) => {
       pick = p;
       picked = [];
@@ -65,7 +66,13 @@
   const sceneName = $derived(String(game.scene.name ?? '') || String(((dm.maps as Dict[]) ?? []).find((m) => m.id === game.scene.map)?.name ?? ''));
   const online = $derived(new Set(game.online.map(String)));
   const session = $derived((dm.session ?? {}) as Dict);
-  const chatCount = $derived((((game.view.log as Dict[]) ?? []).filter((e) => e?.kind === 'chat' || e?.kind === 'roll')).length);
+  // what of the chat is new to the DM: the lines after the last one read,
+  // which this browser keeps (a reload counted the whole log as new: a
+  // playtest's badge said 279). The fight side shows the chat too.
+  const chatLines = $derived(chatIds(chatLog()));
+  let lastRead = $state<string | null>(null); // (null till the first view)
+  const unread = $derived(lastRead === null ? 0 : unreadAfter(chatLines, lastRead));
+  const chatShown = $derived(side === 'chat' || side === 'fight');
   const activeToken = $derived(currentTurnTokens((game.scene.turns ?? {}) as Dict, (game.scene.tokens as Dict[]) ?? [])[0] ?? '');
   // the fight panel follows the turn to a creature the DM runs (a playtest's DM
   // kept seeing the last creature tapped, not the one whose turn it was)
@@ -97,7 +104,14 @@
   });
 
   $effect(() => {
-    if (side === 'chat') seenChat = chatCount;
+    if (lastRead === null && 'log' in game.view) lastRead = startFrom(chatLines, loadRead(game.table, 'dm'));
+  });
+  $effect(() => {
+    const newest = chatLines[chatLines.length - 1] ?? '';
+    if (lastRead !== null && chatShown && newest !== '' && newest !== lastRead) lastRead = newest;
+  });
+  $effect(() => {
+    if (lastRead) saveRead(game.table, 'dm', lastRead);
   });
 
   const guide = $derived.by((): { key: string; text: string; button?: string; act?: () => void } | null => {
@@ -359,7 +373,7 @@
         <div class="tabs" role="tablist">
           <button type="button" role="tab" aria-selected={side === 'party'} class:on={side === 'party'} onclick={() => (side = 'party')}>Party</button>
           <button type="button" role="tab" aria-selected={side === 'chat'} class:on={side === 'chat'} onclick={() => (side = 'chat')}>
-            Chat &amp; rolls{#if side !== 'chat' && chatCount > seenChat}<span class="badge">{chatCount - seenChat}</span>{/if}
+            Chat &amp; rolls{#if !chatShown && unread > 0}<span class="badge">{unread}</span>{/if}
           </button>
           {#if fight}
             <button type="button" role="tab" aria-selected={side === 'fight'} class:on={side === 'fight'} onclick={() => (side = 'fight')}>Fight</button>
@@ -382,10 +396,16 @@
             <Chat />
           {:else}
             <!-- the fight with the talk beneath it (a playtest's DM went between
-                 Fight and Chat dozens of times a fight) -->
+                 Fight and Chat dozens of times a fight); the talk a pane of its
+                 own, headed, so the stat block's clipped edge doesn't run into
+                 the roll cards (a playtest's DM took the chat for covering the
+                 monster's Use and Save buttons) -->
             <div class="fightside">
               <div class="fightpanel"><FightPanel {selected} onselect={(id) => (selected = id)} onopen={open} /></div>
-              <div class="fightchat"><Chat compact /></div>
+              <section class="fightchat" aria-labelledby="fightchat-head">
+                <h2 class="panehead" id="fightchat-head">Chat &amp; rolls</h2>
+                <Chat compact />
+              </section>
             </div>
           {/if}
         </div>
@@ -425,19 +445,37 @@
   }
   .fightside {
     height: 100%;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: minmax(0, 3fr) minmax(200px, 2fr);
     min-height: 0;
   }
   .fightpanel {
-    flex: 3 1 0;
     min-height: 0;
     overflow: hidden;
   }
   .fightchat {
-    flex: 2 1 0;
-    min-height: 180px;
-    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+    background: var(--panel);
+    border-top: 2px solid var(--border);
+  }
+  .fightchat > :global(.chat) {
+    flex: 1;
+    min-height: 0;
+  }
+  .panehead {
+    flex: none;
+    margin: 0;
+    padding: 7px 14px 5px;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border-soft);
   }
   .multi-pick {
     position: absolute;

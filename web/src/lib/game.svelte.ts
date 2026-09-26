@@ -6,8 +6,12 @@
 // returning one can tap their name) and joins after; a reconnect says
 // hello and joins again by itself.
 import { Connection, PROTOCOL, type Msg } from './net';
+import { Waiting } from './waiting';
 
 export type Dict = Record<string, any>;
+
+/** What the table said to an intent sent with a `req`: done, or refused and why. */
+export type Answer = { ok: boolean; why?: string };
 
 export interface Config {
   ws_port: number;
@@ -49,6 +53,12 @@ let compSeq = 0;
 const mapsAsked = new Set<string>();
 const uploadsWaiting = new Map<string, (r: { ref?: string; why?: string }) => void>();
 let uploadSeq = 0;
+// the intents whose screens wait to hear they were done (a form clears and says
+// so): ten seconds without an answer is not done
+const intentsWaiting = new Waiting<Answer>('i', 10000, () => {
+  notice('The table did not answer: check whether it was done before you try again', 'error');
+  return { ok: false, why: 'no answer' };
+});
 let joinMsg: Msg | null = null;
 let byName = '';
 
@@ -182,8 +192,12 @@ function handle(m: Msg): void {
       cb?.(m as Dict);
       break;
     }
+    case 'done':
+      intentsWaiting.answer(String(m.req ?? ''), { ok: true });
+      break;
     case 'refused':
       notice(String(m.why ?? 'Refused'), 'error');
+      intentsWaiting.answer(String(m.req ?? ''), { ok: false, why: String(m.why ?? 'Refused') });
       break;
     case 'uploaded':
     case 'upload_failed': {
@@ -250,6 +264,16 @@ export function send(m: Msg): boolean {
 /** A rules intent: an action, an answer, a note, chat, a DM operation. */
 export function intent(payload: Dict): void {
   if (!send({ t: 'intent', intent: payload })) notice('Not connected to the table', 'error');
+}
+
+/** A rules intent whose answer this page waits for (a form's): done, or refused and why. */
+export function submit(payload: Dict): Promise<Answer> {
+  const { req, answer } = intentsWaiting.ask();
+  if (!send({ t: 'intent', intent: payload, req })) {
+    notice('Not connected to the table', 'error');
+    intentsWaiting.answer(req, { ok: false, why: 'Not connected to the table' });
+  }
+  return answer;
 }
 
 /** A scene event asked for (a move). */
