@@ -148,6 +148,36 @@ The team's notes on making a character in the third playtest
   group; the others keep the slot, and a group left with nobody leaves the
   order (a goblin fleeing a fight whose kin shared its initiative).
 
+- **What the third table found**, done before the fourth. A roll the DM
+  asks for is each player's own click: a prompt's `choices` draw as a
+  button each ("Roll Perception +5"), a prompt says whose character it is
+  about (`opts.actor`), a deadline of 0 means none, and a ruleset can
+  close its own unattended prompt (`hm.prompt_close`); the player's pill
+  says what is asked, their own roll shows where they are, and a roll
+  card marks a natural 20 or 1. A turn ends once: `hm.turns.next` takes
+  who ends it and which turn they mean, a stale one changes nothing and
+  says so, a player's End turn is said to the table and on the DM's bar
+  (`last`), and the DM's Next asks before ending a turn in which nothing
+  has happened (the third table's DM skipped a player twice). Labels are
+  worked out over the whole scene (`TokenLabels`: GW1, GW2, GM, GB, BC —
+  a Minion and a Warrior were both G1), tokens on one cell fan out,
+  creatures wear a crimson ring, a pick takes the token tapped and asks
+  before one on your side, a player taps their token and then where it
+  goes, and no player's colour is red. A fight's turns are cleared when
+  it is launched and when the party returns (a goblin of the lookout
+  stood in the chapel's order), `combat_end` fires when turns stop,
+  prepared fights place their creatures by what the map shows (an altar,
+  a trapdoor, a fire of broken pews), and the web DM's party star lands
+  where it is dropped.
+- On the web screens: the fight's chat has its own pane under the stat
+  block; the book says what each entry is (a place, a fight, a picture)
+  and counts each section; a form says it worked and clears (`{t: "done",
+  req}` answers an intent that carried a `req`; `keep` and `done` on a
+  form); the book's search keeps its answers while the table changes and
+  clears once opened; the Invite says what each address is and how
+  players elsewhere can join, a virtual machine's last; the unread count
+  survives a reload; *See what the DM is showing*; a card's backdrop
+  closes it only for a deliberate press.
 - **Sight follows the light** (the third table's maps were black beyond a
   few hexes, the sunlit road too, and darkvision did nothing). A scene is
   lit by daylight, dim light or dark: its own `light` (the DM's *Light*

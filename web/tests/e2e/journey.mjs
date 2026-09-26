@@ -484,7 +484,10 @@ await step('a reload keeps what Ana has read of the chat', async () => {
   await ben.getByLabel('Message').fill('One more thing before we go.');
   await ben.getByRole('button', { name: 'Send' }).click();
   const badge = ana.getByRole('tab', { name: /Chat/ }).locator('.badge');
+  // (the badge may be up already, from the fight's rolls: wait for Ben's line itself)
+  await ana.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => e.kind === 'chat' && e.text === 'One more thing before we go.'), null, { timeout: 5000 });
   await badge.waitFor({ timeout: 5000 });
+  await ana.waitForTimeout(300);
   const before = await badge.textContent();
   await ana.reload();
   await ana.getByRole('tab', { name: /Journal/ }).waitFor({ timeout: 10000 });
