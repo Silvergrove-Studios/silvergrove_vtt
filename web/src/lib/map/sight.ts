@@ -128,12 +128,16 @@ export function drawFog(ctx: CanvasRenderingContext2D, fog: FogPaths | null, siz
 }
 
 /** Darkvision in the dark: what it reaches is seen, not lit — lifted in
- *  grey, as the host's canvas does (MapCanvas.draw_dark_sight). */
-export function drawDarkSight(ctx: CanvasRenderingContext2D, scene: Dict): void {
+ *  grey, as the host's canvas does (MapCanvas.draw_dark_sight), on the map
+ *  only (a dwarf's 120 feet reach well past its edge). */
+export function drawDarkSight(ctx: CanvasRenderingContext2D, scene: Dict, size: Vec): void {
   const polys = ((scene.dark_sight as number[][][]) ?? []).filter((p) => Array.isArray(p) && p.length >= 3);
   const darkness = Number(scene.darkness ?? 0);
   if (!polys.length || darkness <= 0) return;
   ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, size.x, size.y);
+  ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
   ctx.fillStyle = `rgba(158, 168, 189, ${0.3 * darkness})`;
   for (const poly of polys) {
@@ -163,9 +167,11 @@ const UNSEEN_COLORS: Record<string, string> = {
 
 /** The creatures a player can't see, where they are, for the DM seeing as
  *  them: a faint disc, a dashed ring in the colour of the reason and the
- *  reason under it. `ghosts` are the DM's tokens with `why`. */
+ *  reason under it — once for neighbours that share it (three goblins in
+ *  a row read "walls walls walls"). `ghosts` are the DM's tokens with `why`. */
 export function drawGhosts(ctx: CanvasRenderingContext2D, ghosts: Dict[], scale: number): void {
   ctx.save();
+  const said: { x0: number; x1: number; y0: number; y1: number; words: string }[] = [];
   for (const g of ghosts) {
     const p = (g.pos as number[]) ?? [0, 0];
     const x = Number(p[0]);
@@ -191,14 +197,23 @@ export function drawGhosts(ctx: CanvasRenderingContext2D, ghosts: Dict[], scale:
     if (words) {
       const fs = 12 / scale;
       ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+      const tw = ctx.measureText(words).width;
+      const box = { x0: x - tw / 2, x1: x + tw / 2, y0: y + r + w * 2, y1: y + r + w * 2 + fs * 1.2, words };
+      const near = said.find((o) => box.x0 < o.x1 + fs && box.x1 > o.x0 - fs && box.y0 < o.y1 && box.y1 > o.y0);
+      if (near?.words === words) continue;
+      if (near) {
+        box.y0 = near.y1;
+        box.y1 = box.y0 + fs * 1.2;
+      }
+      said.push(box);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.lineJoin = 'round';
       ctx.lineWidth = fs * 0.3;
       ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.strokeText(words, x, y + r + w * 2);
+      ctx.strokeText(words, x, box.y0);
       ctx.fillStyle = color;
-      ctx.fillText(words, x, y + r + w * 2);
+      ctx.fillText(words, x, box.y0);
     }
   }
   ctx.restore();

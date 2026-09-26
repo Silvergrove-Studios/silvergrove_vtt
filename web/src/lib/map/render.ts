@@ -303,7 +303,7 @@ export function drawFrame(f: Frame): void {
     ctx.fillRect(-3, -3, size.x + 6, size.y + 6);
   }
   drawLights(ctx, (scene.lights as Dict[]) ?? []);
-  drawDarkSight(ctx, scene);
+  drawDarkSight(ctx, scene, size);
   // (a map painted as a picture — a region — may draw no grid at all)
   if (look.showGrid && map.style?.show_grid !== false) {
     ctx.strokeStyle = String(map.style?.grid_color ?? '#00000066');

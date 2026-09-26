@@ -83,6 +83,8 @@
       /* private mode */
     }
   }
+  // (a painted regional map has no walls: no key for them)
+  const hasWalls = $derived((((map?.levels as Dict[]) ?? []).find((l) => String(l.id) === String(game.scene.level ?? ''))?.walls as Dict[] | undefined)?.length ?? 0);
   const LIGHTS: [string, string][] = [['daylight', 'Daylight'], ['dim', 'Dim'], ['dark', 'Dark']];
   // "As the map" says what the map is (a level with none is lit by day)
   const mapLight = $derived(LIGHTS.find(([k]) => k === String(game.scene.map_light ?? ''))?.[1] ?? 'Daylight');
@@ -330,7 +332,9 @@
                 {#each LIGHTS as [k, words] (k)}<option value={k}>{words}</option>{/each}
               </select>
             </label>
-            <button type="button" class="quiet wallsbtn" aria-pressed={showWalls} class:on={showWalls} title="The walls on the map, each kind in its colour" onclick={toggleWalls}>Walls</button>
+            {#if hasWalls > 0}
+              <button type="button" class="quiet wallsbtn" aria-pressed={showWalls} class:on={showWalls} title="The walls on the map, each kind in its colour" onclick={toggleWalls}>Walls</button>
+            {/if}
           {/if}
           <label class="seeas">
             <span class="dim">See as</span>
@@ -340,7 +344,7 @@
             </select>
           </label>
         </div>
-        {#if showWalls && game.scene.id}
+        {#if showWalls && game.scene.id && hasWalls > 0}
           <div class="wallkey" aria-label="What the walls are">
             {#each WALL_KEY as [kind, words] (kind)}
               <span class="key"><span class="swatch" class:dashed={kind === 'terrain'} style:--c={WALL_COLORS[kind]}></span>{words}</span>
@@ -634,11 +638,16 @@
   }
   .mapbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 6px 10px;
     padding: 6px 12px;
     background: var(--bg);
     border-bottom: 1px solid var(--border-soft);
+  }
+  /* (the bar's words on one line each: with Light and Walls in it they wrapped letter-high) */
+  .mapbar .dim {
+    white-space: nowrap;
   }
   .seen {
     position: relative;
