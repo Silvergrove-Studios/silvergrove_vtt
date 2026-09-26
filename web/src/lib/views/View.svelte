@@ -15,7 +15,7 @@
   import { viewUi } from './context';
   import { markdown } from '../markdown';
   import { assetArt } from '../art';
-  import { breakdown, fillIntent, num, putValue, shown, textOf, valueOf, withOptions, type Dict, clone } from './viewlib';
+  import { breakdown, fillIntent, num, putValue, shown, signedOf, textOf, valueOf, withOptions, type Dict, clone } from './viewlib';
   import { Expr, truthy } from '../expr';
   import { resolve } from './fieldcheck';
 
@@ -205,7 +205,7 @@
     {@const v = valueOf(n, ctx)}
     <div class="stat">
       <span class="label">{n.label ?? ''}</span>
-      <span class="value" title={breakdown(v)}>{textOf(v)}</span>
+      <span class="value" title={breakdown(v)}>{n.signed ? signedOf(v) : textOf(v)}</span>
     </div>
   {:else if type === 'pool'}
     {@const rec = valueOf(n, ctx)}

@@ -240,6 +240,28 @@ func test_order_helpers_and_groups() -> void:
 	k.hooks.off("test")
 
 
+func test_remove_a_group_member() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	k.commit([{"t": "actor.add", "actor": {"id": "a_g1", "name": "Goblin 1", "ext": {"sample": {"level": 1, "stats": {"agi": 0, "str": 0, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_g2", "name": "Goblin 2", "ext": {"sample": {"level": 1, "stats": {"agi": 0, "str": 0, "wit": 0}}}}},
+		{"t": "token.add", "scene": "s_1", "token": Encounter.new_token("Goblin 1", Vector2(5, 1), {"id": "t_g1", "actor": "a_g1"})},
+		{"t": "token.add", "scene": "s_1", "token": Encounter.new_token("Goblin 2", Vector2(6, 1), {"id": "t_g2", "actor": "a_g2"})}], "Goblins")
+	check(k.turns.start("s_1", "sample") == "" and k.turns.group("gobs", ["t_g1", "t_g2"], "The goblins") == "", "the goblins share a slot")
+	check(st.encounter.turns.order == ["t_a", "t_c", "t_b", "group:gobs"], "one slot for both: %s" % [st.encounter.turns.order])
+	# one goblin runs: it leaves the slot, the other keeps it (a fleeing creature
+	# whose kin shared its slot could not be taken out of the order)
+	check(k.turns.remove("t_g1") == "", "one member out of the group's slot")
+	check(st.encounter.turns.data.groups.gobs.tokens == ["t_g2"] and st.encounter.turns.order == ["t_a", "t_c", "t_b", "group:gobs"], "the slot stays, with the other: %s" % [st.encounter.turns.data.groups.gobs.tokens])
+	k.commit([{"t": "turns.set", "changes": {"turn": 2}}], "To B")
+	check(k.turns.next() == "" and st.current_turn_tokens() == ["t_g2"], "the slot's turn is the one left's")
+	check(k.turns.remove("t_g1") != "", "not twice")
+	# the last one goes too: the slot goes, and the turn passes on in order
+	check(k.turns.remove("t_g2") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b"] and not st.encounter.turns.data.groups.has("gobs"), "an empty group leaves the order: %s" % [st.encounter.turns.order])
+	check(not st.encounter.turns.data.labels.has("group:gobs"), "and its label")
+
+
 # ----------------------------------------------------------------- focus --
 
 func test_focus_turns() -> void:

@@ -142,6 +142,11 @@ The team's notes on making a character in the third playtest
   (`detail`).
 - A `field` on a sheet shows its value when its tab opens and follows it
   as the table changes it (it showed nothing after a tab switch).
+- A `number` can be `signed`: a modifier reads "+2", not "2" (a sheet's
+  Initiative and concentration save), in both renderers.
+- `hm.turns.remove` of one member of a group's slot takes it out of the
+  group; the others keep the slot, and a group left with nobody leaves the
+  order (a goblin fleeing a fight whose kin shared its initiative).
 
 - **Sight follows the light** (the third table's maps were black beyond a
   few hexes, the sunlit road too, and darkvision did nothing). A scene is

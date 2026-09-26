@@ -236,6 +236,15 @@ static func _num(v: Variant) -> String:
 	return str(int(f)) if is_equal_approx(f, floor(f)) else "%.1f" % f
 
 
+## A number as a modifier reads, "+2" or "-1" (a `number` with `signed`);
+## anything else as _text has it.
+static func _signed(v: Variant) -> String:
+	var n: Variant = v.total if v is Dictionary and TypedNumber.is_typed(v) else v
+	if n is float or n is int:
+		return ("+" if float(n) >= 0 else "") + _num(n)
+	return _text(v)
+
+
 # ----------------------------------------------------------------- build --
 
 func _build(node: Variant, ctx: Dictionary, depth: int) -> Control:
@@ -392,7 +401,8 @@ func _labelled(label: String, ctl: Control) -> Control:
 func _number(n: Dictionary, ctx: Dictionary) -> Control:
 	var v: Variant = value_of(n, ctx)
 	var l := Label.new()
-	l.text = _text(v)
+	# `signed`: a modifier with its sign (an Initiative of +2 read "2")
+	l.text = _signed(v) if bool(n.get("signed", false)) else _text(v)
 	l.theme_type_variation = "HeaderLabel"
 	if v is Dictionary and TypedNumber.is_typed(v):
 		var parts := PackedStringArray()
