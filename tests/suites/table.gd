@@ -791,6 +791,58 @@ func test_campaign_first() -> void:
 	DirAccess.remove_absolute(dir)
 
 
+## A fight's order goes with it (a playtest's chapel fight opened on the
+## lookout fight's order, and a new goblin given a removed one's id took its
+## place in it): a creature taken out mid-fight leaves the order, Return
+## clears the turns, and the next fight, with the same creatures, has none.
+func test_a_fight_leaves_no_order_behind() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://table_fight_order_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_table_fight_order.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	var c := Campaign.create("Two fights")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1"}
+	c.plugins.append({"id": "sample.degrees"})
+	check(c.save(dir.path_join("two.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("two.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var mp := win.maps
+	check(mp.add_map(_example("ruined_chapel.hexmap")) == "", "the chapel in the library")
+	var mid := str(ctx.campaign.maps[0].id)
+	var gob := {"collection": "creatures", "id": "goblin", "name": "Goblin skirmisher"}
+	var lookout := mp.new_encounter("The lookout", mid, "ground")
+	var chapel := mp.new_encounter("The chapel", mid, "ground")
+	for enc in [lookout, chapel]:
+		mp.add_creature(enc, gob, 2, "9,8", false)
+	check(mp.launch(lookout) == "", "the lookout fight")
+	var live: Dictionary = ctx.campaign.encounter_entry(lookout).live
+	check(ctx.commands.start_turns(str(live.scene)) == "" and (ctx.encounter().turns.order as Array).size() == 3 and str(ctx.encounter().turns.scene) == str(live.scene), "its turns run, two goblins and the hero: %s" % [ctx.encounter().turns.order])
+	# the goblin up is taken out mid-fight: out of the order, the turn passes on
+	var up := ctx.state.current_turn_token()
+	var up_actor := str(ctx.state.find_token(up).get("actor", ""))
+	var next_up := str(ctx.encounter().turns.order[1])
+	check((live.actors as Array).has(up_actor), "a goblin is up")
+	check(ctx.commands.run_all(ctx.encounter().removal_events([up_actor]), "Retire") == "", "taken out")
+	var order: Array = ctx.encounter().turns.order
+	check(order.size() == 2 and not order.has(up) and ctx.state.current_turn_token() == next_up and not (ctx.encounter().turns.counters as Dictionary).has("token:" + up), "out of the order and its budget; the next one up: %s" % [order])
+	check(mp.return_from(lookout) == "", "returned")
+	var t := ctx.encounter().turns
+	check(not bool(t.running) and (t.order as Array).is_empty() and t.get("last") == null and (t.counters as Dictionary).is_empty() and str(t.get("scene", "")) == "", "the lookout's turns went with it: %s" % [t])
+	check(mp.launch(chapel) == "", "the chapel fight, with the same creatures")
+	check((ctx.encounter().turns.order as Array).is_empty() and not bool(ctx.encounter().turns.running), "starts with no order: %s" % [ctx.encounter().turns.order])
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("two.campaign"))
+
+
 ## World, Fight, Prep (playtest 1: most of a session is talk, exploring and
 ## looking things up): the campaign opens in the World — the party, the
 ## map, the reference; a place on the map opens its card; its encounter

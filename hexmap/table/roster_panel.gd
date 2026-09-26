@@ -273,7 +273,7 @@ func _retire() -> void:
 	if selected == "":
 		return
 	var a := ctx.encounter().actor(selected)
-	ctx.commands.run_all(ctx.encounter().actor_removal_events(selected), "Retire " + str(a.get("name", "")))
+	ctx.commands.run_all(ctx.encounter().removal_events([selected]), "Retire " + str(a.get("name", "")))
 	selected = ""
 	refresh()
 

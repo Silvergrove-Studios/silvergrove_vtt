@@ -22,6 +22,9 @@ export interface OrderRow {
 
 export function orderRows(scene: Dict): OrderRow[] {
   const turns: Dict = scene.turns ?? {};
+  // an order that isn't running and isn't this scene's is another fight's (a
+  // playtest's chapel fight showed the lookout's, a new goblin in it)
+  if (!turns.running && String(turns.scene ?? '') !== String(scene.id ?? '')) return [];
   const tokens: Dict[] = (scene.tokens as Dict[]) ?? [];
   const up = new Set(currentTurnTokens(turns, tokens));
   const labels: Dict = turns.data?.labels ?? {};

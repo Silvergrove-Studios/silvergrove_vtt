@@ -132,6 +132,7 @@ Hooks in API 1:
 | `after_roll` | `{spec, result, ctx}` | set `result.outcome` and anything else the log should show |
 | `turn_start`, `turn_end` | `{ref, actor, group, events}` | the participant gaining / losing the turn *or the focus*; `group` names the slot when it is a group's member |
 | `round_start`, `round_end` | `{round, events}` | ordered shape only |
+| `combat_end` | `{scene, round, events}` | the turns end (End turns, End the fight): put away what was the fight's own — its initiative, say — with the events the step commits; a veto keeps the turns running |
 | `focus_changed` | `{from, to, by, events}` | asked *before* the focus moves: veto to refuse, add events for a cost |
 | `rest` | `{kind, events}` | after refills and expiries |
 | `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock; `session_start` also fires when a session starts from a campaign, with campaign state already in |

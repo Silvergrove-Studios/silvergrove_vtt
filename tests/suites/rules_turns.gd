@@ -166,6 +166,30 @@ func test_next_names_the_turn_it_ends() -> void:
 	check(not k.turns.running(), "they stay stopped")
 
 
+## The end of the turns is the rulesets' to hear (`combat_end`): what their
+## handlers add — the fight's initiative put away — lands in the same step
+## (a playtest's second fight began on the first one's order).
+func test_combat_end_hook() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	check(k.turns.start("s_1", "sample") == "", "the turns run")
+	var heard := []
+	k.hooks.on("combat_end", func(p: Dictionary) -> Dictionary:
+		heard.append(p.duplicate())
+		p.events.append({"t": "ext.set", "scope": "encounter", "id": "", "plugin": "sample", "changes": {"initiative": "put away"}})
+		return p, "test")
+	check(k.turns.stop() == "" and not k.turns.running() and heard.size() == 1 and str(heard[0].scene) == "s_1", "the rulesets hear the turns end, and on which scene")
+	check(str(k.state.encounter.doc.state.ext.get("sample", {}).get("initiative", "")) == "put away" and k.log.undo_label() == "End turns", "what they add lands in the same step")
+	k.log.undo()
+	check(k.turns.running() and not k.state.encounter.doc.state.ext.get("sample", {}).has("initiative"), "and is undone with it")
+	k.hooks.off("test")
+	k.hooks.on("combat_end", func(p: Dictionary) -> Dictionary:
+		p.veto = "not over"
+		return p, "veto")
+	check(k.turns.stop() == "not over" and k.turns.running(), "a veto keeps the turns running")
+	k.hooks.off("veto")
+
+
 func test_order_helpers_and_groups() -> void:
 	var parts := _party()
 	var k: RulesKernel = parts[0]

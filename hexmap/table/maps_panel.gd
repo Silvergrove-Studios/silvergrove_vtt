@@ -748,9 +748,13 @@ func launch(enc_id: String, show := true) -> String:
 		return "the encounter's map could not be loaded"
 	var entry := ctx.campaign.map_entry(str(e.get("map", "")))
 	# a fight the players are brought to has its own turns: another's end (a
-	# playtest's second fight opened on the first one's order, in raw ids)
+	# playtest's second fight opened on the first one's order, in raw ids),
+	# and whatever order was left behind goes (another opened on the lookout
+	# fight's, one of its new goblins in it)
 	if show and bool(ctx.encounter().turns.get("running", false)):
 		ctx.commands.stop_turns()
+	if not bool(ctx.encounter().turns.get("running", false)):
+		ctx.commands.clear_turns()
 	var previous := ctx.encounter().active_scene_id
 	var scene := Encounter.new_scene(m, str(e.get("level", m.levels[0].get("id", "ground"))), str(e.get("name", "")), str(entry.get("path", "")))
 	scene.fog.enabled = true
@@ -889,6 +893,7 @@ func go(enc_id: String) -> String:
 		return "the players are already there"
 	if bool(ctx.encounter().turns.get("running", false)):
 		ctx.commands.stop_turns()
+	ctx.commands.clear_turns()
 	var why := ctx.commands.activate_scene(sid)
 	if why != "":
 		return why
@@ -923,18 +928,22 @@ func return_from(enc_id: String) -> String:
 	if e.is_empty() or not e.has("live") or (e.live as Dictionary).is_empty():
 		return "nothing to return from"
 	var live: Dictionary = e.live
-	# the fight's turns end first: what lasted rounds ends with them
-	if bool(ctx.encounter().turns.get("running", false)):
-		ctx.commands.stop_turns()
-	var events := []
 	var sid := str(live.get("scene", ""))
-	for aid in live.get("actors", []):
-		events.append_array(ctx.encounter().actor_removal_events(str(aid)))
+	# the fight's turns end first: what lasted rounds ends with them (another
+	# fight's, running on the scene the players see, are left alone)
+	var turns := ctx.encounter().turns
+	var theirs := str(turns.get("scene", "")) in ["", sid] or ctx.encounter().active_scene_id == sid
+	if theirs and bool(turns.get("running", false)):
+		ctx.commands.stop_turns()
+	var events := ctx.encounter().removal_events(live.get("actors", []))
 	if not ctx.encounter().scene(sid).is_empty():
 		events.append({"t": "scene.remove", "id": sid})
 	var why := ctx.commands.run_all(events, "Return from " + str(e.get("name", ""))) if not events.is_empty() else ""
 	if why != "":
 		return why
+	# and its order goes with it: the next fight's starts clean
+	if theirs:
+		ctx.commands.clear_turns()
 	var previous := str(live.get("previous", ""))
 	if previous != "" and not ctx.encounter().scene(previous).is_empty():
 		ctx.commands.activate_scene(previous)

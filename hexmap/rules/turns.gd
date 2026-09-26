@@ -159,11 +159,17 @@ func _start(scene_id: String, strategy_id: String) -> String:
 	return _begin_turn(first) if first != "" else ""
 
 
+## End the turns. What lasted rounds or turns ends with the fight, and the
+## rulesets hear of it (`combat_end`): what their handlers add — the
+## fight's initiative put away, say — lands in the same step. "" or why not.
 func stop() -> String:
-	# what lasted rounds or turns ends with the fight
+	var asked := kernel.ask("combat_end", {"scene": str(turns().get("scene", "")), "round": int(turns().get("round", 1))})
+	if not asked.ok:
+		return asked.why
 	var events: Array = [{"t": "turns.set", "changes": {"running": false}}]
 	events.append_array(kernel.expire({"kind": "combat_end"}))
-	return kernel.commit(events, "End turns")
+	events.append_array(asked.events)
+	return kernel.commit(events, "End turns", {"hook": "combat_end"})
 
 
 # --------------------------------------------------------------- ordered --

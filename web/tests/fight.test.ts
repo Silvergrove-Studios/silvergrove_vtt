@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { endedByPlayer, entryName, nothingSince, turnAfter } from '../src/dm/fight';
+import { endedByPlayer, entryName, nothingSince, orderRows, turnAfter } from '../src/dm/fight';
 
 describe('the fight on the DM’s screen', () => {
   const tokens = [
@@ -51,5 +51,13 @@ describe('the fight on the DM’s screen', () => {
     expect(nothingSince({ ...scene, turns: { ...turns, last: { ...turns.last, by: 'gm' } } }, log, players)).toBeNull();
     // a log this screen can't place the turn in: go on
     expect(nothingSince(scene, [log[0]], players)).toBeNull();
+  });
+
+  it('shows the order that runs, or this scene’s, and no other fight’s', () => {
+    expect(orderRows(scene).map((r) => r.name)).toEqual(['Ada Vex', 'Grace', 'Goblin Warrior']);
+    // the lookout fight's order, left behind, with a new goblin given one of its ids
+    const left = { ...turns, running: false, scene: 's_lookout', order: ['t_g1', 't_old'] };
+    expect(orderRows({ ...scene, turns: left })).toEqual([]);
+    expect(orderRows({ ...scene, turns: { ...left, scene: 's1' } }).map((r) => r.name)).toEqual(['Goblin Warrior']);
   });
 });
