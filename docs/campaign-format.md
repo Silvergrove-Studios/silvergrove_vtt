@@ -129,7 +129,9 @@ party is), `sessions` and `runtime`. Every other field is as before.
   ones its own content shows, not a player's in their journal.
 - `encounters`: prepared encounters: a recipe for a scene — the map and
   level, creatures by compendium entry with a count, a cell and whether
-  they start hidden, the DM's notes, the sessions it was `played` in.
+  they start hidden, the DM's notes, the sessions it was `played` in, and
+  optionally its `light` (`daylight`, `dim` or `dark`), given to the
+  scene when it starts (absent: the map's).
 - `places`: markers on a regional map (`map`, `cell`, `name`) of a
   `kind`: `place` (somewhere to be: a village, an inn — its card opens),
   or a link to an `encounter`, another `map`, or a journal `note`. A

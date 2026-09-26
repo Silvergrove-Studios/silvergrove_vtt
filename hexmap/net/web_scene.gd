@@ -8,9 +8,16 @@ extends RefCounted
 ## what has been explored, and the shape of each light. The web client only
 ## draws.
 ##
-##   {id, name, map, level, active, fog, darkness, overrides, tokens,
-##    explored: [cell keys], visible: [polygon], lights: [{pos, color,
-##    intensity, bright, dim, polygon}], regions, turns}
+##   {id, name, map, level, active, fog, light, darkness, overrides, tokens,
+##    explored: [cell keys], visible: [polygon], los: [polygon],
+##    dark_sight: [polygon], lights: [{pos, color, intensity, bright, dim,
+##    polygon}], regions, turns}
+##
+## `light` is the scene's (daylight, dim or dark) and `darkness` the sheet
+## drawn for it. In the dark, `los` is the viewer's line of sight — there
+## only the dark hides things, not walls — and `dark_sight` what their
+## darkvision reaches (seen, not lit). The DM's also carries the scene's
+## own setting (`light_set`, "" for the map's) and the map's (`map_light`).
 
 
 ## The snapshot of `scene_id` for a viewer: a player (their id), or the GM
@@ -24,11 +31,8 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	if sc.is_empty():
 		return {}
 	var fog := state.fog_enabled(scene_id)
-	var eyes := []
-	for tk in state.tokens(scene_id):
-		if (gm and tk.get("owner", null) != null) or (not gm and _owns(state, tk, player_id)):
-			eyes.append(tk)
-	var sight: Dictionary = Vision.of(state, scene_id, eyes) if (fog or gm) else {"polygons": [], "cells": []}
+	var eyes := _eyes(state, scene_id, player_id, gm)
+	var sight: Dictionary = Vision.of(state, scene_id, eyes) if (fog or gm) else {"polygons": [], "cells": [], "los": [], "dark": []}
 	# labels worked out over every token, the hidden ones too: a player sees
 	# the GW2 the DM calls out, whatever else they can't see
 	var labels := TokenLabels.of_scene(state.tokens(scene_id), state)
@@ -48,12 +52,62 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 		var r: Dictionary = sc.regions[id]
 		if gm or str(r.get("audience", "all")) != "gm":
 			regions[id] = JsonDoc.deep(r)
-	return {"id": str(sc.id), "name": str(sc.get("name", "")), "map": str(sc.get("map", "")), "level": str(sc.get("level", "")),
-		"active": e.active_scene_id == scene_id, "fog": fog, "darkness": float(lvl.get("darkness", 0.0)),
+	var light := state.light_level(scene_id)
+	var out := {"id": str(sc.id), "name": str(sc.get("name", "")), "map": str(sc.get("map", "")), "level": str(sc.get("level", "")),
+		"active": e.active_scene_id == scene_id, "fog": fog, "light": light, "darkness": Vision.darkness(light, gm),
 		"overrides": JsonDoc.deep(sc.get("overrides", {})), "tokens": tokens,
 		"explored": state.explored(scene_id).keys() if fog else [],
 		"visible": (sight.polygons as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
+		"los": (sight.los as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)) if light == "dark" else [],
+		"dark_sight": (sight.dark as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
 		"lights": lights(state, scene_id, lvl, tokens), "regions": regions, "turns": JsonDoc.deep(e.turns)}
+	if gm:
+		out.light_set = str(sc.get("light", "")) if Vision.LIGHT_LEVELS.has(str(sc.get("light", ""))) else ""
+		out.map_light = str(state.level_for(scene_id).get("light", ""))
+	return out
+
+
+## Why a player's screen leaves out the creatures it does, for the DM's
+## See as: {token id: "hidden" | "dark" | "walls" | "none"} — the DM hasn't
+## revealed it; it is in their line of sight but too dark to see; walls
+## (or where their sight ends) are in the way; nothing of theirs on the
+## scene sees at all. Their own tokens and the party are always there. (A
+## playtest's DM saw a player's screen black and couldn't tell why.)
+static func unseen(state: EncounterState, scene_id: String, player_id: String) -> Dictionary:
+	var out := {}
+	if state.encounter.scene(scene_id).is_empty():
+		return out
+	var fog := state.fog_enabled(scene_id)
+	var eyes := _eyes(state, scene_id, player_id, false)
+	var sight: Dictionary = Vision.of(state, scene_id, eyes) if fog else {}
+	var m := state.map_for(scene_id)
+	var sees := eyes.any(func(tk: Dictionary) -> bool: return bool(Vision.eyes(tk, m.grid if m != null else null).sees))
+	for tk in state.tokens(scene_id):
+		if _owns(state, tk, player_id) or _party(state, tk):
+			continue
+		var id := str(tk.get("id", ""))
+		var at := Vision.token_pos(tk)
+		if bool(tk.get("hidden", false)):
+			out[id] = "hidden"
+		elif not fog or Vision.sees(sight.polygons, at):
+			continue
+		elif not sees:
+			out[id] = "none"
+		elif Vision.sees(sight.los, at):
+			out[id] = "dark"
+		else:
+			out[id] = "walls"
+	return out
+
+
+## The tokens a viewer sees through: a player's own (and their
+## characters'), or for the DM every player's, as a preview.
+static func _eyes(state: EncounterState, scene_id: String, player_id: String, gm: bool) -> Array:
+	var out := []
+	for tk in state.tokens(scene_id):
+		if (gm and tk.get("owner", null) != null) or (not gm and _owns(state, tk, player_id)):
+			out.append(tk)
+	return out
 
 
 ## A token as a web client draws it; the DM also learns whether it is hidden.

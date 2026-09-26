@@ -60,6 +60,27 @@ func rename_scene(id: String, p_name: String) -> String:
 	return run({"t": "scene.set", "id": id, "changes": {"name": p_name}}, "Rename scene")
 
 
+## The scene's light: daylight, dim or dark, or "" for the map's own. When
+## the dark lifts, what the party now sees is explored too. One undo step.
+func set_scene_light(id: String, light: String) -> String:
+	var label: String = {"daylight": "Daylight", "dim": "Dim light", "dark": "Darkness"}.get(light, "Light as the map")
+	begin_group()
+	var why := run({"t": "scene.set", "id": id, "changes": {"light": light if light != "" else null}})
+	if why == "":
+		explore_from(id, _party_tokens(id))
+	end_group(label)
+	return why
+
+
+## The tokens the players see through on a scene.
+func _party_tokens(scene_id: String) -> Array:
+	var out := []
+	for tk in state.tokens(scene_id):
+		if tk.get("owner", null) != null and str(tk.owner) != "":
+			out.append(tk)
+	return out
+
+
 # ------------------------------------------------------------------- tokens --
 
 func add_token(scene_id: String, tk: Dictionary) -> String:

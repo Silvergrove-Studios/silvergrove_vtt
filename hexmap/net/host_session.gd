@@ -322,6 +322,13 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		return
 	if Protocol.SCENE_EVENTS.has(t):
 		_broadcast(Protocol.event(ev))
+		# a note on the map shown to the players (or hidden again): their
+		# devices get the map again, with it (or without it)
+		if t == "element.set" and str(ev.get("ref", "")).begins_with("notes:"):
+			var mid := str(state.encounter.scene(str(ev.get("scene", ""))).get("map", ""))
+			for c in _clients:
+				if c.hello and not _is_gm(c) and not bool(c.web) and state.maps.has(mid):
+					_send(c, _map_msg(c, mid))
 	elif Protocol.AUDIENCE_EVENTS.has(t):
 		# co-GMs hold the scene whole: every region and cell event as it is
 		_broadcast(Protocol.event(ev), true)
@@ -445,6 +452,8 @@ func _send_scene(c: Dictionary) -> void:
 		if who != "" and sid != "" and not e.player(who).is_empty():
 			msg.preview = WebScene.build(state, sid, who, false)
 			msg.preview_as = who
+			# and why each creature they don't see isn't there: hidden, dark or walls
+			msg.preview_why = WebScene.unseen(state, sid, who)
 	_send(c, msg)
 
 
@@ -506,6 +515,11 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if _is_gm(c):
 				# the whole scene, now that they may see it
 				_send(c, Protocol.welcome(state.encounter, true))
+				# and the maps whole: a co-GM's device fetched them before joining,
+				# without the DM's notes
+				if not bool(c.web):
+					for mid in state.maps:
+						_send(c, _map_msg(c, str(mid)))
 			_send(c, {"t": "joined", "player": pid, "role": role, "name": _player_name(pid) if pid != "" else ""})
 			_send_view(c)
 			if bool(c.web):
@@ -796,7 +810,7 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 			if m == null:
 				_send(c, Protocol.error("no map " + id))
 				return
-			_send(c, {"t": "map", "id": id, "doc": m.doc})
+			_send(c, _map_msg(c, id))
 		"packs":
 			_send(c, {"t": "packs", "packs": pack_listing()})
 		"asset":
@@ -837,6 +851,27 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 				return
 			var bytes := FileAccess.get_file_as_bytes(dir.path_join(file))
 			_send(c, {"t": "file", "pack": pack, "file": file, "data": Marshalls.raw_to_base64(bytes)})
+
+
+## A map as this client may have it: whole for a GM (the DM's screen, a
+## co-GM), and for anyone else without the DM's notes on it
+## (Protocol.player_map; those a scene has shown stay). A screen asks for
+## its maps before it joins, so until then it is anyone else.
+func _map_msg(c: Dictionary, map_id: String) -> Dictionary:
+	var m: HexMap = state.maps.get(map_id)
+	if m == null:
+		return Protocol.error("no map " + map_id)
+	if _is_gm(c):
+		return {"t": "map", "id": map_id, "doc": m.doc}
+	var shown := {}
+	for sc in state.encounter.scenes:
+		if str(sc.get("map", "")) != map_id:
+			continue
+		var ovs: Dictionary = sc.get("overrides", {})
+		for ref in ovs:
+			if str(ref).begins_with("notes:") and ovs[ref] is Dictionary and ovs[ref].get("gm_only", true) == false:
+				shown[str(ref)] = true
+	return {"t": "map", "id": map_id, "doc": Protocol.player_map(m.doc, shown)}
 
 
 ## The packs the encounter's maps use, and the packs holding the pictures

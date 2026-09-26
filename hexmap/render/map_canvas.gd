@@ -166,6 +166,9 @@ func _rebuild_state() -> void:
 		_seen_polys = v.polygons
 		for c in v.cells:
 			_seen_cells[HexMap.cell_key(c)] = true
+		# the scene's light is the darkness drawn: none by day, the whole sheet
+		# in the dark (the DM's half as dark)
+		darkness = Vision.darkness(state.light_level(scene_id), gm_view())
 	var lvl := level()
 	if lvl.is_empty():
 		return
@@ -439,10 +442,10 @@ func _draw_lights(c: Node2D) -> void:
 				draw_dark_sight(c, t)
 
 
-## The grey reach of a token's darkvision (`vision.dark_radius`), clipped
-## by walls like a light.
+## The grey reach of a token's darkvision (`vision.dark_radius`, in its
+## units on this map), clipped by walls like a light.
 func draw_dark_sight(c: Node2D, tk: Dictionary) -> void:
-	var radius := float(tk.get("vision", {}).get("dark_radius", 0))
+	var radius := float(Vision.eyes(tk, map.grid if map != null else null).dark)
 	if radius <= 0.0:
 		return
 	var origin := from_list(tk.get("pos", [0, 0]))
@@ -605,10 +608,11 @@ static func wall_color(w: Dictionary) -> Color:
 		return Color("#d8d8d8")
 	if move and not sight:
 		return Color("#60c8e0") if bool(b.get("sound", false)) else Color("#c8a060")   # window / fence
-	if not move and sight:
-		return Color("#7090ff")   # ethereal
+	# (terrain before ethereal: a stream bank blocks sight and not movement too)
 	if str(w.get("sight_mode", "normal")) == "limited":
 		return Color("#70c070")
+	if not move and sight:
+		return Color("#7090ff")   # ethereal
 	return Color("#909090")
 
 
@@ -620,6 +624,11 @@ func _draw_walls(c: Node2D) -> void:
 	for w in level().get("walls", []):
 		if not is_shown("walls", w):
 			continue
+		# a player sees a secret door as the wall it looks like, and as a
+		# door once it is open
+		if not gm_view() and str(w.get("door", "none")) == "secret":
+			w = (w as Dictionary).duplicate()
+			w.door = "door" if str(w.get("state", "closed")) == "open" else "none"
 		draw_wall(c, w, 1.0)
 
 

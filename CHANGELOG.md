@@ -143,6 +143,31 @@ The team's notes on making a character in the third playtest
 - A `field` on a sheet shows its value when its tab opens and follows it
   as the table changes it (it showed nothing after a tab switch).
 
+- **Sight follows the light** (the third table's maps were black beyond a
+  few hexes, the sunlit road too, and darkvision did nothing). A scene is
+  lit by daylight, dim light or dark: its own `light` (the DM's *Light*
+  in the web map bar, the Table's *Scene › Light*, or a fight's card,
+  given to the scene it starts), else its map level's (the editor's
+  *Level › Level settings…*), else daylight. By day and in dim light a
+  token sees everything in its line of sight, stopped only by walls; in
+  the dark it sees its darkvision's reach and every lit place in its line
+  of sight — the map's lights and those tokens carry. `vision.radius` no
+  longer limits sight (0 still sees nothing), and a token's vision may be
+  in `units` (`{dark_radius: 60, units: "ft"}`), turned into hexes by the
+  map's own scale. `light_at` starts from the scene's light; `can_see` no
+  longer says "out of range". The examples: the crypt and the cellar
+  dark, the chapel and the forest road by day, *Chapel at dusk* dim.
+- **Why a player sees nothing**, on the web screens: the DM's map draws
+  every wall, each kind in its colour, with a key (*Walls*); *See as*
+  draws that player's walls and fog, hatches what is in their sight but
+  too dark, and rings each creature they can't see with why (hidden, too
+  dark, walls). A player's fog is navy where it is too dark and black
+  where walls are in the way, and a tap on it says which; the walls they
+  have seen are drawn (a secret door as a wall, no hidden ones); their
+  party shows over the fog; a pick with nothing in sight says so.
+- Players' devices are sent a map without the DM's notes on it (a note
+  the DM shows arrives when shown); protocol 3.
+
 ## 2.3.1 — 2026-09-25
 
 After the DM's first notes in the third playtest (`docs/playtest-3.md`).

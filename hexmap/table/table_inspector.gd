@@ -61,6 +61,12 @@ func _player_id(option: String) -> Variant:
 	return null
 
 
+## The scene's grid: a token's sight in feet is so many of its hexes.
+func _grid() -> HexGrid:
+	var m := ctx.map() if ctx.state != null else null
+	return m.grid if m != null else null
+
+
 func _player_name(id) -> String:
 	if id == null:
 		return "(the DM)"
@@ -93,14 +99,14 @@ func refresh() -> void:
 			{"key": "size", "label": "Size", "type": "int", "min": 1, "max": 6, "suffix": " hex"},
 			{"key": "owner", "label": "Owner", "type": "enum", "options": _player_options(), "tooltip": "The player who may move it and sees through it"},
 			{"key": "hidden", "label": "Hidden", "type": "bool", "tooltip": "Players cannot see it"},
-			{"key": "vision", "label": "Vision", "type": "float", "min": 0, "max": 60, "step": 0.5, "suffix": " hex"},
+			{"key": "vision", "label": "Sees", "type": "bool", "tooltip": "Off: a marker, which sees nothing. How far a token sees is the scene's light and the walls' to say"},
 			{"key": "dark_radius", "label": "Sees in the dark", "type": "float", "min": 0, "max": 60, "step": 0.5, "suffix": " hex", "tooltip": "Darkvision: how far it sees unlit space (0: needs light)"},
 			{"key": "art", "label": "Art", "type": "string", "tooltip": "pack:token from a pack's tokens, or blank for a plain disc"},
 			{"key": "tags", "label": "Tags", "type": "string", "tooltip": "Comma-separated, shown on the token"},
 		], {
 			"name": tk.get("name", ""), "label": tk.get("label", ""), "color": tk.get("color", "#c0392b"), "size": tk.get("size", 1),
 			"owner": _player_name(tk.get("owner", null)), "hidden": tk.get("hidden", false),
-			"vision": tk.get("vision", {}).get("radius", 0), "dark_radius": tk.get("vision", {}).get("dark_radius", 0), "art": tk.get("art", ""), "tags": ", ".join(PackedStringArray(tk.get("tags", []))),
+			"vision": Vision.eyes(tk, _grid()).sees, "dark_radius": snappedf(float(Vision.eyes(tk, _grid()).dark), 0.1), "art": tk.get("art", ""), "tags": ", ".join(PackedStringArray(tk.get("tags", []))),
 		})
 		_hint.text = "Drag on the map to move. H hides or reveals; Delete removes."
 		return
@@ -151,8 +157,13 @@ func _on_value(key: String, value: Variant) -> void:
 				var pid = _player_id(str(value))
 				ctx.commands.update_token(ctx.scene_id, id, {"owner": pid}, "Assign token")
 			"vision", "dark_radius":
-				var vision: Dictionary = JsonDoc.deep(ctx.state.token(ctx.scene_id, id).get("vision", {}))
-				vision["radius" if key == "vision" else "dark_radius"] = float(value)
+				var tk := ctx.state.token(ctx.scene_id, id)
+				var vision: Dictionary = JsonDoc.deep(tk.get("vision", {})) if tk.get("vision") is Dictionary else {}
+				if key == "vision":
+					vision.radius = 6 if bool(value) else 0
+				else:
+					# hexes here, kept in the token's own units (a ruleset's feet)
+					vision.dark_radius = snappedf(float(value) / float(Vision.eyes(tk, _grid()).per), 0.01)
 				ctx.commands.update_token(ctx.scene_id, id, {"vision": vision}, "Vision" if key == "vision" else "Darkvision")
 			"tags":
 				var tags := []

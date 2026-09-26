@@ -201,6 +201,7 @@ func _forest_road() -> HexMap:
 	m.doc.meta.description = "A woodland track with a camp beside a stream. Ambush country."
 	m.note_pack("woodland", "0.1.0")
 	var lvl := m.level(0)
+	lvl.light = "daylight"   # out of doors by day: the Table's sight follows it
 	var g := m.grid
 	_fill(m, lvl, "woodland:grass", 3)
 	# Forest floor patches
@@ -316,6 +317,7 @@ func _ruined_chapel() -> HexMap:
 	m.note_pack("dungeons_and_castles", "0.1.0")
 	m.note_pack("woodland", "0.1.0")
 	var lvl := m.level(0)
+	lvl.light = "daylight"   # roofless, by day
 	var g := m.grid
 	_fill(m, lvl, "dungeons_and_castles:grass_courtyard", 2)
 	for c in g.all_cells():
@@ -380,6 +382,7 @@ func _ruined_chapel() -> HexMap:
 	# Crypt level
 	var crypt := HexMap.new_level("crypt", "Crypt")
 	crypt.elevation_range = [-2, -1]
+	crypt.light = "dark"   # underground: its torch and darkvision show what there is
 	m.doc.levels.append(crypt)
 	var room := {}
 	for c in g.all_cells():
@@ -417,6 +420,7 @@ func _cellar() -> HexMap:
 	m.doc.meta.description = "A merchant's cellar: storeroom, wine racks and a walled-off vault. Square cells."
 	m.note_pack("dungeons_and_castles", "0.1.0")
 	var lvl := m.level(0)
+	lvl.light = "dark"   # a cellar: lit by its torch and candles alone
 	var g := m.grid
 	_fill(m, lvl, "dungeons_and_castles:rough_stone", 2)
 	# The storeroom, the vault beside it
@@ -467,6 +471,7 @@ func _chapel_ambush(m: HexMap) -> Encounter:
 	st.apply({"t": "player.add", "player": ben})
 
 	var ground := Encounter.new_scene(m, "ground", "Chapel at dusk", "ruined_chapel.hexmap")
+	ground.light = "dim"   # dusk: the map is by day, this scene is not
 	st.apply({"t": "scene.add", "scene": ground})
 	var sid: String = ground.id
 	var door := m.level_by_id("ground")

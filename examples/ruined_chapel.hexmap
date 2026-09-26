@@ -18,6 +18,7 @@
         1
       ],
       "id": "ground",
+      "light": "daylight",
       "lights": [
         {
           "angle": 360,
@@ -3656,6 +3657,7 @@
         -1
       ],
       "id": "crypt",
+      "light": "dark",
       "lights": [
         {
           "angle": 360,

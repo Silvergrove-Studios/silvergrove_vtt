@@ -314,7 +314,7 @@ func _build_menus() -> MenuBar:
 	var lvl := PopupMenu.new()
 	lvl.name = "Level"
 	_item(lvl, "Add level…", L_ADD)
-	_item(lvl, "Rename level…", L_RENAME)
+	_item(lvl, "Level settings…", L_RENAME)
 	_item(lvl, "Remove level", L_REMOVE)
 	lvl.add_separator()
 	_item(lvl, "Move level up", L_UP)
@@ -639,9 +639,7 @@ func _on_menu(id: int) -> void:
 				_refresh_levels()
 				level_select.select(ctx.map.levels.size() - 1)
 				_on_level_selected(ctx.map.levels.size() - 1))
-		L_RENAME:
-			_prompt("Rename level", "Name", str(ctx.level().get("name", "")), func(n: String) -> void:
-				ctx.commands.update_level(ctx.level_index, {"name": n}))
+		L_RENAME: _level_settings_dialog()
 		L_BACKDROP_IMPORT:
 			var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.png, *.jpg, *.jpeg, *.webp ; Images"])
 			fd.file_selected.connect(func(p: String) -> void:
@@ -1130,6 +1128,27 @@ func _form_dialog(title: String, form: PropertyForm, on_ok: Callable, buttons: A
 	d.close_requested.connect(d.queue_free)
 	add_child(d)
 	d.popup_centered()
+
+
+## The level's name and its light: daylight (out of doors by day; what a
+## level with none is), dim, or dark (a crypt: only lights and darkvision
+## show anything). The Table's sight follows it.
+func _level_settings_dialog() -> void:
+	var form := PropertyForm.new()
+	form.build([
+		{"key": "name", "label": "Name", "type": "string"},
+		{"key": "light", "label": "Light", "type": "enum", "options": [{"id": "daylight", "name": "Daylight"}, {"id": "dim", "name": "Dim"}, {"id": "dark", "name": "Dark"}],
+			"tooltip": "What the players see by: by day, everything in sight; in the dark, only what lights and darkvision show"},
+	], {"name": str(ctx.level().get("name", "")), "light": level_light(ctx.level())})
+	form.name = "LevelSettings"
+	_form_dialog("Level settings", form, func(v: Dictionary) -> void:
+		ctx.commands.update_level(ctx.level_index, {"name": str(v.name), "light": str(v.light)}))
+
+
+## A level's light as the Table reads it: its own, or daylight.
+static func level_light(lvl: Dictionary) -> String:
+	var l := str(lvl.get("light", ""))
+	return l if Vision.LIGHT_LEVELS.has(l) else "daylight"
 
 
 func _prompt(title: String, label: String, initial: String, on_ok: Callable) -> void:

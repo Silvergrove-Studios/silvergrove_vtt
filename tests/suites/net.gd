@@ -130,6 +130,27 @@ func test_host_and_net_session() -> void:
 	history.undo()
 	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) != Vector2(1.5, 1.5)), "the DM's undo reaches the client")
 	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(st.encounter.doc))), "still the same after undo")
+	# her device works out her sight itself: the same as the table's, in the
+	# scene's light and with darkvision in feet (protocol 3)
+	var same_sight := func() -> bool:
+		return Vision.of(client.state, sid, client.state.tokens_owned_by(sid, str(ana.id))).cells == Vision.of(st, sid, st.tokens_owned_by(sid, str(ana.id))).cells
+	check(client.state.light_level(sid) == "dim" and same_sight.call(), "at dusk the client sees what the table says she sees (%d cells)" % Vision.of(st, sid, st.tokens_owned_by(sid, str(ana.id))).cells.size())
+	cmds.set_scene_light(sid, "dark")
+	check(_pump(host, [client], func() -> bool: return client.state.light_level(sid) == "dark"), "the dark reaches the client")
+	check(same_sight.call(), "and in the dark they agree too (%d cells)" % Vision.of(st, sid, st.tokens_owned_by(sid, str(ana.id))).cells.size())
+	cmds.update_token(sid, fighter.id, {"vision": {"radius": 6, "dark_radius": 30, "units": "ft"}})
+	check(_pump(host, [client], func() -> bool: return str(client.state.token(sid, fighter.id).get("vision", {}).get("units", "")) == "ft") and same_sight.call(),
+		"with thirty feet of darkvision too (%d cells)" % Vision.of(st, sid, st.tokens_owned_by(sid, str(ana.id))).cells.size())
+	# the map she was sent: the walls whole (her sight is worked out from them), none of the DM's notes
+	var host_map := st.map_for(sid)
+	var her_map := client.state.map_for(sid)
+	check(not (host_map.level(0).notes as Array).is_empty() and (her_map.level(0).notes as Array).is_empty(), "the DM's notes on the map stay on the table")
+	check((her_map.level(0).walls as Array).size() == (host_map.level(0).walls as Array).size(), "the walls come whole")
+	var shown_note: Dictionary = host_map.level(0).notes[0]
+	cmds.run({"t": "element.set", "scene": sid, "ref": "notes:" + str(shown_note.id), "changes": {"gm_only": false}}, "Show the note")
+	check(_pump(host, [client], func() -> bool: return (client.state.map_for(sid).level(0).notes as Array).size() == 1), "a note the DM shows the players reaches her map")
+	cmds.set_scene_light(sid, "dim")
+	cmds.update_token(sid, fighter.id, {"vision": {"radius": 6}})
 	# a scene over a map the client has never seen, added mid-session: the map is fetched
 	var road := HexMap.load_file("res://examples/forest_road.hexmap")
 	st.attach_map(road)

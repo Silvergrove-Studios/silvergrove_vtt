@@ -175,6 +175,18 @@ func fog_enabled(scene_id: String) -> bool:
 	return bool(encounter.scene(scene_id).get("fog", {}).get("enabled", false))
 
 
+## How lit a scene is: daylight, dim or dark. The scene's own `light` (the
+## DM's, for this fight) wins, then its map level's, then daylight — a
+## map that says nothing is out of doors by day (a playtest's maps were
+## all black beyond a few hexes, the sunlit road too).
+func light_level(scene_id: String) -> String:
+	var own := str(encounter.scene(scene_id).get("light", ""))
+	if Vision.LIGHT_LEVELS.has(own):
+		return own
+	var lvl := str(level_for(scene_id).get("light", ""))
+	return lvl if Vision.LIGHT_LEVELS.has(lvl) else "daylight"
+
+
 # ------------------------------------------------------------------ validate --
 
 ## Why `ev` cannot be applied to the current state, or "" if it can.
@@ -223,6 +235,9 @@ func validate(ev: Dictionary) -> String:
 				for key in ev.changes:
 					if str(key) == k or str(key).begins_with(k + "/"):
 						return "scene.set cannot change '%s'; use its own events" % k
+			# the scene's light: one of the three, or null for the map's own
+			if ev.changes.has("light") and ev.changes.light != null and not Vision.LIGHT_LEVELS.has(str(ev.changes.light)):
+				return "scene.set: 'light' is daylight, dim or dark (or null for the map's)"
 			if ev.changes.has("triggers"):
 				if not (ev.changes.triggers is Array):
 					return "scene.set: 'triggers' must be a list"

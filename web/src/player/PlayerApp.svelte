@@ -25,6 +25,8 @@
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
   import { moveTo, moveWords, pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
+  import { fogOf, fogWords } from '../lib/map/sight';
+  import type { Cell } from '../lib/grid';
   import { movedOn, turnSummary } from '../lib/turns';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
@@ -279,10 +281,23 @@
     selected = selected === t.id ? '' : String(t.id);
   }
 
-  function onCellClick(_cell: unknown, at: { x: number; y: number }): void {
+  function onCellClick(cell: Cell, at: { x: number; y: number }): void {
     if (pick) resolvePick(at);
     else if (moving) moveHere(at);
-    else selected = '';
+    else {
+      selected = '';
+      sayWhyUnseen(cell);
+    }
+  }
+
+  // a tap on the fog says why it's dark there: too dark, or walls in the way
+  function sayWhyUnseen(cell: Cell): void {
+    if (!map || !game.scene.fog) return;
+    const grid = new Grid(map.grid ?? {});
+    if (!grid.inBounds(cell)) return;
+    const f = fogOf(grid, game.scene, cell);
+    const words = fogWords(f, ((game.scene.explored as string[]) ?? []).includes(`${cell.q},${cell.r}`));
+    if (words) notice(words);
   }
 
   // the armed token to the cell tapped: asked first on a touch screen, at once with a mouse
@@ -428,7 +443,7 @@
           playerColors={playerColors()}
           {selected}
           activeToken={''}
-          picking={pick ? pickWords(pick) : moving ? moveWords(moving) : ''}
+          picking={pick ? pickWords(pick, (game.scene.tokens as Dict[]) ?? []) : moving ? moveWords(moving) : ''}
           centerOn={followed}
           follow={followed}
           canDrag={(t) => String(t.owner ?? '') === game.me}
@@ -445,8 +460,13 @@
         {/if}
         {#if game.scene.fog && !confirmPick && !confirmMove && !(pick && pickCount(pick) > 1)}
           <!-- (a playtest's players all took the dark for a broken map, the
-               enemies it hid for missing ones) -->
-          <p class="sight-note">The dark is out of your character's sight: walls, trees and distance hide what's there.</p>
+               enemies it hid for missing ones; at the next, nobody could say
+               whether it was the dark or the walls) -->
+          <p class="sight-note">
+            {game.scene.light === 'dark'
+              ? 'Navy is in your sight but too dark to see; black is behind walls. Tap either to be told.'
+              : "Black is out of your character's sight: walls are in the way. Tap it to be told."}
+          </p>
         {/if}
         {#if pick && pickCount(pick) > 1}
           <div class="confirm-pick" role="dialog" aria-label="Choose the targets">

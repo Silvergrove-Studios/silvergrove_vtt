@@ -106,6 +106,7 @@ static func ray_hit(origin: Vector2, dir: Vector2, segments: Array, max_t: float
 ## origin is then included as the first point so the shape closes at the light.
 static func visibility_polygon(origin: Vector2, radius: float, segments: Array, ring_rays := 48, cone_deg := 360.0, direction_deg := 0.0) -> PackedVector2Array:
 	var segs := nearby(segments, origin, radius)
+	var packed := _pack(segs, origin)
 	var cone := cone_deg < 359.999
 	var half := deg_to_rad(cone_deg) / 2.0
 	var facing := deg_to_rad(direction_deg)
@@ -138,9 +139,91 @@ static func visibility_polygon(origin: Vector2, radius: float, segments: Array, 
 			continue
 		last_angle = a
 		var dir := Vector2(cos(a), sin(a))
-		var t := ray_hit(origin, dir, segs, radius)
+		var t := _packed_hit(origin, dir, packed, radius, a)
 		pts.append(origin + dir * minf(t, radius))
 	return pts
+
+
+## Angular bins for the segments a ray can cross: each segment is filed
+## under every bin its angle from the origin spans.
+const _BINS := 90
+
+
+## Segments as packed arrays, filed by the angles they span from `origin`:
+## a polygon casts hundreds of rays, and by day a token's sight reaches
+## every wall on the map — a ray need only try the few in its direction.
+static func _pack(segs: Array, origin: Vector2) -> Dictionary:
+	var a := PackedVector2Array()
+	var b := PackedVector2Array()
+	var flags := PackedInt32Array()   # one_way (0, 1, 2) + 4 when limited
+	var bins := []
+	for k in _BINS:
+		bins.append(PackedInt32Array())
+	var bw := TAU / _BINS
+	for i in segs.size():
+		var s: Dictionary = segs[i]
+		a.append(s.a)
+		b.append(s.b)
+		flags.append(int(s.one_way) + (4 if bool(s.get("limited", false)) else 0))
+		var ta: float = (s.a - origin).angle()
+		var diff: float = angle_difference(ta, (s.b - origin).angle())
+		var lo := ta if diff >= 0.0 else ta + diff
+		# every bin from a hair before `lo` to a hair past lo + |diff|
+		var k0 := int(floor((wrapf(lo - 1e-4, -PI, PI) + PI) / bw))
+		for j in int(ceil((absf(diff) + 2e-4) / bw)) + 1:
+			var k := (k0 + j) % _BINS
+			var bin: PackedInt32Array = bins[k]
+			bin.append(i)
+			bins[k] = bin
+	return {"a": a, "b": b, "flags": flags, "bins": bins}
+
+
+## ray_hit over packed segments, the ones in the ray's direction: the same
+## rules (one-way sides, a limited wall blocking at the second crossing).
+static func _packed_hit(origin: Vector2, dir: Vector2, packed: Dictionary, max_t: float, angle: float) -> float:
+	var sa: PackedVector2Array = packed.a
+	var sb: PackedVector2Array = packed.b
+	var flags: PackedInt32Array = packed.flags
+	var near: PackedInt32Array = packed.bins[int(floor((wrapf(angle, -PI, PI) + PI) / (TAU / _BINS))) % _BINS]
+	var best := INF
+	var limited := PackedFloat32Array()
+	for i in near:
+		var a := sa[i]
+		var e := sb[i] - a
+		var denom := dir.cross(e)
+		if absf(denom) < 1e-9:
+			continue
+		var d := a - origin
+		var t := d.cross(e) / denom
+		if t <= 1e-6 or t >= best or t > max_t:
+			continue
+		var u := d.cross(dir) / denom
+		if u < -1e-6 or u > 1.0 + 1e-6:
+			continue
+		var f := flags[i]
+		var one_way := f & 3
+		if one_way != 0:
+			var from_right := dir.dot(Vector2(e.y, -e.x)) < 0.0
+			if (one_way == 2) != from_right:
+				continue
+		if f & 4:
+			limited.append(t)
+			continue
+		best = t
+	if limited.size() >= 2:
+		limited.sort()
+		var crossed := 0
+		var last := -INF
+		for t in limited:
+			if t >= best:
+				break
+			if t - last > 1e-4:
+				crossed += 1
+				last = t
+				if crossed == 2:
+					best = t
+					break
+	return best
 
 
 ## The same polygon with every point pulled in to `inner` radius: the bright

@@ -3,7 +3,8 @@
 // slept, a Wi-Fi hiccup — and says hello and joins again when it does.
 
 export type Msg = { t: string; [k: string]: unknown };
-export const PROTOCOL = 2;
+// (3: sight follows the scene's light; the table's own, as protocol.gd says)
+export const PROTOCOL = 3;
 
 export class Connection {
   url: string;

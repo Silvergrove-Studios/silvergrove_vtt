@@ -1,13 +1,16 @@
 // Drawing a scene on a 2D canvas, as the host's map canvas draws it
 // (hexmap/render/map_canvas.gd), in its order: background, backdrop,
-// terrain, props, darkness, lights, grid, regions, doors, tokens, notes,
-// fog. The world is in hex units; the camera maps them to the screen. The
+// terrain, props, darkness, lights, grid, regions, fog, walls, tokens,
+// notes. (The tokens over the fog: a player sees the party wherever it
+// is.) The world is in hex units; the camera maps them to the screen. The
 // backdrop and terrain are drawn once into a cached canvas, and what a
-// snapshot decides (the props in order, the fog, the grid) is worked out
-// once per snapshot (`prepare`); the rest is drawn every frame.
+// snapshot decides (the props in order, the fog, the walls, the grid) is
+// worked out once per snapshot (`prepare`); the rest is drawn every frame.
 import { Grid, INSCRIBED_SQUARE, R, cellKey, keyCell, type Cell, type Vec } from '../grid';
 import { asset, assetArt, image, raster, terrainImage } from '../art';
 import type { Dict } from '../game.svelte';
+import { drawDarkSight, drawFog, drawGhosts, fogPaths, type FogPaths } from './sight';
+import { drawWalls, wallsFor } from './walls';
 
 export interface Camera {
   x: number; // the world point at the centre of the view
@@ -27,13 +30,17 @@ export interface Look {
   /** the token whose turn it is */
   activeToken: string;
   showGrid: boolean;
+  /** the walls drawn (the DM's toggle; on unless said) */
+  showWalls?: boolean;
+  /** the DM seeing as a player: their snapshot, with what's too dark hatched */
+  seeAs?: boolean;
+  /** the creatures a player seen as can't see, each with `why` */
+  ghosts?: Dict[];
 }
 
 /** A creature's outer ring: the side it is on, beside its shape. */
 const FOE = '#dc143c';
 const FOG_UNSEEN = 'rgb(8, 8, 13)';
-const FOG_GM = 'rgba(13, 13, 31, 0.55)';
-const FOG_DIM = 'rgba(8, 8, 13, 0.62)';
 const PROP_LAYERS: Record<string, number> = { ground: 0, objects: 1, overhead: 2 };
 
 /** The scene's level with its overrides merged (a door opened, a light put out). */
@@ -157,14 +164,14 @@ function layerTree(lvl: Dict): Map<string, [number, boolean]> {
 // --------------------------------------------------------------- prepare --
 
 /** What a snapshot decides, worked out once: the grid, the level, the props
- *  in order, the fog and the grid's outline as paths. */
+ *  in order, the fog and the grid's outline as paths, the walls to draw. */
 export interface Prepared {
   grid: Grid;
   lvl: Dict;
   props: Dict[];
   gridPath: Path2D;
-  fogUnseen: Path2D | null;
-  fogDim: Path2D | null;
+  fog: FogPaths | null;
+  walls: Dict[];
 }
 
 function cellPath(path: Path2D, grid: Grid, cell: Cell, grow = 1): void {
@@ -178,7 +185,9 @@ function cellPath(path: Path2D, grid: Grid, cell: Cell, grow = 1): void {
   path.closePath();
 }
 
-export function prepare(map: Dict, scene: Dict, gm: boolean): Prepared {
+/** `allWalls`: every wall drawn (the DM's, and the DM seeing as a player);
+ *  otherwise a player's, the ones they have seen. */
+export function prepare(map: Dict, scene: Dict, gm: boolean, allWalls = gm): Prepared {
   const grid = new Grid(map.grid ?? {});
   const lvl = effectiveLevel(map, scene);
   const tree = layerTree(lvl);
@@ -194,22 +203,9 @@ export function prepare(map: Dict, scene: Dict, gm: boolean): Prepared {
     .map(({ p }) => p);
   const gridPath = new Path2D();
   for (const cell of grid.allCells()) cellPath(gridPath, grid, cell);
-  let fogUnseen: Path2D | null = null;
-  let fogDim: Path2D | null = null;
-  if (scene.fog) {
-    // (Vision.cells_in: a cell is seen when its centre is in sight)
-    const explored = new Set<string>((scene.explored as string[]) ?? []);
-    const polys = (scene.visible as number[][][]) ?? [];
-    fogUnseen = new Path2D();
-    fogDim = new Path2D();
-    for (const cell of grid.allCells()) {
-      if (polys.some((p) => pointInPolygon(grid.center(cell), p))) continue;
-      const known = explored.has(`${cell.q},${cell.r}`);
-      if (gm && known) continue;
-      cellPath(known ? fogDim : fogUnseen, grid, cell, 1.02);
-    }
-  }
-  return { grid, lvl, props, gridPath, fogUnseen, fogDim };
+  // (Vision.cells_in: a cell is seen when its centre is in sight)
+  const fog = fogPaths(grid, scene, gm, (path, cell) => cellPath(path, grid, cell, 1.02));
+  return { grid, lvl, props, gridPath, fog, walls: wallsFor(lvl, grid, scene, allWalls) };
 }
 
 // ------------------------------------------------------------- terrain --
@@ -359,6 +355,7 @@ export function drawFrame(f: Frame): void {
     ctx.fillRect(-3, -3, size.x + 6, size.y + 6);
   }
   drawLights(ctx, (scene.lights as Dict[]) ?? []);
+  drawDarkSight(ctx, scene, size);
   // (a map painted as a picture — a region — may draw no grid at all)
   if (look.showGrid && map.style?.show_grid !== false) {
     ctx.strokeStyle = String(map.style?.grid_color ?? '#00000066');
@@ -366,7 +363,7 @@ export function drawFrame(f: Frame): void {
     ctx.stroke(prep.gridPath);
   }
   drawRegions(ctx, grid, scene, look.gm, cam.scale);
-  drawDoors(ctx, lvl, cam.scale);
+  drawSeen(ctx, prep, look, size, cam.scale);
   const tokens = (scene.tokens as Dict[]) ?? [];
   // (labels come as the host works them out over every token: GW1, GW2)
   const placed = layout(tokens, grid, look.dragging?.id ?? '');
@@ -377,25 +374,6 @@ export function drawFrame(f: Frame): void {
   }
   drawNameTags(ctx, tokens, look, cam.scale, placed);
   if (look.gm) drawNotes(ctx, lvl, cam.scale);
-  if (fog) {
-    if (!look.gm) {
-      // the off-map surround is never seen either
-      ctx.fillStyle = FOG_UNSEEN;
-      const pad = 40;
-      ctx.fillRect(-pad, -pad, size.x + pad * 2, pad);
-      ctx.fillRect(-pad, size.y, size.x + pad * 2, pad);
-      ctx.fillRect(-pad, 0, pad, size.y);
-      ctx.fillRect(size.x, 0, pad, size.y);
-    }
-    if (prep.fogUnseen) {
-      ctx.fillStyle = look.gm ? FOG_GM : FOG_UNSEEN;
-      ctx.fill(prep.fogUnseen);
-    }
-    if (prep.fogDim && !look.gm) {
-      ctx.fillStyle = FOG_DIM;
-      ctx.fill(prep.fogDim);
-    }
-  }
   if (look.hoverCell && look.picking) {
     const path = new Path2D();
     cellPath(path, grid, look.hoverCell);
@@ -496,37 +474,17 @@ function drawRegions(ctx: CanvasRenderingContext2D, grid: Grid, scene: Dict, gm:
   }
 }
 
-/** Doors only: the walls are in the art, and a door is something to open. */
-function drawDoors(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): void {
-  for (const w of (lvl.walls as Dict[]) ?? []) {
-    if (String(w.door ?? 'none') !== 'door' || w.hidden) continue;
-    const pts = (w.points as number[][]) ?? [];
-    if (pts.length < 2) continue;
-    const open = String(w.state ?? 'closed') === 'open';
-    const a = pts[0];
-    const b = pts[pts.length - 1];
-    ctx.lineCap = 'round';
-    ctx.lineWidth = Math.max(4 / scale, 0.09);
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.beginPath();
-    ctx.moveTo(a[0], a[1]);
-    ctx.lineTo(b[0], b[1]);
-    ctx.stroke();
-    ctx.lineWidth = Math.max(2.5 / scale, 0.055);
-    ctx.strokeStyle = open ? '#e0d090' : '#e0a040';
-    ctx.beginPath();
-    if (open) {
-      // an open door: the frame's two ends
-      ctx.moveTo(a[0], a[1]);
-      ctx.lineTo(a[0] + (b[0] - a[0]) * 0.22, a[1] + (b[1] - a[1]) * 0.22);
-      ctx.moveTo(b[0], b[1]);
-      ctx.lineTo(b[0] + (a[0] - b[0]) * 0.22, b[1] + (a[1] - b[1]) * 0.22);
-    } else {
-      ctx.moveTo(a[0], a[1]);
-      ctx.lineTo(b[0], b[1]);
-    }
-    ctx.stroke();
-  }
+/** What the viewer sees, and why not: the fog (navy where it is too dark,
+ *  black where walls are in the way; hatched when the DM sees as a player),
+ *  the walls (every kind for the DM, the ones a player has seen), and for the
+ *  DM seeing as a player the creatures that player can't see. Under the
+ *  tokens: the party shows wherever it is. The DM's Walls off leaves the
+ *  doors, as the map had them before (a door is something to open). */
+function drawSeen(ctx: CanvasRenderingContext2D, prep: Prepared, look: Look, size: Vec, scale: number): void {
+  drawFog(ctx, prep.fog, size, look.gm, scale, look.seeAs === true);
+  const walls = look.showWalls === false ? prep.walls.filter((w) => String(w.door ?? 'none') === 'door' && !w.hidden) : prep.walls;
+  drawWalls(ctx, walls, look.gm || look.seeAs === true, scale);
+  if (look.ghosts?.length) drawGhosts(ctx, look.ghosts, scale);
 }
 
 /** The DM's notes on the map: a yellow pin and its title. */

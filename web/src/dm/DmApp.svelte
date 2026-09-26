@@ -26,6 +26,8 @@
   import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
   import { liveFight } from './fight';
   import { currentTurnTokens } from '../lib/turns';
+  import { ghostsOf } from '../lib/map/sight';
+  import { WALL_COLORS, WALL_KEY } from '../lib/map/walls';
 
   const token = new URLSearchParams(location.hash.slice(1)).get('t') ?? '';
   let card = $state('');
@@ -63,6 +65,30 @@
   // seeing as a player: the map draws that player's snapshot (a playtest's DM
   // revealed the goblins and couldn't tell that nobody could see them)
   const seeing = $derived(game.preview && game.previewAs ? game.players.find((p) => String(p.id) === game.previewAs) : undefined);
+  // …with the creatures they can't see where they are, and why (the next
+  // playtest's DM saw a player's black screen and couldn't say why)
+  const ghosts = $derived(seeing ? ghostsOf((game.scene.tokens as Dict[]) ?? [], game.previewWhy) : []);
+  // the walls on the DM's map, every kind in its colour, and their key (the
+  // DM's map showed none, and nobody knew what was blocking the players' sight)
+  let showWalls = $state(true);
+  try {
+    showWalls = localStorage.getItem('hexmap.dm.walls') !== '0';
+  } catch {
+    /* private mode */
+  }
+  function toggleWalls(): void {
+    showWalls = !showWalls;
+    try {
+      localStorage.setItem('hexmap.dm.walls', showWalls ? '1' : '0');
+    } catch {
+      /* private mode */
+    }
+  }
+  // (a painted regional map has no walls: no key for them)
+  const hasWalls = $derived((((map?.levels as Dict[]) ?? []).find((l) => String(l.id) === String(game.scene.level ?? ''))?.walls as Dict[] | undefined)?.length ?? 0);
+  const LIGHTS: [string, string][] = [['daylight', 'Daylight'], ['dim', 'Dim'], ['dark', 'Dark']];
+  // "As the map" says what the map is (a level with none is lit by day)
+  const mapLight = $derived(LIGHTS.find(([k]) => k === String(game.scene.map_light ?? ''))?.[1] ?? 'Daylight');
   const sceneName = $derived(String(game.scene.name ?? '') || String(((dm.maps as Dict[]) ?? []).find((m) => m.id === game.scene.map)?.name ?? ''));
   const online = $derived(new Set(game.online.map(String)));
   const session = $derived((dm.session ?? {}) as Dict);
@@ -314,6 +340,20 @@
               </div>
             {/if}
           </div>
+          {#if game.scene.id}
+            <!-- how lit the scene is: by day the players see everything in their
+                 line of sight; in the dark, only lights and darkvision show -->
+            <label class="lightsel">
+              <span class="dim">Light</span>
+              <select value={String(game.scene.light_set ?? '')} onchange={(e) => dmOp('scene_light', { scene: String(game.scene.id ?? ''), light: e.currentTarget.value })}>
+                <option value="">As the map ({mapLight.toLowerCase()})</option>
+                {#each LIGHTS as [k, words] (k)}<option value={k}>{words}</option>{/each}
+              </select>
+            </label>
+            {#if hasWalls > 0}
+              <button type="button" class="quiet wallsbtn" aria-pressed={showWalls} class:on={showWalls} title="The walls on the map, each kind in its colour" onclick={toggleWalls}>Walls</button>
+            {/if}
+          {/if}
           <label class="seeas">
             <span class="dim">See as</span>
             <select value={game.previewAs} onchange={(e) => dmOp('see_as', { player: e.currentTarget.value })}>
@@ -322,9 +362,20 @@
             </select>
           </label>
         </div>
+        {#if showWalls && game.scene.id && hasWalls > 0}
+          <div class="wallkey" aria-label="What the walls are">
+            {#each WALL_KEY as [kind, words] (kind)}
+              <span class="key"><span class="swatch" class:dashed={kind === 'terrain'} style:--c={WALL_COLORS[kind]}></span>{words}</span>
+            {/each}
+            <span class="key"><span class="swatch dashed"></span>dashed: hidden from the players</span>
+          </div>
+        {/if}
         {#if seeing}
           <div class="seeing" role="status">
-            <span>You're seeing what <strong>{seeing.name}</strong>'s screen shows: the dark is out of their characters' sight, and what they can't see isn't there.</span>
+            <span>
+              <strong>{seeing.name}</strong>'s screen: <span class="legend navy">hatched</span> in their sight but too dark ·
+              <span class="legend black">black</span> behind walls · <span class="legend ring">dashed ring</span> a creature they can't see, and why
+            </span>
             <button type="button" class="quiet" onclick={() => dmOp('see_as', { player: '' })}>Back to yours</button>
           </div>
         {/if}
@@ -333,6 +384,9 @@
             {map}
             scene={seeing ? (game.preview as Dict) : game.scene}
             gm={!seeing}
+            showWalls={showWalls || !!seeing}
+            seeAs={!!seeing}
+            {ghosts}
             playerColors={playerColors()}
             {selected}
             {activeToken}
@@ -426,6 +480,55 @@
 {/if}
 
 <style>
+  .lightsel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .wallsbtn {
+    min-height: 30px;
+    padding: 2px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+  }
+  .wallsbtn.on {
+    color: var(--text);
+    border-color: var(--accent-soft, var(--accent));
+  }
+  .wallkey {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    padding: 4px 12px 6px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .swatch {
+    width: 18px;
+    height: 0;
+    border-top: 3px solid var(--c, #d8d8d8);
+  }
+  .swatch.dashed {
+    border-top-style: dashed;
+    border-top-color: var(--c, #d8d8d8);
+  }
+  .legend {
+    font-weight: 650;
+  }
+  .legend.navy {
+    color: #a0b0ff;
+  }
+  .legend.ring {
+    text-decoration: underline dashed;
+  }
   .seeas {
     display: flex;
     align-items: center;
@@ -577,11 +680,16 @@
   }
   .mapbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 6px 10px;
     padding: 6px 12px;
     background: var(--bg);
     border-bottom: 1px solid var(--border-soft);
+  }
+  /* (the bar's words on one line each: with Light and Walls in it they wrapped letter-high) */
+  .mapbar .dim {
+    white-space: nowrap;
   }
   .seen {
     position: relative;

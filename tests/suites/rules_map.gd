@@ -88,9 +88,13 @@ func test_map_sight_and_light() -> void:
 	check(covered.seen <= ignoring.seen and (covered.blocked_by.has("t_mid") or covered.seen == ignoring.seen), "a token between gives cover when tokens block: %s vs %s" % [covered.seen, ignoring.seen])
 	check(covered.walls == ignoring.walls, "a creature in the way is not a wall")
 	k.commit([{"t": "token.remove", "scene": sid, "id": "t_mid"}], "Gone")
-	# light: the map's lights, a torch on a token
+	# light: the scene's own, then the map's lights and a torch on a token
 	var dark_spot := g.cell_center(g.offset_to_axial(1, 1))
-	check(mq.light_at(sid, dark_spot).level == "dark", "a corner far from any light is dark")
+	check(mq.light_at(sid, dark_spot).level == "bright" and mq.light_at(sid, dark_spot).ambient == "daylight", "by day a corner far from any light is bright")
+	k.commit([{"t": "scene.set", "id": sid, "changes": {"light": "dim"}}], "Dusk")
+	check(mq.light_at(sid, dark_spot).level == "dim", "at dusk, dim")
+	k.commit([{"t": "scene.set", "id": sid, "changes": {"light": "dark"}}], "Night")
+	check(mq.light_at(sid, dark_spot).level == "dark", "at night a corner far from any light is dark")
 	var lit := false
 	for l in st.level_for(sid).lights:
 		var at := Vector2(float(l.pos[0]), float(l.pos[1]))
@@ -102,11 +106,17 @@ func test_map_sight_and_light() -> void:
 	var near := mq.light_at(sid, Vision.token_pos(st.token(sid, "t_h")) + Vector2(1.5, 0))
 	var mid := mq.light_at(sid, Vision.token_pos(st.token(sid, "t_h")) + Vector2(3.0, 0))
 	check(near.level == "bright" and near.sources.has("token:t_h") and mid.level in ["dim", "bright"], "a torch lights bright then dim: %s, %s" % [near.level, mid.level])
-	# can_see: range, sight, light, vision mode
+	# can_see: eyes, sight, light, vision mode
 	var see := mq.can_see(sid, "token:t_h", "token:t_g")
 	check(see.has("sees") and see.has("why") or see.sees, "can_see answers with a reason: %s" % [see])
-	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 2}}}], "Short sight")
-	check(not mq.can_see(sid, "token:t_h", "token:t_g").sees and mq.can_see(sid, "token:t_h", "token:t_g").why == "out of range", "out of range")
+	# by day, how far is not the token's to say: a line of sight is enough
+	k.commit([{"t": "scene.set", "id": sid, "changes": {"light": "daylight"}}, {"t": "element.set", "scene": sid, "ref": "walls:" + str(door.id), "changes": {"state": "open"}},
+		{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 2}}}], "Short sight by day")
+	var by_day := mq.can_see(sid, "token:t_h", "token:t_g")
+	check(by_day.sees and not by_day.has("why"), "a radius of 2 sees a goblin six hexes off by day (no more 'out of range'): %s" % [by_day])
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 0}}}], "Blind")
+	check(mq.can_see(sid, "token:t_h", "token:t_g").why == "no vision", "a radius of 0 sees nothing")
+	k.commit([{"t": "scene.set", "id": sid, "changes": {"light": "dark"}}], "Night")
 	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 10, "mode": "dark"}, "light": null}}], "Darkvision")
 	var dv := mq.can_see(sid, "token:t_h", "token:t_g")
 	check(dv.why != "dark" if not dv.sees else true, "dark vision does not fail for darkness: %s" % [dv])
@@ -125,6 +135,11 @@ func test_map_sight_and_light() -> void:
 	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 10, "dark_radius": 6}}}], "Darkvision 6")
 	var in_dark := mq.can_see(sid, "token:t_h", "token:t_g")
 	check(in_dark.sees and bool(in_dark.get("dark_sight", false)), "six hexes of darkvision see the goblin, marked as dark sight: %s" % [in_dark])
+	# a ruleset's darkvision in feet: 20 feet is four five-foot hexes, 30 is six
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 1, "dark_radius": 20, "units": "ft"}}}], "Darkvision 20 ft")
+	check(not mq.can_see(sid, "token:t_h", "token:t_g").sees, "20 feet of darkvision do not reach it")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 1, "dark_radius": 30, "units": "ft"}}}], "Darkvision 30 ft")
+	check(mq.can_see(sid, "token:t_h", "token:t_g").sees, "30 feet do")
 	# and the canvas lifts the darkness around a player's darkvision
 	var canvas := MapCanvas.new()
 	canvas.packs = PackLibrary.new()

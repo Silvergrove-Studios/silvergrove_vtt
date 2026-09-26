@@ -27,6 +27,12 @@
     /** a token to keep in view when it moves (a player's own, moved by the DM) */
     follow?: string;
     showGrid?: boolean;
+    /** the DM's walls: every kind, colour-coded (off: the doors alone) */
+    showWalls?: boolean;
+    /** the DM seeing as a player: all the walls, what's too dark hatched, and
+     *  the creatures that player can't see (`ghosts`, each with `why`) */
+    seeAs?: boolean;
+    ghosts?: Dict[];
     canDrag?: (t: Dict) => boolean;
     onTokenClick?: (t: Dict) => void;
     onCellClick?: (cell: Cell, at: Vec) => void;
@@ -45,6 +51,9 @@
     centerOn = '',
     follow = '',
     showGrid = true,
+    showWalls = true,
+    seeAs = false,
+    ghosts = [],
     canDrag = () => false,
     onTokenClick,
     onCellClick,
@@ -70,7 +79,7 @@
   // since): a resize fits again, with the same `first`
   let auto = { on: false, first: false };
 
-  const prep = $derived(map && scene?.id ? prepare(map, scene, gm) : null);
+  const prep = $derived(map && scene?.id ? prepare(map, scene, gm, gm || seeAs) : null);
   const tokens = $derived(((scene?.tokens as Dict[]) ?? []) as Dict[]);
   // where each token is drawn: tokens sharing a cell fan out, and a tap is
   // theirs where they are drawn
@@ -126,12 +135,17 @@
       scene,
       prep,
       terrain,
-      look: { gm, selected, dragging: drag, picking: picking !== '', hoverCell: hover, playerColors, activeToken, showGrid },
+      look: { gm, selected, dragging: drag, picking: picking !== '', hoverCell: hover, playerColors, activeToken, showGrid, showWalls, seeAs, ghosts },
     });
   }
 
   $effect(() => {
     void [prep, cam.x, cam.y, cam.scale, selected, picking, hover, drag, gm, showGrid, activeToken, width, height, dpr, artTick, playerColors, Object.keys(game.packs).length];
+    schedule();
+  });
+  // (what the DM's Walls and See as change)
+  $effect(() => {
+    void [showWalls, seeAs, ghosts];
     schedule();
   });
 

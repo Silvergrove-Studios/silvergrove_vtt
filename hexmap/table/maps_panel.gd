@@ -758,6 +758,9 @@ func launch(enc_id: String, show := true) -> String:
 	var previous := ctx.encounter().active_scene_id
 	var scene := Encounter.new_scene(m, str(e.get("level", m.levels[0].get("id", "ground"))), str(e.get("name", "")), str(entry.get("path", "")))
 	scene.fog.enabled = true
+	# the fight's own light, as the DM set it on its card (else the map's)
+	if Vision.LIGHT_LEVELS.has(str(e.get("light", ""))):
+		scene.light = str(e.light)
 	var why := ctx.commands.add_scene(scene, show)
 	if why != "":
 		return why
@@ -856,16 +859,25 @@ func place_party(scene_id: String, m: HexMap, e: Dictionary) -> String:
 		var extra := {"actor": str(aid), "label": label, "color": color, "hidden": false, "vision": {"radius": 6}}
 		if owner != "":
 			extra.owner = owner
-		# what the character's own token says (art, size, sight) wins
+		# what the character's own token says (art, size, sight) wins; its sight
+		# over the default, not instead of it (a ruleset's darkvision alone,
+		# {dark_radius, units}, left the token with no radius: blind)
 		var own: Variant = a.get("token", {})
 		if own is Dictionary:
 			for k in ["art", "size", "color", "label", "vision"]:
 				if (own as Dictionary).has(k) and own[k] != null and str(own[k]) != "":
-					extra[k] = JsonDoc.deep(own[k])
+					if k == "vision" and own[k] is Dictionary:
+						(extra.vision as Dictionary).merge(JsonDoc.deep(own[k]), true)
+					else:
+						extra[k] = JsonDoc.deep(own[k])
 		events.append({"t": "token.add", "scene": scene_id, "token": Encounter.new_token(str(a.get("name", "")), grid.cell_center(cell), extra)})
 	if events.is_empty():
 		return ""
-	return ctx.commands.run_all(events, "The party arrives")
+	var why := ctx.commands.run_all(events, "The party arrives")
+	# what they see as they arrive is explored (a map by day shows at once)
+	if why == "":
+		ctx.commands.explore_from(scene_id, events.map(func(ev: Dictionary) -> Dictionary: return ctx.state.token(scene_id, str(ev.token.id))))
+	return why
 
 
 ## The cells no creature is put on, {axial cell: true}: under a prop that

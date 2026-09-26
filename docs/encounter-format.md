@@ -75,6 +75,7 @@ A scene is one map level with its overlay, tokens and fog.
   "map": "d74c4e99-…",
   "map_path": "ruined_chapel.hexmap",
   "level": "ground",
+  "light": "dim",
   "overrides": {
     "walls:w_2bf8ecbc": { "state": "open" },
     "lights:l_e40f32d6": { "on": false },
@@ -98,6 +99,11 @@ A scene is one map level with its overlay, tokens and fog.
   to the encounter file (or absolute). Readers load by path and check the
   id; a mismatch is a warning, not a failure.
 - `level` is the level id within the map.
+- `light` (optional): `daylight`, `dim` or `dark` — the scene's own light,
+  over its map level's (`docs/map-format.md`); absent, the level's, and a
+  level with none is lit by day (`EncounterState.light_level`). Set with
+  `scene.set` (`null` goes back to the map's; anything else is refused).
+  What a token sees follows it (see `vision` below).
 - `overrides`: `"<collection>:<id>"` → fields that replace the map's. Any
   field may be overridden but these are the ones the table sets:
 
@@ -167,12 +173,21 @@ A scene is one map level with its overlay, tokens and fog.
   only tokens they own, and sees the scene through them.
 - `hidden`: not shown to players at all (a lurking monster). Distinct from
   fog: a visible token in an unexplored cell is still unseen.
-- `vision.radius` in hex units: how far the token sees, walls permitting
-  (`blocks.sight`, open doors don't block). `0` sees nothing on its own.
-  `vision.dark_radius`: how far of that it sees unlit (darkvision);
-  `vision.mode: "dark"` sees unlit everywhere. Clients lift the darkness
-  in grey within an owned token's dark radius; `MapQuery.can_see` says
-  `dark_sight` when that is how a target was seen.
+- `vision`: what the token sees (`Vision`). How far is the scene's light's
+  to say, not the token's: in daylight and dim light (or with
+  `vision.mode: "dark"`) everything in its line of sight, out to the
+  map's far corner, walls permitting (`blocks.sight`, open doors don't
+  block); in the dark what `vision.dark_radius` reaches (darkvision,
+  walls permitting; at least its own cell) and every lit place in its line
+  of sight — the map's lights that are on and those unhidden tokens carry.
+  `vision.radius` only says whether it sees: `0` sees nothing (a marker),
+  anything more does. `vision.units` (`"ft"`, `"m"`, …) says what the
+  numbers are in — a ruleset writes the sheet's `{dark_radius: 60, units:
+  "ft"}` — and the map's `grid.distance` and `grid.units` make them hexes
+  (twelve of five feet, 12.2 of 1.5 m); without units, or with ones that
+  can't be turned into the map's, they are hexes. Clients lift the
+  darkness in grey within an owned token's dark radius; `MapQuery.can_see`
+  says `dark_sight` when that is how a target was seen.
   `light`: a light the token carries — same fields as a map light
   (`bright`, `dim`, `color`) — or absent. Readers treat a stored `null` as
   absent; writers leave the key out, because in an event `null` means
