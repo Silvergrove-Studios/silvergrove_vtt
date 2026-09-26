@@ -43,6 +43,8 @@ func test_expr_arithmetic_and_precedence() -> void:
 	_is("clamp(@n, 0, 5)", 5)
 	_is("sum(@list) + len(@list) + len(@actor.tags) + len(@s)", 6 + 3 + 2 + 13)
 	_is("sign(-9)", -1)
+	_is("[1, 2] + [3]", [1.0, 2.0, 3.0], "+ joins two lists (literals are numbers)")
+	_is("(@nothing ?? []) + @list", [1, 2, 3], "an absent list as empty, joined")
 
 
 func test_expr_paths_strings_and_logic() -> void:

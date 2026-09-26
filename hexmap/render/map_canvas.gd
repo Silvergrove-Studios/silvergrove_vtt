@@ -702,7 +702,13 @@ func _draw_tokens(c: Node2D) -> void:
 	if _eff_level.is_empty():
 		_rebuild_state()
 	var up := state.highlighted_token_ids()
-	for t in tokens_in_view():
+	var shown := tokens_in_view()
+	# "Goblin Warrior" beside "Goblin Warrior 2" and "3" shows "G1"
+	_numbered_labels.clear()
+	for t in shown:
+		if _NAME_NUMBER.search(str(t.get("name", ""))) != null:
+			_numbered_labels[str(t.get("label", ""))] = true
+	for t in shown:
 		draw_token(c, t, 0.5 if bool(t.get("hidden", false)) else 1.0, up.has(str(t.get("id", ""))))
 
 
@@ -712,6 +718,11 @@ func token_radius_px(tk: Dictionary) -> float:
 
 ## A token: a disc in its colour (or its art, clipped round), a ring in its
 ## owner's colour, its label. Also used by tools for ghosts (alpha < 1).
+static var _NAME_NUMBER := RegEx.create_from_string("\\s(\\d+)$")
+var _numbered_labels := {}
+static var _HAS_DIGIT := RegEx.create_from_string("\\d")
+
+
 func draw_token(c: Node2D, tk: Dictionary, alpha := 1.0, active := false, selected := false) -> void:
 	var pos := Vision.token_pos(tk) * ppx
 	var r := token_radius_px(tk)
@@ -741,7 +752,13 @@ func draw_token(c: Node2D, tk: Dictionary, alpha := 1.0, active := false, select
 		c.draw_polygon(pts, white, uvs, tex)
 	else:
 		c.draw_colored_polygon(pts, Color(color, alpha))
+		# "Goblin Warrior 2" shows "G2": in a playtest three goblins were all "G"
 		var label := str(tk.get("label", ""))
+		var num := _NAME_NUMBER.search(str(tk.get("name", "")))
+		if num != null and label != "" and _HAS_DIGIT.search(label) == null:
+			label += num.get_string(1)
+		elif num == null and _numbered_labels.has(label) and _HAS_DIGIT.search(label) == null:
+			label += "1"
 		if label != "":
 			var font := ThemeDB.fallback_font
 			var fs := int(r * (0.9 if label.length() <= 2 else 0.6))
@@ -752,6 +769,18 @@ func draw_token(c: Node2D, tk: Dictionary, alpha := 1.0, active := false, select
 	var ring_w := maxf(r * 0.09, 1.5)
 	c.draw_arc(pos, r - ring_w * 0.5, 0.0, TAU, n, Color(0, 0, 0, 0.6 * alpha), ring_w + 1.5, true)
 	c.draw_arc(pos, r - ring_w * 0.5, 0.0, TAU, n, Color(ring, alpha), ring_w, true)
+	# what everyone can see of its state (the ruleset's tags): bloodied, down, dead
+	var state_tags: Array = tk.get("tags", []) if tk.get("tags") is Array else []
+	if state_tags.has("dead") or state_tags.has("down"):
+		c.draw_circle(pos, r, Color(0.04, 0.04, 0.05, (0.62 if state_tags.has("dead") else 0.4) * alpha))
+		if state_tags.has("dead"):
+			var k := r * 0.5
+			var xw := maxf(r * 0.14, 2.0)
+			c.draw_line(pos + Vector2(-k, -k), pos + Vector2(k, k), Color(0.92, 0.92, 0.92, 0.9 * alpha), xw, true)
+			c.draw_line(pos + Vector2(k, -k), pos + Vector2(-k, k), Color(0.92, 0.92, 0.92, 0.9 * alpha), xw, true)
+	elif state_tags.has("bloodied"):
+		c.draw_arc(pos, r * 0.8, 0.0, TAU, n, Color(0.84, 0.19, 0.19, 0.9 * alpha), maxf(r * 0.07, 1.5), true)
+		c.draw_circle(pos + Vector2(r * 0.7, -r * 0.7), r * 0.22, Color(0.84, 0.19, 0.19, alpha))
 	if bool(tk.get("hidden", false)):
 		# Dotted outer ring: the GM's reminder that players cannot see it.
 		for i in range(0, n, 4):

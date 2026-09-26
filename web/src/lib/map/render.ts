@@ -307,9 +307,14 @@ export function drawFrame(f: Frame): void {
   drawRegions(ctx, grid, scene, look.gm, cam.scale);
   drawDoors(ctx, lvl, cam.scale);
   const tokens = (scene.tokens as Dict[]) ?? [];
+  // "Goblin Warrior" beside "Goblin Warrior 2" and "3" shows "G1": its label
+  // has numbered siblings
+  const numbered = new Set<string>();
+  for (const t of tokens) if (/\s\d+$/.test(String(t.name ?? ''))) numbered.add(String(t.label ?? ''));
   for (const t of tokens) {
     const drag = look.dragging && look.dragging.id === t.id ? look.dragging.pos : null;
-    drawToken(ctx, t, drag ?? tokenPos(t), look, cam.scale, dpr);
+    const first = numbered.has(String(t.label ?? '')) && !/\s\d+$/.test(String(t.name ?? '')) && !/\d/.test(String(t.label ?? ''));
+    drawToken(ctx, first ? { ...t, label: `${t.label}1` } : t, drag ?? tokenPos(t), look, cam.scale, dpr);
   }
   if (look.gm) drawNotes(ctx, lvl, cam.scale);
   if (fog) {
@@ -521,7 +526,10 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
   } else {
     ctx.fillStyle = String(t.color ?? '#c0392b');
     ctx.fill();
-    const label = String(t.label ?? '');
+    // "Goblin Warrior 2" shows "G2": in a playtest three goblins were all "G"
+    const bare = String(t.label ?? '');
+    const n = /\s(\d+)$/.exec(String(t.name ?? ''))?.[1];
+    const label = n && bare && !/\d/.test(bare) ? bare + n : bare;
     if (label) {
       const fs = label.length <= 2 ? r * 0.9 : r * 0.6;
       ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
@@ -542,6 +550,37 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
   ctx.lineWidth = ringW;
   ctx.strokeStyle = ring;
   ctx.stroke();
+  // what everyone can see of its state (the ruleset's tags): bloodied, down, dead
+  if (tags.includes('dead') || tags.includes('down')) {
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = tags.includes('dead') ? 'rgba(10,10,12,0.62)' : 'rgba(10,10,12,0.4)';
+    ctx.fill();
+    if (tags.includes('dead')) {
+      const k = r * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(pos.x - k, pos.y - k);
+      ctx.lineTo(pos.x + k, pos.y + k);
+      ctx.moveTo(pos.x + k, pos.y - k);
+      ctx.lineTo(pos.x - k, pos.y + k);
+      ctx.lineWidth = Math.max(r * 0.14, 2 / scale);
+      ctx.strokeStyle = 'rgba(235,235,235,0.9)';
+      ctx.stroke();
+    }
+  } else if (tags.includes('bloodied')) {
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r * 0.8, 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(r * 0.07, 1.5 / scale);
+    ctx.strokeStyle = 'rgba(214,48,49,0.9)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pos.x + r * 0.7, pos.y - r * 0.7, r * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = '#d63031';
+    ctx.fill();
+    ctx.lineWidth = Math.max(r * 0.05, 1 / scale);
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.stroke();
+  }
   if (Math.abs(Number(t.rot ?? 0)) > 0.01) {
     // which way it faces
     const dx = Math.cos(rot - Math.PI / 2);

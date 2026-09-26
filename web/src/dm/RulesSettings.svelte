@@ -26,6 +26,9 @@
 <Modal title="Rules settings" wide {onclose}>
   {#if groups.length === 0}
     <p class="dim">This campaign's rules have no settings.</p>
+  {:else}
+    <!-- there's no Save: a playtest's DM wondered whether a change had stuck -->
+    <p class="dim small kept">Each change is kept as you make it. Characters made after it follow it.</p>
   {/if}
   {#each groups as g (g.plugin)}
     <section>
@@ -66,9 +69,15 @@
       </ul>
     </section>
   {/each}
+  {#snippet actions()}
+    <button type="button" class="accent" onclick={onclose}>Done</button>
+  {/snippet}
 </Modal>
 
 <style>
+  .kept {
+    margin: 0 0 12px;
+  }
   section + section {
     margin-top: 16px;
   }

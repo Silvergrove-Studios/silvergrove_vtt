@@ -9,6 +9,10 @@ extends SceneTree
 ##   godot --headless --path . -s tools/web_host.gd -- <package> [--seconds N]
 ##       [--web-port P] [--ws-port P] [--info out.json] [--stop stop-file]
 ##       [--party]   two players, Ana and Ben, with a character each
+##       [--work dir] where its campaign lives (default user://web_host, or
+##                    user://web_host-<web port> on another port); emptied first
+##       [--log file] every message from a screen, every refusal, every change
+##                    the table applies, and who joined or left: JSON lines
 
 class NoBonjour extends Bonjour:
 	func available() -> bool:
@@ -19,6 +23,20 @@ var _ran := false
 var _deadline := 0
 var _stop_file := ""
 var win: TableWindow
+var _log: FileAccess
+
+
+## One line of the log: when, and what (a long one cut short).
+func _trace(entry: Dictionary) -> void:
+	if _log == null:
+		return
+	var now := Time.get_unix_time_from_system()
+	entry["at"] = Time.get_datetime_string_from_unix_time(int(now)) + ".%03dZ" % int((now - floorf(now)) * 1000)
+	var line := JSON.stringify(entry)
+	if line.length() > 20000:
+		line = JSON.stringify({"at": entry.at, "dir": entry.get("dir", ""), "cut": line.length(), "head": line.left(20000)})
+	_log.store_line(line)
+	_log.flush()
 
 
 func _process(_d: float) -> bool:
@@ -38,6 +56,8 @@ func _process(_d: float) -> bool:
 func _finish() -> void:
 	if win != null and win.host != null:
 		win.host.stop()
+	_trace({"dir": "note", "text": "stopped"})
+	_log = null
 	_deadline = 0
 	_stop_file = ""
 	quit(0)
@@ -61,7 +81,9 @@ func _run() -> void:
 	var web_port := int(_arg(args, "--web-port", str(WebServer.DEFAULT_PORT)))
 	App.no_auto_host = true
 	App.no_browser = true
-	var work := "user://web_host"
+	# its own folder, emptied first: another host on another port keeps its own
+	# (one with a live game in it must not be wiped by a second)
+	var work := _arg(args, "--work", "user://web_host" if web_port == WebServer.DEFAULT_PORT else "user://web_host-%d" % web_port)
 	if DirAccess.dir_exists_absolute(work):
 		PluginHost._rm_rf(work)
 	var app := App.new(work.path_join("prefs.json"))
@@ -96,6 +118,15 @@ func _run() -> void:
 	var out := {"dm": win.dm_url(), "player": "http://localhost:%d/" % win.host.web.port, "web_port": win.host.web.port, "ws_port": win.host.port,
 		"campaign": ctx.campaign.name if ctx.campaign != null else ""}
 	print("web_host: ", JSON.stringify(out))
+	var log_path := _arg(args, "--log")
+	if log_path != "":
+		_log = FileAccess.open(log_path, FileAccess.WRITE)
+		if _log == null:
+			push_error("web_host: can't write the log at %s" % log_path)
+		else:
+			win.host.traced.connect(_trace)
+			win.host.log.connect(func(text: String) -> void: _trace({"dir": "note", "text": text}))
+			_trace({"dir": "note", "text": "hosting", "info": out})
 	if info_path != "":
 		var f := FileAccess.open(info_path, FileAccess.WRITE)
 		f.store_string(JSON.stringify(out))

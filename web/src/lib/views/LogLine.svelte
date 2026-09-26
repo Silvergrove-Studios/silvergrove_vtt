@@ -12,6 +12,17 @@
   const who = $derived(entry.actor ? String(actors?.[entry.actor]?.name ?? '') : '');
   const dice = $derived(((r.dice as Dict[]) ?? []).filter((d) => d && typeof d === 'object'));
   const mod = $derived(Number(r.modifier ?? 0));
+  // why the roll had advantage or disadvantage (the ruleset keeps it on the
+  // roll's spec): a playtest's DM couldn't tell why an attack had disadvantage
+  const edge = $derived.by(() => {
+    const spec = (entry.spec ?? {}) as Dict;
+    const a = String(spec.why_adv ?? '');
+    const d = String(spec.why_dis ?? '');
+    if (a && d) return `Advantage (${a}) and disadvantage (${d}) cancel out`;
+    if (a) return `Advantage: ${a}`;
+    if (d) return `Disadvantage: ${d}`;
+    return '';
+  });
 </script>
 
 {#if kind === 'roll'}
@@ -31,6 +42,7 @@
       <span class="total">{num(r.total ?? 0)}</span>
     </div>
     {#if r.outcome}<div class="outcome">{r.outcome}</div>{/if}
+    {#if edge}<div class="edge">{edge}</div>{/if}
   </div>
 {:else if kind === 'chat'}
   <div class="line chat">
@@ -49,6 +61,17 @@
 {/if}
 
 <style>
+  /* what was typed on several lines stays on them (a playtest's DM had his
+     line breaks squashed into spaces) */
+  .chat .text,
+  .note,
+  .handout {
+    white-space: pre-wrap;
+  }
+  .edge {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
   .line {
     padding: 6px 0;
     border-bottom: 1px solid var(--border-soft);

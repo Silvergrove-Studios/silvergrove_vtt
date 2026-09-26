@@ -141,15 +141,20 @@ static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, play
 ## The data a plugin's status schema binds to.
 static func status_data(kernel: RulesKernel, projection: Dictionary, plugin: String, player_id: String, role: String) -> Dictionary:
 	var actors := []
+	var mine := []
 	for aid in projection.actors:
 		var pa: Dictionary = projection.actors[aid]
 		actors.append({"id": pa.id, "name": pa.name, "owner": pa.owner, "mine": pa.mine, "kind": pa.kind,
 			"derived": pa.get("derived", {}).get(plugin, {}), "resources": pa.get("resources", {}).get(plugin, {}), "effects": pa.get("effects", [])})
+		if pa.mine:
+			mine.append(pa.id)
 	var tracks := []
 	for tr in projection.tracks:
 		if str(tr.get("plugin", plugin)) == plugin:
 			tracks.append(tr)
-	return {"me": player_id, "role": role, "turns": projection.turns, "clock": projection.clock, "actors": actors, "tracks": tracks,
+	# `mine`: this player's own actors (a status view offers a new
+	# character only to a player without one)
+	return {"me": player_id, "mine": mine, "role": role, "turns": projection.turns, "clock": projection.clock, "actors": actors, "tracks": tracks,
 		"prompts": projection.prompts, "rolls": projection.rolls, "log": projection.log, "scene": str(kernel.state.encounter.active_scene_id),
 		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {}))}
 

@@ -105,11 +105,12 @@
     gap: 8px;
     background: var(--panel);
   }
+  /* the names wrap: a row that scrolled with no scrollbar cut the fifth
+     name off at the edge (a playtest's DM saw "W" for Walt) */
   .to {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
   }
   .chip {
     min-height: 30px;

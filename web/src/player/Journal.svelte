@@ -167,6 +167,9 @@
   const hasCard = $derived(!!(myNote || otherNote || shownThing));
 </script>
 
+<!-- a box the Journal measures itself by: in the wide screen's side panel it is
+     narrow though the window is not (a playtest's editor was squeezed to a sliver) -->
+<div class="journal-box">
 <div class="journal" class:reading={hasCard}>
   <div class="index">
     <div class="top">
@@ -261,8 +264,14 @@
     {/if}
   </div>
 </div>
+</div>
 
 <style>
+  .journal-box {
+    container-type: inline-size;
+    height: 100%;
+    min-height: 0;
+  }
   .journal {
     display: grid;
     grid-template-columns: minmax(220px, 300px) 1fr;
@@ -392,7 +401,7 @@
     max-width: 440px;
     margin-top: 24px;
   }
-  @media (max-width: 760px) {
+  @container (max-width: 760px) {
     .journal {
       grid-template-columns: 1fr;
     }

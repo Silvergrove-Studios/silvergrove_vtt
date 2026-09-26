@@ -158,7 +158,10 @@ func _start(scene_id: String, strategy_id: String) -> String:
 
 
 func stop() -> String:
-	return kernel.commit([{"t": "turns.set", "changes": {"running": false}}], "End turns")
+	# what lasted rounds or turns ends with the fight
+	var events: Array = [{"t": "turns.set", "changes": {"running": false}}]
+	events.append_array(kernel.expire({"kind": "combat_end"}))
+	return kernel.commit(events, "End turns")
 
 
 # --------------------------------------------------------------- ordered --

@@ -12,6 +12,10 @@ extends RefCounted
 signal client_joined(player_id: String)
 signal client_left(player_id: String)
 signal log(text: String)
+## The table as it happens, for a run to be read back from (tools/web_host.gd
+## --log): each message a screen sends (who, what), each refusal the table
+## answers with, each change it applies. Nothing is built unless a log listens.
+signal traced(entry: Dictionary)
 
 var state: EncounterState
 var packs: PackLibrary
@@ -278,6 +282,16 @@ func _player_name(pid: String) -> String:
 
 func _send(c: Dictionary, msg: Dictionary) -> void:
 	(c.peer as WebSocketPeer).send_text(Protocol.encode(msg))
+	if str(msg.get("t", "")) in ["refused", "error", "upload_failed"] and not traced.get_connections().is_empty():
+		traced.emit({"dir": "out", "player": str(c.get("player", "")), "msg": msg})
+
+
+## A message as the trace keeps it: an upload's picture by its size.
+static func _traced_copy(msg: Dictionary) -> Dictionary:
+	var out := msg.duplicate(true)
+	if out.has("data") and out.data is String:
+		out.data = "<%d characters>" % (out.data as String).length()
+	return out
 
 
 func _broadcast(msg: Dictionary, gm_only := false) -> void:
@@ -293,6 +307,8 @@ func _broadcast(msg: Dictionary, gm_only := false) -> void:
 ## changes what each client is shown, so their views are resent (once per
 ## poll, however many events a step applied).
 func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
+	if not traced.get_connections().is_empty():
+		traced.emit({"dir": "event", "ev": ev})
 	var t := str(ev.get("t", ""))
 	if t == "checkpoint.restore":
 		# the whole document changed under everyone: start them over
@@ -421,6 +437,8 @@ func _send_dm(c: Dictionary) -> void:
 
 func _handle(c: Dictionary, msg: Dictionary) -> void:
 	var t := str(msg.t)
+	if t != "ping" and not traced.get_connections().is_empty():
+		traced.emit({"dir": "in", "player": str(c.get("player", "")), "gm": _is_gm(c), "msg": _traced_copy(msg)})
 	if not c.hello and t != "hello":
 		_send(c, Protocol.error("say hello first"))
 		return

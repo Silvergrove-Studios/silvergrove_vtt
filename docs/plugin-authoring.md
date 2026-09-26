@@ -288,9 +288,10 @@ so register a new kind with `pcall(hm.ui.register, …)`). The kinds:
   (this plugin's blocks), `resources` (name → record), `effects`,
   `tokens`, `turns`, `clock`, `state` (this plugin's encounter state).
 - **status** — the table-wide view every client sees. Data: `me`,
-  `role`, `turns`, `clock`, `actors` (the ones this viewer may see, with
-  this plugin's `derived` and `resources`), `tracks`, `prompts`, `rolls`,
-  `log`, `state`.
+  `mine` (the ids of this player's own actors: offer a new character only
+  when it is empty), `role`, `turns`, `clock`, `actors` (the ones this
+  viewer may see, with this plugin's `derived` and `resources`), `tracks`,
+  `prompts`, `rolls`, `log`, `state`.
 - **gm** — a Table panel, with the status data for the GM audience.
 - **party** — the Table's World view, on screen all session: the party
   at a glance and what a DM asks of them while they talk and explore.
@@ -599,7 +600,7 @@ parts = { {label=, type=, value=} }, kind = "attack", visibility = "gm" }`.
 The roll goes through every plugin's `before_roll`, draws from the
 stream, goes through `after_roll`, and lands in the log as a `roll`
 entry. `ctx` is yours: whatever your hooks need (`actor`, `kind`, `dc`).
-Expressions: `NdS`, `+`/`-`, `kh`/`kl`/`dh`/`dl` N, `rN` (reroll faces
+Dice expressions: `NdS`, `+`/`-`, `kh`/`kl`/`dh`/`dl` N, `rN` (reroll faces
 ≤ N once), `!` (explode), `minN`.
 
 ### Waiting on a Player
@@ -670,3 +671,14 @@ platform that has the runtime.
   costs and recharge kinds as strings) and reach for Lua for pipelines.
 - Never put numbers on tokens or rules in the map: actors, effects,
   resources and state are where they live.
+- What everyone may see of a creature's state goes on its tokens as
+  tags the maps draw: `bloodied` (a red ring and mark), `down` (the
+  token darkened), `dead` (darkened and crossed out). A token named with
+  a number ("Goblin Warrior 2") shows it after its label ("G2"), and the
+  unnumbered one of the set shows "G1".
+- Effects that last rounds or turns (`duration.kind` `rounds`,
+  `turn_start`, `turn_end`) end when the turns stop: a fight's effects
+  don't outlive it.
+- An action's `error("…")` reaches the person as that sentence; the
+  chunk and line (`[string "…"]:103:`) go to the Table's log only. Write
+  the sentence for them: "Thok is behind total cover".

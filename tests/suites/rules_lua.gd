@@ -127,3 +127,9 @@ func test_lua_vm_bridge() -> void:
 	var per := (Time.get_ticks_msec() - t0) / 2000.0
 	check(per < 0.5, "a call with nested data in and out costs under 0.5 ms (%.3f ms)" % per)
 	say.call("  derive round trip: %.3f ms" % per)
+
+
+func test_plain_error_for_people() -> void:
+	check(PluginHost.plain_error('[string "srd5e/combat.lua"]:103: Thok is behind total cover') == "Thok is behind total cover", "the chunk and line go")
+	check(PluginHost.plain_error('[string "hexmap"]:464: [string "srd5e/character.lua"]:435: choose your Primal Order') == "choose your Primal Order", "nested ones too")
+	check(PluginHost.plain_error("no plugin 'x'") == "no plugin 'x'", "a plain one is kept")

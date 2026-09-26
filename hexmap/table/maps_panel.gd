@@ -888,6 +888,9 @@ func return_from(enc_id: String) -> String:
 	if e.is_empty() or not e.has("live") or (e.live as Dictionary).is_empty():
 		return "nothing to return from"
 	var live: Dictionary = e.live
+	# the fight's turns end first: what lasted rounds ends with them
+	if bool(ctx.encounter().turns.get("running", false)):
+		ctx.commands.stop_turns()
 	var events := []
 	var sid := str(live.get("scene", ""))
 	for aid in live.get("actors", []):

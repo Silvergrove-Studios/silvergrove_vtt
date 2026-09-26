@@ -574,9 +574,24 @@ func _absorb_call(pc: PluginCall, c: LuaVm.Call) -> void:
 			pc.request = _as_dict(c.value)
 		_:
 			pc.status = PluginCall.ERROR
-			pc.error = c.error
+			# what the person reads: the sentence, not the chunk and line (a playtest's
+			# table saw `[string "srd5e/combat.lua"]:103: Thok is behind total cover`);
+			# the failure log keeps them
+			pc.error = plain_error(c.error)
 			if p != null:
 				_fail(p, "action " + pc.action, c.error)
+
+
+## A ruleset's error as a person reads it: "Thok is behind total cover", not
+## `[string "srd5e/combat.lua"]:103: Thok is behind total cover`.
+static func plain_error(why: String) -> String:
+	var out := why
+	var re := RegEx.create_from_string("^\\s*\\[string \"[^\"]*\"\\]:\\d+:\\s*")
+	var m := re.search(out)
+	while m != null:
+		out = out.substr(m.get_end())
+		m = re.search(out)
+	return out.strip_edges() if out.strip_edges() != "" else why
 
 
 # --------------------------------------------------------------- tests --

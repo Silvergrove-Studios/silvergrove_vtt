@@ -22,6 +22,9 @@
 
   const type = $derived(String(field.type ?? 'string'));
   const id = `f${Math.random().toString(36).slice(2, 9)}`;
+  // the control's name for a screen reader: its label (the labels beside a
+  // field aren't tied to it; a playtest's Edit tab read as bare "spinbutton"s)
+  const named = $derived(String(field.label ?? '') || undefined);
 
   function clampNum(v: number): number {
     let x = Number.isFinite(v) ? v : 0;
@@ -53,6 +56,7 @@
   <span class="num">
     <input
       {id}
+      aria-label={named}
       type="number"
       inputmode={type === 'int' ? 'numeric' : 'decimal'}
       min={field.min}
@@ -65,21 +69,21 @@
     {#if field.suffix}<span class="suffix">{field.suffix}</span>{/if}
   </span>
 {:else if type === 'bool'}
-  <input {id} type="checkbox" checked={value === true} onchange={(e) => { value = (e.currentTarget as HTMLInputElement).checked; commit?.(value); }} />
+  <input {id} aria-label={named} type="checkbox" checked={value === true} onchange={(e) => { value = (e.currentTarget as HTMLInputElement).checked; commit?.(value); }} />
 {:else if type === 'enum'}
   {#if (field.options ?? []).length === 0}
-    <select {id} disabled><option>{field.loading ? 'Loading…' : 'Nothing to choose'}</option></select>
+    <select {id} aria-label={named} disabled><option>{field.loading ? 'Loading…' : 'Nothing to choose'}</option></select>
   {:else}
-    <select {id} value={String(value ?? '')} onchange={(e) => { value = (e.currentTarget as HTMLSelectElement).value; commit?.(value); }}>
+    <select {id} aria-label={named} value={String(value ?? '')} onchange={(e) => { value = (e.currentTarget as HTMLSelectElement).value; commit?.(value); }}>
       {#each field.options as o (optionValue(o))}
         <option value={optionValue(o)}>{optionLabel(o)}</option>
       {/each}
     </select>
   {/if}
 {:else if type === 'color'}
-  <input {id} type="color" value={String(value ?? '#ffffff').slice(0, 7)} onchange={(e) => { value = (e.currentTarget as HTMLInputElement).value; commit?.(value); }} />
+  <input {id} aria-label={named} type="color" value={String(value ?? '#ffffff').slice(0, 7)} onchange={(e) => { value = (e.currentTarget as HTMLInputElement).value; commit?.(value); }} />
 {:else if type === 'text'}
-  <textarea {id} rows="4" value={String(value ?? '')} oninput={(e) => (value = (e.currentTarget as HTMLTextAreaElement).value)} onchange={() => commit?.(value)}></textarea>
+  <textarea {id} aria-label={named} rows="4" value={String(value ?? '')} oninput={(e) => (value = (e.currentTarget as HTMLTextAreaElement).value)} onchange={() => commit?.(value)}></textarea>
 {:else if type === 'vec2'}
   <span class="pair">
     {#each [0, 1] as axis}
@@ -109,6 +113,7 @@
 {:else}
   <input
     {id}
+    aria-label={named}
     type="text"
     value={String(value ?? '')}
     oninput={(e) => (value = (e.currentTarget as HTMLInputElement).value)}

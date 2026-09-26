@@ -118,7 +118,9 @@ func test_ordered_turns() -> void:
 	var before := k.state.encounter.to_json()
 	check(k.turns.next().contains("not yet") and k.state.encounter.to_json() == before, "a vetoed step leaves nothing behind")
 	k.hooks.off("veto")
+	k.commit(Effects.apply(k.state, {"id": "e_r", "on": "token:t_a", "plugin": "sample", "key": "raging", "duration": {"kind": "rounds", "rounds": 10}}), "Rage")
 	check(k.turns.stop() == "" and not k.turns.running(), "stop")
+	check(not k.state.encounter.effects.has("e_r"), "what lasted rounds ends with the fight (a barbarian stayed Raging after one)")
 	check(k.turns.set_focus("gm") != "", "focus calls are refused in the ordered shape")
 	# the list strategy without a plugin keeps the DM's order
 	k.commit([{"t": "turns.set", "changes": {"order": ["t_b", "t_a", "t_c"]}}], "Reorder")

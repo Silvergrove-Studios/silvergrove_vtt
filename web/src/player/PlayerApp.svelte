@@ -46,9 +46,39 @@
     }
   });
   let pick = $state<Dict | null>(null);
+  // on a touch screen a tap on a creature asks before it acts: in a playtest a
+  // phone's double tap to zoom fired an attack
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  let confirmPick = $state<{ target: string | Dict; words: string } | null>(null);
+  // none of a playtest's four players knew they could drag their own token: a
+  // tip, until they have (or say they've got it)
+  let dragTipDone = $state(false);
+  try {
+    dragTipDone = localStorage.getItem('hexmap.tip.drag') === '1';
+  } catch {
+    /* private mode */
+  }
+  const dragTip = $derived(!dragTipDone && ((game.scene.tokens as Dict[]) ?? []).some((t) => String(t.owner ?? '') === game.me && game.me !== ''));
+  function dragTipSeen(): void {
+    dragTipDone = true;
+    try {
+      localStorage.setItem('hexmap.tip.drag', '1');
+    } catch {
+      /* private mode */
+    }
+  }
   let lookup = $state<{ collection: string; id: string } | null>(null);
   let lookingUp = $state(false);
   let showing = $state<Dict | null>(null);
+  // something new from the DM while you type or are in a dialog of your own waits
+  // for you, behind a pill (a playtest's player lost a half-placed portrait to one,
+  // another a journal note's thread)
+  let waitingHandout = $state<Dict | null>(null);
+  function busyHere(): boolean {
+    const el = document.activeElement as HTMLElement | null;
+    const typing = !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'range', 'file', 'submit'].includes((el as HTMLInputElement).type)));
+    return typing || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+  }
   let asked = $state<string>('');
   let selected = $state('');
   let greeted = false;
@@ -92,7 +122,10 @@
       }
     }
     if (game.view.actors) primed = true;
-    if (newest) showing = newest;
+    if (newest) {
+      if (!showing && busyHere()) waitingHandout = newest;
+      else showing = newest;
+    }
   });
 
   // a question for me: at the front
@@ -178,11 +211,30 @@
       notice('Nothing to pick there — try again, or Cancel', 'error');
       return;
     }
+    if (coarse) {
+      confirmPick = { target, words: `${String(pick.label ?? 'This')} → ${targetName(target)}` };
+      return;
+    }
+    sendPick(target);
+  }
+
+  function sendPick(target: string | Dict): void {
+    if (!pick) return;
     intent(withTarget($state.snapshot(pick) as Dict, target, String(game.scene.id ?? '')));
     pick = null;
+    confirmPick = null;
+  }
+
+  function targetName(target: string | Dict): string {
+    if (typeof target !== 'string') return 'that space';
+    const id = target.replace(/^token:/, '');
+    const t = ((game.scene.tokens as Dict[]) ?? []).find((x) => String(x.id) === id);
+    const actor = t?.actor ? (game.view.actors as Dict)?.[String(t.actor)] : null;
+    return String(t?.name || (actor as Dict | null)?.name || 'that creature');
   }
 
   function onTokenDrop(t: Dict, pos: [number, number]): void {
+    dragTipSeen();
     request({ t: 'token.set', scene: String(game.scene.id ?? ''), id: String(t.id), changes: { pos } });
   }
 
@@ -253,8 +305,21 @@
           {onTokenClick}
           {onCellClick}
           {onTokenDrop}
-          onCancelPick={() => (pick = null)}
+          onCancelPick={() => ((pick = null), (confirmPick = null))}
         />
+        {#if dragTip && !pick}
+          <div class="drag-tip" role="status">
+            <span>Your token is yours to move: drag it on the map.</span>
+            <button type="button" class="quiet" onclick={dragTipSeen}>Got it</button>
+          </div>
+        {/if}
+        {#if confirmPick}
+          <div class="confirm-pick" role="dialog" aria-label="Confirm the target">
+            <span>{confirmPick.words}</span>
+            <button type="button" class="quiet" onclick={() => (confirmPick = null)}>Choose again</button>
+            <button type="button" class="accent" onclick={() => confirmPick && sendPick(confirmPick.target)}>Do it</button>
+          </div>
+        {/if}
       </section>
       {#if wide}
         <aside class="side">
@@ -290,6 +355,17 @@
     {/if}
   </main>
 
+  <!-- a question still waiting, whatever tab is open (three of a playtest's players
+       missed the DM's roll request once its pop-up was closed) -->
+  {#if waitingHandout && !showing}
+    <button type="button" class="accent waiting" onclick={() => ((showing = waitingHandout), (waitingHandout = null))}>
+      The DM is showing you something: look
+    </button>
+  {:else if prompts.length && promptIndex < 0 && !showing}
+    <button type="button" class="accent waiting" onclick={() => (asked = String(prompts[0].id ?? ''))}>
+      The DM is waiting for you{prompts.length > 1 ? ` (${prompts.length})` : ''}: answer
+    </button>
+  {/if}
   {#if showing}
     <Handout handout={showing} onclose={() => (showing = null)} />
   {:else if promptIndex >= 0}
@@ -303,6 +379,53 @@
 {/if}
 
 <style>
+  .waiting {
+    position: fixed;
+    left: 50%;
+    top: calc(10px + env(safe-area-inset-top));
+    transform: translateX(-50%);
+    z-index: 40;
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    max-width: calc(100% - 24px);
+  }
+  .drag-tip {
+    position: absolute;
+    left: 50%;
+    top: 12px;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    max-width: calc(100% - 24px);
+    padding: 6px 6px 6px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    font-size: 0.9rem;
+  }
+  .confirm-pick {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 6;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--accent-soft);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  .confirm-pick span {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+  }
   .join {
     min-height: 100%;
     display: grid;

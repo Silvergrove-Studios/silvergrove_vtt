@@ -11,7 +11,7 @@ extends RefCounted
 ## Syntax
 ##   literals     12  2.5  "text"  'text'  true  false  null  [1, "a"]
 ##   paths        @actor.level  @tags[0]  @stats["dex"]  @pools["hp_" .. @id].max   (null when absent)
-##   arithmetic   + - * / % ^   unary -
+##   arithmetic   + - * / % ^   unary -   (+ also joins two lists)
 ##   strings      ..  (concatenate; numbers are formatted)
 ##   compare      == != < <= > >=      (== is JSON equality)
 ##   logic        and or not           (short-circuit; null/false are falsy)
@@ -145,6 +145,9 @@ func _binary(op: String, a: Variant, b: Variant) -> Variant:
 			if b is String and a is String:
 				return b.contains(a)
 			return _fail("'in' needs a list, object or string on the right")
+	# two lists joined: a class's skills and a background's, say
+	if op == "+" and a is Array and b is Array:
+		return (a as Array) + (b as Array)
 	if not (_is_num(a) and _is_num(b)):
 		if op in ["<", "<=", ">", ">="] and a is String and b is String:
 			match op:

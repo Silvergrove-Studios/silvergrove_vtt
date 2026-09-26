@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Playtests by agents** (`tools/agent_playtest/`): a table of AI agents
+  — a DM who knows only D&D and players with personalities, each in a
+  browser sized like their device (a phone, a tablet, a laptop), talking
+  only through the game's chat — plays a campaign package in real time,
+  keeps diaries as it goes and writes reviews at the end. Everything is
+  logged: the host's `--log` (each message from a screen, each refusal,
+  each change), each agent's stream and tool calls, what happened in each
+  browser, a timelapse of each screen, and one merged timeline. The first
+  table played The Ruined Chapel through to level 2; what it found:
+- On the web screens: a phone asks before a tap on a creature acts (a
+  double tap to zoom fired an attack); tokens show everyone a creature is
+  bloodied, down or dead, and same-named ones are numbered ("G1", "G2");
+  a roll says why it had advantage or disadvantage; a DM's request still
+  waiting stays on screen on every tab; something the DM shows waits
+  behind a pill while you type or have a dialog open; chat keeps line
+  breaks and its names wrap; the Journal lays itself out by its own width
+  (in a wide screen's side panel its editor was a sliver); a sheet's tabs
+  wrap on a phone; form fields are named for screen readers; Rules
+  settings say each change is kept; a tip that your token is yours to
+  drag; the character maker keeps its place by the step's name when steps
+  appear as answers arrive.
+- On the Table: a ruleset's errors reach people as sentences, without the
+  chunk and line; effects that last rounds or turns end when a fight's
+  turns stop, and ending a fight stops them; the status view knows a
+  player's own actors (`mine`); `+` joins two lists in expressions;
+  `web_host.gd --log` and `--work` (a second host no longer empties the
+  first one's folder).
+
 - **Pictures from the table** (the team, after the character maker): a
   player gives their character's token a picture of their own — chosen on
   the phone, placed in a round window (drag, come closer), kept by the

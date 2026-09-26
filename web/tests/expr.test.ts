@@ -11,6 +11,12 @@ describe('Expr, as the host has it', () => {
     expect(ev('7 % 3')).toBe(1);
     expect(ev('1 / 0')).toBe(null);
   });
+  it('joins two lists with +', () => {
+    const ctx = { mine: ['stealth'], theirs: ['insight', 'religion'] };
+    expect(ev('@mine + @theirs', ctx)).toEqual(['stealth', 'insight', 'religion']);
+    expect(ev('(@none ?? []) + @theirs', ctx)).toEqual(['insight', 'religion']);
+    expect(ev('@mine + 1', ctx)).toBe(null);
+  });
   it('reads paths, null when absent', () => {
     const ctx = { actor: { level: 3, name: 'Wren' }, tags: ['a', 'b'], stats: { dex: 14 }, pools: { hp_x: { max: 9 } }, id: 'x' };
     expect(ev('@actor.level * 2 + 1', ctx)).toBe(7);

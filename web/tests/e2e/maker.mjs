@@ -104,6 +104,17 @@ await step('Lia starts a druid: nothing moves on until it is chosen', async () =
   await next(lia).click();
 });
 
+await step('her species’ choices: an elven lineage, the ability for its spells, Keen Senses', async () => {
+  await lia.getByText('What your species lets you choose.').waitFor({ timeout: 8000 });
+  expect(await next(lia).isDisabled(), 'Next waits for the choices');
+  await lia.getByRole('radio', { name: /^Wood Elf/ }).click();
+  await lia.getByRole('radio', { name: /^Wisdom/ }).click();
+  expect((await lia.getByRole('checkbox', { name: /^Arcana/ }).count()) === 0, 'Keen Senses is Insight, Perception or Survival');
+  await lia.getByRole('checkbox', { name: /^Insight/ }).click();
+  await shot(lia, 'lia_species');
+  await next(lia).click();
+});
+
 await step('ability scores: what each is for, the druid’s marked, 27 points from 8s that cannot go wrong', async () => {
   await lia.getByText('Key for a Druid').first().waitFor({ timeout: 8000 });
   expect((await lia.getByText('Perceptiveness and mental fortitude.').count()) === 1, 'Wisdom says what it measures');
@@ -146,12 +157,19 @@ await step('the page reloads (the phone dropped it): back on the same step, answ
 
 await step('skills from a list: the criminal’s two locked, two of the druid’s to choose', async () => {
   await lia.getByText('Choose 2 · 2 left').waitFor({ timeout: 5000 });
-  expect((await lia.getByText('From your background').count()) === 2, 'Sleight of Hand and Stealth, from the background');
+  expect((await lia.getByText('From your background and species').count()) === 3, 'Sleight of Hand and Stealth from the background, Insight from Keen Senses');
   expect((await lia.getByRole('checkbox', { name: /^Athletics/ }).count()) === 0, 'Athletics is not a druid’s');
   await lia.getByRole('checkbox', { name: /^Nature/ }).click();
   await lia.getByRole('checkbox', { name: /^Perception/ }).click();
   await lia.getByText('2 chosen ✓').waitFor({ timeout: 5000 });
   await shot(lia, 'lia_skills');
+  await next(lia).click();
+});
+
+await step('her class’s choice at level 1: a Primal Order', async () => {
+  await lia.getByText('What your class lets you choose at level 1.').waitFor({ timeout: 8000 });
+  await lia.getByRole('radio', { name: /^Warden/ }).click();
+  await shot(lia, 'lia_order');
   await next(lia).click();
 });
 
@@ -208,6 +226,9 @@ const rolf = await open(info.player, { width: 390, height: 844 }, 'rolf');
 await step('a player rolls: the table rolls once, the DM sees it', async () => {
   await who(rolf, 'Rolf', 'Human', 'Soldier', 'Fighter');
   await next(rolf).click();
+  await rolf.getByRole('checkbox', { name: /^Insight/ }).click({ timeout: 8000 });
+  await rolf.getByRole('radio', { name: /^Alert/ }).click({ timeout: 8000 });
+  await next(rolf).click();
   await rolf.getByRole('button', { name: 'Roll my scores' }).click();
   await rolf.getByText('You rolled').waitFor({ timeout: 8000 });
   expect((await rolf.locator('.wizard .problem').innerText()).includes('6 to go'), 'the rolls wait to be given');
@@ -219,6 +240,9 @@ await step('a player rolls: the table rolls once, the DM sees it', async () => {
   await shot(dm, 'dm_sees_rolls');
   await next(rolf).click();
   for (const s of ['Perception', 'Survival']) await rolf.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
+  await next(rolf).click();
+  await rolf.getByRole('radio', { name: /^Defense/ }).click({ timeout: 8000 });
+  for (const w of ['Longsword', 'Greatsword', 'Longbow']) await rolf.getByRole('checkbox', { name: new RegExp(`^${w}`) }).click();
   await next(rolf).click();
   await rolf.getByRole('radio', { name: /^155 GP instead/ }).click();
   await rolf.getByRole('radio', { name: /^50 GP instead/ }).click();

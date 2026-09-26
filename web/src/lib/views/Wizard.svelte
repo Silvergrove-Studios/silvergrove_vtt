@@ -27,13 +27,13 @@
   const steps = $derived((Array.isArray(node.steps) ? node.steps : []).filter((s: unknown) => s && typeof s === 'object') as Dict[]);
   const storeKey = $derived(`hexmap.wizard/${String(ctx.me ?? '')}/${String(node.label ?? '')}/${steps.map((s) => String(s.title ?? '')).join('|')}`);
 
-  function load(key: string): { at: number; values: Dict } | null {
+  function load(key: string): { at: number; title: string; values: Dict } | null {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
-      const v = JSON.parse(raw) as { at: number; values: Dict; t: number };
+      const v = JSON.parse(raw) as { at: number; title?: string; values: Dict; t: number };
       if (!v || typeof v !== 'object' || Date.now() - Number(v.t ?? 0) > KEEP_MS) return null;
-      return { at: Number(v.at) || 0, values: v.values && typeof v.values === 'object' ? v.values : {} };
+      return { at: Number(v.at) || 0, title: String(v.title ?? ''), values: v.values && typeof v.values === 'object' ? v.values : {} };
     } catch {
       return null;
     }
@@ -41,7 +41,11 @@
 
   // (read once, as the wizard opens: where it was left)
   const kept = untrack(() => load(storeKey));
+  // where it is, by the step's title: the steps shown change as the answers'
+  // records arrive (a step after one that waits for them moved, after a reload,
+  // to the step after it); the index where there's no title yet
   let at = $state(kept?.at ?? 0);
+  let atTitle = $state(kept?.title ?? '');
   let values = $state<Dict>(kept?.values ?? {});
   let chosen = $state<Dict>({});
   let options = $state<Record<string, Choice[] | null>>({});
@@ -51,7 +55,13 @@
 
   const wctx = $derived({ ...ctx, values, chosen });
   const visible = $derived(steps.filter((s) => shown(s, wctx)));
-  const index = $derived(Math.max(0, Math.min(at, visible.length - 1)));
+  const index = $derived.by(() => {
+    if (atTitle) {
+      const i = visible.findIndex((s) => String(s.title ?? '') === atTitle);
+      if (i >= 0) return i;
+    }
+    return Math.max(0, Math.min(at, visible.length - 1));
+  });
   const step = $derived((visible[index] ?? {}) as Dict);
   const last = $derived(index >= visible.length - 1);
 
@@ -71,7 +81,7 @@
 
   // keep the step and the answers
   $effect(() => {
-    const snap = { at: index, values: $state.snapshot(values), t: Date.now() };
+    const snap = { at: index, title: String(step.title ?? ''), values: $state.snapshot(values), t: Date.now() };
     try {
       localStorage.setItem(storeKey, JSON.stringify(snap));
     } catch {
@@ -108,6 +118,7 @@
 
   function goto(i: number): void {
     at = Math.max(0, Math.min(i, visible.length - 1));
+    atTitle = String(visible[at]?.title ?? '');
     queueMicrotask(() => top?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   }
 
@@ -198,8 +209,12 @@
     gap: 8px;
     position: sticky;
     bottom: 0;
+    /* room above it, so the last choice scrolls clear of it (a playtest's last
+       spell cards sat under the bar) */
+    margin-top: 16px;
     padding: 8px 0 2px;
-    background: linear-gradient(to top, var(--panel) 70%, transparent);
+    background: var(--panel);
+    box-shadow: 0 -10px 12px -6px var(--panel);
   }
   .nav button {
     min-width: 7em;

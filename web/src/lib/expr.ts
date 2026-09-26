@@ -5,7 +5,7 @@
 //
 //   literals 12 2.5 "text" 'text' true false null [1, "a"]
 //   paths @actor.level @tags[0] @stats["dex"] (null when absent)
-//   + - * / % ^, unary -, .. (concatenate), == != < <= > >=,
+//   + - * / % ^ (+ also joins two lists), unary -, .. (concatenate), == != < <= > >=,
 //   and or not, x in list, a ?? b, cond ? a : b,
 //   min max abs floor ceil round clamp len num str lower upper title
 //   sum has contains starts ends join sign
@@ -119,6 +119,8 @@ export class Expr {
         if (typeof b === 'string' && typeof a === 'string') return b.includes(a);
         return this.fail("'in' needs a list, object or string on the right");
     }
+    // two lists joined: a class's skills and a background's, say
+    if (op === '+' && Array.isArray(a) && Array.isArray(b)) return [...a, ...b];
     if (!(isNum(a) && isNum(b))) {
       if (['<', '<=', '>', '>='].includes(op) && typeof a === 'string' && typeof b === 'string') {
         if (op === '<') return a < b;

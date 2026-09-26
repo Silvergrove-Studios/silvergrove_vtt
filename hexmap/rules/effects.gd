@@ -127,6 +127,11 @@ static func expire(state: EncounterState, trigger: Dictionary) -> Array:
 						_remove_linked(state, str(id), links, out)
 					else:
 						out.append({"t": "effect.set", "id": str(id), "changes": {"duration/rounds": left}})
+			# the fight is over: what lasted rounds or turns ends with it (a playtest's
+			# barbarian stayed Raging after the fight had ended)
+			"combat_end":
+				if dk == "rounds" or dk == "turn_start" or dk == "turn_end":
+					_remove_linked(state, str(id), links, out)
 			"scene", "rest", "session":
 				if dk == kind or (kind == "rest" and dk == "long_rest" and bool(trigger.get("long", false))):
 					_remove_linked(state, str(id), links, out)

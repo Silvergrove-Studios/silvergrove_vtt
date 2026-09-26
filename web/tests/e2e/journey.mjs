@@ -200,6 +200,12 @@ await step('a new player makes a character with the wizard', async () => {
   await shot(cara, 'cara_wizard');
   const next = cara.locator('.wizard .nav button.accent');
   await next.click();
+  // the species' choices (a human): Skillful's skill, Versatile's Origin feat
+  await cara.getByText('What your species lets you choose.').waitFor({ timeout: 8000 });
+  await cara.getByRole('checkbox', { name: /^Insight/ }).click();
+  await cara.getByRole('radio', { name: /^Alert/ }).click({ timeout: 8000 });
+  await shot(cara, 'cara_species');
+  await next.click();
   // ability scores: a point buy from 8s; she asks for the fighter's suggestion; the soldier's +2/+1 placed
   await cara.getByText('27 left').waitFor({ timeout: 8000 });
   await cara.getByRole('button', { name: 'Suggested for a Fighter' }).click();
@@ -209,6 +215,12 @@ await step('a new player makes a character with the wizard', async () => {
   // skills: the soldier's two already, two of the fighter's to choose
   await cara.getByText('From your background').first().waitFor({ timeout: 5000 });
   for (const s of ['Perception', 'Survival']) await cara.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
+  await next.click();
+  // the class's choices at level 1: a Fighting Style feat, three kinds of weapons to master
+  await cara.getByText('What your class lets you choose at level 1.').waitFor({ timeout: 8000 });
+  await cara.getByRole('radio', { name: /^Defense/ }).click({ timeout: 8000 });
+  for (const w of ['Longsword', 'Greatsword', 'Longbow']) await cara.getByRole('checkbox', { name: new RegExp(`^${w}`) }).click();
+  await shot(cara, 'cara_class_features');
   await next.click();
   // equipment: the fighter's package A, the soldier's package A
   for (const r of await cara.getByRole('radio', { name: /^Package A/ }).all()) await r.click();
@@ -341,6 +353,12 @@ await step('Ana attacks: a target picked on the map, the roll in the log', async
   if (!at) throw new Error('Ana sees no creature to attack');
   const before = await ana.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length);
   await ana.mouse.click(at.x, at.y);
+  // on a touch screen the tap asks first (a playtest's double tap to zoom fired an attack)
+  await ana.getByRole('dialog', { name: 'Confirm the target' }).waitFor({ timeout: 5000 });
+  const asks = await ana.getByRole('dialog', { name: 'Confirm the target' }).innerText();
+  if (!asks.includes(at.name)) throw new Error(`the confirmation names the target (${at.name}): ${asks}`);
+  await shot(ana, 'ana_confirm_target');
+  await ana.getByRole('button', { name: 'Do it' }).click();
   await ana.waitForFunction((n) => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length > n, before, { timeout: 8000 });
   await ana.getByRole('tab', { name: /Chat/ }).click();
   await shot(ana, 'ana_attack_rolled');

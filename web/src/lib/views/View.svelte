@@ -528,19 +528,21 @@
     flex-direction: column;
     gap: 6px;
   }
+  /* the tabs wrap onto a second row rather than scroll out of sight (on a
+     playtest's phone "Features" showed as "Fe") */
   .tabbar {
     display: flex;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 0 4px;
     border-bottom: 1px solid var(--border);
     margin-bottom: 8px;
-    overflow-x: auto;
   }
   .tabbar button {
     border: 0;
     border-bottom: 2px solid transparent;
     border-radius: 0;
     background: none;
-    padding: 8px 12px;
+    padding: 8px 10px;
     color: var(--muted);
   }
   .tabbar button.on {
