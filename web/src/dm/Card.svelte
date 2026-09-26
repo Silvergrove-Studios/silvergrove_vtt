@@ -11,6 +11,7 @@
   import { markdown } from '../lib/markdown';
   import { pictureUrl } from '../lib/art';
   import AddPicture from '../common/AddPicture.svelte';
+  import FightCard from './FightCard.svelte';
   import TokenPicture from '../common/TokenPicture.svelte';
   import { cardData, cardSchema } from '../lib/views/viewlib';
   import { audienceWords, folderChoices, layout } from './contents';
@@ -28,6 +29,8 @@
   const mapEntry = $derived(kind === 'map' ? ((dm.maps as Dict[]) ?? []).find((m) => String(m.id) === id) : undefined);
   const pnote = $derived(kind === 'pnote' ? ((dm.player_notes as Dict[]) ?? []).find((n) => String(n.id) === id) : undefined);
   const encounter = $derived(place?.kind === 'encounter' ? ((dm.encounters as Dict[]) ?? []).find((e) => String(e.id) === String(place.target ?? '')) : undefined);
+  // a fight prepared or of the DM's own (fight:<id>)
+  const fightEntry = $derived(kind === 'fight' ? ((dm.encounters as Dict[]) ?? []).find((e) => String(e.id) === id) : undefined);
   const viewActor = $derived(kind === 'actor' ? ((game.view.actors ?? {}) as Dict)[id] : undefined);
   const shownNow = $derived(((dm.shown as Dict[]) ?? []).filter((h) => String(h.ref ?? '') === ref));
   const folders = $derived(folderChoices(dm));
@@ -111,8 +114,8 @@
 <article class="card">
   <header class="head">
     <div class="titles">
-      <p class="kind">{kind === 'place' ? (place?.kind === 'encounter' ? 'A fight' : 'A place') : kind === 'actor' ? (person?.kind === 'pc' ? 'A player character' : 'A person') : kind === 'note' ? 'A note' : kind === 'handout' ? 'Shown to the players' : kind === 'picture' ? 'A picture' : kind === 'map' ? 'A map' : kind === 'pnote' ? 'From a player' : kind === 'entry' ? 'Rules' : ''}</p>
-      <h2>{place?.name ?? person?.name ?? note?.title ?? picture?.name ?? mapEntry?.name ?? pnote?.title ?? entry?.data?.entry?.name ?? (kind === 'entry' ? '' : 'Not found')}</h2>
+      <p class="kind">{kind === 'fight' ? 'A fight' : kind === 'place' ? (place?.kind === 'encounter' ? 'A fight' : 'A place') : kind === 'actor' ? (person?.kind === 'pc' ? 'A player character' : 'A person') : kind === 'note' ? 'A note' : kind === 'handout' ? 'Shown to the players' : kind === 'picture' ? 'A picture' : kind === 'map' ? 'A map' : kind === 'pnote' ? 'From a player' : kind === 'entry' ? 'Rules' : ''}</p>
+      <h2>{place?.name ?? person?.name ?? note?.title ?? picture?.name ?? mapEntry?.name ?? pnote?.title ?? fightEntry?.name ?? entry?.data?.entry?.name ?? (kind === 'entry' || kind === 'fight' ? '' : 'Not found')}</h2>
     </div>
     <div class="tools">
       {#if popout}<button type="button" class="quiet" title="Open this card in a window of its own" onclick={popout}>Pop out ↗</button>{/if}
@@ -163,6 +166,7 @@
             <!-- (one press: the fight takes a moment to set up, and a second press started it twice) -->
             <button type="button" class="accent" disabled={starting} onclick={() => { starting = true; dmOp('go_place', { place: id }); setTimeout(() => (starting = false), 5000); }}>{starting ? 'Starting…' : 'Start the fight'}</button>
           {/if}
+          {#if encounter}<button type="button" class="quiet" onclick={() => onopen(`fight:${encounter.id}`)}>Its creatures and map</button>{/if}
         </div>
         {#if encounter?.notes}<div class="prose dmnotes">{@html markdown(String(encounter.notes))}</div>{/if}
       {:else if place.kind === 'map'}
@@ -247,6 +251,8 @@
     {:else if pnote}
       <p class="dim">From {playerName(String(pnote.owner ?? ''))}</p>
       <div class="prose">{@html markdown(String(pnote.text ?? ''))}</div>
+    {:else if kind === 'fight'}
+      <FightCard fightId={id} {onclose} {onopen} />
     {:else if kind === 'entry'}
       {#if entry}
         <View node={cardSchema(game.view.cards ?? {}, String(entry.collection))} ctx={{ ...entry.data, role: 'gm' }} />

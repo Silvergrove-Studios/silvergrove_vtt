@@ -71,6 +71,14 @@
     width: 36px;
     padding: 0;
   }
+  /* a finger's worth (a playtest's phone player tapped the ✕ and had to use Escape) */
+  @media (pointer: coarse) {
+    .close {
+      width: 44px;
+      min-height: 44px;
+      font-size: 1.1rem;
+    }
+  }
   .body {
     padding: 16px 20px 20px;
     flex: 1;

@@ -26,7 +26,8 @@ describe('the DM’s book', () => {
   it('puts the DM’s folders where they were put', () => {
     expect(topOrder(dm)[0]).toBe('folder:f2');
     const b = book(dm, players, '');
-    expect(b.map((n) => n.title)).toEqual(['Session 2', 'Notes for you', 'The party', 'Where', 'People', 'Shown to the players', 'Pictures', 'Maps']);
+    // (Fights shows even empty, after the places: it is where a new fight is made)
+    expect(b.map((n) => n.title)).toEqual(['Session 2', 'Notes for you', 'The party', 'Where', 'Fights', 'People', 'Shown to the players', 'Pictures', 'Maps']);
     const people = b.find((n) => n.node === 'section:people')!;
     expect(people.folders[0].title).toBe('Villains');
     expect(people.folders[0].items.map((i) => i.label)).toEqual(['Marta Vell']);

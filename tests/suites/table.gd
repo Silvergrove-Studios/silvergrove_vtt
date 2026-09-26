@@ -696,6 +696,30 @@ func test_campaign_first() -> void:
 		if ctx.encounter().resources.has(ref):
 			left.append(ref)
 	check(left.is_empty(), "and nothing of theirs is left behind: %s" % [left])
+	# a fight of the DM's own from the web screen: made with the id the screen
+	# gave it, named, creatures added, started with them on free cells, ended,
+	# deleted (a playtest's DM could start only the adventure's own fights)
+	check(win.web_dm.op({"op": "new_fight", "id": "enc_mine", "name": "A new fight", "map": mid}) == "" and not ctx.campaign.encounter_entry("enc_mine").is_empty(), "a fight of the DM's own")
+	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_mine", "name": "The mill"}) == "" and ctx.campaign.encounter_entry("enc_mine").name == "The mill", "named")
+	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_mine", "map": "nowhere"}) != "", "not on a map the campaign hasn't got")
+	if rules:
+		mp._search.text = "goblin"
+		mp._search_compendium()
+		var gob: Dictionary = mp._results.get_item_metadata(0)
+		check(win.web_dm.op({"op": "fight_add", "encounter": "enc_mine", "collection": str(gob.collection), "entry": str(gob.id), "name": str(gob.name), "count": 3, "hidden": false}) == ""
+			and ctx.campaign.encounter_entry("enc_mine").creatures.size() == 1 and int(ctx.campaign.encounter_entry("enc_mine").creatures[0].count) == 3, "three goblins in it")
+		check(win.web_dm.op({"op": "launch", "encounter": "enc_mine"}) == "", "started")
+		var mine_live: Dictionary = ctx.campaign.encounter_entry("enc_mine").get("live", {})
+		var cells := {}
+		var mine_grid := ctx.state.map_for(str(mine_live.get("scene", ""))).grid
+		for tk in ctx.state.tokens(str(mine_live.get("scene", ""))):
+			if (mine_live.get("actors", []) as Array).has(str(tk.get("actor", ""))):
+				cells[mine_grid.world_to_axial(Vision.token_pos(tk))] = true
+		check(cells.size() == 3, "each on a cell of its own, none on the map's corner: %s" % [cells.keys()])
+		check(win.web_dm.op({"op": "fight_delete", "encounter": "enc_mine"}).contains("end the fight"), "not deleted while it runs")
+		check(win.web_dm.op({"op": "end_fight"}) == "", "ended")
+	check(win.web_dm.op({"op": "fight_set", "encounter": "enc_mine", "creatures": []}) == "" and ctx.campaign.encounter_entry("enc_mine").creatures.is_empty(), "its creatures taken out")
+	check(win.web_dm.op({"op": "fight_delete", "encounter": "enc_mine"}) == "" and ctx.campaign.encounter_entry("enc_mine").is_empty(), "and the fight deleted")
 	check(mp.show_map(mid) == "" and ctx.encounter().scenes.size() == 1, "Show makes a scene over a library map")
 	# a regional map: the forest road, with a place that launches the chapel fight and the party marker
 	check(mp.add_map(_example("forest_road.hexmap"), "regional") == "", "the forest road as a regional map")

@@ -220,6 +220,15 @@ func test_web_clients_on_the_host() -> void:
 		check(HostSession.is_local_address(ip), "this machine, however it is written: %s" % ip)
 	for ip in ["::ffff:192.168.1.9", "0:0:0:0:0:ffff:c0a8:109", "fe80::1", "::", "10.0.0.1", ""]:
 		check(not HostSession.is_local_address(ip), "not this machine: %s" % ip)
+	# seeing as a player: that player's snapshot beside the DM's own (a playtest's
+	# DM revealed the goblins and couldn't tell that nobody could see them)
+	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "see_as", "player": "pl_fe0170c1"}})
+	check(_pump(host, [dm], func() -> bool: return str(dm.last("scene").get("preview_as", "")) == "pl_fe0170c1"), "the DM sees as Ana")
+	var preview: Dictionary = dm.last("scene").get("preview", {})
+	check((preview.get("tokens", []) as Array).size() < (dm.last("scene").scene.tokens as Array).size() and not (preview.tokens as Array).any(func(t: Dictionary) -> bool: return t.has("hidden")),
+		"her snapshot: fewer tokens than the DM's, nothing hidden among them")
+	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "see_as", "player": ""}})
+	check(_pump(host, [dm], func() -> bool: return not dm.last("scene").has("preview")), "and back to the DM's own")
 	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "launch", "encounter": "e1"}})
 	check(_pump(host, [dm], func() -> bool: return ops.has("launch")), "the DM's operations reach the Table")
 	var crypt := str(st.encounter.scenes[1].id)

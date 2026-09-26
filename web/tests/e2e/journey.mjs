@@ -371,6 +371,33 @@ await step('the DM ends the fight', async () => {
   await shot(dm, 'dm_after_fight');
 });
 
+await step('the DM sees the map as Ana does, and back', async () => {
+  await dm.getByRole('combobox', { name: /See as/ }).selectOption({ label: 'Ana' });
+  await dm.getByRole('status').filter({ hasText: 'Ana' }).first().waitFor({ timeout: 8000 });
+  await shot(dm, 'dm_sees_as_ana');
+  await dm.getByRole('button', { name: 'Back to yours' }).click();
+  await dm.getByRole('button', { name: 'Back to yours' }).waitFor({ state: 'detached', timeout: 8000 });
+});
+
+await step('the DM makes a fight of their own: a goblin, started, ended', async () => {
+  await dm.getByRole('button', { name: '+ New fight' }).click();
+  await dm.getByRole('textbox', { name: 'Name' }).first().waitFor({ timeout: 8000 });
+  await dm.getByRole('searchbox', { name: 'Find a creature' }).fill('goblin');
+  await dm.locator('.found').first().waitFor({ timeout: 8000 });
+  await dm.locator('.found').first().click();
+  await dm.getByRole('button', { name: 'Start the fight' }).waitFor({ timeout: 8000 });
+  await dm.waitForFunction(() => document.querySelector('.fightcard .line') !== null, null, { timeout: 8000 });
+  await shot(dm, 'dm_new_fight');
+  await dm.getByRole('button', { name: 'Start the fight' }).click();
+  await dm.locator('.fightbar').waitFor({ timeout: 10000 });
+  // the chat beside the fight
+  await dm.locator('.fightchat').getByLabel('Message').waitFor({ timeout: 5000 });
+  await shot(dm, 'dm_new_fight_on');
+  await dm.locator('.fightbar').getByRole('button', { name: 'End the fight' }).click();
+  await dm.getByRole('dialog', { name: 'End the fight?' }).getByRole('button', { name: 'End the fight' }).click();
+  await dm.locator('.fightbar').waitFor({ state: 'detached', timeout: 8000 });
+});
+
 await step('Ana’s journal keeps what she was shown', async () => {
   await ana.getByRole('tab', { name: /Journal/ }).click();
   await ana.getByRole('button', { name: 'Thornwick' }).first().waitFor({ timeout: 5000 });

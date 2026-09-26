@@ -8,6 +8,8 @@ export const SECTIONS: [string, string][] = [
   ['notes', 'Notes for you'],
   ['party', 'The party'],
   ['places', 'Places'],
+  // the campaign's fights, and the DM's own (a playtest's DM could start only the adventure's)
+  ['fights', 'Fights'],
   ['people', 'People'],
   ['handouts', 'Handouts'],
   ['shown', 'Shown to the players'],
@@ -50,6 +52,8 @@ export function topOrder(dm: Dict): string[] {
   const all = [...SECTIONS.map((s) => `section:${s[0]}`), ...lay.folders.filter((f: Dict) => !f.parent).map((f: Dict) => `folder:${f.id}`)];
   const out: string[] = [];
   for (const n of lay.order) if (all.includes(String(n)) && !out.includes(String(n))) out.push(String(n));
+  // (Fights is the web screen's own section: after Places, where the Table's order doesn't say)
+  if (!out.includes('section:fights') && out.includes('section:places')) out.splice(out.indexOf('section:places') + 1, 0, 'section:fights');
   for (const n of all) if (!out.includes(n)) out.push(n);
   return out;
 }
@@ -73,7 +77,7 @@ export function contents(dm: Dict, players: Dict[], q: string): Record<string, I
   const places: Dict[] = (dm.places as Dict[]) ?? [];
   const placeName = (id: string) => String(places.find((p) => String(p.id) === id)?.name ?? '');
   const playerName = (id: string) => String(players.find((p) => String(p.id) === id)?.name ?? id);
-  const out: Record<string, Item[]> = { notes: [], party: [], places: [], people: [], handouts: [], shown: [], from_players: [], pictures: [], maps: [] };
+  const out: Record<string, Item[]> = { notes: [], party: [], places: [], fights: [], people: [], handouts: [], shown: [], from_players: [], pictures: [], maps: [] };
   const sorted = [...people].sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), undefined, { sensitivity: 'base', numeric: true }));
   for (const a of sorted) {
     const kind = String(a.kind ?? '');
@@ -101,6 +105,12 @@ export function contents(dm: Dict, players: Dict[], q: string): Record<string, I
       if (((n.tags as string[]) ?? []).includes('start')) out.notes.unshift(item);
       else out.notes.push(item);
     }
+  }
+  for (const f of (dm.encounters as Dict[]) ?? []) {
+    if (q && !hay(f.name, f.notes, ((f.creatures as Dict[]) ?? []).map((c) => c.name)).includes(q)) continue;
+    const n = ((f.creatures as Dict[]) ?? []).reduce((sum, c) => sum + Number(c.count ?? 1), 0);
+    const live = f.live && typeof f.live === 'object' && Object.keys(f.live).length > 0;
+    out.fights.push({ label: String(f.name || 'A fight'), sub: live ? 'running now' : n ? `${n} creature${n === 1 ? '' : 's'}` : 'no creatures yet', ref: `fight:${f.id}` });
   }
   for (const pic of (dm.pictures as Dict[]) ?? []) {
     if (q && !hay(pic.name, pic.tags).includes(q)) continue;
@@ -140,7 +150,8 @@ export function book(dm: Dict, players: Dict[], query: string): Node[] {
       .filter((n: Node | null): n is Node => n !== null);
     const items = kind === 'section' ? (groups[key] ?? []) : (filed[key] ?? []);
     const empty = folders.length === 0 && items.length === 0;
-    if (empty && (q || kind === 'section')) return null;
+    // (Fights shows empty too: it is where a new fight is made)
+    if (empty && (q || (kind === 'section' && key !== 'fights'))) return null;
     return { node, title, folders, items };
   };
   return topOrder(dm)

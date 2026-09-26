@@ -387,7 +387,8 @@
       The DM is showing you something: look
     </button>
   {:else if prompts.length && promptIndex < 0 && !showing}
-    <button type="button" class="accent waiting" onclick={() => (asked = String(prompts[0].id ?? ''))}>
+    <!-- (the newest first: a playtest's player was sent to an old question left open, not the live one) -->
+    <button type="button" class="accent waiting" onclick={() => (asked = String(prompts[prompts.length - 1].id ?? ''))}>
       The DM is waiting for you{prompts.length > 1 ? ` (${prompts.length})` : ''}: answer
     </button>
   {/if}

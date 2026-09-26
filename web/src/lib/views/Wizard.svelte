@@ -147,7 +147,9 @@
   {:else}
     <div class="head">
       <h4>{step.title ?? ''}</h4>
-      <span class="dim">Step {index + 1} of {visible.length}</span>
+      <!-- (steps that come with a choice not yet made: said, so the count
+           doesn't seem to jump — a playtest's 1 of 3 became 1 of 6 with a class) -->
+      <span class="dim">Step {index + 1} of {visible.length}{index === 0 && steps.length > visible.length ? ', more with your choices' : ''}</span>
     </div>
     <div class="dots" aria-hidden="true">
       {#each visible as s, i (i)}<span class:on={i === index} class:done={i < index} title={String(s.title ?? '')}></span>{/each}

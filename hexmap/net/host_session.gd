@@ -239,7 +239,7 @@ func poll(delta := 0.0) -> void:
 		peer.outbound_buffer_size = Protocol.BUFFER_SIZE
 		peer.max_queued_packets = 4096
 		if peer.accept_stream(_server.take_connection()) == OK:
-			_clients.append({"peer": peer, "player": "", "role": "", "hello": false, "joined": false, "web": false, "scene": ""})
+			_clients.append({"peer": peer, "player": "", "role": "", "hello": false, "joined": false, "web": false, "scene": "", "see_as": ""})
 	var gone := []
 	for c in _clients:
 		var peer: WebSocketPeer = c.peer
@@ -439,6 +439,11 @@ func _send_scene(c: Dictionary) -> void:
 		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
 	if _is_gm(c):
 		msg.scenes = e.scenes.map(func(s: Dictionary) -> Dictionary: return {"id": str(s.id), "name": str(s.get("name", "")), "map": str(s.get("map", "")), "active": str(s.id) == e.active_scene_id})
+		# seeing as a player: that player's snapshot of the scene, as their screen has it
+		var who := str(c.get("see_as", ""))
+		if who != "" and sid != "" and not e.player(who).is_empty():
+			msg.preview = WebScene.build(state, sid, who, false)
+			msg.preview_as = who
 	_send(c, msg)
 
 
@@ -651,6 +656,15 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			if str(intent.get("op", "")) == "view_scene":
 				# which scene this DM screen looks at (the players see the active one)
 				c.scene = str(intent.get("scene", ""))
+				_send_scene(c)
+				return ""
+			if str(intent.get("op", "")) == "see_as":
+				# what one player's screen shows, beside the DM's own (a playtest's DM
+				# revealed the goblins and couldn't tell that nobody could see them)
+				var who := str(intent.get("player", ""))
+				if who != "" and state.encounter.player(who).is_empty():
+					return "no such player"
+				c.see_as = who
 				_send_scene(c)
 				return ""
 			if not dm_handler.is_valid():

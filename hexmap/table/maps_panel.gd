@@ -568,8 +568,10 @@ func _new_encounter_dialog() -> void:
 
 
 ## A prepared encounter record. Its id.
-func new_encounter(p_name: String, map_id: String, level_id: String) -> String:
-	var rec := {"id": JsonDoc.new_id("enc"), "name": p_name if p_name.strip_edges() != "" else "Encounter %d" % (ctx.campaign.encounters.size() + 1),
+func new_encounter(p_name: String, map_id: String, level_id: String, p_id := "") -> String:
+	# (the web DM screen names its new fight's id, to open its card at once)
+	var eid := p_id if p_id != "" and ctx.campaign.encounter_entry(p_id).is_empty() else JsonDoc.new_id("enc")
+	var rec := {"id": eid, "name": p_name if p_name.strip_edges() != "" else "Encounter %d" % (ctx.campaign.encounters.size() + 1),
 		"map": map_id, "level": level_id, "creatures": [], "notes": "", "played": []}
 	ctx.campaign.encounters.append(rec)
 	selected_enc = str(rec.id)
@@ -759,6 +761,13 @@ func launch(enc_id: String, show := true) -> String:
 	var acts := _entry_actions()
 	var made := []
 	var problems := PackedStringArray()
+	# creatures with no cell of their own stand side by side, each on a free
+	# cell, east of the middle (a fight the DM made at the table put them all
+	# on the map's corner, one on top of another)
+	var taken := {}
+	for tk in ctx.state.tokens(str(scene.id)):
+		taken[m.grid.world_to_axial(Vision.token_pos(tk))] = true
+	var east := m.grid.offset_to_axial(int(m.grid.columns * 2 / 3), int(m.grid.rows / 2))
 	for c in e.get("creatures", []):
 		var coll := str(c.get("collection", ""))
 		if not acts.has(coll):
@@ -777,7 +786,11 @@ func launch(enc_id: String, show := true) -> String:
 		# one dispatch per creature (rulesets need not know `count`), each a cell along
 		for n in int(c.get("count", 1)):
 			var before := ctx.encounter().actors.keys()
-			var at := pos + Vector2(float(n) * 1.0, 0.0) if cell.contains(",") else pos
+			var at := pos + Vector2(float(n) * 1.0, 0.0)
+			if not cell.contains(","):
+				var free := _free_cell(m.grid, east, taken)
+				taken[free] = true
+				at = m.grid.cell_center(free)
 			var pc := ctx.host.dispatch(act.plugin, act.action, {"entry": record, "collection": coll, "scene": str(scene.id), "x": at.x, "y": at.y,
 				"count": 1, "hidden": bool(c.get("hidden", true))})
 			if pc.status == PluginHost.PluginCall.ERROR:

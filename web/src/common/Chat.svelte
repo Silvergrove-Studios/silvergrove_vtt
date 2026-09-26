@@ -61,12 +61,53 @@
     void entries.length;
     if (pinned && list) queueMicrotask(() => (list.scrollTop = list.scrollHeight));
   });
+
+  // the DM's pins: a line kept above the chat until it's dealt with (a playtest's
+  // DM missed a player's request for ten minutes as the chat ran on); this
+  // browser's own, kept for the table
+  const pinKey = $derived(`hexmap.pins/${game.table}`);
+  let pins = $state<string[]>([]);
+  $effect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(pinKey) ?? '[]');
+      pins = Array.isArray(v) ? v.map(String) : [];
+    } catch {
+      pins = [];
+    }
+  });
+  function pin(id: string): void {
+    pins = pins.includes(id) ? pins.filter((x) => x !== id) : [...pins, id];
+    try {
+      localStorage.setItem(pinKey, JSON.stringify(pins));
+    } catch {
+      /* private mode */
+    }
+  }
+  const pinnedLines = $derived(dm ? entries.filter((e) => pins.includes(String(e.id ?? ''))) : []);
 </script>
 
 <div class="chat" class:compact>
+  {#if pinnedLines.length}
+    <div class="pins" role="region" aria-label="Pinned">
+      {#each pinnedLines as entry (entry.id)}
+        <div class="line-row pinned-row">
+          <LogLine {entry} {actors} />
+          <button type="button" class="quiet pinbtn on" onclick={() => pin(String(entry.id))}>Unpin</button>
+        </div>
+      {/each}
+    </div>
+  {/if}
   <div class="entries scroll" bind:this={list} {onscroll}>
     {#each entries as entry (entry.id ?? JSON.stringify(entry))}
-      <LogLine {entry} {actors} />
+      {#if dm && entry.kind === 'chat' && entry.id}
+        <div class="line-row">
+          <LogLine {entry} {actors} />
+          <button type="button" class="quiet pinbtn" class:on={pins.includes(String(entry.id))} onclick={() => pin(String(entry.id))}
+            title="Keep it above the chat until it's dealt with">{pins.includes(String(entry.id)) ? 'Unpin' : 'Pin'}</button>
+        </div>
+      {:else}
+        <LogLine {entry} {actors} />
+      {/if}
     {:else}
       <p class="dim empty">Nothing said or rolled yet. Rolls land here too.</p>
     {/each}
@@ -96,6 +137,40 @@
 </div>
 
 <style>
+  .line-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .line-row > :global(:first-child) {
+    flex: 1;
+    min-width: 0;
+  }
+  .pinbtn {
+    flex: none;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    min-height: 0;
+    opacity: 0;
+  }
+  .line-row:hover .pinbtn,
+  .line-row:focus-within .pinbtn,
+  .pinbtn.on {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .pinbtn {
+      opacity: 0.8;
+    }
+  }
+  .pins {
+    flex: none;
+    max-height: 30%;
+    overflow-y: auto;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  }
   /* who is about to read it, plain to see when it isn't everyone */
   .who.aimed {
     color: var(--accent);

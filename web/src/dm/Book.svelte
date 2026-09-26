@@ -11,7 +11,8 @@
   let { current = '', onopen }: { current?: string; onopen: (ref: string) => void } = $props();
 
   let q = $state('');
-  let closed = $state<Record<string, boolean>>({ 'section:shown': true, 'section:pictures': true });
+  // (Pictures open: a playtest's DM found the Warden's picture only after the game)
+  let closed = $state<Record<string, boolean>>({ 'section:shown': true });
   let menu = $state('');
   // a picture of the DM's own into Pictures, to show the players (a playtest's DM
   // could add none): made smaller here, kept by the table, filed in the book
@@ -57,6 +58,20 @@
       });
     }
   });
+
+  // a fight of the DM's own: made at once over the first battle map, then its
+  // card (name it, choose the map, add creatures, start it)
+  function newFight(): void {
+    menu = '';
+    const battle = ((game.dm.maps as Dict[]) ?? []).find((m) => m.role !== 'regional') ?? ((game.dm.maps as Dict[]) ?? [])[0];
+    if (!battle) {
+      notice('The campaign has no map to fight on: add one on the Table first', 'error');
+      return;
+    }
+    const id = `enc_${Math.random().toString(36).slice(2, 10)}`;
+    dmOp('new_fight', { id, name: 'A new fight', map: battle.id });
+    onopen(`fight:${id}`);
+  }
 
   function rename(node: Node): void {
     menu = '';
@@ -115,6 +130,9 @@
         <div class="menu" role="menu">
           <button type="button" role="menuitem" class="quiet" onclick={() => rename(n)}>Rename</button>
           <button type="button" role="menuitem" class="quiet" onclick={() => newFolder(n.node)}>New folder inside</button>
+          {#if n.node === 'section:fights'}
+            <button type="button" role="menuitem" class="quiet" onclick={newFight}>New fight…</button>
+          {/if}
           {#if n.node === 'section:pictures'}
             <button type="button" role="menuitem" class="quiet" disabled={addingPicture} onclick={() => { menu = ''; pictureInput?.click(); }}>{addingPicture ? 'Sending the picture…' : 'Add a picture…'}</button>
           {/if}
@@ -128,7 +146,9 @@
     {#if !isClosed}
       {#each n.folders as f (f.node)}{@render group(f, depth + 1)}{/each}
       {#each n.items as it (it.ref)}{@render item(it, depth + 1)}{/each}
-      {#if n.folders.length === 0 && n.items.length === 0}
+      {#if n.node === 'section:fights' && !q}
+        <button type="button" class="item newfight" style:padding-left={`${12 + (depth + 1) * 14}px`} onclick={newFight}>+ New fight</button>
+      {:else if n.folders.length === 0 && n.items.length === 0}
         <p class="empty" style:padding-left={`${26 + depth * 14}px`}>Empty. Put things here from their cards (“In the book”).</p>
       {/if}
     {/if}
@@ -260,6 +280,9 @@
   }
   .menu button {
     text-align: left;
+  }
+  .newfight {
+    color: var(--accent);
   }
   .item {
     display: flex;

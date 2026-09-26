@@ -69,13 +69,22 @@ export function pointInPolygon(p: Vec, poly: number[][]): boolean {
 }
 
 /** The topmost token under a point (hex units), or null. */
-export function tokenAt(tokens: Dict[], p: Vec): Dict | null {
+/** The token under a point: within its own radius or `least` (a reach on
+ *  screen, in map units: a small map's tokens are a few pixels across, and a
+ *  playtest's DM panned the map trying to drag the party), the nearest first. */
+export function tokenAt(tokens: Dict[], p: Vec, least = 0): Dict | null {
+  let best: Dict | null = null;
+  let bestD = Infinity;
   for (let i = tokens.length - 1; i >= 0; i--) {
     const t = tokens[i];
     const c = tokenPos(t);
-    if (Math.hypot(c.x - p.x, c.y - p.y) <= tokenRadius(t)) return t;
+    const d = Math.hypot(c.x - p.x, c.y - p.y);
+    if (d <= Math.max(tokenRadius(t), least) && d < bestD) {
+      best = t;
+      bestD = d;
+    }
   }
-  return null;
+  return best;
 }
 
 /** The layer tree's order and visibility: {ref: [index, visible]} (LayerTree.order / effective). */
@@ -316,6 +325,7 @@ export function drawFrame(f: Frame): void {
     const first = numbered.has(String(t.label ?? '')) && !/\s\d+$/.test(String(t.name ?? '')) && !/\d/.test(String(t.label ?? ''));
     drawToken(ctx, first ? { ...t, label: `${t.label}1` } : t, drag ?? tokenPos(t), look, cam.scale, dpr);
   }
+  drawNameTags(ctx, tokens, look, cam.scale);
   if (look.gm) drawNotes(ctx, lvl, cam.scale);
   if (fog) {
     if (!look.gm) {
@@ -617,24 +627,46 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
     ctx.strokeStyle = 'rgba(255, 255, 77, 0.9)';
     ctx.stroke();
   }
-  // a place on a regional map, and the party: their names under them, so the
-  // map reads without clicking every marker (about 13 px on screen)
-  if ((tags.includes('place') || tags.includes('party')) && t.name) {
-    const fs = 13 / scale;
-    const y = pos.y + r + ringW * 2;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = fs * 0.3;
+}
+
+/** The names under the places on a regional map and under the party, so the
+ *  map reads without clicking every marker (about 13 px on screen), each
+ *  moved down clear of any it would cover (a playtest's DM read "The
+ *  partyuined chapel" where the party stood at the chapel). */
+function drawNameTags(ctx: CanvasRenderingContext2D, tokens: Dict[], look: Look, scale: number): void {
+  const fs = 13 / scale;
+  ctx.save();
+  ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = fs * 0.3;
+  const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
+  // places first: the party's name gives way to the place it stands at
+  const named = tokens
+    .filter((t) => {
+      const tags: string[] = Array.isArray(t.tags) ? (t.tags as string[]) : [];
+      return (tags.includes('place') || tags.includes('party')) && t.name && !(t.hidden && !look.gm);
+    })
+    .sort((a, b) => Number(((b.tags as string[]) ?? []).includes('place')) - Number(((a.tags as string[]) ?? []).includes('place')));
+  for (const t of named) {
+    const pos = look.dragging && look.dragging.id === t.id ? look.dragging.pos : tokenPos(t);
+    const r = tokenRadius(t);
+    const w = ctx.measureText(String(t.name)).width;
+    let y = pos.y + r + Math.max(r * 0.09, 1.5 / scale) * 2;
+    for (let tries = 0; tries < 4; tries++) {
+      const box = { x0: pos.x - w / 2, x1: pos.x + w / 2, y0: y, y1: y + fs * 1.15 };
+      if (!placed.some((o) => box.x0 < o.x1 && box.x1 > o.x0 && box.y0 < o.y1 && box.y1 > o.y0)) break;
+      y += fs * 1.2;
+    }
+    placed.push({ x0: pos.x - w / 2, x1: pos.x + w / 2, y0: y, y1: y + fs * 1.15 });
+    ctx.globalAlpha = t.hidden ? 0.5 : 1;
     ctx.strokeStyle = 'rgba(0,0,0,0.85)';
     ctx.strokeText(String(t.name), pos.x, y);
     ctx.fillStyle = '#fff';
     ctx.fillText(String(t.name), pos.x, y);
-    ctx.restore();
   }
+  ctx.restore();
 }
 
 export function hexA(hex: string, a: number): string {

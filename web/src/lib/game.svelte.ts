@@ -32,6 +32,9 @@ export const game = $state({
   view: {} as Dict,
   scene: {} as Dict,
   scenes: [] as Dict[],
+  // the DM seeing as a player: that player's snapshot of the scene, and who
+  preview: null as Dict | null,
+  previewAs: '',
   clock: {} as Dict,
   maps: {} as Record<string, Dict>,
   packs: {} as Record<string, Dict>,
@@ -156,6 +159,8 @@ function handle(m: Msg): void {
       game.online = (m.online as string[]) ?? [];
       game.clock = (m.clock as Dict) ?? {};
       if (m.scenes) game.scenes = m.scenes as Dict[];
+      game.preview = (m.preview as Dict) ?? null;
+      game.previewAs = String(m.preview_as ?? '');
       wantMap(String(game.scene.map ?? ''));
       break;
     case 'dm':

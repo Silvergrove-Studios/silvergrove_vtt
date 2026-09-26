@@ -66,6 +66,21 @@
   "1 actions"; a message typed but not sent keeps a card from covering
   Send; Look up is named what it says.
 
+- **What the second table left open**, done before the third: the DM
+  sees the map as any player does (*See as*, beside *The players see*:
+  that player's own snapshot, fog and all); makes fights of their own on
+  the web screen (a *Fights* section in the book: *New fight*, a battle
+  map, creatures from the rules with how many and hidden or seen, *Start*;
+  the adventure's fights open there too, with their creatures' pictures),
+  and a creature put on the map in a fight under way rolls initiative and
+  takes its place in the order; renaming a fight's place renames the
+  fight. The chat sits under the fight, and the DM can pin a line above
+  it until it's dealt with. On the maps, names under places and the party
+  move clear of each other and a token is easier to grab (at least 16 px
+  of reach). A player's *waiting* pill opens the newest question, the ✕
+  is a finger's size on a phone, the character maker says when more steps
+  come with a choice, and the book's Pictures start open.
+
 - **Pictures from the table** (the team, after the character maker): a
   player gives their character's token a picture of their own — chosen on
   the phone, placed in a round window (drag, come closer), kept by the

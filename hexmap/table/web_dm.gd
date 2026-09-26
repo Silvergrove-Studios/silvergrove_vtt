@@ -217,6 +217,61 @@ func op(intent: Dictionary) -> String:
 			for k in ["text", "notes", "image", "name"]:
 				if intent.has(k):
 					p[k] = str(intent[k])
+			# a fight's place renamed renames the fight (a playtest's DM renamed the
+			# lookout "The raid at Mill Crossing" and the fight's bar kept the old name)
+			if intent.has("name") and str(p.get("kind", "")) == "encounter":
+				var linked := ctx.campaign.encounter_entry(str(p.get("target", "")))
+				if not linked.is_empty():
+					linked.name = str(intent.name)
+			ctx.campaign.touch()
+			ctx.campaign_changed.emit()
+			return ""
+		# fights the DM makes at the table (a playtest's DM could start only the
+		# adventure's own): a name and a battle map, creatures from the rules, then
+		# Start; its card on the screen is fight:<id>
+		"new_fight":
+			var map_id := str(intent.get("map", ""))
+			if ctx.campaign.map_entry(map_id).is_empty():
+				return "choose a map for the fight"
+			maps.new_encounter(str(intent.get("name", "")), map_id, _first_level(map_id), str(intent.get("id", "")))
+			return ""
+		"fight_set":
+			var fe := ctx.campaign.encounter_entry(str(intent.get("encounter", "")))
+			if fe.is_empty():
+				return "no such fight"
+			for k in ["name", "notes"]:
+				if intent.has(k):
+					fe[k] = str(intent[k])
+			if intent.has("map"):
+				if ctx.campaign.map_entry(str(intent.map)).is_empty():
+					return "no such map"
+				fe.map = str(intent.map)
+				fe.level = _first_level(str(intent.map))
+			# its creatures, as the card has them now (a line taken out, a count changed)
+			if intent.get("creatures") is Array:
+				var lines := []
+				for line in intent.creatures:
+					if line is Dictionary and str(line.get("entry", "")) != "":
+						var kept: Dictionary = JsonDoc.deep(line)
+						kept.count = clampi(int(line.get("count", 1)), 1, 20)
+						lines.append(kept)
+				fe.creatures = lines
+			ctx.campaign.touch()
+			ctx.campaign_changed.emit()
+			return ""
+		"fight_add":
+			return maps.add_creature(str(intent.get("encounter", "")), {"collection": str(intent.get("collection", "creatures")), "id": str(intent.get("entry", "")),
+				"name": str(intent.get("name", intent.get("entry", "")))}, clampi(int(intent.get("count", 1)), 1, 20), str(intent.get("cell", "")), bool(intent.get("hidden", true)))
+		"fight_delete":
+			var gone := ctx.campaign.encounter_entry(str(intent.get("encounter", "")))
+			if gone.is_empty():
+				return "no such fight"
+			if gone.get("live") is Dictionary and not (gone.live as Dictionary).is_empty():
+				return "end the fight first"
+			for pl in ctx.campaign.places:
+				if str(pl.get("kind", "")) == "encounter" and str(pl.get("target", "")) == str(gone.id):
+					return "a place starts this fight (%s): it stays" % str(pl.get("name", ""))
+			ctx.campaign.encounters.erase(gone)
 			ctx.campaign.touch()
 			ctx.campaign_changed.emit()
 			return ""
@@ -252,6 +307,12 @@ func op(intent: Dictionary) -> String:
 			ctx.campaign_changed.emit()
 			return ""
 	return "unknown DM operation '%s'" % str(intent.get("op", ""))
+
+
+## A map's first level (the one a new fight is on).
+func _first_level(map_id: String) -> String:
+	var m := win.maps.load_map(map_id)
+	return str(m.levels[0].get("id", "ground")) if m != null and not m.levels.is_empty() else "ground"
 
 
 ## The DM's own folders in the contents: new, rename, file, move, delete.

@@ -250,7 +250,8 @@
     const p = local(e);
     pointers.set(e.pointerId, p);
     if (pointers.size === 1) {
-      const t = tokenAt(tokens, toWorld(p.x, p.y));
+      // (a reach of at least 16 px on screen, 22 on a touch screen)
+      const t = tokenAt(tokens, toWorld(p.x, p.y), (e.pointerType === 'mouse' ? 16 : 22) / cam.scale);
       press = { id: e.pointerId, at: p, token: t, moved: false, cam: { x: cam.x, y: cam.y } };
       pressing = true;
     } else if (pointers.size === 2) {

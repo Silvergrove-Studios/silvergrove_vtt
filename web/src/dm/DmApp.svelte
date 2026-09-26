@@ -59,6 +59,9 @@
   const dm = $derived(game.dm);
   const fight = $derived(liveFight(dm));
   const map = $derived(game.maps[String(game.scene.map ?? '')] ?? null);
+  // seeing as a player: the map draws that player's snapshot (a playtest's DM
+  // revealed the goblins and couldn't tell that nobody could see them)
+  const seeing = $derived(game.preview && game.previewAs ? game.players.find((p) => String(p.id) === game.previewAs) : undefined);
   const sceneName = $derived(String(game.scene.name ?? '') || String(((dm.maps as Dict[]) ?? []).find((m) => m.id === game.scene.map)?.name ?? ''));
   const online = $derived(new Set(game.online.map(String)));
   const session = $derived((dm.session ?? {}) as Dict);
@@ -105,6 +108,10 @@
     const withoutCharacter = game.players.filter((p) => online.has(String(p.id)) && !people.some((a) => a.kind === 'pc' && String(a.owner ?? '') === String(p.id)));
     if (withoutCharacter.length)
       return { key: `chars:${withoutCharacter.map((p) => p.id).join(',')}`, text: `${withoutCharacter.map((p) => p.name).join(' and ')} ${withoutCharacter.length > 1 ? 'are' : 'is'} making a character on their own screen. Meanwhile, read what the adventure says first.`, button: startHere() ? `Open “${startTitle()}”` : undefined, act: () => open(startHere()) };
+    // (once something has been shown, the DM has the way of it: a playtest's DM
+    // saw "Open Introduction" halfway through the second part)
+    // (the adventure's own handouts are listed too, shown to nobody: only a card shared counts)
+    if (((dm.shown as Dict[]) ?? []).some((h) => String(h.ref ?? '') !== '' && String(h.audience ?? 'gm') !== 'gm')) return null;
     return { key: 'play', text: 'Tap a place on the map to open its card; “Show the players” puts its picture and words on their screens.', button: startHere() ? `Open “${startTitle()}”` : undefined, act: () => open(startHere()) };
   });
 
@@ -289,12 +296,25 @@
               </div>
             {/if}
           </div>
+          <label class="seeas">
+            <span class="dim">See as</span>
+            <select value={game.previewAs} onchange={(e) => dmOp('see_as', { player: e.currentTarget.value })}>
+              <option value="">yourself: everything</option>
+              {#each game.players as p (p.id)}<option value={String(p.id)}>{p.name}</option>{/each}
+            </select>
+          </label>
         </div>
+        {#if seeing}
+          <div class="seeing" role="status">
+            <span>You're seeing what <strong>{seeing.name}</strong>'s screen shows: the dark is out of their characters' sight, and what they can't see isn't there.</span>
+            <button type="button" class="quiet" onclick={() => dmOp('see_as', { player: '' })}>Back to yours</button>
+          </div>
+        {/if}
         <div class="mapholder">
           <MapView
             {map}
-            scene={game.scene}
-            gm
+            scene={seeing ? (game.preview as Dict) : game.scene}
+            gm={!seeing}
             playerColors={playerColors()}
             {selected}
             {activeToken}
@@ -361,7 +381,12 @@
           {:else if side === 'chat'}
             <Chat />
           {:else}
-            <FightPanel {selected} onselect={(id) => (selected = id)} onopen={open} />
+            <!-- the fight with the talk beneath it (a playtest's DM went between
+                 Fight and Chat dozens of times a fight) -->
+            <div class="fightside">
+              <div class="fightpanel"><FightPanel {selected} onselect={(id) => (selected = id)} onopen={open} /></div>
+              <div class="fightchat"><Chat compact /></div>
+            </div>
           {/if}
         </div>
       </aside>
@@ -377,6 +402,43 @@
 {/if}
 
 <style>
+  .seeas {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .seeas select {
+    max-width: 14em;
+  }
+  .seeing {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .seeing span {
+    flex: 1;
+  }
+  .fightside {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .fightpanel {
+    flex: 3 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .fightchat {
+    flex: 2 1 0;
+    min-height: 180px;
+    border-top: 1px solid var(--border);
+  }
   .multi-pick {
     position: absolute;
     left: 12px;
