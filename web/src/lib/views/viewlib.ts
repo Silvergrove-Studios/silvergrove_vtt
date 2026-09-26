@@ -81,6 +81,13 @@ export function textOf(v: unknown): string {
   return JSON.stringify(v);
 }
 
+/** A number as a modifier reads, "+2" or "-1" (a `number` with `signed`); anything else as textOf has it. */
+export function signedOf(v: unknown): string {
+  const n = isTyped(v) ? v.total : v;
+  if (typeof n === 'number' && Number.isFinite(n)) return `${n >= 0 ? '+' : ''}${num(n)}`;
+  return textOf(v);
+}
+
 /** A typed number's parts, one per line ("Dexterity +2"). */
 export function breakdown(v: unknown): string {
   if (!isTyped(v)) return '';

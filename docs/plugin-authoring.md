@@ -315,8 +315,9 @@ children}}}`, `text {style = header|dim|mono}`, `title {sub, icon}` (a
 card's heading: the name, a line under it, an icon — a pack ref — when
 there is one), `facts {items = {{label, text | bind | expr, if, rich}}}`
 (labelled facts, an empty one left out), `tags {items = {{text | expr,
-if, tone = "accent"}}}`, `number` (a typed number
-with its breakdown as tooltip), `pool {spend, gain}` (intents for the
+if, tone = "accent"}}}`, `number {signed}` (a typed number
+with its breakdown as tooltip; `signed = true` reads it as a modifier,
+"+2" or "-1"), `pool {spend, gain}` (intents for the
 − / + buttons), `track {on_mark, on_clear}`, `effects`, `list {bind,
 item, empty}` (the item schema sees `@item` and `@index`), `cards
 {on_tap}` (the tap sees `@card` and `@card_id`), `button {label,
@@ -443,7 +444,7 @@ picks a strategy in the Turns panel; `hm.turns.start(scene, id)`,
 | `hm.turns.request(player, ref)` / `hm.turns.deny(ref)` | a Player's request for the focus |
 | `hm.turns.counters(ref)` | this turn's budgets for a participant |
 | `hm.turns.consume(ref, counter, n)` | a `turns.set` event spending from a budget, or nil when there is not enough |
-| `hm.turns.reorder(order)`, `hm.turns.insert(entry [, index])`, `hm.turns.remove(entry)` | the ordered shape's order itself: a delay, a ready action, a late arrival, a departure. Entries are token ids or `group:<id>`; the participant whose turn it is stays current |
+| `hm.turns.reorder(order)`, `hm.turns.insert(entry [, index])`, `hm.turns.remove(entry)` | the ordered shape's order itself: a delay, a ready action, a late arrival, a departure. Entries are token ids or `group:<id>`; the participant whose turn it is stays current. `remove` of one member of a group's slot takes it out of the group (the others keep the slot; an emptied group leaves the order) |
 | `hm.turns.group(id, tokens, label)`, `hm.turns.ungroup(id)` | several tokens on one slot: the order holds `group:<id>`, `turns.data.groups[id]` holds the members, and each member gets its own `turn_start` / `turn_end` (payload `group = id`), budgets and expiries when the slot comes round. A group survives a restart |
 
 ### Tracks, the clock, rests

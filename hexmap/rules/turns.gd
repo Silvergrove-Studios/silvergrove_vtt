@@ -258,12 +258,34 @@ func insert(entry: String, index := -1) -> String:
 	return kernel.commit([{"t": "turns.set", "changes": changes}], "Budgets") if not changes.is_empty() else ""
 
 
+## Take an entry out of the order: a token id or "group:<id>", or one
+## member of a group's slot — it leaves the group and the others keep the
+## slot; a group left with nobody goes (a goblin fleeing a fight in which
+## its kin shared its initiative).
 func remove(entry: String) -> String:
 	var order: Array = (turns().get("order", []) as Array).duplicate()
-	if not order.has(entry):
-		return "not in the order"
-	order.erase(entry)
-	return reorder(order)
+	if order.has(entry):
+		order.erase(entry)
+		return reorder(order)
+	var t := turns()
+	var data: Dictionary = t.get("data", {}) if t.get("data") is Dictionary else {}
+	var groups: Dictionary = JsonDoc.deep(data.get("groups", {}))
+	for gid in groups:
+		var members: Array = (groups[gid].get("tokens", []) as Array).duplicate()
+		if not members.has(entry):
+			continue
+		members.erase(entry)
+		if not members.is_empty():
+			return kernel.commit([{"t": "turns.set", "changes": {"data/groups/%s/tokens" % gid: members}}], "Leave the group")
+		groups.erase(gid)
+		var labels: Dictionary = JsonDoc.deep(data.get("labels", {}))
+		labels.erase("group:" + str(gid))
+		var why := kernel.commit([{"t": "turns.set", "changes": {"data/groups": groups, "data/labels": labels}}], "Leave the order")
+		if why != "":
+			return why
+		order.erase("group:" + str(gid))
+		return reorder(order)
+	return "not in the order"
 
 
 ## Several tokens on one slot: "group:<id>" replaces the members in the

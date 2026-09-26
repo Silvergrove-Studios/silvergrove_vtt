@@ -146,6 +146,27 @@ func test_view_helpers() -> void:
 	await tree.process_frame
 
 
+func test_a_signed_number() -> void:
+	# a modifier reads with its sign (an Initiative of +2 read "2")
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	r.render({"type": "row", "children": [
+		{"type": "number", "label": "Initiative", "bind": "/derived/init", "signed": true},
+		{"type": "number", "label": "Penalty", "bind": "/derived/penalty", "signed": true},
+		{"type": "number", "label": "Even", "bind": "/derived/even", "signed": true},
+		{"type": "number", "label": "AC", "bind": "/derived/ac"}]},
+		{"derived": {"init": TypedNumber.make([{"label": "dexterity", "type": "ability", "value": 2}]), "penalty": -1, "even": 0,
+			"ac": TypedNumber.make([{"label": "base", "type": "base", "value": 12}])}})
+	await tree.process_frame
+	var init := _find(r, "Label", "+2")
+	check(init != null and init.tooltip_text.contains("dexterity +2"), "a typed number with its sign, its breakdown still the tooltip")
+	check(_find(r, "Label", "-1") != null and _find(r, "Label", "+0") != null, "a plain number too; nought is +0")
+	check(_find(r, "Label", "12") != null and _find(r, "Label", "+12") == null, "without `signed`, as before")
+	check(ViewRenderer._signed("—") == "—", "a value that isn't a number reads as it is")
+	r.queue_free()
+	await tree.process_frame
+
+
 ## A form or wizard field may take its choices from a collection: what
 ## the campaign has, less what it turned off, plus what it imported.
 func test_choice_fields_come_from_the_compendium() -> void:
