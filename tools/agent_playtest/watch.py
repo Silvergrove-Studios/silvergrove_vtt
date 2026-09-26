@@ -19,7 +19,19 @@ def alive(key):
     return subprocess.run(['pgrep', '-f', f'{names[key]} \\(playtest\\)'], capture_output=True).returncode == 0
 
 
-was, stale, seatwarn, tick = {}, set(), False, 0
+def size_mb(path):
+    total = 0
+    for root, _, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total // (1024 * 1024)
+
+
+# (the agents' logs carry every screenshot: a run is watched for size too)
+was, stale, seatwarn, sizewarn, tick = {}, set(), False, False, 0
 while True:
     now = time.time()
     hm = time.strftime('%H:%M')
@@ -47,7 +59,11 @@ while True:
     if up < len(pids) and not seatwarn:
         print(f'{hm} only {up} of {len(pids)} browser seats are running', flush=True)
         seatwarn = True
+    mb = size_mb(run) if tick % 5 == 0 else None
+    if mb is not None and mb > 5000 and not sizewarn:
+        print(f'{hm} the run folder is {mb} MB', flush=True)
+        sizewarn = True
     if tick and tick % 15 == 0:
-        print(' | '.join(status), flush=True)
+        print(' | '.join(status) + (f' | {mb} MB' if mb is not None else ''), flush=True)
     tick += 1
     time.sleep(60)
