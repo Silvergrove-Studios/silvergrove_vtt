@@ -230,17 +230,26 @@ await step('a new player makes a character with the wizard', async () => {
   await shot(cara, 'cara_sheet');
 });
 
-await step('the DM asks the party for a roll; the players answer', async () => {
+await step('the DM asks the party for a roll; each player rolls their own', async () => {
   await dm.getByRole('tab', { name: 'Party' }).click();
-  const before = await dm.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length);
+  const rolls = () => dm.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length);
+  const before = await rolls();
   await dm.getByRole('button', { name: 'Ask', exact: true }).click();
-  for (const p of [ana, ben, cara]) {
-    if (!p) continue;
-    await p.getByRole('dialog', { name: 'The DM asks' }).waitFor({ timeout: 8000 });
-  }
+  const asked = [ana, ben, cara].filter(Boolean);
+  for (const p of asked) await p.getByRole('dialog', { name: 'The DM asks' }).waitFor({ timeout: 8000 });
   await shot(ana, 'ana_asked');
-  for (const p of [ana, ben, cara]) if (p) await p.getByRole('button', { name: 'Answer' }).click();
-  await dm.waitForFunction((n) => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length >= n + 3, before, { timeout: 10000 });
+  // one roll lands per tap, whoever is still to roll (a playtest's party
+  // waited two minutes on its slowest player before anyone's roll was made)
+  let n = before;
+  for (const p of asked) {
+    await p.getByRole('button', { name: /^Roll Perception/ }).click();
+    n += 1;
+    await dm.waitForFunction((want) => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length >= want, n, { timeout: 10000 });
+  }
+  // the roller sees the result where they are
+  await ana.locator('.rolled').waitFor({ timeout: 5000 });
+  await shot(ana, 'ana_rolled');
+  await dm.getByText('Rolls asked').first().waitFor({ timeout: 5000 });
   await dm.getByRole('tab', { name: /Chat/ }).click();
   await shot(dm, 'dm_rolls');
 });

@@ -325,6 +325,42 @@ func test_pending_prompts_and_rolls() -> void:
 	check(k.pending.rolls().is_empty() and k.pending.resolve(qid).is_empty(), "closed")
 
 
+## A question nothing waits on can wait as long as it takes (deadline 0: a
+## player's roll is theirs to make), carries the character it is about,
+## and can be closed unanswered by the plugin that opened it.
+func test_unattended_prompts_wait_and_close() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _state()
+	var k := RulesKernel.new(st)
+	var host := PluginHost.new(k)
+	check(host.load_dir("res://tests/plugins/sample.ordered") == "", "sample.ordered loads")
+	k.commit([{"t": "actor.add", "actor": {"id": "a_h", "owner": "pl_1", "ext": {"sample.ordered": {"level": 3, "stats": {"agi": 5, "str": 3, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_g", "owner": "pl_2", "name": "Gob", "ext": {"sample.ordered": {"level": 1, "stats": {"agi": -5, "str": 0, "wit": 0}, "armour": 2}}}}], "Actors")
+	host.dispatch("sample.ordered", "setup", {"actor": "a_h"})
+	host.dispatch("sample.ordered", "setup", {"actor": "a_g"})
+	var id := k.pending.open_prompt_unattended({"to": "pl_1", "form": {"title": "Take the dare?", "choices": [{"id": "yes", "label": "Yes"}]},
+		"opts": {"default": {"take": false}, "deadline": 0, "actor": "a_h"}}, "sample.ordered", {"actor": "a_h", "stake": 1})
+	var rec: Dictionary = k.pending.prompts().get(id, {})
+	check(not rec.is_empty() and rec.actor == "a_h" and rec.deadline == 0, "the record says whose character it's about: %s" % [rec])
+	k.pending.tick(1.0e6)
+	check(k.pending.prompts().has(id), "no deadline: time passing answers nothing")
+	check(k.pending.close(id, "someone.else").contains("sample.ordered"), "another plugin may not close it")
+	var notes := func() -> int:
+		return st.encounter.log.filter(func(e: Dictionary) -> bool: return str(e.get("text", "")).begins_with("dare:")).size()
+	check(k.pending.close(id, "sample.ordered") == "" and not k.pending.prompts().has(id), "its own plugin closes it")
+	check(notes.call() == 0, "closed unanswered: the hook didn't fire")
+	check(k.pending.close(id, "sample.ordered") != "", "gone")
+	# a prompt an action is waiting on is answered, never closed
+	var pc := host.dispatch("sample.ordered", "strike", {"actor": "a_h", "target": "a_g"})
+	k.pending.drive(pc, "sample.ordered")
+	if pc.status == PluginHost.PluginCall.PENDING:
+		var waiting := str(k.pending.prompts().keys()[0])
+		check(k.pending.close(waiting, "sample.ordered").contains("waiting"), "a paused action's prompt can't be closed")
+		check(k.pending.answer(waiting, {"spend": false}, "pl_2") == "" and pc.status == PluginHost.PluginCall.OK, "it's answered instead")
+
+
 # ------------------------------------------------------------------ table --
 
 func test_table_turn_panel_both_shapes() -> void:

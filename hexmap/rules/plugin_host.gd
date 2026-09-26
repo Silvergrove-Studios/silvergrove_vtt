@@ -743,7 +743,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting"]:
+			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -879,6 +879,13 @@ class Bridge:
 		var o := PluginHost._as_dict(opts)
 		var id := _k().pending.open_prompt_unattended({"to": str(to), "form": PluginHost._as_dict(form), "opts": o}, plugin_id, o.get("context", {}))
 		return id if id != "" else {"__error": "could not open the prompt"}
+
+	## Close one of this plugin's prompts that nothing waits on, unanswered.
+	func prompt_close(id: String) -> Variant:
+		if not _p().can("prompts"):
+			return {"__error": "hm.prompt_close needs the 'prompts' capability"}
+		var why := _k().pending.close(str(id), plugin_id)
+		return true if why == "" else {"__error": why}
 
 	func note(text: String, audience: String) -> Variant:
 		if not _p().can("log"):

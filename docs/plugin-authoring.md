@@ -629,11 +629,24 @@ local id = hm.prompt_open("pl_1", form, { default = {…}, deadline = 60, contex
 -- nothing waits: the action goes on; the answer arrives as the
 -- `prompt_answered` hook with `context` as given (a synchronous hook:
 -- append events to `p.events`)
+hm.prompt_close(id)
+-- closes one of your own unattended prompts unanswered (no hook fires):
+-- what it asked for was done some other way, or taken back
 ```
 
-A group is how a save is asked of three Players at once with each
-pressing their own button; an unattended prompt is how a question can
-stay open across the rest of the action, or the session.
+A group is how a question is asked of three Players at once when the
+action needs every answer before it goes on; an unattended prompt is how a
+question can stay open across the rest of the action, or the session, and
+how each Player can answer in their own time (srd5e asks for rolls that
+way: a card each, and each roll made when its Player taps).
+
+A form's `choices` (`[{ id, label, intent? }]`) draw as a button each
+instead of one submit button: a button with an `intent` sends that (with
+the form's values at `$values`), one without answers the prompt with the
+values plus `choice = id`. `opts.actor` names the character a prompt is
+about, for the screens to say. A `deadline` of 0 (or less) means none;
+the Table doesn't count deadlines down yet, so a prompt waits for its
+answer however long that takes (or for the GM to answer it).
 
 ### Typed numbers
 

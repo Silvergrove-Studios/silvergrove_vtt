@@ -6,8 +6,11 @@ extends RefCounted
 ## continuations that resume a paused action or hook live here, in
 ## memory, on the Table.
 ##
-## A prompt: { id, to: player id | "gm", form, default, deadline (s),
-##             by (plugin), title, opened (seq), context }
+## A prompt: { id, to: player id | "gm", form, default, deadline (s; 0 or
+##             less: none), by (plugin), title, opened (seq), context, actor }
+##   `actor` (opts.actor) names the character a prompt is about, for the
+##   screens to say ("for Ada Vex"); a form's `choices` ([{id, label,
+##   intent?}]) draw as a button each (docs/plugin-authoring.md).
 ##   A prompt opened without anything waiting on it (`hm.prompt_open`)
 ##   carries `context.hook = true`: its answer fires the `prompt_answered`
 ##   hook instead of resuming a continuation. A group of prompts opened
@@ -54,13 +57,18 @@ func open_prompt(request: Dictionary, by: String, continuation: Callable, contex
 		"default": opts.get("default", {}), "deadline": float(opts.get("deadline", 30)), "by": by,
 		"title": str(request.get("form", {}).get("title", "")) if request.get("form") is Dictionary else "",
 		"opened": kernel.log.seq, "context": context}
+	if str(opts.get("actor", "")) != "":
+		rec.actor = str(opts.actor)
 	if rec.to == "":
 		rec.to = "gm"
 	var why := kernel.commit([{"t": "pending.open", "kind": "prompts", "record": rec}], "Prompt", {"by": by}, "owner:" + rec.to if rec.to != "gm" else "gm")
 	if why != "":
 		return ""
 	_continuations[rec.id] = continuation
-	_deadlines[rec.id] = rec.deadline
+	# a deadline of 0 waits for the answer however long it takes (a
+	# player's roll is theirs to make: nothing rolls it for them)
+	if float(rec.deadline) > 0.0:
+		_deadlines[rec.id] = rec.deadline
 	opened.emit("prompts", rec)
 	return rec.id
 
@@ -123,6 +131,28 @@ func open_prompt_group(request: Dictionary, by: String, continuation: Callable, 
 				continuation.call(JsonDoc.deep(answers)), ctx)
 		ids.append(id)
 	return ids
+
+
+## Close a prompt nothing waits on without answering it: the plugin that
+## opened it (`by`) decided it is no longer needed (the roll it asked for
+## was made from the sheet, or the GM took the request back). No hook
+## fires. "" or why not.
+func close(id: String, by := "") -> String:
+	var rec: Dictionary = prompts().get(id, {})
+	if rec.is_empty():
+		return "no prompt '%s'" % id
+	if not bool(rec.get("context", {}).get("hook", false)):
+		return "an action is waiting on that prompt: answer it instead"
+	if by != "" and str(rec.get("by", "")) != by:
+		return "that prompt is %s's" % str(rec.get("by", ""))
+	var why := kernel.commit([{"t": "pending.close", "kind": "prompts", "id": id}], "Close", {"by": by if by != "" else "gm"})
+	if why != "":
+		return why
+	_continuations.erase(id)
+	_deadlines.erase(id)
+	_timed_out.erase(id)
+	closed.emit("prompts", id, null)
+	return ""
 
 
 ## Answer with the prompt's default (a deadline passed, or the GM waved it on).

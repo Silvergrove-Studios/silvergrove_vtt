@@ -73,7 +73,21 @@
       values: rec.default ?? {},
       submit: { kind: 'answer', prompt: String(rec.id ?? ''), answer: '$values' },
       submit_label: String(form.submit ?? 'Answer'),
+      // a button for each choice ([{id, label, intent?}]) instead of one
+      // "Answer": a roll the DM asked for is the player's own click
+      choices: Array.isArray(form.choices) ? form.choices.filter((c: unknown) => c && typeof c === 'object') : null,
+      prompt: String(rec.id ?? ''),
     };
+  }
+
+  // one tap per card: the choice goes, and the buttons wait for the card to close
+  let chose = $state('');
+  function choose(f: Dict, c: Dict): void {
+    if (chose === f.prompt) return;
+    chose = String(f.prompt);
+    const values = $state.snapshot(formValues);
+    if (c.intent && typeof c.intent === 'object') ui.intent(putValue(fillIntent(c.intent, ctx), values, '$values'));
+    else ui.intent({ kind: 'answer', prompt: f.prompt, answer: { ...values, choice: String(c.id ?? '') } });
   }
 
   function formFields(f: Dict): Dict[] {
@@ -265,7 +279,15 @@
       <div class="form-box" class:prompt={type === 'prompt'}>
         {#if f.label}<h4>{f.label}</h4>{/if}
         <Form fields={formFields(f)} bind:values={formValues} />
-        <button type="button" class="accent" onclick={() => submitForm(f)}>{f.submit_label ?? 'Submit'}</button>
+        {#if f.choices && f.choices.length > 0}
+          <div class="actions">
+            {#each f.choices as c (String(c.id ?? c.label))}
+              <button type="button" class="accent" disabled={chose === f.prompt} onclick={() => choose(f, c)}>{c.label ?? c.id}</button>
+            {/each}
+          </div>
+        {:else}
+          <button type="button" class="accent" onclick={() => submitForm(f)}>{f.submit_label ?? 'Submit'}</button>
+        {/if}
       </div>
     {/if}
   {:else if type === 'log'}

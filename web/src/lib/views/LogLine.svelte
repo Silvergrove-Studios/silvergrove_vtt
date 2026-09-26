@@ -5,6 +5,7 @@
 <script lang="ts">
   import { num, type Dict } from './viewlib';
   import { playerName } from '../game.svelte';
+  import { natural } from '../rolls';
 
   let { entry, actors = {} }: { entry: Dict; actors?: Dict } = $props();
   const kind = $derived(String(entry.kind ?? ''));
@@ -12,6 +13,8 @@
   const who = $derived(entry.actor ? String(actors?.[entry.actor]?.name ?? '') : '');
   const dice = $derived(((r.dice as Dict[]) ?? []).filter((d) => d && typeof d === 'object'));
   const mod = $derived(Number(r.modifier ?? 0));
+  // a natural 20 or 1 looked like any other roll (a playtest's DM announced them by hand)
+  const nat = $derived(kind === 'roll' ? natural(entry) : null);
   // why the roll had advantage or disadvantage (the ruleset keeps it on the
   // roll's spec): a playtest's DM couldn't tell why an attack had disadvantage
   const edge = $derived.by(() => {
@@ -35,13 +38,18 @@
     <div class="result">
       <span class="dice">
         {#each dice as d}
-          <span class="die" class:dropped={!d.kept} title={`d${d.sides}`}>{d.face}</span>
+          <span class="die" class:dropped={!d.kept} class:nat20={nat === 20 && d.kept && Number(d.sides) === 20 && Number(d.face) === 20} class:nat1={nat === 1 && d.kept && Number(d.sides) === 20 && Number(d.face) === 1} title={`d${d.sides}`}>{d.face}</span>
         {/each}
         {#if mod !== 0}<span class="mod">{mod > 0 ? '+' : '−'}{num(Math.abs(mod))}</span>{/if}
       </span>
       <span class="total">{num(r.total ?? 0)}</span>
     </div>
-    {#if r.outcome}<div class="outcome">{r.outcome}</div>{/if}
+    {#if r.outcome || nat}
+      <div class="outcome">
+        {#if nat === 20}<span class="nat crit">Natural 20!</span>{:else if nat === 1}<span class="nat fumble">Natural 1</span>{/if}
+        {r.outcome ?? ''}
+      </div>
+    {/if}
     {#if edge}<div class="edge">{edge}</div>{/if}
   </div>
 {:else if kind === 'chat'}
@@ -131,6 +139,26 @@
   .die.dropped {
     opacity: 0.4;
     text-decoration: line-through;
+  }
+  .die.nat20 {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .die.nat1 {
+    border-color: var(--danger, #d9534f);
+    color: var(--danger, #d9534f);
+    font-weight: 700;
+  }
+  .nat {
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .nat.crit {
+    color: var(--accent);
+  }
+  .nat.fumble {
+    color: var(--danger, #d9534f);
   }
   .mod {
     color: var(--muted);

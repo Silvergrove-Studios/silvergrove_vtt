@@ -61,6 +61,26 @@ func test_view_renderer_widgets() -> void:
 	await tree.process_frame
 	check(_count(r2, "CheckBox") == 2, "a prompt with an undefaulted bool field renders its two checkboxes")
 	r2.queue_free()
+	# a prompt's choices: a button each instead of Answer (a roll the DM asked
+	# for is the player's own click); one sends its intent, one answers
+	var r3 := ViewRenderer.new()
+	root.add_child(r3)
+	var sent3 := []
+	r3.intent.connect(func(i: Dictionary) -> void: sent3.append(i))
+	r3.render({"type": "prompt", "bind": "/prompts/0"}, {"prompts": [{"id": "p_3", "to": "pl_1", "form": {"title": "Persuasion check (DC 12)",
+		"fields": [{"key": "inspiration", "type": "bool", "label": "Add my die"}],
+		"choices": [{"id": "skill:persuasion", "label": "Roll Persuasion +5", "intent": {"kind": "action", "action": "answer_request", "ctx": {"choice": "skill:persuasion", "form": "$values"}}},
+			{"id": "skill:deception", "label": "Roll Deception +3"}]}, "default": {"choice": "skill:persuasion"}}]})
+	await tree.process_frame
+	check(_find(r3, "Button", "Answer") == null and _find(r3, "Button", "Roll Persuasion +5") != null and _find(r3, "Button", "Roll Deception +3") != null, "a Roll button per choice, no Answer")
+	_find(r3, "Button", "Roll Persuasion +5").pressed.emit()
+	check(sent3.size() == 1 and sent3[0].kind == "action" and sent3[0].action == "answer_request" and sent3[0].ctx.form is Dictionary and sent3[0].ctx.form.has("inspiration"), "a choice with an intent sends it, the form's values at $values: %s" % [sent3])
+	check((_find(r3, "Button", "Roll Deception +3") as Button).disabled, "one tap per card: the other buttons wait")
+	r3.render({"type": "prompt", "bind": "/prompts/0"}, {"prompts": [{"id": "p_4", "to": "pl_1", "form": {"title": "Which?", "choices": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}]}, "default": {}}]})
+	await tree.process_frame
+	_find(r3, "Button", "B").pressed.emit()
+	check(sent3.size() == 2 and sent3[1].kind == "answer" and sent3[1].prompt == "p_4" and sent3[1].answer.choice == "b", "a choice without one answers with its id: %s" % [sent3])
+	r3.queue_free()
 	check(_find(r, "Label", "Level 2 Ana") != null, "an expression text")
 	var def := _find(r, "Label", "13")
 	check(def != null and def.tooltip_text.contains("agility +3"), "a typed number with its breakdown as tooltip: %s" % [def.tooltip_text if def != null else "none"])

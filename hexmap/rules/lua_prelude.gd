@@ -298,6 +298,11 @@ function hm.prompt_open(to, form, opts)
 	return call(host.prompt_open, to, form, opts or {})
 end
 
+-- Close one of your own prompt_open prompts without an answer (no hook fires).
+function hm.prompt_close(id)
+	return call(host.prompt_close, id)
+end
+
 -- ---------------------------------------------------------------- state --
 
 function hm.actor(id) return call(host.actor, id) end

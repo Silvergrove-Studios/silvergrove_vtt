@@ -572,8 +572,14 @@ func _prompt(n: Dictionary, ctx: Dictionary) -> Control:
 		return null
 	var form: Dictionary = rec.get("form", {}) if rec.get("form") is Dictionary else {}
 	var fields: Array = form.get("fields", []) if form.get("fields") is Array else []
-	return _form({"label": str(form.get("title", rec.get("title", "A question"))), "fields": fields, "values": rec.get("default", {}),
-		"submit": {"kind": "answer", "prompt": str(rec.get("id", "")), "answer": "$values"}, "submit_label": str(form.get("submit", "Answer"))}, ctx)
+	var node := {"label": str(form.get("title", rec.get("title", "A question"))), "fields": fields, "values": rec.get("default", {}),
+		"submit": {"kind": "answer", "prompt": str(rec.get("id", "")), "answer": "$values"}, "submit_label": str(form.get("submit", "Answer"))}
+	# a button for each choice ([{id, label, intent?}]) instead of one "Answer":
+	# its own intent, or the answer with the choice's id (a roll the DM asked for)
+	if form.get("choices") is Array and not (form.choices as Array).is_empty():
+		node.choices = form.choices
+		node.prompt = str(rec.get("id", ""))
+	return _form(node, ctx)
 
 
 func _form(n: Dictionary, ctx: Dictionary) -> Control:
@@ -598,6 +604,29 @@ func _form(n: Dictionary, ctx: Dictionary) -> Control:
 	# fields whose choices are a collection's entries (what the campaign has,
 	# minus what it turned off) are filled as the answers come back
 	_fill_choices(fields, pf)
+	if n.get("choices") is Array:
+		var row := HFlowContainer.new()
+		var buttons: Array[Button] = []
+		for c in n.choices:
+			if not (c is Dictionary):
+				continue
+			var b := Button.new()
+			b.text = str(c.get("label", c.get("id", "")))
+			b.theme_type_variation = "AccentButton"
+			var choice: Dictionary = c
+			b.pressed.connect(func() -> void:
+				for other in buttons:
+					other.disabled = true
+				if choice.get("intent") is Dictionary:
+					intent.emit(_put_value(fill_intent(choice.intent, ctx), pf.get_values(), "$values"))
+				else:
+					var ans: Dictionary = pf.get_values()
+					ans.choice = str(choice.get("id", ""))
+					intent.emit({"kind": "answer", "prompt": str(n.get("prompt", "")), "answer": ans}))
+			buttons.append(b)
+			row.add_child(b)
+		box.add_child(row)
+		return box
 	var submit := Button.new()
 	submit.text = str(n.get("submit_label", "Submit"))
 	submit.theme_type_variation = "AccentButton"

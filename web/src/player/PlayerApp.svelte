@@ -17,6 +17,9 @@
   import Journal from './Journal.svelte';
   import TablePane from './TablePane.svelte';
   import { comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, type Dict } from '../lib/game.svelte';
+  import { freshRolls } from '../lib/rolls';
+  import { pillText } from '../lib/prompts';
+  import LogLine from '../lib/views/LogLine.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -144,6 +147,26 @@
       }
     }
   });
+
+  // my own roll, shown where I am: the dice, the total, what it means (a
+  // playtest's players rolled, saw nothing on the tab they were on, and
+  // rolled again); the chat has it anyway, so not while the chat shows
+  const seenRolls = new Set<string>();
+  let rollsPrimed = false;
+  let rolled = $state<Dict | null>(null);
+  let rolledTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const mineIds = new Set(mine.map((a) => String(a.id ?? '')));
+    const fresh = freshRolls((game.view.log as Dict[]) ?? [], mineIds, seenRolls, rollsPrimed);
+    if (game.view.actors) rollsPrimed = true;
+    const chatShows = wide ? side === 'chat' : tab === 'chat';
+    if (fresh.length > 0 && !chatShows) {
+      rolled = fresh[fresh.length - 1];
+      clearTimeout(rolledTimer);
+      rolledTimer = setTimeout(() => (rolled = null), 7000);
+    }
+  });
+  const myNames = $derived(Object.fromEntries(mine.map((a) => [String(a.id ?? ''), String(a.name ?? '')])));
 
   // joined with no character: straight to where one is made
   $effect(() => {
@@ -389,7 +412,12 @@
   {:else if prompts.length && promptIndex < 0 && !showing}
     <!-- (the newest first: a playtest's player was sent to an old question left open, not the live one) -->
     <button type="button" class="accent waiting" onclick={() => (asked = String(prompts[prompts.length - 1].id ?? ''))}>
-      The DM is waiting for you{prompts.length > 1 ? ` (${prompts.length})` : ''}: answer
+      {pillText(prompts, myNames)}
+    </button>
+  {/if}
+  {#if rolled && !showing && promptIndex < 0}
+    <button type="button" class="rolled" aria-live="polite" title="Close" onclick={() => (rolled = null)}>
+      <LogLine entry={rolled} actors={game.view.actors ?? {}} />
     </button>
   {/if}
   {#if showing}
@@ -405,6 +433,21 @@
 {/if}
 
 <style>
+  .rolled {
+    position: fixed;
+    left: 50%;
+    top: calc(58px + env(safe-area-inset-top));
+    transform: translateX(-50%);
+    z-index: 39;
+    width: min(360px, calc(100% - 24px));
+    padding: 4px 14px;
+    text-align: left;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
   .waiting {
     position: fixed;
     left: 50%;
