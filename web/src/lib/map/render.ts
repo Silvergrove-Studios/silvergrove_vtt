@@ -316,14 +316,10 @@ export function drawFrame(f: Frame): void {
   drawRegions(ctx, grid, scene, look.gm, cam.scale);
   drawDoors(ctx, lvl, cam.scale);
   const tokens = (scene.tokens as Dict[]) ?? [];
-  // "Goblin Warrior" beside "Goblin Warrior 2" and "3" shows "G1": its label
-  // has numbered siblings
-  const numbered = new Set<string>();
-  for (const t of tokens) if (/\s\d+$/.test(String(t.name ?? ''))) numbered.add(String(t.label ?? ''));
+  // (labels come as the host works them out over every token: GW1, GW2)
   for (const t of tokens) {
     const drag = look.dragging && look.dragging.id === t.id ? look.dragging.pos : null;
-    const first = numbered.has(String(t.label ?? '')) && !/\s\d+$/.test(String(t.name ?? '')) && !/\d/.test(String(t.label ?? ''));
-    drawToken(ctx, first ? { ...t, label: `${t.label}1` } : t, drag ?? tokenPos(t), look, cam.scale, dpr);
+    drawToken(ctx, t, drag ?? tokenPos(t), look, cam.scale, dpr);
   }
   drawNameTags(ctx, tokens, look, cam.scale);
   if (look.gm) drawNotes(ctx, lvl, cam.scale);
@@ -536,10 +532,7 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
   } else {
     ctx.fillStyle = String(t.color ?? '#c0392b');
     ctx.fill();
-    // "Goblin Warrior 2" shows "G2": in a playtest three goblins were all "G"
-    const bare = String(t.label ?? '');
-    const n = /\s(\d+)$/.exec(String(t.name ?? ''))?.[1];
-    const label = n && bare && !/\d/.test(bare) ? bare + n : bare;
+    const label = String(t.label ?? '');
     if (label) {
       const fs = label.length <= 2 ? r * 0.9 : r * 0.6;
       ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;

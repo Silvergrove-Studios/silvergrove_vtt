@@ -703,11 +703,9 @@ func _draw_tokens(c: Node2D) -> void:
 		_rebuild_state()
 	var up := state.highlighted_token_ids()
 	var shown := tokens_in_view()
-	# "Goblin Warrior" beside "Goblin Warrior 2" and "3" shows "G1"
-	_numbered_labels.clear()
-	for t in shown:
-		if _NAME_NUMBER.search(str(t.get("name", ""))) != null:
-			_numbered_labels[str(t.get("label", ""))] = true
+	# the labels the web screens show too, over every token on the scene
+	# (Goblin Warrior and Goblin Warrior 2 are GW1 and GW2)
+	_labels = TokenLabels.of_scene(state.tokens(scene_id), state)
 	for t in shown:
 		draw_token(c, t, 0.5 if bool(t.get("hidden", false)) else 1.0, up.has(str(t.get("id", ""))))
 
@@ -718,9 +716,8 @@ func token_radius_px(tk: Dictionary) -> float:
 
 ## A token: a disc in its colour (or its art, clipped round), a ring in its
 ## owner's colour, its label. Also used by tools for ghosts (alpha < 1).
-static var _NAME_NUMBER := RegEx.create_from_string("\\s(\\d+)$")
-var _numbered_labels := {}
-static var _HAS_DIGIT := RegEx.create_from_string("\\d")
+## {token id: label}, as TokenLabels works them out for the scene drawn.
+var _labels := {}
 
 
 func draw_token(c: Node2D, tk: Dictionary, alpha := 1.0, active := false, selected := false) -> void:
@@ -752,13 +749,8 @@ func draw_token(c: Node2D, tk: Dictionary, alpha := 1.0, active := false, select
 		c.draw_polygon(pts, white, uvs, tex)
 	else:
 		c.draw_colored_polygon(pts, Color(color, alpha))
-		# "Goblin Warrior 2" shows "G2": in a playtest three goblins were all "G"
-		var label := str(tk.get("label", ""))
-		var num := _NAME_NUMBER.search(str(tk.get("name", "")))
-		if num != null and label != "" and _HAS_DIGIT.search(label) == null:
-			label += num.get_string(1)
-		elif num == null and _numbered_labels.has(label) and _HAS_DIGIT.search(label) == null:
-			label += "1"
+		# (in a playtest three goblins were all "G")
+		var label := str(_labels.get(str(tk.get("id", "")), tk.get("label", "")))
 		if label != "":
 			var font := ThemeDB.fallback_font
 			var fs := int(r * (0.9 if label.length() <= 2 else 0.6))
