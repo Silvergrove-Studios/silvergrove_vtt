@@ -197,9 +197,13 @@ func stop_turns() -> String:
 	return run({"t": "turns.set", "changes": {"running": false}}, "End turns")
 
 
-func next_turn() -> String:
+## `opts` as TurnRunner.next has them: {by, expect: {round, turn}}.
+func next_turn(opts := {}) -> String:
 	if kernel != null:
-		return kernel.turns.next()
+		return kernel.turns.next(opts)
+	var late := TurnRunner.stale(state, opts.get("expect"))
+	if late != "":
+		return late
 	var turns := state.encounter.turns
 	var changes := TurnSystem.get_system(str(turns.get("system", "list"))).next(turns)
 	if changes.is_empty():

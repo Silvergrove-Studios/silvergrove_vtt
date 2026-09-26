@@ -280,6 +280,37 @@ func test_web_clients_on_the_host() -> void:
 	check(not host.is_running() and host.web == null, "stopped, the web side too")
 
 
+## The DM screen's Next says the turn it showed (`from`): in a playtest a
+## player's End turn and the DM's Next a few seconds apart took two turns.
+func test_dm_next_names_the_turn_it_ends() -> void:
+	var dir := "user://web_dm_next_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_web_dm_next.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var c := Campaign.create("Next turn")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	check(c.save(dir.path_join("next.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("next.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	check(ctx.commands.run({"t": "scene.add", "scene": {"id": "s_fight", "name": "Fight", "map": "", "tokens": []}}, "Scene") == "" and ctx.commands.activate_scene("s_fight") == "", "a scene")
+	for n in ["Ada", "Grace", "Jin"]:
+		ctx.commands.add_token("s_fight", Encounter.new_token(n, Vector2(2 + ["Ada", "Grace", "Jin"].find(n), 2), {"id": "t_" + n.to_lower()}))
+	check(win.web_dm.op({"op": "turns", "do": "start"}) == "" and ctx.encounter().turns.order == ["t_ada", "t_grace", "t_jin"], "turns started: Ada, Grace, Jin")
+	# Ada's player ended her turn a moment before the DM, still seeing Ada's, pressed Next
+	check(ctx.commands.next_turn({"by": "pl_1", "expect": {"round": 1, "turn": 0}}) == "" and int(ctx.encounter().turns.turn) == 1, "Ada's turn ended from her sheet")
+	var why := win.web_dm.op({"op": "turns", "do": "next", "from": {"round": 1, "turn": 0}})
+	check(why == "Ada's turn has already ended: it's Grace's turn now.", "the DM's Next for Ada's turn is refused, saying whose it is: " + why)
+	check(int(ctx.encounter().turns.turn) == 1 and str(ctx.encounter().turns.last.entry) == "t_ada", "Grace's turn goes on")
+	check(win.web_dm.op({"op": "turns", "do": "next", "from": {"round": 1, "turn": 1}}) == "" and int(ctx.encounter().turns.turn) == 2 and str(ctx.encounter().turns.last.by) == "gm", "the DM's Next for Grace's turn ends it")
+	check(win.web_dm.op({"op": "turns", "do": "next"}) == "" and int(ctx.encounter().turns.round) == 2, "and a Next that says no turn steps as before")
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("next.campaign"))
+
+
 ## Pictures the table uploads (the team: token pictures, pictures in
 ## journals): checked and made again as WebP, a token's cut square, kept
 ## once by what is in them, served at /upload/<id>.webp to whoever has the

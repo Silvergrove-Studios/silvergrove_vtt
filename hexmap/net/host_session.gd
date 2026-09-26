@@ -753,9 +753,10 @@ func _chat(c: Dictionary, intent: Dictionary) -> String:
 
 
 ## What a co-GM may drive besides actions: {op: next|previous|checkpoint|restore|trigger|bulk, …}.
+## Next may say the turn it means (`from`: {round, turn}), as the DM's own does.
 func _gm_intent(intent: Dictionary) -> String:
 	match str(intent.get("op", "")):
-		"next": return kernel.turns.next()
+		"next": return kernel.turns.next({"by": "gm", "expect": intent.get("from")})
 		"previous": return kernel.turns.previous()
 		"checkpoint": return "" if kernel.checkpoint(str(intent.get("name", "Checkpoint"))) != "" else "could not mark"
 		"restore": return kernel.restore_checkpoint(str(intent.get("id", "")))

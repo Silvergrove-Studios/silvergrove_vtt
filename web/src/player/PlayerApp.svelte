@@ -21,7 +21,7 @@
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
   import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
-  import { turnSummary } from '../lib/turns';
+  import { movedOn, turnSummary } from '../lib/turns';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
   const TAB_KEYS: Tab[] = ['map', 'character', 'table', 'chat', 'journal'];
@@ -160,10 +160,13 @@
     if (tab === 'chat' || (wide && side === 'chat')) seenChat = chatCount;
   });
 
-  // my turn: said, and felt on a phone
+  // my turn: said, and felt on a phone; and its end, when the DM ended it (a
+  // playtest's player pressed End turn after the DM's Next, and ended the next one's)
   let wasMine = false;
+  let mineAt: { round: number; turn: number } | null = null;
   $effect(() => {
-    const mine = turn.mine && String(game.scene.turns?.mode ?? 'free') !== 'free';
+    const t = (game.scene.turns ?? {}) as Dict;
+    const mine = turn.mine && String(t.mode ?? 'free') !== 'free';
     if (mine && !wasMine) {
       notice(turn.text);
       try {
@@ -173,6 +176,11 @@
         /* not a phone */
       }
     }
+    if (!mine && wasMine && mineAt) {
+      const said = movedOn(game.scene, mineAt);
+      if (said) notice(said);
+    }
+    mineAt = mine ? { round: Number(t.round ?? 1), turn: Number(t.turn ?? 0) } : null;
     wasMine = mine;
   });
 

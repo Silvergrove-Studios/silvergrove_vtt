@@ -87,8 +87,10 @@ func start(scene_id: String, strategy_id := "list") -> String:
 func _start(scene_id: String, strategy_id: String) -> String:
 	var spec := strategy(strategy_id)
 	var events := []
+	# the scene the order is for (a screen shows another scene's order only
+	# while it runs), and no turn ended yet
 	var base := {"mode": "ordered", "strategy": str(spec.shape), "plugin": str(spec.plugin), "running": true,
-		"counters": {}, "requests": [], "history": [], "focus": ""}
+		"counters": {}, "requests": [], "history": [], "focus": "", "scene": scene_id, "last": null}
 	if str(spec.shape) == "focus":
 		base.order = []
 		base.turn = 0
@@ -167,12 +169,23 @@ func stop() -> String:
 # --------------------------------------------------------------- ordered --
 
 ## Advance one turn: end the current one, start the next, wrapping into a
-## new round. "" or why not.
-func next() -> String:
-	return kernel.transaction("Next turn", func() -> String: return _next())
+## new round. `opts.by` says who ended it: "gm" (the default), a player's
+## id or a plugin's. `opts.expect` ({round, turn}) is the turn the caller
+## means to end: when that turn has already ended — a player's End turn
+## and the DM's Next a few seconds apart, in a playtest, took two turns —
+## nothing changes and the answer says whose turn it is now. The turn
+## that ended is kept as `last` ({by, entry, round, turn, at}, and what
+## the new turn began with: `log`, the newest log entry, and `pos`, where
+## its tokens stood), and a player's end is said in the log for everyone.
+## "" or why not.
+func next(opts := {}) -> String:
+	var late := stale(kernel.state, opts.get("expect"))
+	if late != "":
+		return late
+	return kernel.transaction("Next turn", func() -> String: return _next(opts))
 
 
-func _next() -> String:
+func _next(opts: Dictionary) -> String:
 	var t := turns()
 	if shape() == "focus":
 		return "focus turns have no next; grant the focus"
@@ -181,18 +194,29 @@ func _next() -> String:
 		return "no turn order"
 	var turn := int(t.get("turn", 0))
 	var round := int(t.get("round", 1))
-	var cur := _ref_of(str(order[turn])) if turn >= 0 and turn < order.size() else ""
+	var entry := str(order[turn]) if turn >= 0 and turn < order.size() else ""
+	var cur := _ref_of(entry) if entry != "" else ""
+	var ended := {}
 	if bool(t.get("running", false)) and cur != "":
 		var why := _end_turn(cur)
 		if why != "":
 			return why
+		ended = {"by": str(opts.get("by", "gm")), "entry": entry, "round": round, "turn": turn, "at": JsonDoc.now()}
 	turn += 1
 	var wrapped := false
 	if turn >= order.size():
 		turn = 0
 		round += 1
 		wrapped = true
-	var why := kernel.commit([{"t": "turns.set", "changes": {"turn": turn, "round": round, "running": true}}], "Next turn")
+	var changes := {"turn": turn, "round": round, "running": true}
+	if not ended.is_empty():
+		changes.last = ended
+	var events := [{"t": "turns.set", "changes": changes}]
+	# a player's End turn, said where everyone reads (the DM's Next and a
+	# player's End turn crossed without either knowing)
+	if not ended.is_empty() and not kernel.state.encounter.player(str(ended.by)).is_empty():
+		events.append({"t": "log.add", "entry": {"id": JsonDoc.new_id("n"), "kind": "note", "text": "%s ends their turn" % entry_name(kernel.state, entry), "audience": "all"}})
+	var why := kernel.commit(events, "Next turn")
 	if why != "":
 		return why
 	if wrapped:
@@ -205,7 +229,55 @@ func _next() -> String:
 		why = _fire("round_start", {"round": round}, "Round %d" % round)
 		if why != "":
 			return why
-	return _begin_turn(_ref_of(str(order[turn])))
+	why = _begin_turn(_ref_of(str(order[turn])))
+	if why != "" or ended.is_empty():
+		return why
+	# what the new turn began with, so a screen can tell whether anything has
+	# happened on it since: the newest log entry, where its tokens stand
+	var entries: Array = kernel.state.encounter.log
+	var pos := {}
+	for id in kernel.state.current_turn_tokens():
+		var tk := kernel.state.find_token(str(id))
+		if not tk.is_empty():
+			pos[str(id)] = JsonDoc.deep(tk.get("pos", [0, 0]))
+	return kernel.commit([{"t": "turns.set", "changes": {"last/log": str(entries.back().get("id", "")) if not entries.is_empty() else "", "last/pos": pos}}], "Next turn")
+
+
+## Why a step meant to end the turn `expect` ({round, turn}) comes too
+## late, or "" when that turn is the current one (or none was named):
+## "Ada Vex's turn has already ended: it's Grace's turn now."
+static func stale(st: EncounterState, expect: Variant) -> String:
+	if not (expect is Dictionary) or not (expect as Dictionary).has("turn"):
+		return ""
+	var t := st.encounter.turns
+	if not bool(t.get("running", false)):
+		return "The turns have stopped: roll initiative or start them again."
+	var order: Array = t.get("order", [])
+	var round := int(t.get("round", 1))
+	var turn := int(t.get("turn", 0))
+	var was := int(expect.get("turn", -1))
+	if int(expect.get("round", round)) == round and was == turn:
+		return ""
+	var who := entry_name(st, str(order[was])) if was >= 0 and was < order.size() else ""
+	var now := entry_name(st, str(order[turn])) if turn >= 0 and turn < order.size() else ""
+	return "%s turn has already ended: %s" % [(who + "'s") if who != "" else "That", ("it's %s's turn now." % now) if now != "" else "it's round %d now." % round]
+
+
+## What an order entry is called: a group's label, a token's name (or its
+## actor's), else the entry itself.
+static func entry_name(st: EncounterState, entry: String) -> String:
+	var t := st.encounter.turns
+	if entry.begins_with("group:"):
+		var data: Dictionary = t.get("data", {}) if t.get("data") is Dictionary else {}
+		var g: Dictionary = data.get("groups", {}).get(entry.substr(6), {})
+		return str(g.get("label", data.get("labels", {}).get(entry, entry.substr(6))))
+	var tk := st.find_token(entry)
+	if tk.is_empty():
+		return entry
+	var n := str(tk.get("name", ""))
+	if n == "" and str(tk.get("actor", "")) != "":
+		n = str(st.encounter.actor(str(tk.actor)).get("name", ""))
+	return n if n != "" else entry
 
 
 ## Step back one turn without firing anything (a correction, not play).

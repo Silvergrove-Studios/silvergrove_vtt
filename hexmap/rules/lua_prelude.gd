@@ -228,7 +228,9 @@ function hm.turns.set_focus(holder, by) return call(host.turns_op, "set_focus", 
 function hm.turns.request(player, ref) return call(host.turns_op, "request", ref, player) end
 function hm.turns.deny(ref) return call(host.turns_op, "deny", ref, "") end
 function hm.turns.start(scene, strategy) return call(host.turns_op, "start", scene, strategy or hm.id) end
-function hm.turns.next() return call(host.turns_op, "next", "", "") end
+-- who ended the turn (a player's id, "gm", this plugin when not said) and, when
+-- known, the turn meant ({round, turn}): a turn already ended is refused
+function hm.turns.next(by, expect) return call(host.turns_op, "next", by or hm.id, expect or {}) end
 function hm.turns.stop() return call(host.turns_op, "stop", "", "") end
 function hm.turns.counters(ref) return (call(host.turns_get).counters or {})[ref] or {} end
 -- The order itself (ordered shape): entries are token ids or "group:<id>".
