@@ -16,7 +16,7 @@
   import Character from './Character.svelte';
   import Journal from './Journal.svelte';
   import TablePane from './TablePane.svelte';
-  import { comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, type Dict } from '../lib/game.svelte';
+  import { comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -97,6 +97,7 @@
       if (p?.kind === 'lookup') lookup = { collection: String(p.collection ?? ''), id: String(p.id ?? '') };
       else intent(p);
     },
+    submit,
     pick: (p) => {
       pick = p;
       picked = [];

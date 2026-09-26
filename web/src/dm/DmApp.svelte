@@ -18,7 +18,7 @@
   import RulesSettings from './RulesSettings.svelte';
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
-  import { comp, connect, dmOp, game, intent, join, notice, playerColors, request, type Dict } from '../lib/game.svelte';
+  import { comp, connect, dmOp, game, intent, join, notice, playerColors, request, submit, type Dict } from '../lib/game.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -48,6 +48,7 @@
       else if (p?.kind === 'show' && p.actor) open(`actor:${p.actor}`);
       else intent(p);
     },
+    submit,
     pick: (p) => {
       pick = p;
       picked = [];

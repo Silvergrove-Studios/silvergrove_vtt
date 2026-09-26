@@ -82,9 +82,29 @@
     return ((f.fields as Dict[]) ?? []).filter((x) => x && typeof x === 'object' && 'key' in x && shown(x, ctx)).map((x) => withOptions(resolve(x, ctx), ctx));
   }
 
-  function submitForm(f: Dict): void {
-    ui.intent(putValue(fillIntent(f.submit ?? {}, ctx), $state.snapshot(formValues), '$values'));
+  // a form sent waits for the table: done, it starts over from its own values
+  // (unless it `keep`s them) and says so beside its button for a moment;
+  // refused, what was typed stays (a playtest's DM saw "Give something of your
+  // own" still filled in after Give it, and couldn't tell it had worked)
+  let sending = $state(false);
+  let said = $state('');
+  let saidTimer: ReturnType<typeof setTimeout> | undefined;
+  async function submitForm(f: Dict): Promise<void> {
+    const payload = putValue(fillIntent(f.submit ?? {}, ctx), $state.snapshot(formValues), '$values');
+    if (!ui.submit) {
+      ui.intent(payload);
+      return;
+    }
+    sending = true;
+    const r = await ui.submit(payload);
+    sending = false;
+    if (!r.ok) return;
+    if (!f.keep) formValues = f.values && typeof f.values === 'object' ? clone(f.values) : {};
+    said = String(f.done ?? 'Done ✓');
+    clearTimeout(saidTimer);
+    saidTimer = setTimeout(() => (said = ''), 4000);
   }
+  $effect(() => () => clearTimeout(saidTimer));
 
   // a form's starting values, once for each form drawn here (a tab switch
   // draws another in this place: it starts from its own)
@@ -265,7 +285,10 @@
       <div class="form-box" class:prompt={type === 'prompt'}>
         {#if f.label}<h4>{f.label}</h4>{/if}
         <Form fields={formFields(f)} bind:values={formValues} />
-        <button type="button" class="accent" onclick={() => submitForm(f)}>{f.submit_label ?? 'Submit'}</button>
+        <div class="submit">
+          <button type="button" class="accent" disabled={sending} onclick={() => submitForm(f)}>{f.submit_label ?? 'Submit'}</button>
+          <span class="said" role="status">{said}</span>
+        </div>
       </div>
     {/if}
   {:else if type === 'log'}
@@ -575,8 +598,15 @@
     border: 1px solid var(--accent-soft);
     background: var(--accent-bg);
   }
-  .form-box > button {
-    align-self: flex-start;
+  .submit {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .said {
+    color: var(--ok);
+    font-weight: 600;
+    font-size: 0.92rem;
   }
   .log {
     display: flex;

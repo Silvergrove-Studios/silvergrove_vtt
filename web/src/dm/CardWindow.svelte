@@ -6,7 +6,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Card from './Card.svelte';
-  import { comp, connect, game, intent, join } from '../lib/game.svelte';
+  import { comp, connect, game, intent, join, submit } from '../lib/game.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
 
@@ -20,6 +20,7 @@
       else if (p?.kind === 'show' && p.actor) ref = `actor:${p.actor}`;
       else intent(p);
     },
+    submit,
     pick: () => {},
     comp,
     picture: pictureUrl,
