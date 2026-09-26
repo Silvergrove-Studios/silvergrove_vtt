@@ -22,6 +22,8 @@ tools, can read and write only their own folder, and research D&D on the web.
 - `cast.json` — who plays: persona, device, model, seat port, camera roll.
   `cast2.json` is another table (a warlock, a paladin, a sorcerer, a rogue,
   and a DM who improvises fights): `setup.mjs --cast cast2.json`.
+  `cast3.json` names no classes (the players choose), and its DM lets the
+  players lead, as the DM brief now asks of every DM.
 - `briefs/` — the DM's and the players' briefs (a `session` or a whole
   `campaign`), and `resume.md` to bring an agent back after an interruption
   (its diary is its memory).
