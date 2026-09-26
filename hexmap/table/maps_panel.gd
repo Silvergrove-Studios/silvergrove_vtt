@@ -961,8 +961,9 @@ func return_from(enc_id: String) -> String:
 		return "nothing to return from"
 	var live: Dictionary = e.live
 	var sid := str(live.get("scene", ""))
-	# the fight's turns end first: what lasted rounds ends with them (another
-	# fight's, running on the scene the players see, are left alone)
+	# the fight's turns end first: what lasted rounds ends with them (the turns
+	# of another fight, on the scene the players see, are not this one's to
+	# end or clear)
 	var turns := ctx.encounter().turns
 	var theirs := str(turns.get("scene", "")) in ["", sid] or ctx.encounter().active_scene_id == sid
 	if theirs and bool(turns.get("running", false)):
