@@ -79,7 +79,10 @@
   function busyHere(): boolean {
     const el = document.activeElement as HTMLElement | null;
     const typing = !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'range', 'file', 'submit'].includes((el as HTMLInputElement).type)));
-    return typing || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+    // (a message written but not yet sent counts too: playtest players' Send
+    // clicks landed on a card that came up between typing and sending)
+    const draft = (document.querySelector('[aria-label="Message"]') as HTMLTextAreaElement | HTMLInputElement | null)?.value?.trim() ?? '';
+    return typing || draft !== '' || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
   }
   let asked = $state<string>('');
   let selected = $state('');
@@ -294,7 +297,8 @@
       </div>
       <div class="me">
         {#if game.status !== 'open'}<span class="chip warn">Reconnecting…</span>{/if}
-        <button type="button" class="quiet" onclick={() => (lookingUp = true)} aria-label="Look something up">Look up</button>
+        <!-- (its name is what it says: three playtest players looked for "Look up" and didn't find it) -->
+        <button type="button" class="quiet" onclick={() => (lookingUp = true)} title="Look up a spell, a creature, an item or a rule">Look up</button>
         <button type="button" class="quiet" onclick={() => { if (confirm('Leave the table? You can come back with your name.')) leave(); }}>Leave</button>
       </div>
     </header>

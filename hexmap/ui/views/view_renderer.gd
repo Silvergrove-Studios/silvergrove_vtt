@@ -502,13 +502,23 @@ func _cards(n: Dictionary, ctx: Dictionary) -> Control:
 	return _labelled(str(n.get("label", "")), flow) if n.has("label") else flow
 
 
+## What a button costs, in words: "1 action", "2 bonus actions" (a
+## playtest's player read "Dash [1 actions]").
+static func cost_words(key: String, v: Variant) -> String:
+	var words: Dictionary = {"actions": ["action", "actions"], "bonus": ["bonus action", "bonus actions"], "reactions": ["reaction", "reactions"]}
+	var n := float(v) if (v is float or v is int) else 0.0
+	if not words.has(key):
+		return "%s %s" % [_num(v), key]
+	return "%s %s" % [_num(v), words[key][0] if is_equal_approx(n, 1.0) else words[key][1]]
+
+
 func _button(n: Dictionary, ctx: Dictionary) -> Control:
 	var b := Button.new()
 	b.text = _text(value_of(n, ctx, "label"))
 	if n.has("cost") and n.cost is Dictionary and not (n.cost as Dictionary).is_empty():
 		var bits := PackedStringArray()
 		for k in n.cost:
-			bits.append("%s %s" % [_num(n.cost[k]), str(k)])
+			bits.append(cost_words(str(k), n.cost[k]))
 		b.text += "  [%s]" % ", ".join(bits)
 	if n.has("enabled"):
 		b.disabled = not Expr.truthy(Expr.evaluate(str(n.enabled), ctx))
@@ -578,7 +588,11 @@ func _form(n: Dictionary, ctx: Dictionary) -> Control:
 	var fields: Array = []
 	for f in n.get("fields", []):
 		if f is Dictionary and f.has("key"):
-			fields.append(_with_options(JsonDoc.deep(f), ctx))
+			# a field's `if` and its {expr} properties, as a wizard's are (what a new
+			# level asks: a bard's Expertise, a ranger's languages)
+			if f.has("if") and not Expr.truthy(Expr.evaluate(str(f["if"]), ctx)):
+				continue
+			fields.append(_with_options(resolve_props(JsonDoc.deep(f), ctx), ctx))
 	pf.build(fields, n.get("values", {}) if n.get("values") is Dictionary else {})
 	box.add_child(pf)
 	# fields whose choices are a collection's entries (what the campaign has,

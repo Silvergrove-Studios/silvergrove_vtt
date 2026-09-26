@@ -45,6 +45,7 @@ func test_projection_audience() -> void:
 	check(ana.actors.a_ana.sheets.size() == 1 and ana.actors.a_ana.sheets[0].plugin == "sample.focus" and ana.actors.a_ana.sheets[0].schema.type == "column", "with the plugin's sheet schema")
 	var sd: Dictionary = ana.actors.a_ana.sheets[0].data
 	check(sd.me == "pl_1" and sd.actor.id == "a_ana" and sd.derived.evade.total == 10 and sd.resources.hp.marked == 1 and sd.derived.hand == ["dash"], "and its data: me, actor, derived, resources: %s" % [sd.keys()])
+	check(sd.party == [{"id": "a_ben", "name": "Ben's bard"}], "and the rest of the party, whom to hand things to (not the goblin): %s" % [sd.get("party")])
 	check(ana.actors.has("a_ben") and not ana.actors.a_ben.mine and ana.actors.a_ben.sheets.is_empty() and ana.actors.a_ben.derived["sample.focus"].evade.total == 8, "another PC: public numbers, no sheet")
 	check(not ana.actors.has("a_gob"), "an NPC is not hers to see")
 	check(ana.actors.a_ana.tokens.size() == 1, "her token is listed")
@@ -223,7 +224,7 @@ func test_wire_views_intents_and_roles() -> void:
 	# an area pick from the sheet's button: the renderer asks the window, which asks the tool
 	player.set_pane("sheet")
 	await tree.process_frame
-	var oil := _button(player._pane_box, "Throw oil  [1 actions]")
+	var oil := _button(player._pane_box, "Throw oil  [1 action]")
 	check(oil != null, "the ordered sheet's Throw oil button is on the phone")
 	oil.pressed.emit()
 	check(not player.tool.pick.is_empty() and player.tool.pick_spec().kind == "area", "pressing it started an area pick")

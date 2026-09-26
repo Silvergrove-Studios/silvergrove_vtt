@@ -71,7 +71,7 @@
     {#if error}<p class="dim">{error}</p>{/if}
     {#if entry}
       <article class="card">
-        <View node={cardSchema(game.view.cards ?? {}, entry.collection)} ctx={entry.data} />
+        <View node={cardSchema(game.view.cards ?? {}, entry.collection)} ctx={{ ...entry.data, role: game.role === 'dm' ? 'gm' : 'player' }} />
       </article>
     {/if}
   </div>

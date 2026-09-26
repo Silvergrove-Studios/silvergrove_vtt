@@ -135,7 +135,19 @@ static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, play
 		"ext": JsonDoc.deep(pa.get("ext", {}).get(plugin, {})), "derived": JsonDoc.deep(pa.get("derived", {}).get(plugin, {})),
 		"resources": res, "effects": effects, "tokens": pa.get("tokens", []),
 		"turns": JsonDoc.deep(kernel.state.encounter.turns), "clock": JsonDoc.deep(kernel.state.encounter.clock),
-		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {}))}
+		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {})), "party": party_of(kernel, str(pa.id))}
+
+
+## The rest of the party, for a sheet (what to hand something to): the
+## player characters and companions but `except`, {id, name}, by name.
+static func party_of(kernel: RulesKernel, except: String) -> Array:
+	var out := []
+	for aid in kernel.state.encounter.actors:
+		var a: Dictionary = kernel.state.encounter.actors[aid]
+		if str(aid) != except and str(a.get("kind", "")) in ["pc", "companion"]:
+			out.append({"id": str(aid), "name": str(a.get("name", ""))})
+	out.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return str(x.name).naturalnocasecmp_to(str(y.name)) < 0)
+	return out
 
 
 ## The data a plugin's status schema binds to.

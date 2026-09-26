@@ -28,6 +28,16 @@ func test_compendium_index_and_layers() -> void:
 	check(r.total == 2, "text matches a prefix in any string field (hunts, hungry)")
 	r = c.query("creatures", {"text": "goblin fight"})
 	check(r.total == 1 and r.entries[0].id == "goblin-chief", "every word must match")
+	# by name, a name that matches comes first (a playtest's DM looked for
+	# "Rope" and was offered Burglar's Pack first)
+	var gear := Compendium.new()
+	check(gear.load_pack({"id": "gear", "name": "Gear", "plugin": "x"}, {"items": [
+		{"id": "burglars-pack", "name": "Burglar's Pack", "text": "A backpack, a bag of ball bearings, rope, a bell and candles."},
+		{"id": "climbers-kit", "name": "Climber's Kit", "text": "Pitons, boot tips, gloves and a harness; use it with rope."},
+		{"id": "rope-silk", "name": "Rope, Silk", "text": "Fifty feet."},
+		{"id": "rope", "name": "Rope", "text": "Fifty feet of hempen rope."}]}) == "", "a little gear")
+	var names: Array = gear.query("items", {"text": "rope"}).entries.map(func(x: Dictionary) -> String: return str(x.name))
+	check(names == ["Rope", "Rope, Silk", "Burglar's Pack", "Climber's Kit"], "the name first, then what says it: %s" % [names])
 	r = c.query("creatures", {"sort": "-level", "fields": ["name", "level"]})
 	check(r.entries[0].id == "ogre" and r.entries[0].keys().size() == 4 and not r.entries[0].has("stats"), "sort descending; only the fields asked for")
 	r = c.query("creatures", {"per_page": 4, "page": 2})

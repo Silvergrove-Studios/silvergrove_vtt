@@ -55,6 +55,9 @@ func test_map_distances_and_templates() -> void:
 	# cells
 	check(mq.neighbors(sid, "token:t_h").size() == 6 and mq.cells_within(sid, "token:t_h", 1).size() == 7 and mq.cells_between(sid, "token:t_h", "token:t_g").size() == 7, "neighbours, rings, lines")
 	check(mq.cell(sid, "token:t_h").has("terrain") and mq.cell(sid, "token:t_h").key == HexMap.cell_key(g.offset_to_axial(3, 7)), "a cell record with the map's terrain")
+	var centre := g.cell_center(g.offset_to_axial(3, 7))
+	var rec_c: Array = mq.cell(sid, "token:t_h").get("center", [])
+	check(rec_c.size() == 2 and Vector2(rec_c[0], rec_c[1]).distance_to(centre) < 0.001, "and where its centre is (a creature put where the DM tapped): %s" % [rec_c])
 
 
 func test_map_sight_and_light() -> void:

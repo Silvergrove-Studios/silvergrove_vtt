@@ -56,6 +56,15 @@
   players ends another's turns, and End the fight ends the one they see;
   a long rest no longer fails over a creature that has gone; the host
   rolls a screen's own dice (intent `roll`).
+- And for what the rules ask of the screens: a form's fields may have an
+  `if` and `{expr}` properties, as a wizard's do (a new level's choices
+  are asked in one); a sheet's data carries the rest of the `party`
+  (whom to hand a thing to); a map cell's record says where its centre
+  is (a creature put where the DM tapped); a card that looks something up
+  knows who is looking; the DM's card steps aside while a pick waits (it
+  covered the creatures to tap); a button's cost reads "1 action", not
+  "1 actions"; a message typed but not sent keeps a card from covering
+  Send; Look up is named what it says.
 
 - **Pictures from the table** (the team, after the character maker): a
   player gives their character's token a picture of their own — chosen on

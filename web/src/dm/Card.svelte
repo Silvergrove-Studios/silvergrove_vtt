@@ -249,7 +249,7 @@
       <div class="prose">{@html markdown(String(pnote.text ?? ''))}</div>
     {:else if kind === 'entry'}
       {#if entry}
-        <View node={cardSchema(game.view.cards ?? {}, String(entry.collection))} ctx={entry.data} />
+        <View node={cardSchema(game.view.cards ?? {}, String(entry.collection))} ctx={{ ...entry.data, role: 'gm' }} />
       {:else}
         <p class="dim">{entryError || 'Looking it up…'}</p>
       {/if}

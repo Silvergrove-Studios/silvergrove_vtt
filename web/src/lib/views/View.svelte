@@ -17,6 +17,7 @@
   import { assetArt } from '../art';
   import { breakdown, fillIntent, num, putValue, shown, textOf, valueOf, withOptions, type Dict, clone } from './viewlib';
   import { Expr, truthy } from '../expr';
+  import { resolve } from './fieldcheck';
 
   let { node, ctx, depth = 0 }: { node: any; ctx: Dict; depth?: number } = $props();
   const ui = viewUi();
@@ -46,9 +47,16 @@
     return [];
   }
 
+  // what a button costs, in words (a playtest's player read "Dash [1 actions]")
+  const COST_WORDS: Record<string, [string, string]> = { actions: ['action', 'actions'], bonus: ['bonus action', 'bonus actions'], reactions: ['reaction', 'reactions'] };
+  function costWords(k: string, v: unknown): string {
+    const w = COST_WORDS[k];
+    return w ? `${num(v)} ${Number(v) === 1 ? w[0] : w[1]}` : `${num(v)} ${k}`;
+  }
+
   function buttonLabel(b: Dict): string {
     let s = textOf(valueOf(b, ctx, 'label'));
-    if (b.cost && typeof b.cost === 'object' && Object.keys(b.cost).length) s += `  [${Object.entries(b.cost).map(([k, v]) => `${num(v)} ${k}`).join(', ')}]`;
+    if (b.cost && typeof b.cost === 'object' && Object.keys(b.cost).length) s += `  [${Object.entries(b.cost).map(([k, v]) => costWords(k, v)).join(', ')}]`;
     return s;
   }
 
@@ -69,7 +77,9 @@
   }
 
   function formFields(f: Dict): Dict[] {
-    return ((f.fields as Dict[]) ?? []).filter((x) => x && typeof x === 'object' && 'key' in x).map((x) => withOptions(x, ctx));
+    // a field's `if` and its {expr} properties, as a wizard's are (what a new
+    // level asks: a bard's Expertise, a ranger's languages)
+    return ((f.fields as Dict[]) ?? []).filter((x) => x && typeof x === 'object' && 'key' in x && shown(x, ctx)).map((x) => withOptions(resolve(x, ctx), ctx));
   }
 
   function submitForm(f: Dict): void {

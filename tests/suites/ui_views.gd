@@ -75,7 +75,7 @@ func test_view_renderer_widgets() -> void:
 	check(boxes == 3 and crossed == 1, "a track: 3 + 1 boxes, one crossed out (%d boxes, %d crossed)" % [boxes, crossed])
 	check(_find(r, "Button", "Shaken 2") != null, "an effect badge with its value")
 	check(_find(r, "Button", "dash") != null and _find(r, "Button", "Rally!") != null, "cards from strings and from records")
-	var act := _find(r, "Button", "Act  [1 actions]")
+	var act := _find(r, "Button", "Act  [1 action]")
 	check(act != null and not act.disabled, "an action button with its cost")
 	check(_find(r, "Button", "Never").disabled, "an enabled expression that is false disables the button")
 	check(_find(r, "Label", "Doom") != null and _find(r, "Label", "■") != null, "a tracker")

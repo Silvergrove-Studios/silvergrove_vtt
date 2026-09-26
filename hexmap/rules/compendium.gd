@@ -342,6 +342,28 @@ func query(coll: String, opts: Dictionary = {}) -> Dictionary:
 	if started:
 		list = ids.keys()
 		_sort(list, all, sort)
+		# by name, a name that matches comes first (a playtest's DM looked for
+		# "Rope" and was offered Burglar's Pack): the whole name, the name's
+		# start, every word in the name, then what says it in its text
+		if text != "" and sort == "name":
+			var buckets := [[], [], [], []]
+			var words := text.split(" ", false)
+			for id in list:
+				var name := str(all[id].get("name", "")).to_lower()
+				var r := 3
+				if name == text:
+					r = 0
+				elif name.begins_with(text):
+					r = 1
+				else:
+					var every := true
+					for w in words:
+						if not name.contains(w):
+							every = false
+					if every:
+						r = 2
+				buckets[r].append(id)
+			list = buckets[0] + buckets[1] + buckets[2] + buckets[3]
 	else:
 		# the whole collection in this order, cached until entries change
 		if not _sorted.has(coll):

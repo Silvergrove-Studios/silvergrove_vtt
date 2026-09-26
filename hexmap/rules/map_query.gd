@@ -528,4 +528,9 @@ func cell(scene_id: String, key: Variant) -> Dictionary:
 	var lvl := kernel.state.effective_level(scene_id)
 	rec.terrain = JsonDoc.deep(lvl.get("terrain", {}).get(k, {}))
 	rec.key = k
+	# where it is, in hex units (a creature put on a cell the DM picked)
+	var m := kernel.state.map_for(scene_id)
+	if m != null and HexMap.is_cell_key(k):
+		var c := m.grid.cell_center(HexMap.key_cell(k))
+		rec.center = [c.x, c.y]
 	return rec
