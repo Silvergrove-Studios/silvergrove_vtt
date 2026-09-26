@@ -29,8 +29,13 @@
     if (at) open(at.collection, at.id);
   });
 
+  // what the search looks through, as one string: every view the table sends
+  // is a new list, and the search ran again on each
+  const colls = $derived(((game.view.collections as string[]) ?? []).join('\n'));
+
   $effect(() => {
     const text = q.trim();
+    const list = colls ? colls.split('\n') : [];
     const mine = ++seq;
     if (text.length < 2) {
       results = [];
@@ -48,7 +53,7 @@
       if (n.split(/[^a-z0-9']+/).some((w) => w.startsWith(t))) return 2;
       return 3;
     };
-    for (const coll of (game.view.collections as string[]) ?? []) {
+    for (const coll of list) {
       comp(coll, { query: { text, per_page: 8, fields: ['name'] } }).then((reply) => {
         if (mine !== seq) return;
         for (const e of (reply.page?.entries as Dict[]) ?? []) found.push({ collection: coll, id: String(e.id ?? ''), name: String(e.name ?? e.id ?? '') });

@@ -60,25 +60,46 @@
     }
   }
   let rules = $state<Item[]>([]);
+  // the collections yet to answer the search: "Nothing by that name." waits for them all
+  let asking = $state(0);
   let seq = 0;
 
   const nodes = $derived(book(game.dm, game.players, q));
+  // what the search looks through, as one string: every view the table sends
+  // (each move in a fight) is a new list, and the search ran again on each,
+  // emptied what it had found and flashed "Nothing by that name." until the
+  // rules answered (a playtest's DM saw it three times with no cause)
+  const colls = $derived(((game.view.collections as string[]) ?? []).join('\n'));
 
-  // the rules, when searching: a few from every collection
+  // the rules, when searching: a few from every collection (what was found
+  // before stays until the first answer replaces it)
   $effect(() => {
     const text = q.trim();
+    const list = colls ? colls.split('\n') : [];
     const mine = ++seq;
-    rules = [];
-    if (text.length < 2) return;
+    if (text.length < 2 || list.length === 0) {
+      rules = [];
+      asking = 0;
+      return;
+    }
     const found: Item[] = [];
-    for (const coll of (game.view.collections as string[]) ?? []) {
+    asking = list.length;
+    for (const coll of list) {
       comp(coll, { query: { text, per_page: 6, fields: ['name'] } }).then((reply) => {
         if (mine !== seq) return;
         for (const e of (reply.page?.entries as Dict[]) ?? []) found.push({ label: String(e.name ?? e.id), kind: 'rule', sub: coll.replace(/_/g, ' '), ref: `entry:${coll}/${e.id}` });
         rules = [...found];
+        asking -= 1;
       });
     }
   });
+
+  // something opened ends the search (a playtest's DM found hers still on
+  // "Twinned" long after)
+  function openIt(ref: string): void {
+    onopen(ref);
+    q = '';
+  }
 
   // a fight of the DM's own: made at once over the first battle map, then its
   // card (name it, choose the map, add creatures, start it)
@@ -129,7 +150,7 @@
 </script>
 
 {#snippet item(it: Item, depth: number)}
-  <button type="button" class="item" class:on={current === it.ref} style:padding-left={`${12 + depth * 14}px`} onclick={() => onopen(it.ref)}>
+  <button type="button" class="item" class:on={current === it.ref} style:padding-left={`${12 + depth * 14}px`} onclick={() => openIt(it.ref)}>
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[it.kind] ?? ''} /></svg>
     <span class="label">{it.label}</span>
     <!-- what it is, after its name (a name is what's looked for first): in sight
@@ -190,13 +211,14 @@
   <div class="search">
     <input
       type="search"
+      aria-label="Look up anything"
       placeholder="Look up anything — a person, a place, a spell…"
       bind:value={q}
       onkeydown={(e) => {
         if (e.key === 'Enter') {
           const r = first();
-          if (r) onopen(r);
-        }
+          if (r) openIt(r);
+        } else if (e.key === 'Escape') q = '';
       }}
     />
   </div>
@@ -208,7 +230,7 @@
         {#each rules as it (it.ref)}{@render item(it, 1)}{/each}
       </div>
     {/if}
-    {#if q && nodes.length === 0 && rules.length === 0}
+    {#if q && nodes.length === 0 && rules.length === 0 && asking === 0}
       <p class="empty">Nothing by that name.</p>
     {/if}
     {#if !q}
