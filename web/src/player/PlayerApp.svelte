@@ -22,6 +22,7 @@
   import { Grid } from '../lib/grid';
   import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
   import { fogOf, fogWords } from '../lib/map/sight';
+  import type { Cell } from '../lib/grid';
   import { turnSummary } from '../lib/turns';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
@@ -207,7 +208,7 @@
     selected = selected === t.id ? '' : String(t.id);
   }
 
-  function onCellClick(cell: { q: number; r: number }, at: { x: number; y: number }): void {
+  function onCellClick(cell: Cell, at: { x: number; y: number }): void {
     if (pick) resolvePick(at);
     else {
       selected = '';
@@ -216,7 +217,7 @@
   }
 
   // a tap on the fog says why it's dark there: too dark, or walls in the way
-  function sayWhyUnseen(cell: { q: number; r: number }): void {
+  function sayWhyUnseen(cell: Cell): void {
     if (!map || !game.scene.fog) return;
     const grid = new Grid(map.grid ?? {});
     if (!grid.inBounds(cell)) return;

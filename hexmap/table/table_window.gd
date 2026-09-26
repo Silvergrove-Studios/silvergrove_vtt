@@ -15,8 +15,9 @@ const V_THEME_BASE := 1000
 const V_SCALE_BASE := 1100
 var scale_menu: PopupMenu
 const V_PLAYER_BASE := 2000
-## Scene › Light: as the map, then Vision.LIGHT_LEVELS in order.
-const S_LIGHT_BASE := 2100
+## Scene › Light: as the map, then Vision.LIGHT_LEVELS in order (clear of
+## the viewpoints' ids, however many players).
+const S_LIGHT_BASE := 3000
 const LIGHT_CHOICES := [["", "As the map"], ["daylight", "Daylight"], ["dim", "Dim"], ["dark", "Dark"]]
 var light_menu: PopupMenu
 
