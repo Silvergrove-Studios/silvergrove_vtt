@@ -240,6 +240,7 @@ func refresh_art() -> void:
 		var scoped := PackLibrary.new()
 		scoped.only_dirs = PackedStringArray([campaign.base_dir().path_join("art")])
 		scoped.reload()
+		scoped.uploads_dir = Uploads.dir_of(campaign)
 		art = scoped
 	art_changed.emit()
 

@@ -13,6 +13,7 @@ import {
   spent,
   startingBase,
   startingBonus,
+  suggestedBase,
   toggle,
 } from '../src/lib/views/fieldcheck';
 
@@ -57,10 +58,10 @@ describe('point buy', () => {
     expect(canRaise('str', oneLeft, pb)).toBe(false);
     expect(canRaise('cha', oneLeft, pb)).toBe(true);
   });
-  it('starts from the class suggestion, which is a valid buy', () => {
-    const base = startingBase(scores('point_buy', { suggest: DRUID }));
-    expect(base).toEqual(DRUID);
-    expect(startingBase(f)).toEqual({ str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 });
+  it('starts from 8s: the class suggestion is the player’s to ask for, and a valid buy', () => {
+    expect(startingBase(scores('point_buy', { suggest: DRUID }))).toEqual({ str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 });
+    expect(suggestedBase(scores('point_buy', { suggest: DRUID }))).toEqual(DRUID);
+    expect(suggestedBase(f)).toEqual({ str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 });
   });
   it('will not move on with points to spend, over the budget or out of range', () => {
     const all8 = { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 };
@@ -78,10 +79,18 @@ describe('point buy', () => {
 });
 
 describe('the standard array and rolled scores', () => {
-  it('assigns the numbers highest-first where the class wants them', () => {
-    expect(startingBase(scores('array', { suggest: DRUID }))).toEqual({ str: 8, dex: 12, con: 14, int: 13, wis: 15, cha: 10 });
+  it('starts with no number given; asked, puts them highest-first where the class wants them', () => {
+    expect(startingBase(scores('array', { suggest: DRUID }))).toEqual({ str: null, dex: null, con: null, int: null, wis: null, cha: null });
+    expect(suggestedBase(scores('array', { suggest: DRUID }))).toEqual({ str: 8, dex: 12, con: 14, int: 13, wis: 15, cha: 10 });
     const rolled = scores('rolled', { suggest: DRUID, rolled: { values: [9, 17, 12, 11, 14, 6] } });
-    expect(startingBase(rolled)).toEqual({ wis: 17, con: 14, int: 12, dex: 11, cha: 9, str: 6 });
+    expect(Object.values(startingBase(rolled)).every((v) => v === null)).toBe(true);
+    expect(suggestedBase(rolled)).toEqual({ wis: 17, con: 14, int: 12, dex: 11, cha: 9, str: 6 });
+  });
+  it('asks for every number to be given before moving on', () => {
+    const f = scores('array');
+    const half = { str: 15, dex: 14, con: 13, int: null, wis: null, cha: null };
+    expect(scoresProblem(f, scoresValue(f, half, {}))).toBe('Give a number to each ability (3 to go).');
+    expect(scoresValue(f, half, {}).final.int).toBeNull();
   });
   it('uses each number once', () => {
     const f = scores('array');

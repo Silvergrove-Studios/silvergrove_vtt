@@ -4,8 +4,9 @@ extends RefCounted
 ## WebSocket. It serves the web clients themselves (the player's screen at
 ## `/`, the DM's at `/dm` — one page, the path decides), the art they draw
 ## with (`/art/<pack>/<file>`, the packs the Table holds), the maps' own
-## files (`/mapfile/<map id>/<file>`, a backdrop), and `/config.json` (where
-## the WebSocket is). Players open it from any phone or computer on the
+## files (`/mapfile/<map id>/<file>`, a backdrop), the pictures the table
+## uploaded (`/upload/<id>.webp`, a token's, a journal's: by an address only
+## those shown them know), and `/config.json` (where the WebSocket is). Players open it from any phone or computer on the
 ## network: nothing to install. Only GET and HEAD; nothing outside those
 ## roots is served. Non-blocking: poll it every frame.
 ##
@@ -33,6 +34,8 @@ var art_source: Callable = Callable()
 var map_file_source: Callable = Callable()
 ## () -> Dictionary: what /config.json says.
 var config_source: Callable = Callable()
+## (id: String) -> PackedByteArray: an uploaded picture's WebP, or empty.
+var upload_source: Callable = Callable()
 var _server := TCPServer.new()
 var _conns: Array = []
 var _zip: ZIPReader = null
@@ -152,6 +155,13 @@ func respond(head: String) -> PackedByteArray:
 			body = map_file_source.call(mid, file)
 		type = _type(file)
 		cache = "max-age=3600"
+	elif path.begins_with("/upload/"):
+		var id := path.substr(8).trim_suffix(".webp")
+		if path.ends_with(".webp") and Uploads.valid_id(id) and upload_source.is_valid():
+			body = upload_source.call(id)
+		type = TYPES.webp
+		# (an upload's address is what is in it: it never changes)
+		cache = "max-age=31536000, immutable"
 	elif path == "/favicon.ico":
 		return _status(204, "No Content")
 	if body.is_empty():

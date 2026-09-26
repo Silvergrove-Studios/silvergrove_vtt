@@ -296,6 +296,8 @@ func prop_texture(ref: String, ppx: float) -> Texture2D:
 ## Texture for a token's art, sized to fill `size` hexes at `ppx`; null when
 ## the ref is unknown so the caller draws its plain disc instead.
 func token_texture(ref: String, ppx: float, size := 1.0) -> Texture2D:
+	if ref.begins_with(Uploads.PREFIX):
+		return upload_texture(ref)
 	var t := token_art(ref)
 	var file := str(t.get("texture", ""))
 	if file == "":
@@ -305,6 +307,8 @@ func token_texture(ref: String, ppx: float, size := 1.0) -> Texture2D:
 
 ## A picture at about `px` across; null when the ref is unknown.
 func picture_texture(ref: String, px := 512.0) -> Texture2D:
+	if ref.begins_with(Uploads.PREFIX):
+		return upload_texture(ref)
 	var p := picture(ref)
 	var file := str(p.get("texture", ""))
 	if file == "":
@@ -327,6 +331,29 @@ func wall_texture(ref: String, ppx: float) -> Texture2D:
 	if file == "":
 		return null
 	return _texture(split_ref(ref)[0], file, ppx, ref)
+
+
+## Where the campaign keeps its uploaded pictures (the Table sets it): an
+## `upload:<id>` ref's texture comes from there.
+var uploads_dir := ""
+
+
+## An uploaded picture (a token's, a journal's), or null when there is none.
+func upload_texture(ref: String) -> Texture2D:
+	var path := Uploads.path_of(uploads_dir, ref)
+	if path == "":
+		return null
+	if _textures.has(path):
+		return _textures[path]
+	var tex: Texture2D = null
+	if FileAccess.file_exists(path):
+		var img := Image.new()
+		if img.load_webp_from_buffer(FileAccess.get_file_as_bytes(path)) == OK:
+			img.generate_mipmaps()
+			tex = ImageTexture.create_from_image(img)
+	if tex != null:
+		_textures[path] = tex
+	return tex
 
 
 func _texture(pack_id: String, file: String, target_px: float, key: String) -> Texture2D:

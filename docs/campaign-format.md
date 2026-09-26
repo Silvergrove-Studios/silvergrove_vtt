@@ -118,6 +118,15 @@ party is), `sessions` and `runtime`. Every other field is as before.
   copied into the campaign's `art/`, which is the only art the Table
   draws this campaign with. A map is never changed from the Table;
   scenes are made over it.
+- Pictures the people at the table upload (a character's token picture,
+  a picture in a note) are kept beside the campaign file in `uploads/`,
+  one WebP each named for what is in it, and referred to as
+  `upload:<id>`: a token's or an actor's `token.art`, a note's
+  `![caption](upload:<id>)`. The Table checks and re-encodes each one
+  (PNG, JPEG or WebP; a token's cut square, 512 across; others 1600 on
+  the longer side). None is listed anywhere: the web side serves
+  `/upload/<id>.webp` to whoever has the address. A package carries the
+  ones its own content shows, not a player's in their journal.
 - `encounters`: prepared encounters: a recipe for a scene — the map and
   level, creatures by compendium entry with a count, a cell and whether
   they start hidden, the DM's notes, the sessions it was `played` in.
@@ -193,7 +202,7 @@ elsewhere).
   "name": "Ana's ranger",
   "owner": "pl_a1",
   "art": "creatures:ranger",
-  "token": { "size": 1, "color": "#4f9cf6", "vision": { "radius": 6 } },
+  "token": { "size": 1, "color": "#4f9cf6", "vision": { "radius": 6 }, "art": "upload:5f1c…" },
   "ext": { "sample.ordered": { "level": 3, "stats": { "agi": 2, "str": -1 } } },
   "derived": { "sample.ordered": { "defence": { "total": 13, "parts": [ … ] } } },
   "overlays": [ { "id": "o_bear", "source": "sample.ordered:shapeshift", "patch": { "sample.ordered": { "stats": { "str": 4 } } } } ],

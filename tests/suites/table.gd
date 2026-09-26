@@ -377,6 +377,87 @@ func test_table_window() -> void:
 
 
 ## The Table is campaign-first: the picker until a campaign opens, the
+## Token pictures from the screens (the team): a player's picture goes on
+## their own character — its token everywhere and the ones it gets later —
+## and never on someone else's; the DM's on anyone's; a journal's is kept
+## and its ref sent back; a picture taken off leaves the initials.
+func test_token_pictures_from_the_screens() -> void:
+	var dir := "user://table_uploads_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	for sub in ["", "uploads"]:
+		var d := dir.path_join(sub)
+		if DirAccess.dir_exists_absolute(d):
+			for f in DirAccess.get_files_at(d):
+				DirAccess.remove_absolute(d.path_join(f))
+	var app := App.new("user://test_prefs_table_uploads.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var c := Campaign.create("Pictures")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.players.append({"id": "pl_2", "name": "Ben", "color": "#e5a55a"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1"}
+	c.actors["a_b"] = {"id": "a_b", "kind": "pc", "name": "Brakka", "owner": "pl_2"}
+	check(c.save(dir.path_join("pictures.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("pictures.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var sid := ctx.scene_id
+	if sid == "":
+		check(ctx.commands.run({"t": "scene.add", "scene": {"id": "s_road", "name": "Road", "map": "", "tokens": []}}, "Scene") == "", "a scene")
+		sid = "s_road"
+	check(ctx.commands.run({"t": "token.add", "scene": sid, "token": Encounter.new_token("Hero", Vector2(1, 1), {"id": "t_h", "actor": "a_h", "owner": "pl_1"})}, "Token") == "", "the hero's token on the map")
+	var img := Image.create(300, 300, false, Image.FORMAT_RGB8)
+	img.fill(Color.ORANGE)
+	var data := Marshalls.raw_to_base64(img.save_png_to_buffer())
+	var out := win.upload("pl_1", false, {"kind": "token", "actor": "a_h", "data": data})
+	check(bool(out.ok) and Uploads.is_ref(str(out.ref)), "Ana's picture for her hero: %s" % [out])
+	check(str(ctx.encounter().actor("a_h").token.art) == str(out.ref), "the hero's own token says it (the tokens it gets later)")
+	check(str(ctx.state.token(sid, "t_h").art) == str(out.ref), "and his token on the map shows it")
+	check(FileAccess.file_exists(Uploads.path_of(Uploads.dir_of(ctx.campaign), str(out.ref))), "kept in the campaign's uploads")
+	check(ctx.art.token_texture(str(out.ref), 64.0) != null, "the Table draws it")
+	check(str(win.upload("pl_1", false, {"kind": "token", "actor": "a_b", "data": data}).why).contains("not your character"), "not on Ben's character")
+	check(str(win.upload("pl_1", false, {"kind": "token", "actor": "a_nobody", "data": data}).why).contains("no such character"), "nor on no one")
+	check(bool(win.upload("", true, {"kind": "token", "actor": "a_b", "data": data}).ok) and Uploads.is_ref(str(ctx.encounter().actor("a_b").token.art)), "the DM's on anyone's")
+	var pic := win.upload("pl_2", false, {"kind": "picture", "data": data})
+	check(bool(pic.ok) and Uploads.is_ref(str(pic.ref)), "a journal's picture: kept, its ref sent back")
+	check(bool(win.upload("pl_1", false, {"kind": "token", "actor": "a_h", "clear": true}).ok) and str(ctx.state.token(sid, "t_h").art) == "" and str(ctx.encounter().actor("a_h").token.art) == "", "taken off: the initials again")
+	check(str(win.upload("pl_1", false, {"kind": "token", "actor": "a_h", "data": "bm90IGEgcGljdHVyZQ=="}).why).contains("not a picture"), "what is not a picture is refused")
+	win.queue_free()
+	await tree.process_frame
+
+
+## A package carries the uploaded pictures its own content shows (a DM's
+## in a note, on a person's token) and not a player's in their journal.
+func test_packages_carry_the_contents_pictures() -> void:
+	var dir := "user://package_uploads_test"
+	DirAccess.make_dir_recursive_absolute(dir.path_join("uploads"))
+	for f in DirAccess.get_files_at(dir.path_join("uploads")):
+		DirAccess.remove_absolute(dir.path_join("uploads").path_join(f))
+	var c := Campaign.create("Pictured")
+	var img := Image.create(64, 64, false, Image.FORMAT_RGB8)
+	img.fill(Color.TEAL)
+	var dm_pic := Uploads.store(dir.path_join("uploads"), "picture", img.save_png_to_buffer())
+	img.fill(Color.MAROON)
+	var npc_pic := Uploads.store(dir.path_join("uploads"), "token", img.save_png_to_buffer())
+	img.fill(Color.GOLD)
+	var player_pic := Uploads.store(dir.path_join("uploads"), "picture", img.save_png_to_buffer())
+	check(bool(dm_pic.ok) and bool(npc_pic.ok) and bool(player_pic.ok), "three pictures kept")
+	c.journal.append({"id": "j_door", "kind": "note", "title": "The door", "audience": "gm", "text": "Runes.\n\n![](%s)" % str(dm_pic.ref)})
+	c.actors["a_aldous"] = {"id": "a_aldous", "kind": "npc", "name": "Aldous", "token": {"art": str(npc_pic.ref)}}
+	c.player_notes.append({"id": "pn_1", "owner": "pl_1", "title": "Mine", "text": "![](%s)" % str(player_pic.ref), "share": []})
+	check(c.save(dir.path_join("pictured.campaign")) == OK, "saved")
+	var pkg := dir.path_join("pictured.campaignpkg")
+	var r := CampaignPackage.export_from(Campaign.load_file(dir.path_join("pictured.campaign")), pkg, {"plugin_dirs": []})
+	check(bool(r.get("ok", false)), "exported: %s" % [r])
+	var zr := ZIPReader.new()
+	check(zr.open(pkg) == OK, "the package opens")
+	var names := zr.get_files()
+	zr.close()
+	check(names.has("uploads/%s.webp" % str(dm_pic.id)) and names.has("uploads/%s.webp" % str(npc_pic.id)), "the note's picture and the person's token go with it")
+	check(not names.has("uploads/%s.webp" % str(player_pic.id)), "a player's journal picture does not")
+
+
 ## The DM's Rules settings (the web DM screen): a ruleset's settings as
 ## its manifest declares them, the campaign's values over the defaults; a
 ## change checked against the schema, kept in the campaign, the rules

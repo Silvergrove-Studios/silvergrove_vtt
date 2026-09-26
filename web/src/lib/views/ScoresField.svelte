@@ -22,6 +22,7 @@
     signed,
     spent,
     startingBase,
+    suggestedBase,
     startingBonus,
     stats,
     type ScoresValue,
@@ -48,7 +49,7 @@
   const left = $derived(method === 'point_buy' ? pb.budget - spent(base, pb) : 0);
   const pattern = $derived(Object.values(bonus).filter((v) => Number(v) > 0).length === 3 ? 'three' : 'two');
 
-  function set(b: Record<string, number>, bo: Record<string, number>): void {
+  function set(b: Record<string, number | null>, bo: Record<string, number>): void {
     value = scoresValue(field, b, bo);
   }
 
@@ -57,11 +58,22 @@
   $effect(() => {
     const v = current;
     const ids = list.map((s) => s.id);
+    // an array's or the rolls' numbers: each given at most as often as it is there, or not yet
+    const fromPool = () => {
+      if (!nums) return false;
+      const left = counts(nums);
+      for (const id of ids) {
+        const x = v?.base?.[id];
+        if (x === null || x === undefined) continue;
+        if (!left.get(Number(x))) return false;
+        left.set(Number(x), left.get(Number(x))! - 1);
+      }
+      return true;
+    };
     const fits =
       v &&
       v.method === method &&
-      ids.every((id) => Number.isInteger(Number(v.base?.[id]))) &&
-      (method !== 'rolled' || (nums !== null && [...ids.map((id) => Number(v.base[id]))].sort().join() === [...nums].sort().join()));
+      (method === 'array' || method === 'rolled' ? fromPool() : ids.every((id) => Number.isInteger(Number(v.base?.[id])) && v.base?.[id] !== null));
     if (!fits) {
       if (method === 'rolled' && !nums) {
         if (v) value = null;
@@ -84,11 +96,34 @@
     set(b, bonus);
   }
 
-  /** Give a number to an ability; the ability that had it takes this one's. */
-  function give(id: string, n: number): void {
+  function counts(ns: number[]): Map<number, number> {
+    const m = new Map<number, number>();
+    for (const n of ns) m.set(n, (m.get(n) ?? 0) + 1);
+    return m;
+  }
+
+  /** How many of `n` are not given to any ability yet. */
+  function free(n: number): number {
+    let c = counts(nums ?? []).get(n) ?? 0;
+    for (const st of list) if (base[st.id] !== null && base[st.id] !== undefined && Number(base[st.id]) === n) c -= 1;
+    return c;
+  }
+
+  /** Who has every `n` there is, when none is free: choosing it swaps with them. */
+  function holder(id: string, n: number): string {
+    if (free(n) > 0) return '';
+    return list.find((st) => st.id !== id && base[st.id] !== null && Number(base[st.id]) === n)?.name ?? '';
+  }
+
+  /** Give a number to an ability (or none): when every one of that number is
+   * given, the ability that had it takes this one's (or none). */
+  function give(id: string, n: number | null): void {
     const b = { ...base };
-    const other = list.find((s) => s.id !== id && Number(b[s.id]) === n && Number(b[id]) !== n);
-    if (other) b[other.id] = Number(b[id]);
+    const was = b[id] ?? null;
+    if (n !== null && was !== n && free(n) <= 0) {
+      const other = list.find((st) => st.id !== id && b[st.id] !== null && Number(b[st.id]) === n);
+      if (other) b[other.id] = was;
+    }
     b[id] = n;
     set(b, bonus);
   }
@@ -101,16 +136,13 @@
     set({ ...base, [id]: n }, bonus);
   }
 
+  // the class's suggestion is the player's to ask for, never put in unasked
   function suggest(): void {
-    set(startingBase(field), bonus);
+    set(suggestedBase(field), bonus);
   }
 
   function reset(): void {
-    const b: Record<string, number> = {};
-    if (method === 'point_buy') for (const s of list) b[s.id] = pb.min;
-    else if (nums) list.forEach((s, i) => (b[s.id] = [...nums].sort((x, y) => y - x)[i] ?? 10));
-    else for (const s of list) b[s.id] = 10;
-    set(b, bonus);
+    set(startingBase(field), bonus);
   }
 
   function roll(): void {
@@ -163,7 +195,7 @@
     {#if (method !== 'rolled' || nums) && list.length}
       <div class="tools">
         {#if field.suggest && who}<button type="button" onclick={suggest}>Suggested for {aOrAn(who)}</button>{/if}
-        {#if method === 'point_buy' || method === 'array'}<button type="button" class="quiet" onclick={reset}>Start again</button>{/if}
+        {#if method === 'point_buy' || method === 'array' || (method === 'rolled' && nums)}<button type="button" class="quiet" onclick={reset}>Start again</button>{/if}
       </div>
     {/if}
   </div>
@@ -172,8 +204,9 @@
     <p class="legend" aria-hidden="true"><span>Score</span><span>After your background: score · modifier</span></p>
     <ul class="stats">
       {#each list as s (s.id)}
+        {@const has = base[s.id] !== null && base[s.id] !== undefined}
         {@const b = Number(base[s.id] ?? 0)}
-        {@const f = Number(final[s.id] ?? b)}
+        {@const f = final[s.id] === null || final[s.id] === undefined ? null : Number(final[s.id])}
         {@const key = primary.includes(s.id)}
         <li class:key>
           <div class="about">
@@ -193,9 +226,11 @@
               </div>
               <span class="cost">{costOf(b, pb)} pt{costOf(b, pb) === 1 ? '' : 's'}</span>
             {:else if nums}
-              <select aria-label={s.name} value={String(b)} onchange={(e) => give(s.id, Number((e.currentTarget as HTMLSelectElement).value))}>
+              <select aria-label={s.name} class:unset={!has} value={has ? String(b) : ''} onchange={(e) => { const raw = (e.currentTarget as HTMLSelectElement).value; give(s.id, raw === '' ? null : Number(raw)); }}>
+                <option value="">—</option>
                 {#each [...new Set(nums)].sort((x, y) => y - x) as n (n)}
-                  <option value={String(n)}>{n}</option>
+                  {@const who = has && b === n ? '' : holder(s.id, n)}
+                  <option value={String(n)}>{who ? `${n} · swap with ${who}` : String(n)}</option>
                 {/each}
               </select>
             {:else}
@@ -203,8 +238,8 @@
             {/if}
             <span class="result" title="The score after your background, and its modifier">
               {#if Number(bonus[s.id] ?? 0) > 0}<span class="plus">+{bonus[s.id]}</span>{/if}
-              <span class="final">{f}</span>
-              <span class="mod">{signed(modifier(f))}</span>
+              <span class="final">{f === null ? '—' : f}</span>
+              <span class="mod">{f === null ? '' : signed(modifier(f))}</span>
             </span>
           </div>
         </li>
@@ -376,6 +411,10 @@
   .cost {
     font-size: 0.75rem;
     color: var(--muted);
+  }
+  select.unset {
+    color: var(--muted);
+    border-style: dashed;
   }
   select,
   input[type='number'] {

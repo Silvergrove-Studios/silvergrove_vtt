@@ -50,6 +50,13 @@ var dm_handler: Callable = Callable()
 var dm_state_source: Callable = Callable()
 ## () -> Array: the chat banked from sessions before (the campaign's).
 var chat_source: Callable = Callable()
+## Where the campaign keeps the pictures the table uploads ("" for none).
+var uploads_dir := ""
+## (player_id: String, gm: bool, msg: Dictionary) -> {ok, ref, why}: a
+## picture a screen sent (a token's, a journal's), kept and put to use.
+var upload_handler: Callable = Callable()
+## The least time between one screen's uploads.
+const UPLOAD_GAP_MS := 1500
 var _server := TCPServer.new()
 var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
 var _listening := false
@@ -92,6 +99,8 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 			return m.asset_bytes(file) if m != null and m.asset_refs().has(file) else PackedByteArray()
 		web.config_source = func() -> Dictionary:
 			return {"ws_port": port, "name": announcer.name, "protocol": Protocol.VERSION}
+		web.upload_source = func(id: String) -> PackedByteArray:
+			return Uploads.read(uploads_dir, id)
 		if web.start(web_port) != OK:
 			web = null
 	if announce:
@@ -497,6 +506,20 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 				why = str(apply_request.call(ev, "" if _is_gm(c) else c.player)) if apply_request.is_valid() else _apply_plain(ev)
 			if why != "":
 				_send(c, Protocol.refused(ev, why))
+		"upload":
+			# a picture from a screen that joined: one at a time, the Table says what becomes of it
+			if not bool(c.joined):
+				return
+			var now := Time.get_ticks_msec()
+			if now - int(c.get("last_upload", -UPLOAD_GAP_MS)) < UPLOAD_GAP_MS:
+				_send(c, {"t": "upload_failed", "req": msg.get("req", ""), "why": "one picture at a time: try again in a moment"})
+				return
+			c["last_upload"] = now
+			var out: Dictionary = upload_handler.call(str(c.player), _is_gm(c), msg) if upload_handler.is_valid() else {"ok": false, "why": "this table takes no pictures"}
+			if bool(out.get("ok", false)):
+				_send(c, {"t": "uploaded", "req": msg.get("req", ""), "ref": str(out.get("ref", ""))})
+			else:
+				_send(c, {"t": "upload_failed", "req": msg.get("req", ""), "why": str(out.get("why", "refused"))})
 		"need":
 			if str(msg.get("kind", "")) == "scene":
 				_send_scene(c)

@@ -44,6 +44,8 @@ let noticeSeq = 0;
 const compWaiting = new Map<string, (reply: Dict) => void>();
 let compSeq = 0;
 const mapsAsked = new Set<string>();
+const uploadsWaiting = new Map<string, (r: { ref?: string; why?: string }) => void>();
+let uploadSeq = 0;
 let joinMsg: Msg | null = null;
 let byName = '';
 
@@ -178,6 +180,13 @@ function handle(m: Msg): void {
     case 'refused':
       notice(String(m.why ?? 'Refused'), 'error');
       break;
+    case 'uploaded':
+    case 'upload_failed': {
+      const done = uploadsWaiting.get(String(m.req ?? ''));
+      uploadsWaiting.delete(String(m.req ?? ''));
+      done?.(m.t === 'uploaded' ? { ref: String(m.ref ?? '') } : { why: String(m.why ?? 'The table did not keep it') });
+      break;
+    }
     case 'error':
       if ((game.joining || !game.joined) && byName) {
         // this tab's player is not at this table (another campaign now): by the name instead
@@ -198,6 +207,24 @@ function handle(m: Msg): void {
       notice(game.error, 'error');
       break;
   }
+}
+
+/** Send a picture made ready (lib/pictures.ts: base64) to the table: a
+ * token's (`actor`, or `clear` to take it off) or a journal's. The ref it
+ * is kept as, or why not. */
+export function uploadPicture(kind: 'token' | 'picture', data: string, extra: Dict = {}): Promise<{ ref?: string; why?: string }> {
+  const req = `u${++uploadSeq}`;
+  return new Promise((resolve) => {
+    uploadsWaiting.set(req, resolve);
+    if (!send({ t: 'upload', req, kind, data, ...extra })) {
+      uploadsWaiting.delete(req);
+      resolve({ why: 'Not connected to the table' });
+      return;
+    }
+    setTimeout(() => {
+      if (uploadsWaiting.delete(req)) resolve({ why: 'The table did not answer: try again' });
+    }, 45000);
+  });
 }
 
 /** For tests: the socket drops as a phone's does (in another app, a Wi-Fi blip); the page reconnects by itself. */

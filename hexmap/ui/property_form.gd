@@ -445,14 +445,15 @@ class ScoresField extends VBoxContainer:
 	func set_value(v: Variant) -> void:
 		var base: Dictionary = v.get("base", {}) if v is Dictionary and v.get("base") is Dictionary else {}
 		_given_bonus = (v.bonus as Dictionary).duplicate() if v is Dictionary and v.get("bonus") is Dictionary else {}
-		var sug: Dictionary = item.get("suggest", {}) if item.get("suggest") is Dictionary else {}
+		# (a fresh start, never the class's suggestion unasked: a point buy's
+		# minimums, the numbers in order, or 10s)
 		var pool := _pool().duplicate()
 		pool.sort()
 		pool.reverse()
 		var i := 0
 		for id in _spins:
 			var sb: SpinBox = _spins[id]
-			var start: Variant = base.get(id, sug.get(id, pool[i] if i < pool.size() else (sb.min_value if str(item.get("method", "")) == "point_buy" else 10)))
+			var start: Variant = base.get(id, pool[i] if i < pool.size() else (sb.min_value if str(item.get("method", "")) == "point_buy" else 10))
 			sb.set_value_no_signal(float(start))
 			i += 1
 		_refresh()

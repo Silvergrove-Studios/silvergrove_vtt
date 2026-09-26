@@ -195,6 +195,30 @@ a {
   color: var(--accent);
   font-weight: 650;
 }
+/* pictures in notes and rules text: never wider than their column */
+.prose img.md-picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+.prose .md-figure {
+  margin: 0.4em 0 1em;
+}
+.prose .md-figure figcaption {
+  margin-top: 6px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.prose p img.md-picture {
+  display: inline-block;
+  max-height: 8em;
+  vertical-align: middle;
+}
+.prose .md-missing {
+  color: var(--muted);
+  font-style: italic;
+}
 /* the SRDs' tables: scroll sideways on a phone rather than squeeze */
 .md-table {
   margin: 0.4em 0 1em;

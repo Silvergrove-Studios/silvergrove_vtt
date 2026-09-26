@@ -11,6 +11,7 @@
   import { game, handouts, intent, playerName, type Dict } from '../lib/game.svelte';
   import { markdown } from '../lib/markdown';
   import { pictureUrl } from '../lib/art';
+  import AddPicture from '../common/AddPicture.svelte';
 
   let q = $state('');
   let current = $state('');
@@ -108,6 +109,8 @@
     open(`mine:${id}`);
     queueMicrotask(() => (document.getElementById('note-title') as HTMLInputElement | null)?.focus());
   }
+
+  let noteArea: HTMLTextAreaElement | undefined = $state();
 
   function edit(id: string, field: 'title' | 'text' | 'folder', value: string): void {
     const cur = { ...(mine.find((n) => n.id === id) ?? {}) };
@@ -221,7 +224,15 @@
           {#if on}<button type="button" class="quiet" onclick={() => open(`shown:${n.about}`)}>Open</button>{/if}
         </p>
       {/if}
-      <textarea rows="10" placeholder="Your note" value={n.text ?? ''} oninput={(e) => edit(n.id, 'text', e.currentTarget.value)} onblur={() => flush(n.id)}></textarea>
+      <textarea bind:this={noteArea} rows="10" placeholder="Your note" value={n.text ?? ''} oninput={(e) => edit(n.id, 'text', e.currentTarget.value)} onblur={() => flush(n.id)}></textarea>
+      <!-- a picture into the note, where the cursor is (the team) -->
+      <AddPicture target={noteArea} onvalue={(v) => { edit(n.id, 'text', v); flush(n.id); }} />
+      {#if /!\[[^\]]*\]\(/.test(String(n.text ?? ''))}
+        <div class="preview">
+          <p class="dim small">How it reads</p>
+          <div class="prose">{@html markdown(String(n.text ?? ''))}</div>
+        </div>
+      {/if}
       <fieldset class="share">
         <legend>Who can read it: {shareWords((n.share as string[]) ?? [])}</legend>
         {#each targets as [who, name] (who)}
@@ -345,6 +356,15 @@
   }
   .field input {
     flex: 1;
+  }
+  .preview {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px dashed var(--border);
+  }
+  .preview .small {
+    margin: 0 0 6px;
+    font-size: 0.8rem;
   }
   .share {
     border: 1px solid var(--border);

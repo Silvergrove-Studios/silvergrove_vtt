@@ -5,7 +5,8 @@
 -->
 <script lang="ts">
   import View from '../lib/views/View.svelte';
-  import { game, myActors, type Dict } from '../lib/game.svelte';
+  import TokenPicture from '../common/TokenPicture.svelte';
+  import { game, myActors, playerColors, type Dict } from '../lib/game.svelte';
 
   const mine = $derived(myActors());
   let chosen = $state('');
@@ -68,6 +69,10 @@
     {/if}
     {#if actor}
       {#key actor.id}
+        <!-- the token's picture: the player's own (the team) -->
+        <div class="token">
+          <TokenPicture actor={String(actor.id)} art={String((actor.token as Dict)?.art ?? '')} name={String(actor.name ?? '')} color={playerColors()[game.me] ?? '#4f9cf6'} label={String((actor.token as Dict)?.label ?? '')} />
+        </div>
         <div class="sheet">
           {#each (actor.sheets as Dict[]) ?? [] as sh, i (i)}
             <View node={sh.schema} ctx={sh.data} />
@@ -103,6 +108,13 @@
   }
   .box {
     padding: 16px;
+    border-radius: 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
+  .token {
+    padding: 12px 14px;
+    margin-bottom: 12px;
     border-radius: 14px;
     background: var(--panel);
     border: 1px solid var(--border);

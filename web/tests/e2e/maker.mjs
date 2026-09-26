@@ -104,21 +104,23 @@ await step('Lia starts a druid: nothing moves on until it is chosen', async () =
   await next(lia).click();
 });
 
-await step('ability scores: what each is for, the druid’s marked, 27 points that cannot go wrong', async () => {
+await step('ability scores: what each is for, the druid’s marked, 27 points from 8s that cannot go wrong', async () => {
   await lia.getByText('Key for a Druid').first().waitFor({ timeout: 8000 });
   expect((await lia.getByText('Perceptiveness and mental fortitude.').count()) === 1, 'Wisdom says what it measures');
-  await lia.getByText('All spent ✓').waitFor({ timeout: 5000 });
-  await shot(lia, 'lia_scores_suggested');
-  await lia.getByRole('button', { name: 'Start again' }).click();
+  // (the class's suggestion is hers to ask for: nothing is put in unasked)
   await lia.getByText('27 left').waitFor({ timeout: 5000 });
+  await shot(lia, 'lia_scores_start');
   expect(await next(lia).isDisabled(), 'Next waits while points are left');
   expect((await lia.locator('.wizard .problem').innerText()).includes('27 points left'), 'and says so');
   expect(await lia.getByRole('button', { name: 'Lower Wisdom' }).isDisabled(), 'no score below 8');
   for (let i = 0; i < 7; i++) await lia.getByRole('button', { name: 'Raise Wisdom' }).click();
   expect(await lia.getByRole('button', { name: 'Raise Wisdom' }).isDisabled(), 'no score above 15');
   await shot(lia, 'lia_scores_buying');
+  await lia.getByRole('button', { name: 'Start again' }).click();
+  await lia.getByText('27 left').waitFor({ timeout: 5000 });
   await lia.getByRole('button', { name: 'Suggested for a Druid' }).click();
   await lia.getByText('All spent ✓').waitFor({ timeout: 5000 });
+  await shot(lia, 'lia_scores_suggested');
   await lia.getByRole('radio', { name: '+1 to all three' }).click();
   expect((await lia.getByRole('radio', { name: '+1 to all three' }).getAttribute('aria-checked')) === 'true', 'the background’s +1 to each of its three');
   await shot(lia, 'lia_scores_bonus');
@@ -208,7 +210,9 @@ await step('a player rolls: the table rolls once, the DM sees it', async () => {
   await next(rolf).click();
   await rolf.getByRole('button', { name: 'Roll my scores' }).click();
   await rolf.getByText('You rolled').waitFor({ timeout: 8000 });
-  await rolf.getByRole('button', { name: 'Suggested for a Fighter' }).waitFor({ timeout: 5000 });
+  expect((await rolf.locator('.wizard .problem').innerText()).includes('6 to go'), 'the rolls wait to be given');
+  await rolf.getByRole('button', { name: 'Suggested for a Fighter' }).click();
+  await rolf.waitForFunction(() => !document.querySelector('.wizard .nav button.accent')?.hasAttribute('disabled'), null, { timeout: 5000 });
   await shot(rolf, 'rolf_rolled');
   await dm.getByText('Rolled ability scores').waitFor({ timeout: 8000 });
   await dm.getByText(/^Rolf: \d+, \d+/).first().waitFor({ timeout: 5000 });
@@ -231,9 +235,15 @@ await step('the standard array: each number given once', async () => {
   await who(ari, 'Ari', 'Dwarf', 'Acolyte', 'Cleric');
   await next(ari).click();
   await ari.getByText('Give each of these numbers to one ability').waitFor({ timeout: 8000 });
-  // giving Strength the 15 swaps it with the ability that had it
+  const abilities = ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'];
+  const read = () => Promise.all(abilities.map((a) => ari.getByRole('combobox', { name: a }).inputValue()));
+  expect((await read()).every((v) => v === ''), 'nothing given yet');
+  // she gives each number herself
+  for (const [a, v] of [['Strength', '8'], ['Dexterity', '10'], ['Constitution', '13'], ['Intelligence', '12'], ['Wisdom', '15'], ['Charisma', '14']]) await ari.getByRole('combobox', { name: a }).selectOption(v);
+  // the 15 again, for Strength: it swaps with Wisdom, who had it
   await ari.getByRole('combobox', { name: 'Strength' }).selectOption('15');
-  const nums = await Promise.all(['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'].map((a) => ari.getByRole('combobox', { name: a }).inputValue()));
+  const nums = await read();
+  expect(nums[0] === '15' && nums[4] === '8', `a swap: Strength ${nums[0]}, Wisdom ${nums[4]}`);
   expect([...nums].sort((a, b) => b - a).join() === '15,14,13,12,10,8', `each number once: ${nums.join(', ')}`);
   await shot(ari, 'ari_array');
 });

@@ -42,9 +42,10 @@ export interface Stat {
 
 export interface ScoresValue {
   method: string;
-  base: Record<string, number>;
+  /** a stat's score, or null while it has none (an array's or the rolls' numbers not given yet) */
+  base: Record<string, number | null>;
   bonus: Record<string, number>;
-  final: Record<string, number>;
+  final: Record<string, number | null>;
 }
 
 export const STANDARD_COST: Record<string, number> = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
@@ -78,18 +79,18 @@ export function costOf(score: number, pb: PointBuy): number {
   return c === undefined ? Infinity : Number(c);
 }
 
-export function spent(base: Record<string, number>, pb: PointBuy): number {
-  return Object.values(base).reduce((t, v) => t + costOf(Number(v), pb), 0);
+export function spent(base: Record<string, number | null>, pb: PointBuy): number {
+  return Object.values(base).reduce((t: number, v) => t + costOf(Number(v), pb), 0);
 }
 
 /** Can this stat go up one within the budget? */
-export function canRaise(id: string, base: Record<string, number>, pb: PointBuy): boolean {
+export function canRaise(id: string, base: Record<string, number | null>, pb: PointBuy): boolean {
   const v = Number(base[id] ?? pb.min);
   if (v >= pb.max) return false;
   return spent(base, pb) - costOf(v, pb) + costOf(v + 1, pb) <= pb.budget;
 }
 
-export function canLower(id: string, base: Record<string, number>, pb: PointBuy): boolean {
+export function canLower(id: string, base: Record<string, number | null>, pb: PointBuy): boolean {
   return Number(base[id] ?? pb.min) > pb.min;
 }
 
@@ -110,13 +111,31 @@ function sameNumbers(a: number[], b: number[]): boolean {
   return x.every((v, i) => v === y[i]);
 }
 
-/** A fresh assignment: the suggestion for the class where there is one
- * (the numbers the method gives, highest where the suggestion is highest),
- * else the method's plain start (a point buy's minimums, the numbers in order). */
-export function startingBase(f: Dict): Record<string, number> {
+/** A fresh start, the player's to fill (the team: a suggestion taken
+ * unasked takes the fun out of it): a point buy's minimums, an array's or
+ * the rolls' numbers not given to anything yet, typed scores at 10. */
+export function startingBase(f: Dict): Record<string, number | null> {
+  const ids = stats(f).map((s) => s.id);
+  const out: Record<string, number | null> = {};
+  if (f.method === 'point_buy') {
+    const pb = pointBuy(f);
+    for (const id of ids) out[id] = pb.min;
+  } else if (f.method === 'array' || f.method === 'rolled') {
+    for (const id of ids) out[id] = null;
+  } else {
+    const m = (f.manual as Dict) ?? {};
+    for (const id of ids) out[id] = Number(m.default ?? 10);
+  }
+  return out;
+}
+
+/** The class's suggestion, when the player asks for it: the numbers the
+ * method gives, highest where the suggestion is highest (a point buy: the
+ * suggestion itself, which is a valid buy), else the method's plain start. */
+export function suggestedBase(f: Dict): Record<string, number | null> {
   const ids = stats(f).map((s) => s.id);
   const sug = (f.suggest && typeof f.suggest === 'object' ? f.suggest : null) as Record<string, number> | null;
-  const out: Record<string, number> = {};
+  const out: Record<string, number | null> = {};
   if (f.method === 'point_buy') {
     const pb = pointBuy(f);
     for (const id of ids) out[id] = pb.min;
@@ -151,18 +170,23 @@ export function startingBonus(f: Dict): Record<string, number> {
   return { [two]: 2, [one]: 1 };
 }
 
-export function finalScores(f: Dict, base: Record<string, number>, bonus: Record<string, number>): Record<string, number> {
+export function finalScores(f: Dict, base: Record<string, number | null>, bonus: Record<string, number>): Record<string, number | null> {
   const cap = Number((f.bonus as Dict)?.cap ?? 20);
-  const out: Record<string, number> = {};
+  const out: Record<string, number | null> = {};
   for (const s of stats(f)) {
-    const b = Number(base[s.id] ?? 10);
+    const v = base[s.id];
+    if (v === null || v === undefined) {
+      out[s.id] = null;
+      continue;
+    }
+    const b = Number(v);
     const plus = Number(bonus[s.id] ?? 0);
     out[s.id] = plus > 0 ? Math.min(cap, b + plus) : b;
   }
   return out;
 }
 
-export function scoresValue(f: Dict, base: Record<string, number>, bonus: Record<string, number>): ScoresValue {
+export function scoresValue(f: Dict, base: Record<string, number | null>, bonus: Record<string, number>): ScoresValue {
   return { method: String(f.method ?? 'manual'), base: { ...base }, bonus: { ...bonus }, final: finalScores(f, base, bonus) };
 }
 
@@ -184,7 +208,10 @@ export function scoresProblem(f: Dict, value: unknown): string {
   const v = value as ScoresValue | null;
   const ids = stats(f).map((s) => s.id);
   if (f.method === 'rolled' && !pool(f)) return 'Roll your scores first.';
-  if (!v || !v.base || ids.some((id) => !Number.isInteger(Number(v.base[id])))) return 'Give every ability a score.';
+  if (!v || !v.base || ids.some((id) => v.base[id] === null || v.base[id] === undefined || !Number.isInteger(Number(v.base[id])))) {
+    const left = ids.filter((id) => v?.base?.[id] === null || v?.base?.[id] === undefined).length;
+    return left > 0 && (f.method === 'array' || f.method === 'rolled') ? `Give a number to each ability (${left} to go).` : 'Give every ability a score.';
+  }
   const base = ids.map((id) => Number(v.base[id]));
   if (f.method === 'point_buy') {
     const pb = pointBuy(f);

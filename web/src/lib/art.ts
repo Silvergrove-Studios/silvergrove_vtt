@@ -2,6 +2,7 @@
 // and their image files (fetched from its web side, /art/<pack>/<file>),
 // loaded once and kept. Listeners hear when an image arrives, to redraw.
 import { game, type Dict } from './game.svelte';
+import { isUpload, uploadUrl } from './pictures';
 
 const images = new Map<string, HTMLImageElement>();
 const listeners = new Set<() => void>();
@@ -77,8 +78,10 @@ export function terrainImage(ref: string, variant: number, shape: 'hex' | 'squar
   return { img: image(url), url, lay: art.lay, color };
 }
 
-/** A picture's address, for an <img>: the DM's showing, a place, a person. */
+/** A picture's address, for an <img>: the DM's showing, a place, a person,
+ * or one the table uploaded (`upload:<id>`). */
 export function pictureUrl(ref: string): string {
+  if (isUpload(ref)) return uploadUrl(ref);
   const a = asset('pictures', ref);
   const parts = splitRef(ref);
   return a && parts && a.texture ? artUrl(parts[0], String(a.texture)) : '';
@@ -115,6 +118,11 @@ export function raster(img: HTMLImageElement | null, url: string, px: number): H
 
 /** A pack asset's image and its address ("props", "tokens"). */
 export function assetArt(collection: string, ref: string): { img: HTMLImageElement | null; url: string } {
+  // a picture the table uploaded (a player's token)
+  if (isUpload(ref)) {
+    const url = uploadUrl(ref);
+    return { img: image(url), url };
+  }
   const a = asset(collection, ref);
   const parts = splitRef(ref);
   if (!a || !parts || !a.texture) return { img: null, url: '' };

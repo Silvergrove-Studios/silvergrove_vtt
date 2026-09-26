@@ -1406,6 +1406,9 @@ func _set_hosting(on: bool) -> void:
 		host.dm_handler = func(intent: Dictionary) -> String: return web_dm.op(intent)
 		host.dm_state_source = func() -> Dictionary: return web_dm.state()
 		host.chat_source = func() -> Array: return ctx.campaign.chat_log if ctx.campaign != null else []
+		# pictures from the screens: a token's, a journal's, kept in the campaign's uploads
+		host.uploads_dir = Uploads.dir_of(ctx.campaign)
+		host.upload_handler = func(pid: String, gm: bool, msg: Dictionary) -> Dictionary: return upload(pid, gm, msg)
 		host.log.connect(ctx.say)
 		host.announcer.answered.connect(func(ip: String) -> void:
 			ctx.say("Answered a player looking for tables at %s" % ip)
@@ -1885,6 +1888,52 @@ func _open_campaign_path(path: String) -> void:
 	_open_campaign(c)
 
 
+## A picture a screen sent (the team, after the character maker): kept in
+## the campaign's uploads. A token's (`kind` "token", `actor`) becomes the
+## character's token art, on its tokens on every map and on the ones it
+## gets later; a player's for their own characters only, the DM's for
+## anyone. `clear` takes a token's picture off. A journal's (`kind`
+## "picture") is kept and its ref sent back, for the note it goes in.
+## {ok, ref, why}
+func upload(pid: String, gm: bool, msg: Dictionary) -> Dictionary:
+	var kind := str(msg.get("kind", ""))
+	if not Uploads.KINDS.has(kind):
+		return {"ok": false, "why": "a picture for what?"}
+	var actor_id := str(msg.get("actor", ""))
+	if kind == "token":
+		var a: Dictionary = ctx.encounter().actor(actor_id)
+		if a.is_empty():
+			return {"ok": false, "why": "no such character"}
+		if not gm and str(a.get("owner", "")) != pid:
+			return {"ok": false, "why": "that is not your character"}
+	var ref := ""
+	if not (kind == "token" and bool(msg.get("clear", false))):
+		var r := Uploads.store(Uploads.dir_of(ctx.campaign), kind, Marshalls.base64_to_raw(str(msg.get("data", ""))))
+		if not bool(r.ok):
+			return r
+		ref = str(r.ref)
+	if kind == "token":
+		var why := set_token_art(actor_id, ref)
+		if why != "":
+			return {"ok": false, "why": why}
+	return {"ok": true, "ref": ref}
+
+
+## A character's token picture ("" for none): the character's own token
+## says it, and its tokens on every map show it. "" or why not.
+func set_token_art(actor_id: String, ref: String) -> String:
+	var enc := ctx.encounter()
+	var own: Variant = enc.actor(actor_id).get("token", {})
+	var token: Dictionary = (own as Dictionary).duplicate(true) if own is Dictionary else {}
+	token["art"] = ref
+	var events: Array = [{"t": "actor.set", "id": actor_id, "changes": {"token": token}}]
+	for sc in enc.scenes:
+		for t in (sc.get("tokens", []) if sc is Dictionary else []):
+			if t is Dictionary and str(t.get("actor", "")) == actor_id and str(t.get("art", "")) != ref:
+				events.append({"t": "token.set", "scene": str(sc.id), "id": str(t.id), "changes": {"art": ref}})
+	return ctx.commands.run_all(events, "Token picture")
+
+
 ## Make a campaign the live document.
 func _open_campaign(c: Campaign) -> void:
 	var warn := ctx.open_campaign(c)
@@ -1896,6 +1945,7 @@ func _open_campaign(c: Campaign) -> void:
 		host.kernel = ctx.kernel
 		host.plugins = ctx.host
 		host.packs = ctx.art
+		host.uploads_dir = Uploads.dir_of(c)
 	_bind_panels()
 	_refresh_scene_select()
 	_refresh_viewpoints()

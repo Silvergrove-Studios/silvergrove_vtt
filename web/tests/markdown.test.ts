@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markdown } from '../src/lib/markdown';
+import { markdown, setPictureResolver } from '../src/lib/markdown';
 
 describe('markdown', () => {
   it('formats rules text', () => {
@@ -34,6 +34,19 @@ describe('markdown', () => {
     expect(html).toContain('<tr><td>Primary Ability</td><td>Strength or Dexterity</td></tr>');
     expect(html).toContain('<tr><td>Hit Point Die</td><td></td></tr>');
     expect((html.match(/<tr>/g) ?? []).length).toBe(2);
+  });
+  it('draws the table’s pictures, and only those', () => {
+    setPictureResolver((ref) => (ref === 'upload:' + 'a'.repeat(32) ? '/upload/' + 'a'.repeat(32) + '.webp' : ref === 'far:away' ? 'https://example.com/x.png' : ''));
+    const up = 'upload:' + 'a'.repeat(32);
+    const block = markdown(`Before.\n\n![The *old* chapel](${up})\n\nAfter.`);
+    expect(block).toContain(`<figure class="md-figure"><img class="md-picture" src="/upload/${'a'.repeat(32)}.webp" alt="The *old* chapel" loading="lazy"><figcaption>The *old* chapel</figcaption></figure>`);
+    expect(block).toContain('<p>Before.</p>');
+    expect(markdown(`A token ![me](${up}) and **bold**`)).toContain(`<img class="md-picture" src="/upload/${'a'.repeat(32)}.webp" alt="me" loading="lazy"> and <strong>bold</strong>`);
+    expect(markdown('![gone](upload:' + 'b'.repeat(32) + ')')).toContain('<span class="md-missing">[gone]</span>');
+    expect(markdown('![x](far:away)')).not.toContain('https://');
+    expect(markdown('![x](javascript:alert(1))')).not.toContain('<img');
+    expect(markdown('![x"><script>](upload:' + 'a'.repeat(32) + ')')).not.toContain('<script>');
+    setPictureResolver(() => '');
   });
   it('leaves a lone "Table:" line as a caption and pipes in prose alone', () => {
     expect(markdown('Table: Nothing follows')).toContain('<p class="md-caption">Nothing follows</p>');

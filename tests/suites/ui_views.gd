@@ -132,6 +132,8 @@ func test_view_helpers() -> void:
 	check(ViewRenderer.markdown_to_bbcode("A **bold** and *italic* word\n# Heading\n- one\n[x]") == "A [b]bold[/b] and [i]italic[/i] word\n[b]Heading[/b]\n  • one\n[lb]x]", "markdown to BBCode, brackets escaped")
 	var tb := ViewRenderer.markdown_to_bbcode("Table: Skills\n\n|Skill|Ability|\n|---|---|\n|Acrobatics|**Dex**|\n|||\nAfter")
 	check(tb == "[b]Skills[/b]\n\n[table=2][cell][b]Skill[/b]   [/cell][cell][b]Ability[/b]   [/cell][cell]Acrobatics   [/cell][cell][b]Dex[/b]   [/cell][/table]\nAfter", "markdown tables to BBCode tables: the caption bold, the header bold, empty rows left out (%s)" % tb)
+	var up := "upload:" + "a".repeat(32)
+	check(ViewRenderer.markdown_to_bbcode("A ![The door](%s) here\n![](%s)" % [up, up]) == "A [i](The door)[/i] here\n[i](a picture)[/i]", "a picture in a note: said where it is (the web screens draw it)")
 	var nohead := ViewRenderer.markdown_to_bbcode("|||\n|---|---|\n|Hit Point Die|D8|")
 	check(nohead == "[table=2][cell]Hit Point Die   [/cell][cell]D8   [/cell][/table]", "a table with an empty header row has no header (%s)" % nohead)
 	r.render({"type": "text", "text": "**Casting Time:** Action", "rich": true}, {})
@@ -349,8 +351,8 @@ func test_choose_and_scores_fields() -> void:
 	check(pf.get_values().skills == ["arcana", "nature"], "two chosen: %s" % [pf.get_values().skills])
 	check((_find(pf, "CheckBox", "Perception") as CheckBox).disabled, "and no more can be")
 	var sc: Dictionary = pf.get_values().abilities
-	check(sc.method == "point_buy" and sc.base == {"str": 8, "dex": 14, "wis": 15}, "the scores start from the class's suggestion: %s" % [sc])
-	check(sc.bonus == {"wis": 2, "dex": 1} and sc.final.wis == 17 and sc.final.dex == 15, "the bonus goes on the class's key ability, then the next offered: %s" % [sc])
+	check(sc.method == "point_buy" and sc.base == {"str": 8, "dex": 8, "wis": 8}, "the scores start from the minimums, not the class's suggestion: %s" % [sc])
+	check(sc.bonus == {"wis": 2, "dex": 1} and sc.final.wis == 10 and sc.final.dex == 9, "the bonus goes on the class's key ability, then the next offered: %s" % [sc])
 	check(pf.get_values().kit == "", "a single choice starts unchosen")
 	var ob := _find(pf, "OptionButton") as OptionButton
 	ob.select(2)

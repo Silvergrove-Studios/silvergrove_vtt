@@ -322,6 +322,13 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 			_walk(campaign.base_dir().path_join(adir), adir, files)
 	for sub in ["packs", "art", "handouts"]:
 		_walk(campaign.base_dir().path_join(sub), sub, files)
+	# the uploaded pictures the campaign's own content shows (a DM's in a
+	# note, on a person's token): carried; a player's in their own journal,
+	# play that stays behind, is not
+	for mt in RegEx.create_from_string("upload:([0-9a-f]{32})").search_all(JsonDoc.stringify(doc)):
+		var rel := Uploads.DIR.path_join(mt.get_string(1) + ".webp")
+		if not files.has(rel):
+			files.append(rel)
 	for rel in files:
 		var src := campaign.resolve(rel)
 		if not FileAccess.file_exists(src):

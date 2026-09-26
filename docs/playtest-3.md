@@ -106,6 +106,18 @@ do about it:
 | T5 | the spell selector: only the spells I'm eligible for; the DM can add any spell | A caster picks cantrips and spells in the maker from the class's list at the levels it can cast, as many as the class allows; the Spells tab offers the same, and the ruleset refuses more. *Give a spell (any list)* is the DM's. |
 | T6 | the spell description was poorly formatted ASCII; room for an icon | Rules text renders its tables. A spell reads as a card: its name with room for an icon, level and school, casting time, range, components and duration as facts, Concentration and Ritual as tags, the text, *Using a Higher-Level Spell Slot*. |
 
+### After the character maker
+
+The team made their characters with the maker on phones — "the first time
+the team has finished character creation without real complaints" — and
+asked for three things (the `player-pictures` branches):
+
+| # | the team said | response |
+|---|---|---|
+| T7 | the *Suggested for a …* scores should be a button you have to press: put in unasked it takes a little of the fun away | The scores start as the player's to make: a point buy from 8s, an array or the rolls with no number given yet (each ability's menu shows who has a number, and taking it swaps). *Suggested for a …* is there to press, and *Start again* goes back. |
+| T8 | players need a way to upload pictures for their tokens | *Token* on a player's sheet (and on any person's card, for the DM): *Choose a picture* — a photo or a drawing, placed in a round window (drag, come closer) — kept by the table and shown on the sheet, the DM's card and the character's tokens on every map. *Take it off* for the initials. |
+| T9 | journals should be able to have pictures inserted | *Add a picture* in a player's note (with *How it reads*), the DM's notes, a place's words to read aloud and what players may learn of a person: the picture goes where the cursor is, and shows wherever the note is read (a note shared with a player, a place shown to everyone). |
+
 ## Observations
 
 - **The Android app is redundant for players.** Since 2.3.0 a player

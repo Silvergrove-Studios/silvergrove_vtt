@@ -41,5 +41,10 @@ the connection dropped and the page reloaded half way, skills, equipment,
 spells and a spell's card, then the DM's *Rules settings* switching to
 rolled scores and to the standard array.
 
+`tests/e2e/pictures.mjs <host.json> <out>` (host with `--party`): a
+player's token picture through the crop window, on her sheet, the DM's
+card and the fight's map; a picture in her journal shared with another
+player; a picture in the DM's notes.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).

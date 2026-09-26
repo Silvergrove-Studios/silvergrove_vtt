@@ -165,6 +165,10 @@ static func markdown_to_bbcode(md: String) -> String:
 		out.append(t)
 		i += 1
 	s = "\n".join(out)
+	# a picture (the web screens draw it): here, where it is
+	var pic := RegEx.create_from_string("!\\[lb\\]([^\\]\\n]*)\\]\\(([a-z0-9_.-]+:[A-Za-z0-9_./-]+)\\)")
+	for m in pic.search_all(s):
+		s = s.replace(m.get_string(), "[i](%s)[/i]" % (m.get_string(1) if m.get_string(1) != "" else "a picture"))
 	var bold := RegEx.create_from_string("\\*\\*(.+?)\\*\\*")
 	s = bold.sub(s, "[b]$1[/b]", true)
 	var italic := RegEx.create_from_string("(^|[^\\*])\\*([^\\*\\n]+?)\\*")

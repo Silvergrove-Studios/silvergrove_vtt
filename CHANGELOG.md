@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **Pictures from the table** (the team, after the character maker): a
+  player gives their character's token a picture of their own — chosen on
+  the phone, placed in a round window (drag, come closer), kept by the
+  table — and it shows on their sheet, on the DM's card and on the
+  character's tokens on every map. The DM can do it for anyone. Notes
+  take pictures too — a player's journal (with *How it reads*), the DM's
+  notes, a place's words to read aloud, what players may learn of a
+  person — put where the cursor is and drawn wherever the note is read.
+  Pictures are made smaller on the phone (a photo's location left behind),
+  checked and kept by the Table in the campaign's `uploads/`, and served
+  only to those who have their address; a package carries those its own
+  content shows.
+- The character maker's ability scores start as the player's to make — a
+  point buy from 8s, an array or the rolls not given to anything yet —
+  and *Suggested for a …* is a button to press (the team: a suggestion
+  put in unasked takes the fun out of it).
+
 The team's notes on making a character in the third playtest
 (`docs/playtest-3.md`, T1–T6), on the web screens and the plugin API.
 

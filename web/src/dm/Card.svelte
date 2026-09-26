@@ -10,6 +10,8 @@
   import { comp, dmOp, game, playerName, type Dict } from '../lib/game.svelte';
   import { markdown } from '../lib/markdown';
   import { pictureUrl } from '../lib/art';
+  import AddPicture from '../common/AddPicture.svelte';
+  import TokenPicture from '../common/TokenPicture.svelte';
   import { cardData, cardSchema } from '../lib/views/viewlib';
   import { audienceWords, folderChoices, layout } from './contents';
 
@@ -31,6 +33,10 @@
   const filedIn = $derived(String(layout(dm).in[ref] ?? ''));
   let editing = $state(false);
   let editingNotes = $state(false);
+  // the text boxes a picture can go into (the team: pictures in notes)
+  let yoursArea: HTMLTextAreaElement | undefined = $state();
+  let readAloudArea: HTMLTextAreaElement | undefined = $state();
+  let publicArea: HTMLTextAreaElement | undefined = $state();
   let entry = $state<Dict | null>(null);
   let entryError = $state('');
   let showMenu = $state(false);
@@ -93,7 +99,8 @@
       <button type="button" class="quiet small" onclick={() => (editingNotes = !editingNotes)}>{editingNotes ? 'Done' : text.trim() ? 'Edit' : 'Write some'}</button>
     </div>
     {#if editingNotes}
-      <textarea rows="10" {placeholder} value={text} oninput={(e) => save(e.currentTarget.value)}></textarea>
+      <textarea bind:this={yoursArea} rows="10" {placeholder} value={text} oninput={(e) => save(e.currentTarget.value)}></textarea>
+      <AddPicture target={yoursArea} onvalue={save} />
     {:else if text.trim()}
       <div class="prose notes">{@html markdown(text)}</div>
     {/if}
@@ -161,7 +168,8 @@
       {/if}
       {#if editing}
         <label class="edit">Name <input type="text" value={place.name ?? ''} oninput={(e) => setPlace('name', e.currentTarget.value)} /></label>
-        <label class="edit">Read aloud <textarea rows="8" value={place.text ?? ''} oninput={(e) => setPlace('text', e.currentTarget.value)}></textarea></label>
+        <label class="edit">Read aloud <textarea bind:this={readAloudArea} rows="8" value={place.text ?? ''} oninput={(e) => setPlace('text', e.currentTarget.value)}></textarea></label>
+        <AddPicture target={readAloudArea} onvalue={(v) => setPlace('text', v)} label="Add a picture to the words" />
       {:else if String(place.text ?? '').trim()}
         <section class="readaloud">
           <h3>Read aloud</h3>
@@ -194,7 +202,8 @@
         <section>
           <h3>What the players may learn</h3>
           {#if editing}
-            <textarea rows="5" value={person.public ?? ''} oninput={(e) => setActor('public', e.currentTarget.value)}></textarea>
+            <textarea bind:this={publicArea} rows="5" value={person.public ?? ''} oninput={(e) => setActor('public', e.currentTarget.value)}></textarea>
+            <AddPicture target={publicArea} onvalue={(v) => setActor('public', v)} />
           {:else if String(person.public ?? '').trim()}
             <div class="prose">{@html markdown(String(person.public))}</div>
           {:else}
@@ -205,6 +214,10 @@
         <button type="button" class="quiet small" onclick={() => (editing = !editing)}>{editing ? 'Done editing' : 'Edit what the players may learn'}</button>
       {/if}
       {#if viewActor}
+        <!-- the token's picture: the DM's for anyone (the team) -->
+        <section class="token">
+          <TokenPicture actor={id} art={String((viewActor.token as Dict)?.art ?? '')} name={String(viewActor.name ?? '')} color={person.kind === 'pc' && person.owner ? (game.players.find((p) => String(p.id) === String(person.owner))?.color ?? '#4f9cf6') : '#c0392b'} label={String((viewActor.token as Dict)?.label ?? '')} />
+        </section>
         <section class="sheet">
           {#each (viewActor.sheets as Dict[]) ?? [] as sh, i (i)}
             <View node={sh.schema} ctx={sh.data} />

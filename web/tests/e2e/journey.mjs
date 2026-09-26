@@ -200,8 +200,9 @@ await step('a new player makes a character with the wizard', async () => {
   await shot(cara, 'cara_wizard');
   const next = cara.locator('.wizard .nav button.accent');
   await next.click();
-  // ability scores: a point buy, started where a fighter wants them, the soldier's +2/+1 placed
-  await cara.getByText('Suggested for a Fighter').waitFor({ timeout: 8000 });
+  // ability scores: a point buy from 8s; she asks for the fighter's suggestion; the soldier's +2/+1 placed
+  await cara.getByText('27 left').waitFor({ timeout: 8000 });
+  await cara.getByRole('button', { name: 'Suggested for a Fighter' }).click();
   await cara.getByText('All spent ✓').waitFor({ timeout: 5000 });
   await shot(cara, 'cara_scores');
   await next.click();
