@@ -215,6 +215,7 @@ static func _status(code: int, text: String) -> PackedByteArray:
 ## the likeliest first — a home or office network before the bridges of
 ## virtual machines (…​.1) and overlay networks (100.64/10, a VPN's).
 static func urls(web_port: int) -> PackedStringArray:
+	_note_virtual_interfaces()
 	var ips := []
 	for a in IP.get_local_addresses():
 		var s := str(a)
@@ -230,9 +231,29 @@ static func urls(web_port: int) -> PackedStringArray:
 	return out
 
 
+## Addresses on the network interfaces of virtual machines and containers
+## (Parallels' vnic, VMware's vmnet, VirtualBox's vboxnet, Docker's, WSL's),
+## which other devices can't reach: a Mac's Parallels address sorted ahead
+## of its Wi-Fi's in the Invite.
+const VIRTUAL_INTERFACES := ["vnic", "vmnet", "vboxnet", "bridge1", "docker", "veth", "virbr", "vethernet", "virtualbox", "vmware", "hyper-v", "parallels"]
+static var _virtual_ips := {}
+
+
+static func _note_virtual_interfaces() -> void:
+	_virtual_ips.clear()
+	for iface in IP.get_local_interfaces():
+		var names := (str(iface.get("name", "")) + " " + str(iface.get("friendly", ""))).to_lower()
+		for word in VIRTUAL_INTERFACES:
+			if names.contains(word):
+				for a in iface.get("addresses", []):
+					_virtual_ips[str(a)] = true
+				break
+
+
 ## How likely other devices reach us at an IPv4 address: 0 a private
-## network, 1 a private network's .1 (usually this machine's side of a
-## virtual one), 2 an overlay network (100.64/10), 3 anything else.
+## network, 1 a virtual machine's (an address on a virtual interface, one of
+## Parallels' own subnets, or a private network's .1, usually this machine's
+## side of a virtual one), 2 an overlay network (100.64/10), 3 anything else.
 static func address_rank(ip: String) -> int:
 	var p := ip.split(".")
 	if p.size() != 4:
@@ -241,6 +262,8 @@ static func address_rank(ip: String) -> int:
 	var b := int(p[1])
 	if a == 100 and b >= 64 and b < 128:
 		return 2
+	if _virtual_ips.has(ip) or (a == 10 and ((b == 211 and int(p[2]) == 55) or (b == 37 and int(p[2]) == 129))):
+		return 1
 	var private := a == 10 or (a == 192 and b == 168) or (a == 172 and b >= 16 and b < 32)
 	if private:
 		return 1 if p[3] == "1" else 0

@@ -8,6 +8,9 @@ describe('the addresses players join at', () => {
     expect(addressRank('10.5.91.189')).toBe(0);
     expect(addressRank('172.20.0.7')).toBe(0);
     expect(addressRank('192.168.18.1')).toBe(1);
+    // Parallels' shared and host-only networks (this Mac's own address there ends .2)
+    expect(addressRank('10.211.55.2')).toBe(1);
+    expect(addressRank('10.37.129.2')).toBe(1);
     expect(addressRank('100.99.188.26')).toBe(2);
     expect(addressRank('8.8.8.8')).toBe(3);
     expect(addressRank('172.32.0.7')).toBe(3);

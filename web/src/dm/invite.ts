@@ -9,14 +9,17 @@ function hostOf(address: string): string {
 }
 
 /** How likely other devices reach this computer there: 0 a private network,
- * 1 a private network's .1 (usually this computer's side of a virtual
- * machine's), 2 an overlay network (100.64/10, a VPN's), 3 anything else. */
+ * 1 a virtual machine's (one of Parallels' own subnets, or a private
+ * network's .1, usually this computer's side of a virtual machine's; the
+ * host also puts addresses on virtual interfaces last), 2 an overlay network
+ * (100.64/10, a VPN's), 3 anything else. */
 export function addressRank(address: string): number {
   const p = hostOf(address).split('.');
   if (p.length !== 4 || p.some((x) => !/^\d{1,3}$/.test(x))) return 3;
   const a = Number(p[0]);
   const b = Number(p[1]);
   if (a === 100 && b >= 64 && b < 128) return 2;
+  if (a === 10 && ((b === 211 && Number(p[2]) === 55) || (b === 37 && Number(p[2]) === 129))) return 1;
   const isPrivate = a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b < 32);
   if (isPrivate) return p[3] === '1' ? 1 : 0;
   return 3;
