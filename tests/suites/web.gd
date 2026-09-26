@@ -41,6 +41,8 @@ func test_web_server() -> void:
 	check(str(get.call("/", "POST")).begins_with("HTTP/1.1 405"), "only GET and HEAD")
 	check(WebServer.address_rank("192.168.1.23") == 0 and WebServer.address_rank("10.5.91.189") == 0 and WebServer.address_rank("192.168.18.1") == 1
 		and WebServer.address_rank("100.99.188.26") == 2 and WebServer.address_rank("8.8.8.8") == 3, "the addresses players likely reach come first")
+	check(WebServer.address_kind("http://192.168.1.23:47780") == "a home or office network" and WebServer.address_kind("192.168.18.1") == "a virtual machine's (rarely right)"
+		and WebServer.address_kind("http://100.99.188.26:47780/") == "a VPN such as Tailscale" and WebServer.address_kind("8.8.8.8") == "another network", "and each said for what it is, as the web Invite says it")
 	# the web clients as the exports carry them: one zip
 	var zpath := "user://test_webclient.zip"
 	var zp := ZIPPacker.new()

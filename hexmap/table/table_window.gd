@@ -567,7 +567,14 @@ func _toggle_session() -> void:
 	_update_banner()
 
 
-## What the players do to join, and this table's address.
+## How players somewhere else can join: the table serves the local network only.
+const PLAY_APART := "Players somewhere else? Hexmap serves your local network only and does not reach them over the internet by itself. To play apart, first put this computer and their devices on one private network with a VPN app (Tailscale, ZeroTier), then send them this computer's address on it. If nobody can open the address, check that this computer's firewall lets Hexmap accept connections."
+
+
+## What the players do to join: the address likeliest to work, this
+## computer's others said for what they are, and how to play apart (a
+## playtest's DM, her players in four places, read "the same Wi-Fi" and four
+## addresses, and worried before anyone had joined).
 func _join_info() -> void:
 	var name := ctx.campaign.name if ctx.campaign != null else ctx.encounter().name
 	if host == null:
@@ -575,9 +582,16 @@ func _join_info() -> void:
 		return
 	var info := _host_info()
 	var here: Array = info.get("connected", [])
-	var web := ", ".join(host.join_urls()) if host.web != null else ""
-	_info("On each player's phone or computer (on the same Wi-Fi as this one), in any browser:\n\n1. Open %s — or scan the code that Invite players shows on your screen.\n2. Type their name (or tap it, if they have played here before).\n3. Make a character (or take the one you made).\n\nIn the Hexmap app instead: Join a game → \"%s\" (or type %s).\n\nJoined now: %s\n\nA second DM on another laptop joins with the co-DM code %s." % [
-		web if web != "" else "the address your screen shows", name, str(info.get("address", "")), ", ".join(PackedStringArray(here)) if not here.is_empty() else "nobody yet", str(info.get("code", ""))])
+	var urls := Array(host.join_urls()) if host.web != null else []
+	var text := "Players with you: scan the code, or open this address in any browser. Their phone or computer must be on the same network as this one (the same Wi-Fi or router).\n\n1. Open %s — or scan the code that Invite players shows on your screen.\n2. Type their name (or tap it, if they have played here before).\n3. Make a character (or take the one you made)." % (str(urls[0]) if not urls.is_empty() else "the address your screen shows")
+	if urls.size() > 1:
+		text += "\n\nOther addresses of this computer:"
+		for u in urls.slice(1):
+			text += "\n%s — %s" % [str(u), WebServer.address_kind(str(u))]
+	text += "\n\n" + PLAY_APART
+	text += "\n\nIn the Hexmap app instead: Join a game → \"%s\" (or type %s).\n\nJoined now: %s\n\nA second DM on another laptop joins with the co-DM code %s." % [
+		name, str(info.get("address", "")), ", ".join(PackedStringArray(here)) if not here.is_empty() else "nobody yet", str(info.get("code", ""))]
+	_info(text)
 
 
 ## The first screen of the Table: carry on with the last campaign, start an
@@ -1484,7 +1498,7 @@ func _build_running() -> Control:
 	urls.name = "Urls"
 	box.add_child(urls)
 	var hint := Label.new()
-	hint.text = "On a phone or a computer on this network, in any browser. Invite players, on your screen, shows a code to scan."
+	hint.text = "Players with you: on a phone or computer on the same network as this one (the same Wi-Fi or router), in any browser. Invite players, on your screen, shows a code to scan, and how players somewhere else can join."
 	hint.theme_type_variation = "DimLabel"
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(hint)
@@ -1531,14 +1545,23 @@ func _refresh_running() -> void:
 	for c in urls.get_children():
 		urls.remove_child(c)
 		c.queue_free()
+	# the likeliest address, and this computer's others said for what they are
+	# (a playtest's DM, shown four alike, worried before anyone had joined)
 	var list := Array(host.join_urls())
 	if list.is_empty():
 		list = ["http://localhost:%d  (this computer only: no network)" % host.web.port]
-	for u in list:
-		var l := Label.new()
-		l.text = str(u)
-		l.theme_type_variation = "HeaderLabel"
-		urls.add_child(l)
+	var first := Label.new()
+	first.text = str(list[0])
+	first.theme_type_variation = "HeaderLabel"
+	urls.add_child(first)
+	if list.size() > 1:
+		var rest := Label.new()
+		rest.text = "Other addresses of this computer:"
+		for u in list.slice(1):
+			rest.text += "\n%s — %s" % [str(u), WebServer.address_kind(str(u))]
+		rest.theme_type_variation = "DimLabel"
+		rest.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		urls.add_child(rest)
 	var names := PackedStringArray()
 	for p in ctx.encounter().players:
 		names.append("%s %s" % [str(p.get("name", "")), "(here)" if host.connected_players().has(str(p.get("id", ""))) else "(not yet)"])

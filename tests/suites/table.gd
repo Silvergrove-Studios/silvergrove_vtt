@@ -764,6 +764,16 @@ func test_campaign_first() -> void:
 	check(win._running.visible and (win._running.find_child("Title", true, false) as Label).text == ctx.campaign.name, "the window says the game is running")
 	var join_at := (win._running.find_child("Urls", true, false) as VBoxContainer).get_children()
 	check(not join_at.is_empty() and (join_at[0] as Label).text.begins_with("http://"), "and where players join: %s" % [(join_at[0] as Label).text if not join_at.is_empty() else ""])
+	# how they join, said in full: the same network, not "the same Wi-Fi", and how
+	# to play apart (a playtest's DM, her players in four places, worried)
+	win._join_info()
+	var said := ""
+	for node in win.get_children():
+		if node is AcceptDialog and node.visible and not node.is_queued_for_deletion():
+			said = (node as AcceptDialog).dialog_text
+			node.queue_free()
+	var likeliest := str(win.host.join_urls()[0]) if not win.host.join_urls().is_empty() else "the address your screen shows"
+	check(said.contains("same network as this one (the same Wi-Fi or router)") and said.contains(TableWindow.PLAY_APART) and said.contains("1. Open %s —" % likeliest), "Join info: one address, the same network, how to play apart: %s" % said.left(120).replace("\n", " | "))
 	(win._running.find_child("OpenDm", true, false) as Button).pressed.emit()
 	check(win.last_opened.begins_with("http://localhost:") and win.last_opened.contains("/dm#t="), "the DM's screen, one press away: %s" % win.last_opened)
 	(win._running.find_child("FullTable", true, false) as Button).pressed.emit()

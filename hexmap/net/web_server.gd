@@ -245,3 +245,10 @@ static func address_rank(ip: String) -> int:
 	if private:
 		return 1 if p[3] == "1" else 0
 	return 3
+
+
+## What one of this machine's addresses (an IP, or a join address
+## "http://ip:port") is, in words, as the web Invite says it (web/src/dm/invite.ts).
+static func address_kind(address: String) -> String:
+	var ip := address.trim_prefix("http://").get_slice("/", 0).get_slice(":", 0)
+	return ["a home or office network", "a virtual machine's (rarely right)", "a VPN such as Tailscale", "another network"][address_rank(ip)]
