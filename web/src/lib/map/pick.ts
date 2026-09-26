@@ -15,10 +15,14 @@ export function pickFrom(payload: Dict, tokens: Dict[]): string {
   return '';
 }
 
-export function pickTarget(grid: Grid, tokens: Dict[], payload: Dict, p: Vec, gm: boolean): string | Dict | null {
+/** What a tap at `p` picks. `hit` is the token the map says was tapped: the
+ *  one drawn there, of several fanned out on one cell (a playtest's tap went
+ *  to whichever was last in the list, by position). */
+export function pickTarget(grid: Grid, tokens: Dict[], payload: Dict, p: Vec, gm: boolean, hit: Dict | null = null): string | Dict | null {
   const cell = grid.cellAt(p);
   switch (String(payload.pick ?? '')) {
     case 'token':
+      if (hit && (gm || !hit.hidden)) return `token:${hit.id}`;
       for (let i = tokens.length - 1; i >= 0; i--) {
         const t = tokens[i];
         if (!gm && t.hidden) continue;

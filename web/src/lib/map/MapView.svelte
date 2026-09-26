@@ -10,7 +10,7 @@
   import type { Cell, Vec } from '../grid';
   import { onArt } from '../art';
   import { game, type Dict } from '../game.svelte';
-  import { drawFrame, drawTerrain, prepare, tokenAt, tokenPos, type Camera, type TerrainCache } from './render';
+  import { drawFrame, drawTerrain, layout, prepare, tokenAt, tokenPos, type Camera, type TerrainCache } from './render';
 
   interface Props {
     map: Dict | null;
@@ -70,6 +70,9 @@
 
   const prep = $derived(map && scene?.id ? prepare(map, scene, gm) : null);
   const tokens = $derived(((scene?.tokens as Dict[]) ?? []) as Dict[]);
+  // where each token is drawn: tokens sharing a cell fan out, and a tap is
+  // theirs where they are drawn
+  const placed = $derived(prep ? layout(tokens, prep.grid, drag?.id ?? '') : undefined);
 
   // ----------------------------------------------------------- terrain --
   let terrain: TerrainCache | null = null;
@@ -251,7 +254,7 @@
     pointers.set(e.pointerId, p);
     if (pointers.size === 1) {
       // (a reach of at least 16 px on screen, 22 on a touch screen)
-      const t = tokenAt(tokens, toWorld(p.x, p.y), (e.pointerType === 'mouse' ? 16 : 22) / cam.scale);
+      const t = tokenAt(tokens, toWorld(p.x, p.y), (e.pointerType === 'mouse' ? 16 : 22) / cam.scale, placed);
       press = { id: e.pointerId, at: p, token: t, moved: false, cam: { x: cam.x, y: cam.y } };
       pressing = true;
     } else if (pointers.size === 2) {
@@ -354,7 +357,7 @@
   export function screenOf(id: string): { x: number; y: number } | null {
     const t = tokens.find((x) => x.id === id);
     if (!t || !canvas) return null;
-    const p = tokenPos(t);
+    const p = placed?.get(String(t.id))?.pos ?? tokenPos(t);
     const r = canvas.getBoundingClientRect();
     return { x: r.left + width / 2 + (p.x - cam.x) * cam.scale, y: r.top + height / 2 + (p.y - cam.y) * cam.scale };
   }

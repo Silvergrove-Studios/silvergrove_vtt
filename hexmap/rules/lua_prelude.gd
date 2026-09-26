@@ -482,8 +482,9 @@ function __run_test(index, helpers)
 	function h.answer(prompt, answer, who) return call(host.test_answer, prompt, answer, who or "") end
 	function h.prompts() return call(host.test_prompts) end
 	function h.tick(seconds) return call(host.test_tick, seconds or 0) end
-	-- move a token the way the Table does (token_moved, regions, prep, after_move)
-	function h.move(scene, token, to) return call(host.test_move, scene, token, to) end
+	-- move a token the way the Table does (token_moved, regions, prep, after_move),
+	-- as the GM or, `by` a player's id, as that player's own move
+	function h.move(scene, token, to, by) return call(host.test_move, scene, token, to, by or "gm") end
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
 	-- a campaign setting for this test (the manifest's defaults come back for the next)
 	function h.setting(key, value) return call(host.test_setting, key, value) end

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
 import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../src/lib/map/pick';
+import { FAN_SIZE, layout, tokenAt } from '../src/lib/map/render';
 
 describe('picking a target', () => {
   const grid = new Grid({ columns: 10, rows: 8 });
@@ -26,6 +27,43 @@ describe('picking a target', () => {
     const sent = withTarget({ kind: 'action', pick: 'token', label: 'Attack', ctx: { actor: 'hero' } }, 'token:g', 's1');
     expect(sent).toEqual({ kind: 'action', ctx: { actor: 'hero', target: 'token:g', scene: 's1' } });
   });
+  it('fans out tokens on one cell, and a tap on each picks that one', () => {
+    const c = grid.center({ q: 5, r: 5 });
+    const stack = [
+      { id: 'ada', pos: [c.x, c.y], owner: 'pl_a' },
+      { id: 'gob', pos: [c.x, c.y], actor: 'a_g' },
+    ];
+    const placed = layout(stack, grid);
+    const a = placed.get('ada')!;
+    const b = placed.get('gob')!;
+    expect(a.k).toBe(FAN_SIZE);
+    expect(Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y)).toBeCloseTo(0.44);
+    for (const t of stack) {
+      // where it is drawn, with a finger's reach
+      const hit = tokenAt(stack, placed.get(t.id)!.pos, 0.3, placed);
+      expect(hit?.id).toBe(t.id);
+      // (the pick was re-found by position: the last one on the cell, whichever was tapped)
+      expect(pickTarget(grid, stack, { pick: 'token' }, { x: c.x, y: c.y }, false, hit)).toBe(`token:${t.id}`);
+    }
+    // three or four round a circle; one alone, or a large one, stays where it stands
+    const lone = grid.center({ q: 1, r: 1 });
+    const more = [...stack, { id: 'jin', pos: [c.x, c.y], owner: 'pl_j' }, { id: 'lone', pos: [lone.x, lone.y] }, { id: 'ogre', pos: [c.x, c.y], size: 2 }];
+    const p3 = layout(more, grid);
+    const three = ['ada', 'gob', 'jin'].map((id) => p3.get(id)!.pos);
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) expect(Math.hypot(three[i].x - three[j].x, three[i].y - three[j].y)).toBeGreaterThan(0.3);
+    expect(p3.get('lone')).toEqual({ pos: lone, k: 1 });
+    expect(p3.get('ogre')).toEqual({ pos: c, k: 1 });
+    for (const id of ['ada', 'gob', 'jin']) expect(tokenAt(more.filter((t) => t.id !== 'ogre'), p3.get(id)!.pos, 0.25, p3)?.id).toBe(id);
+    // a token being dragged is drawn where the pointer is: the others close up
+    expect(layout(stack, grid, 'gob').get('ada')).toEqual({ pos: c, k: 1 });
+  });
+
+  it('never picks a hidden creature for a player, whatever was hit', () => {
+    const g = { id: 'g', pos: tokens[1].pos, hidden: true };
+    expect(pickTarget(grid, tokens, { pick: 'token' }, { x: g.pos[0], y: g.pos[1] }, false, g)).toBeNull();
+    expect(pickTarget(grid, tokens, { pick: 'token' }, { x: g.pos[0], y: g.pos[1] }, true, g)).toBe('token:g');
+  });
+
   it('picks several creatures for a spell that takes them (Bless: up to three)', () => {
     const bless = { kind: 'action', pick: 'token', picks: 3, label: 'Cast', ctx: { actor: 'hero' } };
     expect(pickCount(bless)).toBe(3);

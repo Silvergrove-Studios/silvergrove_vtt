@@ -843,6 +843,51 @@ func test_a_fight_leaves_no_order_behind() -> void:
 	DirAccess.remove_absolute(dir.path_join("two.campaign"))
 
 
+## A player's move reaches the rules as theirs (`by`: their id), so a ruleset
+## can refuse a move a player may not make and the DM may (in a playtest a
+## goblin and a player's character ended up on one cell); and no player is
+## given the creatures' red.
+func test_player_moves_reach_the_rules_as_theirs() -> void:
+	var dir := "user://table_moves_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_table_moves.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var c := Campaign.create("Moves")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1"}
+	c.actors["a_g"] = {"id": "a_g", "kind": "npc", "name": "Goblin Warrior"}
+	check(c.save(dir.path_join("moves.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("moves.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	check(win.maps.add_map(_example("ruined_chapel.hexmap")) == "" and win.maps.show_map(str(ctx.campaign.maps[0].id)) == "", "a scene over the chapel")
+	var sid := ctx.encounter().active_scene_id
+	var g := ctx.state.map_for(sid).grid
+	var hero_at := g.cell_center(g.offset_to_axial(3, 8))
+	var gob_at := g.cell_center(g.offset_to_axial(5, 8))
+	ctx.commands.add_token(sid, Encounter.new_token("Hero", hero_at, {"id": "t_h", "actor": "a_h", "owner": "pl_1"}))
+	ctx.commands.add_token(sid, Encounter.new_token("Goblin Warrior", gob_at, {"id": "t_g", "actor": "a_g"}))
+	var heard := []
+	ctx.kernel.hooks.on("token_moved", func(p: Dictionary) -> Dictionary:
+		heard.append(str(p.by))
+		if str(p.by) != "gm" and Vector2(float(p.to[0]), float(p.to[1])).distance_to(gob_at) < 0.5:
+			p.veto = "You can't end a move in the Goblin Warrior's space"
+		return p, "test")
+	var onto := {"t": "token.set", "scene": sid, "id": "t_h", "changes": {"pos": [gob_at.x, gob_at.y]}}
+	check(win._apply_player_request(onto, "pl_1").contains("Goblin Warrior's space") and heard.back() == "pl_1", "Ana's move is hers, and refused: %s" % [heard])
+	check(Vision.token_pos(ctx.state.token(sid, "t_h")).distance_to(hero_at) < 0.01, "her token stays where it was")
+	check(win._apply_player_request(onto, "") == "" and heard.back() == "gm" and Vision.token_pos(ctx.state.token(sid, "t_h")).distance_to(gob_at) < 0.01, "the Table's own (a co-GM's) is the DM's, and goes")
+	ctx.kernel.hooks.off("test")
+	for col in HostSession.PLAYER_COLORS:
+		var h := Color(str(col)).h
+		check(h > 0.04 and h < 0.94, "%s is not red (hue %.2f)" % [col, h])
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("moves.campaign"))
+
+
 ## World, Fight, Prep (playtest 1: most of a session is talk, exploring and
 ## looking things up): the campaign opens in the World — the party, the
 ## map, the reference; a place on the map opens its card; its encounter

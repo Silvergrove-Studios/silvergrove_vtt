@@ -1333,12 +1333,12 @@ class Bridge:
 			out.append(JsonDoc.deep(_k().pending.prompts()[id]))
 		return out
 
-	func test_move(scene: String, token: String, to: Variant) -> Variant:
+	func test_move(scene: String, token: String, to: Variant, by: String = "gm") -> Variant:
 		var k := _k()
 		var p := k.map.point_of(str(scene), to)
 		if p == Vector2.INF:
 			return {"__error": "unknown place"}
-		var why := k.move_token(str(scene), str(token).trim_prefix("token:"), p, "gm")
+		var why := k.move_token(str(scene), str(token).trim_prefix("token:"), p, str(by))
 		return true if why == "" else {"__error": why}
 
 	func test_tick(seconds: Variant) -> bool:

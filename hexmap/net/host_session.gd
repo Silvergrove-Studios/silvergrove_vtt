@@ -72,8 +72,9 @@ var _dm_dirty := false
 var _last_dm_ms := 0
 var _last_scene_ms := 0
 
-## Colours given to players who join by name, in turn.
-const PLAYER_COLORS := ["#4f9cf6", "#e67e22", "#2ecc71", "#e74c3c", "#9b59b6", "#f1c40f", "#1abc9c", "#ec87c0"]
+## Colours given to players who join by name, in turn. None is red: red is
+## the creatures' (a playtest's player in red read as a goblin).
+const PLAYER_COLORS := ["#4f9cf6", "#e67e22", "#2ecc71", "#a4d65e", "#9b59b6", "#f1c40f", "#1abc9c", "#ec87c0"]
 
 
 func _init(p_state: EncounterState, p_packs: PackLibrary) -> void:

@@ -208,7 +208,7 @@
 
   function onTokenClick(t: Dict): void {
     if (pick) {
-      resolvePick(t.pos ? { x: Number(t.pos[0]), y: Number(t.pos[1]) } : null);
+      resolvePick(t.pos ? { x: Number(t.pos[0]), y: Number(t.pos[1]) } : null, t);
       return;
     }
     selected = selected === t.id ? '' : String(t.id);
@@ -219,9 +219,10 @@
     else selected = '';
   }
 
-  function resolvePick(at: { x: number; y: number } | null): void {
+  // (`hit`: the token tapped, of several on one cell)
+  function resolvePick(at: { x: number; y: number } | null, hit: Dict | null = null): void {
     if (!pick || !at || !map) return;
-    const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, false);
+    const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, false, hit);
     if (target === null) {
       notice('Nothing to pick there — try again, or Cancel', 'error');
       return;
@@ -230,11 +231,20 @@
       picked = togglePicked(picked, target, pickCount(pick));
       return;
     }
-    if (coarse) {
-      confirmPick = { target, words: `${String(pick.label ?? 'This')} → ${targetName(target)}` };
+    // one of the party asks first, however the tap came (a playtest's tap
+    // on stacked tokens threw a javelin at the thrower's own side)
+    const friend = typeof target === 'string' && onOurSide(target);
+    if (coarse || friend) {
+      confirmPick = { target, words: `${String(pick.label ?? 'This')} → ${targetName(target)}${friend ? ' (on your side)' : ''}` };
       return;
     }
     sendPick(target);
+  }
+
+  /** A party member's token ("token:<id>"): a player's. */
+  function onOurSide(target: string): boolean {
+    const id = target.replace(/^token:/, '');
+    return String(((game.scene.tokens as Dict[]) ?? []).find((x) => String(x.id) === id)?.owner ?? '') !== '';
   }
 
   function sendPick(target: string | Dict | string[]): void {
