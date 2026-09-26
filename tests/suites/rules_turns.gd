@@ -127,6 +127,69 @@ func test_ordered_turns() -> void:
 	check(k.turns.start("s_1", "list") == "" and k.state.encounter.turns.order == ["t_b", "t_a", "t_c"] and k.state.encounter.turns.plugin == "", "the list strategy keeps the order as arranged")
 
 
+## Next says which turn it means and who ended it: a step that crossed
+## another (in a playtest a player's End turn and the DM's Next a few
+## seconds apart took two turns) changes nothing and says whose turn it is.
+func test_next_names_the_turn_it_ends() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	k.commit([{"t": "player.add", "player": {"id": "pl_a", "name": "Ana", "color": "#4f9cf6"}}], "Ana")
+	check(k.turns.start("s_1", "sample") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b"] and st.encounter.turns.scene == "s_1", "A, C, B, on the scene they were started on")
+	var notes := func() -> Array: return st.encounter.log.filter(func(x: Dictionary) -> bool: return str(x.get("kind", "")) == "note")
+	# Ana ends A's turn from her sheet
+	check(k.turns.next({"by": "pl_a", "expect": {"round": 1, "turn": 0}}) == "", "Ana ends A's turn")
+	var last: Dictionary = st.encounter.turns.last
+	check(str(last.by) == "pl_a" and str(last.entry) == "t_a" and int(last.round) == 1 and int(last.turn) == 0 and str(last.at) != "", "the turn that ended, and who ended it: %s" % [last])
+	check((last.pos as Dictionary).keys() == ["t_c"] and near(float(last.pos.t_c[0]), 2.0), "where C stood as its turn began: %s" % [last.pos])
+	var said: Array = notes.call()
+	check(said.size() == 1 and str(said[0].text) == "A ends their turn" and str(said[0].audience) == "all", "a player's end is said in the log, for everyone: %s" % [said])
+	check(str(last.log) == str(said[0].id), "and the newest log entry as C's turn began is kept")
+	# the DM's Next, meant for A's turn, arrives after it
+	var before := JsonDoc.sans_modified(st.encounter.to_json())
+	var depth := k.log.undo_depth()
+	var why := k.turns.next({"by": "gm", "expect": {"round": 1, "turn": 0}})
+	check(why == "A's turn has already ended: it's C's turn now.", "the late Next is refused, saying whose turn it is: " + why)
+	check(JsonDoc.sans_modified(st.encounter.to_json()) == before and k.log.undo_depth() == depth, "and nothing changed")
+	# the DM's Next for C's turn: the DM ended it, nothing said
+	check(k.turns.next({"by": "gm", "expect": {"round": 1, "turn": 1}}) == "" and str(st.encounter.turns.last.by) == "gm" and str(st.encounter.turns.last.entry) == "t_c", "the DM ends C's turn")
+	check((notes.call() as Array).size() == 1, "no note when the DM ends a turn")
+	# the Table's own button says nothing of the turn: as before, the GM's
+	check(k.turns.next() == "" and st.encounter.turns.round == 2 and str(st.encounter.turns.last.by) == "gm", "a Next that names no turn steps as before")
+	var commands := EncounterCommands.new(st, k.log)
+	commands.kernel = k
+	check(commands.next_turn({"expect": {"round": 1, "turn": 2}}) == "B's turn has already ended: it's A's turn now.", "the Table's commands pass the turn meant along")
+	commands.kernel = null
+	check(commands.next_turn({"expect": {"round": 1, "turn": 2}}).begins_with("B's turn has already ended"), "and check it without a runner too")
+	k.turns.stop()
+	check(k.turns.next({"expect": {"round": 2, "turn": 0}}).contains("stopped"), "a step meant for turns that have stopped changes nothing")
+	check(not k.turns.running(), "they stay stopped")
+
+
+## The end of the turns is the rulesets' to hear (`combat_end`): what their
+## handlers add — the fight's initiative put away — lands in the same step
+## (a playtest's second fight began on the first one's order).
+func test_combat_end_hook() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	check(k.turns.start("s_1", "sample") == "", "the turns run")
+	var heard := []
+	k.hooks.on("combat_end", func(p: Dictionary) -> Dictionary:
+		heard.append(p.duplicate())
+		p.events.append({"t": "ext.set", "scope": "encounter", "id": "", "plugin": "sample", "changes": {"initiative": "put away"}})
+		return p, "test")
+	check(k.turns.stop() == "" and not k.turns.running() and heard.size() == 1 and str(heard[0].scene) == "s_1", "the rulesets hear the turns end, and on which scene")
+	check(str(k.state.encounter.doc.state.ext.get("sample", {}).get("initiative", "")) == "put away" and k.log.undo_label() == "End turns", "what they add lands in the same step")
+	k.log.undo()
+	check(k.turns.running() and not k.state.encounter.doc.state.ext.get("sample", {}).has("initiative"), "and is undone with it")
+	k.hooks.off("test")
+	k.hooks.on("combat_end", func(p: Dictionary) -> Dictionary:
+		p.veto = "not over"
+		return p, "veto")
+	check(k.turns.stop() == "not over" and k.turns.running(), "a veto keeps the turns running")
+	k.hooks.off("veto")
+
+
 func test_order_helpers_and_groups() -> void:
 	var parts := _party()
 	var k: RulesKernel = parts[0]

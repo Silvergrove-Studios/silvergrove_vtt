@@ -221,6 +221,83 @@ func actor_removal_events(id: String) -> Array:
 	return events
 
 
+## Several actors off the table as one batch: each one's removal events,
+## then — once for the batch — their tokens out of the turn order, its
+## groups, labels and budgets. (An order left naming a removed token picked
+## up the next one given its id: a playtest's chapel goblin took the
+## lookout's place.)
+func removal_events(ids: Array) -> Array:
+	var events := []
+	var gone := []
+	for id in ids:
+		for sc in scenes:
+			for tk in sc.tokens:
+				if str(tk.get("actor", "")) == str(id):
+					gone.append(str(tk.id))
+		events.append_array(actor_removal_events(str(id)))
+	var pruned := turns_without(gone)
+	if not pruned.is_empty():
+		events.append({"t": "turns.set", "changes": pruned})
+	return events
+
+
+## The turns' changes that take these tokens out of the order (a group that
+## loses its last member goes too), the groups, the labels and the budgets,
+## whoever is up staying up — or, gone, the turn passing to the next. {}
+## when none of them is there.
+func turns_without(token_ids: Array) -> Dictionary:
+	var t: Dictionary = doc.turns
+	var gone := {}
+	for id in token_ids:
+		gone[str(id)] = true
+	var data: Dictionary = JsonDoc.deep(t.get("data", {})) if t.get("data") is Dictionary else {}
+	var groups: Dictionary = data.get("groups", {}) if data.get("groups") is Dictionary else {}
+	var labels: Dictionary = data.get("labels", {}) if data.get("labels") is Dictionary else {}
+	var counters: Dictionary = JsonDoc.deep(t.get("counters", {})) if t.get("counters") is Dictionary else {}
+	var changed := false
+	for gid in groups.keys():
+		var members: Array = groups[gid].get("tokens", [])
+		var kept := members.filter(func(x: Variant) -> bool: return not gone.has(str(x)))
+		if kept.size() == members.size():
+			continue
+		changed = true
+		if kept.is_empty():
+			groups.erase(gid)
+			labels.erase("group:" + str(gid))
+		else:
+			groups[gid].tokens = kept
+	for id in gone:
+		for k in [id, "token:" + str(id)]:
+			if labels.has(k):
+				labels.erase(k)
+				changed = true
+			if counters.has(k):
+				counters.erase(k)
+				changed = true
+	var order: Array = t.get("order", [])
+	var turn := int(t.get("turn", 0))
+	var kept_order := []
+	var before_turn := 0
+	for i in order.size():
+		var entry := str(order[i])
+		if gone.has(entry) or (entry.begins_with("group:") and not groups.has(entry.substr(6))):
+			changed = true
+			continue
+		kept_order.append(entry)
+		if i < turn:
+			before_turn += 1
+	if not changed:
+		return {}
+	var out := {"order": kept_order, "counters": counters}
+	if not data.is_empty():
+		out.data = data
+	# the one up stays up; one that went passes the turn to the next
+	var cur := str(order[turn]) if turn >= 0 and turn < order.size() else ""
+	var at := kept_order.find(cur)
+	out.turn = at if at >= 0 else (before_turn if before_turn < kept_order.size() else 0)
+	return out
+
+
 func player(id: String) -> Dictionary:
 	for p in players:
 		if str(p.get("id", "")) == id:

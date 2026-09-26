@@ -733,6 +733,12 @@ func test_campaign_first() -> void:
 	check(not ptk.is_empty() and bool(ptk.hidden) and (ptk.tags as Array).has("place") and place.map == rid and place.cell == "6,4", "a hidden marker token on the map, the record with its link")
 	check(mp.set_party(Vector2i(3, 4)) == "" and ctx.campaign.doc.party.cell == "3,4" and ctx.state.tokens(ctx.scene_id).any(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")), "the party marker")
 	check(mp.set_party(Vector2i(4, 4)) == "" and ctx.campaign.doc.party.cell == "4,4" and ctx.state.tokens(ctx.scene_id).filter(func(t: Dictionary) -> bool: return (t.tags as Array).has("party")).size() == 1, "moved, not doubled")
+	# the DM's screen says the map's column and row (a playtest's star, sent as
+	# axial, landed cells away on an odd row)
+	check(win.web_dm.op({"op": "party_move", "cell": [9, 7]}) == "" and ctx.campaign.doc.party.cell == "9,7", "the DM's screen moves the party by column and row")
+	var road_grid := ctx.state.map_for(ctx.scene_id).grid
+	var star: Dictionary = ctx.state.tokens(ctx.scene_id).filter(func(t: Dictionary) -> bool: return (t.tags as Array).has("party"))[0]
+	check(Vision.token_pos(star).distance_to(road_grid.cell_center(road_grid.offset_to_axial(9, 7))) < 0.01, "and the star is on that cell, an odd row's")
 	var regional_scene := ctx.scene_id
 	# the markers are the campaign's: a scene made over the road afresh (a package started, a copy) shows them
 	var road_id := str(mp.shown_map_entry().id)
@@ -799,6 +805,120 @@ func test_campaign_first() -> void:
 	for f in ["first.campaign"]:
 		DirAccess.remove_absolute(dir.path_join(f))
 	DirAccess.remove_absolute(dir)
+
+
+## A fight's order goes with it (a playtest's chapel fight opened on the
+## lookout fight's order, and a new goblin given a removed one's id took its
+## place in it): a creature taken out mid-fight leaves the order, Return
+## clears the turns, and the next fight, with the same creatures, has none.
+func test_a_fight_leaves_no_order_behind() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://table_fight_order_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_table_fight_order.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	var c := Campaign.create("Two fights")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1"}
+	c.plugins.append({"id": "sample.degrees"})
+	check(c.save(dir.path_join("two.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("two.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var mp := win.maps
+	check(mp.add_map(_example("ruined_chapel.hexmap")) == "", "the chapel in the library")
+	var mid := str(ctx.campaign.maps[0].id)
+	var gob := {"collection": "creatures", "id": "goblin", "name": "Goblin skirmisher"}
+	var lookout := mp.new_encounter("The lookout", mid, "ground")
+	var chapel := mp.new_encounter("The chapel", mid, "ground")
+	for enc in [lookout, chapel]:
+		mp.add_creature(enc, gob, 2, "9,8", false)
+	check(mp.launch(lookout) == "", "the lookout fight")
+	var live: Dictionary = ctx.campaign.encounter_entry(lookout).live
+	check(ctx.commands.start_turns(str(live.scene)) == "" and (ctx.encounter().turns.order as Array).size() == 3 and str(ctx.encounter().turns.scene) == str(live.scene), "its turns run, two goblins and the hero: %s" % [ctx.encounter().turns.order])
+	# the goblin up is taken out mid-fight: out of the order, the turn passes on
+	var up := ctx.state.current_turn_token()
+	var up_actor := str(ctx.state.find_token(up).get("actor", ""))
+	var next_up := str(ctx.encounter().turns.order[1])
+	check((live.actors as Array).has(up_actor), "a goblin is up")
+	check(ctx.commands.run_all(ctx.encounter().removal_events([up_actor]), "Retire") == "", "taken out")
+	var order: Array = ctx.encounter().turns.order
+	check(order.size() == 2 and not order.has(up) and ctx.state.current_turn_token() == next_up and not (ctx.encounter().turns.counters as Dictionary).has("token:" + up), "out of the order and its budget; the next one up: %s" % [order])
+	check(mp.return_from(lookout) == "", "returned")
+	var t := ctx.encounter().turns
+	check(not bool(t.running) and (t.order as Array).is_empty() and t.get("last") == null and (t.counters as Dictionary).is_empty() and str(t.get("scene", "")) == "", "the lookout's turns went with it: %s" % [t])
+	check(mp.launch(chapel) == "", "the chapel fight, with the same creatures")
+	check((ctx.encounter().turns.order as Array).is_empty() and not bool(ctx.encounter().turns.running), "starts with no order: %s" % [ctx.encounter().turns.order])
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("two.campaign"))
+
+
+## The cells a fight's creatures are not put on (a playtest's boss stood on a
+## pew, the Warden on a pillar): under what blocks movement, and in a fire.
+func test_cells_no_creature_is_put_on() -> void:
+	var m := HexMap.load_file(_example("ruined_chapel.hexmap"))
+	var g := m.grid
+	var art := PackLibrary.new()
+	art.reload()
+	var blocked := MapsPanel.blocked_cells(g, m.level(0), art)
+	var at := func(col: int, row: int) -> bool: return blocked.has(g.offset_to_axial(col, row))
+	check(at.call(7, 5) and at.call(13, 10), "the pillars")
+	check(at.call(10, 6) and at.call(12, 9), "the pews")
+	check(at.call(17, 8), "the altar")
+	check(not at.call(13, 8) and not at.call(9, 8), "not the trapdoor, nor the bones on the floor")
+	check(at.call(11, 8) and not MapsPanel.blocked_cells(g, m.level(0), art, false).has(g.offset_to_axial(11, 8)), "the goblins' fire, when creatures are put down; not a wall to walk into")
+	check(not at.call(11, 7) and not at.call(16, 8), "the nave's floor is free")
+
+
+## A player's move reaches the rules as theirs (`by`: their id), so a ruleset
+## can refuse a move a player may not make and the DM may (in a playtest a
+## goblin and a player's character ended up on one cell); and no player is
+## given the creatures' red.
+func test_player_moves_reach_the_rules_as_theirs() -> void:
+	var dir := "user://table_moves_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_table_moves.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var c := Campaign.create("Moves")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1"}
+	c.actors["a_g"] = {"id": "a_g", "kind": "npc", "name": "Goblin Warrior"}
+	check(c.save(dir.path_join("moves.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("moves.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	check(win.maps.add_map(_example("ruined_chapel.hexmap")) == "" and win.maps.show_map(str(ctx.campaign.maps[0].id)) == "", "a scene over the chapel")
+	var sid := ctx.encounter().active_scene_id
+	var g := ctx.state.map_for(sid).grid
+	var hero_at := g.cell_center(g.offset_to_axial(3, 8))
+	var gob_at := g.cell_center(g.offset_to_axial(5, 8))
+	ctx.commands.add_token(sid, Encounter.new_token("Hero", hero_at, {"id": "t_h", "actor": "a_h", "owner": "pl_1"}))
+	ctx.commands.add_token(sid, Encounter.new_token("Goblin Warrior", gob_at, {"id": "t_g", "actor": "a_g"}))
+	var heard := []
+	ctx.kernel.hooks.on("token_moved", func(p: Dictionary) -> Dictionary:
+		heard.append(str(p.by))
+		if str(p.by) != "gm" and Vector2(float(p.to[0]), float(p.to[1])).distance_to(gob_at) < 0.5:
+			p.veto = "You can't end a move in the Goblin Warrior's space"
+		return p, "test")
+	var onto := {"t": "token.set", "scene": sid, "id": "t_h", "changes": {"pos": [gob_at.x, gob_at.y]}}
+	check(win._apply_player_request(onto, "pl_1").contains("Goblin Warrior's space") and heard.back() == "pl_1", "Ana's move is hers, and refused: %s" % [heard])
+	check(Vision.token_pos(ctx.state.token(sid, "t_h")).distance_to(hero_at) < 0.01, "her token stays where it was")
+	check(win._apply_player_request(onto, "") == "" and heard.back() == "gm" and Vision.token_pos(ctx.state.token(sid, "t_h")).distance_to(gob_at) < 0.01, "the Table's own (a co-GM's) is the DM's, and goes")
+	ctx.kernel.hooks.off("test")
+	for col in HostSession.PLAYER_COLORS:
+		var h := Color(str(col)).h
+		check(h > 0.04 and h < 0.94, "%s is not red (hue %.2f)" % [col, h])
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("moves.campaign"))
 
 
 ## World, Fight, Prep (playtest 1: most of a session is talk, exploring and

@@ -160,7 +160,7 @@
 
   function onTokenClick(t: Dict): void {
     if (pick) {
-      resolvePick({ x: Number(t.pos?.[0] ?? 0), y: Number(t.pos?.[1] ?? 0) });
+      resolvePick({ x: Number(t.pos?.[0] ?? 0), y: Number(t.pos?.[1] ?? 0) }, t);
       return;
     }
     const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
@@ -178,9 +178,10 @@
     else selected = '';
   }
 
-  function resolvePick(at: { x: number; y: number }): void {
+  // (`hit`: the token tapped, of several on one cell)
+  function resolvePick(at: { x: number; y: number }, hit: Dict | null = null): void {
     if (!pick || !map) return;
-    const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, true);
+    const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, true, hit);
     if (target === null) {
       notice('Nothing to pick there — try again, or Cancel', 'error');
       return;
@@ -207,8 +208,11 @@
   function onTokenDrop(t: Dict, pos: [number, number]): void {
     const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
     if (tags.includes('party') && map) {
-      const c = new Grid(map.grid ?? {}).cellAt({ x: pos[0], y: pos[1] });
-      dmOp('party_move', { cell: [c.q, c.r] });
+      // the Table keeps the party's cell as the map's column and row (a
+      // playtest's star, sent axial, landed cells away on an odd row)
+      const g = new Grid(map.grid ?? {});
+      const o = g.toOffset(g.cellAt({ x: pos[0], y: pos[1] }));
+      dmOp('party_move', { cell: [o.col, o.row] });
       return;
     }
     request({ t: 'token.set', scene: String(game.scene.id ?? ''), id: String(t.id), changes: { pos } });

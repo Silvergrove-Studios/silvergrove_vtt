@@ -228,7 +228,9 @@ function hm.turns.set_focus(holder, by) return call(host.turns_op, "set_focus", 
 function hm.turns.request(player, ref) return call(host.turns_op, "request", ref, player) end
 function hm.turns.deny(ref) return call(host.turns_op, "deny", ref, "") end
 function hm.turns.start(scene, strategy) return call(host.turns_op, "start", scene, strategy or hm.id) end
-function hm.turns.next() return call(host.turns_op, "next", "", "") end
+-- who ended the turn (a player's id, "gm", this plugin when not said) and, when
+-- known, the turn meant ({round, turn}): a turn already ended is refused
+function hm.turns.next(by, expect) return call(host.turns_op, "next", by or hm.id, expect or {}) end
 function hm.turns.stop() return call(host.turns_op, "stop", "", "") end
 function hm.turns.counters(ref) return (call(host.turns_get).counters or {})[ref] or {} end
 -- The order itself (ordered shape): entries are token ids or "group:<id>".
@@ -485,8 +487,9 @@ function __run_test(index, helpers)
 	function h.answer(prompt, answer, who) return call(host.test_answer, prompt, answer, who or "") end
 	function h.prompts() return call(host.test_prompts) end
 	function h.tick(seconds) return call(host.test_tick, seconds or 0) end
-	-- move a token the way the Table does (token_moved, regions, prep, after_move)
-	function h.move(scene, token, to) return call(host.test_move, scene, token, to) end
+	-- move a token the way the Table does (token_moved, regions, prep, after_move),
+	-- as the GM or, `by` a player's id, as that player's own move
+	function h.move(scene, token, to, by) return call(host.test_move, scene, token, to, by or "gm") end
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
 	-- a campaign setting for this test (the manifest's defaults come back for the next)
 	function h.setting(key, value) return call(host.test_setting, key, value) end

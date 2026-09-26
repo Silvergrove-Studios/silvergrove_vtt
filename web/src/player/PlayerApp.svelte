@@ -24,8 +24,8 @@
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
-  import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
-  import { turnSummary } from '../lib/turns';
+  import { moveTo, moveWords, pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
+  import { movedOn, turnSummary } from '../lib/turns';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
   const TAB_KEYS: Tab[] = ['map', 'character', 'table', 'chat', 'journal'];
@@ -56,6 +56,11 @@
   // phone's double tap to zoom fired an attack
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   let confirmPick = $state<{ target: string | Dict; words: string } | null>(null);
+  // tap your token, then where it goes (a playtest's tablet player never
+  // managed to drag hers): the token armed, and on a touch screen the move
+  // asked before it goes
+  let moving = $state<Dict | null>(null);
+  let confirmMove = $state<{ pos: [number, number]; words: string } | null>(null);
   // none of a playtest's four players knew they could drag their own token: a
   // tip, until they have (or say they've got it)
   let dragTipDone = $state(false);
@@ -109,6 +114,7 @@
     pick: (p) => {
       pick = p;
       picked = [];
+      stopMoving();
       if (!wide) tab = 'map';
     },
     comp,
@@ -202,10 +208,13 @@
     if (lastRead && game.me) saveRead(game.table, game.me, lastRead);
   });
 
-  // my turn: said, and felt on a phone
+  // my turn: said, and felt on a phone; and its end, when the DM ended it (a
+  // playtest's player pressed End turn after the DM's Next, and ended the next one's)
   let wasMine = false;
+  let mineAt: { round: number; turn: number } | null = null;
   $effect(() => {
-    const mine = turn.mine && String(game.scene.turns?.mode ?? 'free') !== 'free';
+    const t = (game.scene.turns ?? {}) as Dict;
+    const mine = turn.mine && String(t.mode ?? 'free') !== 'free';
     if (mine && !wasMine) {
       notice(turn.text);
       try {
@@ -215,6 +224,11 @@
         /* not a phone */
       }
     }
+    if (!mine && wasMine && mineAt) {
+      const said = movedOn(game.scene, mineAt);
+      if (said) notice(said);
+    }
+    mineAt = mine ? { round: Number(t.round ?? 1), turn: Number(t.turn ?? 0) } : null;
     wasMine = mine;
   });
 
@@ -247,7 +261,19 @@
 
   function onTokenClick(t: Dict): void {
     if (pick) {
-      resolvePick(t.pos ? { x: Number(t.pos[0]), y: Number(t.pos[1]) } : null);
+      resolvePick(t.pos ? { x: Number(t.pos[0]), y: Number(t.pos[1]) } : null, t);
+      return;
+    }
+    if (moving) {
+      // the armed token again: put down; a creature is never acted on
+      if (String(t.id) === String(moving.id)) stopMoving();
+      else if (t.actor || t.owner) notice('That space is taken', 'error');
+      else if (t.pos) moveHere({ x: Number(t.pos[0]), y: Number(t.pos[1]) });
+      return;
+    }
+    if (String(t.owner ?? '') === game.me && game.me !== '') {
+      moving = t;
+      selected = String(t.id);
       return;
     }
     selected = selected === t.id ? '' : String(t.id);
@@ -255,12 +281,47 @@
 
   function onCellClick(_cell: unknown, at: { x: number; y: number }): void {
     if (pick) resolvePick(at);
+    else if (moving) moveHere(at);
     else selected = '';
   }
 
-  function resolvePick(at: { x: number; y: number } | null): void {
+  // the armed token to the cell tapped: asked first on a touch screen, at once with a mouse
+  function moveHere(at: { x: number; y: number }): void {
+    if (!moving || !map) return;
+    const now = ((game.scene.tokens as Dict[]) ?? []).find((t) => String(t.id) === String(moving?.id)) ?? moving;
+    const to = moveTo(new Grid(map.grid ?? {}), now, at, map.style?.show_grid !== false);
+    if (!to) {
+      notice('That’s off the map', 'error');
+      return;
+    }
+    if (coarse) {
+      confirmMove = { pos: to.pos, words: `${String(moving.name ?? 'Your token')} → here (${to.spaces} space${to.spaces === 1 ? '' : 's'})` };
+      return;
+    }
+    sendMove(to.pos);
+  }
+
+  function sendMove(pos: [number, number]): void {
+    if (!moving) return;
+    dragTipSeen();
+    request({ t: 'token.set', scene: String(game.scene.id ?? ''), id: String(moving.id), changes: { pos } });
+    stopMoving();
+  }
+
+  function stopMoving(): void {
+    moving = null;
+    confirmMove = null;
+  }
+
+  // a token armed to move that has gone (another scene, taken off the map) is put down
+  $effect(() => {
+    if (moving && !((game.scene.tokens as Dict[]) ?? []).some((t) => String(t.id) === String(moving?.id))) stopMoving();
+  });
+
+  // (`hit`: the token tapped, of several on one cell)
+  function resolvePick(at: { x: number; y: number } | null, hit: Dict | null = null): void {
     if (!pick || !at || !map) return;
-    const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, false);
+    const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, false, hit);
     if (target === null) {
       notice('Nothing to pick there — try again, or Cancel', 'error');
       return;
@@ -269,11 +330,20 @@
       picked = togglePicked(picked, target, pickCount(pick));
       return;
     }
-    if (coarse) {
-      confirmPick = { target, words: `${String(pick.label ?? 'This')} → ${targetName(target)}` };
+    // one of the party asks first, however the tap came (a playtest's tap
+    // on stacked tokens threw a javelin at the thrower's own side)
+    const friend = typeof target === 'string' && onOurSide(target);
+    if (coarse || friend) {
+      confirmPick = { target, words: `${String(pick.label ?? 'This')} → ${targetName(target)}${friend ? ' (on your side)' : ''}` };
       return;
     }
     sendPick(target);
+  }
+
+  /** A party member's token ("token:<id>"): a player's. */
+  function onOurSide(target: string): boolean {
+    const id = target.replace(/^token:/, '');
+    return String(((game.scene.tokens as Dict[]) ?? []).find((x) => String(x.id) === id)?.owner ?? '') !== '';
   }
 
   function sendPick(target: string | Dict | string[]): void {
@@ -358,22 +428,22 @@
           playerColors={playerColors()}
           {selected}
           activeToken={''}
-          picking={pick ? pickWords(pick) : ''}
+          picking={pick ? pickWords(pick) : moving ? moveWords(moving) : ''}
           centerOn={followed}
           follow={followed}
           canDrag={(t) => String(t.owner ?? '') === game.me}
           {onTokenClick}
           {onCellClick}
           {onTokenDrop}
-          onCancelPick={() => ((pick = null), (picked = []), (confirmPick = null))}
+          onCancelPick={() => ((pick = null), (picked = []), (confirmPick = null), stopMoving())}
         />
-        {#if dragTip && !pick}
+        {#if dragTip && !pick && !moving}
           <div class="drag-tip" role="status">
-            <span>Your token is yours to move: drag it on the map.</span>
+            <span>{coarse ? 'Your token is yours to move: tap it, then tap where it goes.' : 'Your token is yours to move: drag it, or click it and then where it goes.'}</span>
             <button type="button" class="quiet" onclick={dragTipSeen}>Got it</button>
           </div>
         {/if}
-        {#if game.scene.fog && !confirmPick && !(pick && pickCount(pick) > 1)}
+        {#if game.scene.fog && !confirmPick && !confirmMove && !(pick && pickCount(pick) > 1)}
           <!-- (a playtest's players all took the dark for a broken map, the
                enemies it hid for missing ones) -->
           <p class="sight-note">The dark is out of your character's sight: walls, trees and distance hide what's there.</p>
@@ -390,6 +460,12 @@
             <span>{confirmPick.words}</span>
             <button type="button" class="quiet" onclick={() => (confirmPick = null)}>Choose again</button>
             <button type="button" class="accent" onclick={() => confirmPick && sendPick(confirmPick.target)}>Do it</button>
+          </div>
+        {:else if confirmMove}
+          <div class="confirm-pick" role="dialog" aria-label="Confirm the move">
+            <span>{confirmMove.words}</span>
+            <button type="button" class="quiet" onclick={() => (confirmMove = null)}>Choose again</button>
+            <button type="button" class="accent" onclick={() => confirmMove && sendMove(confirmMove.pos)}>Move</button>
           </div>
         {/if}
       </section>

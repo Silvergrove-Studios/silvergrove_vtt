@@ -1059,15 +1059,16 @@ class Bridge:
 	func turns_get() -> Dictionary:
 		return JsonDoc.deep(_k().state.encounter.turns)
 
-	func turns_op(op: String, a: String, b: String) -> Variant:
+	## `next` takes who ended the turn and the turn meant ({round, turn} or {}).
+	func turns_op(op: String, a: Variant, b: Variant) -> Variant:
 		var why := ""
 		var t := _k().turns
 		match str(op):
-			"set_focus": why = t.set_focus(a, b)
-			"request": why = t.request_focus(b, a)
-			"deny": why = t.deny_focus(a)
-			"start": why = t.start(a, b)
-			"next": why = t.next()
+			"set_focus": why = t.set_focus(str(a), str(b))
+			"request": why = t.request_focus(str(b), str(a))
+			"deny": why = t.deny_focus(str(a))
+			"start": why = t.start(str(a), str(b))
+			"next": why = t.next({"by": str(a), "expect": PluginHost._as_dict(b)})
 			"stop": why = t.stop()
 			_: why = "unknown turns op " + op
 		return true if why == "" else {"__error": why}
@@ -1339,12 +1340,12 @@ class Bridge:
 			out.append(JsonDoc.deep(_k().pending.prompts()[id]))
 		return out
 
-	func test_move(scene: String, token: String, to: Variant) -> Variant:
+	func test_move(scene: String, token: String, to: Variant, by: String = "gm") -> Variant:
 		var k := _k()
 		var p := k.map.point_of(str(scene), to)
 		if p == Vector2.INF:
 			return {"__error": "unknown place"}
-		var why := k.move_token(str(scene), str(token).trim_prefix("token:"), p, "gm")
+		var why := k.move_token(str(scene), str(token).trim_prefix("token:"), p, str(by))
 		return true if why == "" else {"__error": why}
 
 	func test_tick(seconds: Variant) -> bool:

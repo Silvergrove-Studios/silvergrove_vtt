@@ -303,6 +303,12 @@ below puts rules in the map or numbers on tokens; it puts them in
   the focus (`[{player, ref}]`); `history` the last holders. `mode` keeps
   its three values: it says who may move tokens; `strategy` says how
   turns are shaped. Clients draw either shape from these fields alone.
+  `scene` is the scene the order was started on; `last` is the turn that
+  ended last — `{by, entry, round, turn, at}` (`by`: `gm`, a player's id
+  or a plugin's) and what the next turn began with: `log`, the id of the
+  newest log entry, and `pos`, `{token id: [x, y]}` for the tokens up —
+  so a screen can say who ended it and whether anything has happened
+  since.
 - **tracks**: progress tracks by id — countdowns, clocks and meters:
   `{id, plugin, name, kind, value, max, direction, advance: {on, outcomes,
   amount, actor}, audience, on_done, done, linked}`. `advance.on` is

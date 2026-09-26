@@ -124,6 +124,44 @@ func test_web_scene() -> void:
 	check(WebScene.build(st, "nope", ana, false).is_empty(), "no such scene: nothing")
 
 
+## Labels worked out once, over every token on the scene (in a playtest
+## every goblin was "G": a Minion and a Warrior were both G1, the Bandit
+## Captain and a Bandit both B1): initials and numbers, the players' own
+## kept, the same on every screen — a player whose view hides GW1 still
+## sees the GW2 the DM calls out.
+func test_token_labels() -> void:
+	var st := _chapel_state()
+	var m: HexMap = st.map_for(st.encounter.active_scene_id)
+	var sc := Encounter.new_scene(m, str(m.levels[0].get("id", "ground")), "The road", "")
+	sc.fog.enabled = false
+	st.apply({"t": "scene.add", "scene": sc})
+	var sid := str(sc.id)
+	var names := ["Goblin Warrior", "Goblin Warrior 2", "Goblin Minion", "Goblin Boss", "Bandit Captain", "Bandit", "Bandit 2", "Giant Ape"]
+	for i in names.size():
+		var n: String = names[i]
+		var aid := "a_" + n.to_lower().replace(" ", "_")
+		st.apply({"t": "actor.add", "actor": {"id": aid, "kind": "npc", "name": n}})
+		st.apply({"t": "token.add", "scene": sid, "token": Encounter.new_token(n, Vector2(2 + i, 3), {"id": "t_" + aid.substr(2), "actor": aid, "label": n.left(1), "hidden": n == "Goblin Warrior"})})
+	# Ana's Gareth Ash, whose label is GA
+	st.apply({"t": "actor.add", "actor": {"id": "a_gareth", "kind": "pc", "name": "Gareth Ash", "owner": "pl_fe0170c1"}})
+	st.apply({"t": "token.add", "scene": sid, "token": Encounter.new_token("Gareth Ash", Vector2(2, 6), {"id": "t_gareth", "actor": "a_gareth", "owner": "pl_fe0170c1", "label": "GA"})})
+	var labels := TokenLabels.of_scene(st.tokens(sid), st)
+	var got := names.map(func(n: String) -> String: return str(labels.get("t_" + n.to_lower().replace(" ", "_"), "")))
+	check(got.slice(0, 7) == ["GW1", "GW2", "GM", "GB", "BC", "B1", "B2"], "initials, numbered where a stem has company: %s" % [got])
+	check(str(labels.t_gareth) == "GA" and got[7] != "" and got[7] != "GA" and not got.slice(0, 7).has(got[7]), "the player's GA kept; the Giant Ape's is its own: %s" % got[7])
+	check(TokenLabels.of_scene([{"id": "t_x", "name": "Swarm of Bats", "actor": "a_x", "label": ""}]) == {"t_x": "SB"}, "a lone one unnumbered, linking words left out")
+	var ana := {}
+	for t in WebScene.build(st, sid, "pl_fe0170c1", false).tokens:
+		ana[str(t.id)] = str(t.label)
+	check(not ana.has("t_goblin_warrior") and ana.get("t_goblin_warrior_2", "") == "GW2" and ana.get("t_gareth", "") == "GA", "Ana doesn't see GW1, and sees GW2 as the DM calls it: %s" % [ana])
+	var dm := {}
+	for t in WebScene.build(st, sid, "", true).tokens:
+		dm[str(t.id)] = str(t.label)
+	check(dm.get("t_goblin_warrior", "") == "GW1" and dm.get("t_goblin_warrior_2", "") == "GW2", "the DM's screen, the same labels")
+	# the example's goblins with no actor keep what they were given
+	check(WebScene.build(st, st.encounter.active_scene_id, "", true).tokens.filter(func(t: Dictionary) -> bool: return str(t.name) == "Goblin").map(func(t: Dictionary) -> String: return str(t.label)) == ["G1", "G2", "G3", "G4"], "tokens with no creature behind them keep their labels")
+
+
 ## A web client over a real socket: its messages, as they come.
 class WebClient:
 	var ws := WebSocketPeer.new()
@@ -291,6 +329,37 @@ func test_web_clients_on_the_host() -> void:
 	check(hist == ["Last week"], "the history a view carries is the sessions before, not the live log again: %s" % [hist])
 	host.stop()
 	check(not host.is_running() and host.web == null, "stopped, the web side too")
+
+
+## The DM screen's Next says the turn it showed (`from`): in a playtest a
+## player's End turn and the DM's Next a few seconds apart took two turns.
+func test_dm_next_names_the_turn_it_ends() -> void:
+	var dir := "user://web_dm_next_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_web_dm_next.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var c := Campaign.create("Next turn")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	check(c.save(dir.path_join("next.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("next.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	check(ctx.commands.run({"t": "scene.add", "scene": {"id": "s_fight", "name": "Fight", "map": "", "tokens": []}}, "Scene") == "" and ctx.commands.activate_scene("s_fight") == "", "a scene")
+	for n in ["Ada", "Grace", "Jin"]:
+		ctx.commands.add_token("s_fight", Encounter.new_token(n, Vector2(2 + ["Ada", "Grace", "Jin"].find(n), 2), {"id": "t_" + n.to_lower()}))
+	check(win.web_dm.op({"op": "turns", "do": "start"}) == "" and ctx.encounter().turns.order == ["t_ada", "t_grace", "t_jin"], "turns started: Ada, Grace, Jin")
+	# Ada's player ended her turn a moment before the DM, still seeing Ada's, pressed Next
+	check(ctx.commands.next_turn({"by": "pl_1", "expect": {"round": 1, "turn": 0}}) == "" and int(ctx.encounter().turns.turn) == 1, "Ada's turn ended from her sheet")
+	var why := win.web_dm.op({"op": "turns", "do": "next", "from": {"round": 1, "turn": 0}})
+	check(why == "Ada's turn has already ended: it's Grace's turn now.", "the DM's Next for Ada's turn is refused, saying whose it is: " + why)
+	check(int(ctx.encounter().turns.turn) == 1 and str(ctx.encounter().turns.last.entry) == "t_ada", "Grace's turn goes on")
+	check(win.web_dm.op({"op": "turns", "do": "next", "from": {"round": 1, "turn": 1}}) == "" and int(ctx.encounter().turns.turn) == 2 and str(ctx.encounter().turns.last.by) == "gm", "the DM's Next for Grace's turn ends it")
+	check(win.web_dm.op({"op": "turns", "do": "next"}) == "" and int(ctx.encounter().turns.round) == 2, "and a Next that says no turn steps as before")
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("next.campaign"))
 
 
 ## Pictures the table uploads (the team: token pictures, pictures in

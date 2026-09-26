@@ -29,6 +29,9 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 		if (gm and tk.get("owner", null) != null) or (not gm and _owns(state, tk, player_id)):
 			eyes.append(tk)
 	var sight: Dictionary = Vision.of(state, scene_id, eyes) if (fog or gm) else {"polygons": [], "cells": []}
+	# labels worked out over every token, the hidden ones too: a player sees
+	# the GW2 the DM calls out, whatever else they can't see
+	var labels := TokenLabels.of_scene(state.tokens(scene_id), state)
 	var tokens := []
 	for tk in state.tokens(scene_id):
 		if not gm:
@@ -36,7 +39,9 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 				continue
 			if fog and not _owns(state, tk, player_id) and not _party(state, tk) and not Vision.sees(sight.polygons, Vision.token_pos(tk)):
 				continue
-		tokens.append(token_out(state, tk, gm))
+		var out := token_out(state, tk, gm)
+		out.label = str(labels.get(str(tk.id), out.get("label", "")))
+		tokens.append(out)
 	var lvl := state.effective_level(scene_id)
 	var regions := {}
 	for id in sc.get("regions", {}):

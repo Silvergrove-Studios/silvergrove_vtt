@@ -72,8 +72,9 @@ var _dm_dirty := false
 var _last_dm_ms := 0
 var _last_scene_ms := 0
 
-## Colours given to players who join by name, in turn.
-const PLAYER_COLORS := ["#4f9cf6", "#e67e22", "#2ecc71", "#e74c3c", "#9b59b6", "#f1c40f", "#1abc9c", "#ec87c0"]
+## Colours given to players who join by name, in turn. None is red: red is
+## the creatures' (a playtest's player in red read as a goblin).
+const PLAYER_COLORS := ["#4f9cf6", "#e67e22", "#2ecc71", "#a4d65e", "#9b59b6", "#f1c40f", "#1abc9c", "#ec87c0"]
 
 
 func _init(p_state: EncounterState, p_packs: PackLibrary) -> void:
@@ -759,9 +760,10 @@ func _chat(c: Dictionary, intent: Dictionary) -> String:
 
 
 ## What a co-GM may drive besides actions: {op: next|previous|checkpoint|restore|trigger|bulk, …}.
+## Next may say the turn it means (`from`: {round, turn}), as the DM's own does.
 func _gm_intent(intent: Dictionary) -> String:
 	match str(intent.get("op", "")):
-		"next": return kernel.turns.next()
+		"next": return kernel.turns.next({"by": "gm", "expect": intent.get("from")})
 		"previous": return kernel.turns.previous()
 		"checkpoint": return "" if kernel.checkpoint(str(intent.get("name", "Checkpoint"))) != "" else "could not mark"
 		"restore": return kernel.restore_checkpoint(str(intent.get("id", "")))

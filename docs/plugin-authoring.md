@@ -132,6 +132,7 @@ Hooks in API 1:
 | `after_roll` | `{spec, result, ctx}` | set `result.outcome` and anything else the log should show |
 | `turn_start`, `turn_end` | `{ref, actor, group, events}` | the participant gaining / losing the turn *or the focus*; `group` names the slot when it is a group's member |
 | `round_start`, `round_end` | `{round, events}` | ordered shape only |
+| `combat_end` | `{scene, round, events}` | the turns end (End turns, End the fight): put away what was the fight's own — its initiative, say — with the events the step commits; a veto keeps the turns running |
 | `focus_changed` | `{from, to, by, events}` | asked *before* the focus moves: veto to refuse, add events for a cost |
 | `rest` | `{kind, events}` | after refills and expiries |
 | `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock; `session_start` also fires when a session starts from a campaign, with campaign state already in |
@@ -449,7 +450,8 @@ picks a strategy in the Turns panel; `hm.turns.start(scene, id)`,
 
 | call | |
 |---|---|
-| `hm.turns.current()` | the turns block: `strategy`, `running`, `order`, `turn`, `round`, `focus`, `counters`, `requests`, `history` |
+| `hm.turns.current()` | the turns block: `strategy`, `running`, `order`, `turn`, `round`, `focus`, `counters`, `requests`, `history`, `scene` (the one the order is for) and `last` (the turn that ended: `{by, entry, round, turn, at}`) |
+| `hm.turns.next([by, expect])` | end the current turn and start the next. `by` says who ended it (a player's id, `"gm"`, or this plugin when not given): a player's end is noted in the log for everyone. `expect = {round, turn}` is the turn meant: when it has already ended, nothing changes and the call fails saying whose turn it is now |
 | `hm.turns.focus()` / `hm.turns.holder_actor()` | the focus holder ref / the actor behind it |
 | `hm.turns.set_focus(holder, by)` | move the focus (`"gm"`, `"token:id"`, `"actor:id"`); `focus_changed` may veto |
 | `hm.turns.request(player, ref)` / `hm.turns.deny(ref)` | a Player's request for the focus |

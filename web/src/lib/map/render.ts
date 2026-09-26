@@ -5,7 +5,7 @@
 // backdrop and terrain are drawn once into a cached canvas, and what a
 // snapshot decides (the props in order, the fog, the grid) is worked out
 // once per snapshot (`prepare`); the rest is drawn every frame.
-import { Grid, INSCRIBED_SQUARE, R, keyCell, type Cell, type Vec } from '../grid';
+import { Grid, INSCRIBED_SQUARE, R, cellKey, keyCell, type Cell, type Vec } from '../grid';
 import { asset, assetArt, image, raster, terrainImage } from '../art';
 import type { Dict } from '../game.svelte';
 
@@ -29,6 +29,8 @@ export interface Look {
   showGrid: boolean;
 }
 
+/** A creature's outer ring: the side it is on, beside its shape. */
+const FOE = '#dc143c';
 const FOG_UNSEEN = 'rgb(8, 8, 13)';
 const FOG_GM = 'rgba(13, 13, 31, 0.55)';
 const FOG_DIM = 'rgba(8, 8, 13, 0.62)';
@@ -68,18 +70,68 @@ export function pointInPolygon(p: Vec, poly: number[][]): boolean {
   return inside;
 }
 
-/** The topmost token under a point (hex units), or null. */
+/** Where a token is drawn, and at what share of its size. */
+export interface Placed {
+  pos: Vec;
+  k: number;
+}
+
+/** How far apart two tokens on one cell sit, and how big each is drawn. */
+export const FAN_APART = 0.22;
+export const FAN_SIZE = 0.62;
+
+/** Where each token is drawn: tokens of size 1 or less on the same cell fan
+ *  out — two side by side, three or four round a circle — each smaller
+ *  (in a playtest two tokens drawn one on the other were one to see, and a
+ *  tap went to the one underneath). `skip` (a token being dragged) stays
+ *  where it is. By token id; a token alone is drawn where it stands. */
+export function layout(tokens: Dict[], grid: Grid, skip = ''): Map<string, Placed> {
+  const out = new Map<string, Placed>();
+  const cells = new Map<string, Dict[]>();
+  for (const t of tokens) {
+    const id = String(t.id);
+    if (Number(t.size ?? 1) > 1 || id === skip) {
+      out.set(id, { pos: tokenPos(t), k: 1 });
+      continue;
+    }
+    const key = cellKey(grid.cellAt(tokenPos(t)));
+    const here = cells.get(key);
+    if (here) here.push(t);
+    else cells.set(key, [t]);
+  }
+  for (const here of cells.values()) {
+    if (here.length === 1) {
+      out.set(String(here[0].id), { pos: tokenPos(here[0]), k: 1 });
+      continue;
+    }
+    // round where they stand (a cell's centre, on a map with a grid)
+    const mid = here.reduce((m, t) => ({ x: m.x + tokenPos(t).x / here.length, y: m.y + tokenPos(t).y / here.length }), { x: 0, y: 0 });
+    here.forEach((t, i) => {
+      let off: Vec;
+      if (here.length === 2) off = { x: i === 0 ? -FAN_APART : FAN_APART, y: 0 };
+      else {
+        const a = -Math.PI / 2 + (here.length === 4 ? Math.PI / 4 : 0) + (i * 2 * Math.PI) / here.length;
+        off = { x: Math.cos(a) * FAN_APART * 1.1, y: Math.sin(a) * FAN_APART * 1.1 };
+      }
+      out.set(String(t.id), { pos: { x: mid.x + off.x, y: mid.y + off.y }, k: FAN_SIZE });
+    });
+  }
+  return out;
+}
+
 /** The token under a point: within its own radius or `least` (a reach on
  *  screen, in map units: a small map's tokens are a few pixels across, and a
- *  playtest's DM panned the map trying to drag the party), the nearest first. */
-export function tokenAt(tokens: Dict[], p: Vec, least = 0): Dict | null {
+ *  playtest's DM panned the map trying to drag the party), the nearest first;
+ *  where `placed` (layout) draws it. */
+export function tokenAt(tokens: Dict[], p: Vec, least = 0, placed?: Map<string, Placed>): Dict | null {
   let best: Dict | null = null;
   let bestD = Infinity;
   for (let i = tokens.length - 1; i >= 0; i--) {
     const t = tokens[i];
-    const c = tokenPos(t);
+    const at = placed?.get(String(t.id));
+    const c = at?.pos ?? tokenPos(t);
     const d = Math.hypot(c.x - p.x, c.y - p.y);
-    if (d <= Math.max(tokenRadius(t), least) && d < bestD) {
+    if (d <= Math.max(tokenRadius(t) * (at?.k ?? 1), least) && d < bestD) {
       best = t;
       bestD = d;
     }
@@ -316,16 +368,14 @@ export function drawFrame(f: Frame): void {
   drawRegions(ctx, grid, scene, look.gm, cam.scale);
   drawDoors(ctx, lvl, cam.scale);
   const tokens = (scene.tokens as Dict[]) ?? [];
-  // "Goblin Warrior" beside "Goblin Warrior 2" and "3" shows "G1": its label
-  // has numbered siblings
-  const numbered = new Set<string>();
-  for (const t of tokens) if (/\s\d+$/.test(String(t.name ?? ''))) numbered.add(String(t.label ?? ''));
+  // (labels come as the host works them out over every token: GW1, GW2)
+  const placed = layout(tokens, grid, look.dragging?.id ?? '');
   for (const t of tokens) {
     const drag = look.dragging && look.dragging.id === t.id ? look.dragging.pos : null;
-    const first = numbered.has(String(t.label ?? '')) && !/\s\d+$/.test(String(t.name ?? '')) && !/\d/.test(String(t.label ?? ''));
-    drawToken(ctx, first ? { ...t, label: `${t.label}1` } : t, drag ?? tokenPos(t), look, cam.scale, dpr);
+    const at = placed.get(String(t.id));
+    drawToken(ctx, t, drag ?? at?.pos ?? tokenPos(t), look, cam.scale, dpr, drag ? 1 : (at?.k ?? 1));
   }
-  drawNameTags(ctx, tokens, look, cam.scale);
+  drawNameTags(ctx, tokens, look, cam.scale, placed);
   if (look.gm) drawNotes(ctx, lvl, cam.scale);
   if (fog) {
     if (!look.gm) {
@@ -507,9 +557,13 @@ function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): voi
   }
 }
 
-/** A token: a disc in its colour (or its art, clipped round), a ring in its owner's colour, its label. */
-export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look: Look, scale: number, dpr = 1): void {
-  const r = tokenRadius(t);
+/** A token: a disc in its colour (or its art, clipped round), a ring in its
+ *  owner's colour, its label; `k` of its size (layout). Its side is marked,
+ *  not by colour alone: a creature has a crimson ring outside, notched at
+ *  the top, the party a white halo round their own colour (in a playtest a
+ *  player's red ring read as a goblin's). */
+export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look: Look, scale: number, dpr = 1, k = 1): void {
+  const r = tokenRadius(t) * k;
   const hidden = Boolean(t.hidden);
   const alpha = hidden ? 0.5 : 1;
   const tags: string[] = Array.isArray(t.tags) ? (t.tags as string[]) : [];
@@ -536,10 +590,7 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
   } else {
     ctx.fillStyle = String(t.color ?? '#c0392b');
     ctx.fill();
-    // "Goblin Warrior 2" shows "G2": in a playtest three goblins were all "G"
-    const bare = String(t.label ?? '');
-    const n = /\s(\d+)$/.exec(String(t.name ?? ''))?.[1];
-    const label = n && bare && !/\d/.test(bare) ? bare + n : bare;
+    const label = String(t.label ?? '');
     if (label) {
       const fs = label.length <= 2 ? r * 0.9 : r * 0.6;
       ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
@@ -560,6 +611,36 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
   ctx.lineWidth = ringW;
   ctx.strokeStyle = ring;
   ctx.stroke();
+  if (t.actor && !t.owner) {
+    // a creature: crimson outside, and a notch at the top
+    const out = r + ringW * 0.75;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, out, 0, Math.PI * 2);
+    ctx.lineWidth = ringW * 1.2 + 1.5 / scale;
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.stroke();
+    ctx.lineWidth = ringW * 1.2;
+    ctx.strokeStyle = FOE;
+    ctx.stroke();
+    const w = ringW * 1.3;
+    ctx.beginPath();
+    ctx.moveTo(pos.x - w, pos.y - out);
+    ctx.lineTo(pos.x, pos.y - out - ringW * 2.2);
+    ctx.lineTo(pos.x + w, pos.y - out);
+    ctx.closePath();
+    ctx.fillStyle = FOE;
+    ctx.fill();
+    ctx.lineWidth = Math.max(ringW * 0.3, 1 / scale);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.stroke();
+  } else if (t.owner) {
+    // the party: its own colour, haloed in white
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r + ringW * 0.55, 0, Math.PI * 2);
+    ctx.lineWidth = ringW * 0.6;
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+    ctx.stroke();
+  }
   // what everyone can see of its state (the ruleset's tags): bloodied, down, dead
   if (tags.includes('dead') || tags.includes('down')) {
     ctx.beginPath();
@@ -633,7 +714,7 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
  *  map reads without clicking every marker (about 13 px on screen), each
  *  moved down clear of any it would cover (a playtest's DM read "The
  *  partyuined chapel" where the party stood at the chapel). */
-function drawNameTags(ctx: CanvasRenderingContext2D, tokens: Dict[], look: Look, scale: number): void {
+function drawNameTags(ctx: CanvasRenderingContext2D, tokens: Dict[], look: Look, scale: number, spots?: Map<string, Placed>): void {
   const fs = 13 / scale;
   ctx.save();
   ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
@@ -650,8 +731,10 @@ function drawNameTags(ctx: CanvasRenderingContext2D, tokens: Dict[], look: Look,
     })
     .sort((a, b) => Number(((b.tags as string[]) ?? []).includes('place')) - Number(((a.tags as string[]) ?? []).includes('place')));
   for (const t of named) {
-    const pos = look.dragging && look.dragging.id === t.id ? look.dragging.pos : tokenPos(t);
-    const r = tokenRadius(t);
+    const at = spots?.get(String(t.id));
+    const dragged = look.dragging && look.dragging.id === t.id;
+    const pos = dragged ? look.dragging!.pos : (at?.pos ?? tokenPos(t));
+    const r = tokenRadius(t) * (dragged ? 1 : (at?.k ?? 1));
     const w = ctx.measureText(String(t.name)).width;
     let y = pos.y + r + Math.max(r * 0.09, 1.5 / scale) * 2;
     for (let tries = 0; tries < 4; tries++) {

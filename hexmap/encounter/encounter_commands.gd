@@ -191,15 +191,31 @@ func set_turn_order(order: Array) -> String:
 	return run({"t": "turns.set", "changes": {"order": order}}, "Reorder")
 
 
+## A fight's order goes with the fight: no order, turn or round, no labels,
+## groups, budgets or last turn, so the next fight's turns start clean (a
+## playtest's chapel fight opened on the lookout's order, one of its new
+## goblins in it). Who may move (`mode`) stays. Stop the turns first.
+func clear_turns() -> String:
+	var t := state.encounter.turns
+	var data: Dictionary = t.get("data", {}) if t.get("data") is Dictionary else {}
+	if (t.get("order", []) as Array).is_empty() and data.is_empty() and (t.get("counters", {}) as Dictionary).is_empty() and t.get("last") == null and str(t.get("scene", "")) == "":
+		return ""
+	return run({"t": "turns.set", "changes": {"order": [], "turn": 0, "round": 1, "running": false, "data": {}, "counters": {}, "last": null, "scene": ""}}, "Clear the turns")
+
+
 func stop_turns() -> String:
 	if kernel != null:
 		return kernel.turns.stop()
 	return run({"t": "turns.set", "changes": {"running": false}}, "End turns")
 
 
-func next_turn() -> String:
+## `opts` as TurnRunner.next has them: {by, expect: {round, turn}}.
+func next_turn(opts := {}) -> String:
 	if kernel != null:
-		return kernel.turns.next()
+		return kernel.turns.next(opts)
+	var late := TurnRunner.stale(state, opts.get("expect"))
+	if late != "":
+		return late
 	var turns := state.encounter.turns
 	var changes := TurnSystem.get_system(str(turns.get("system", "list"))).next(turns)
 	if changes.is_empty():

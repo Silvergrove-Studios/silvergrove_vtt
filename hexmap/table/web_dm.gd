@@ -184,7 +184,8 @@ func op(intent: Dictionary) -> String:
 			var sid := ctx.encounter().active_scene_id
 			match str(intent.get("do", "")):
 				"start": return ctx.commands.start_turns(sid)
-				"next": return ctx.commands.next_turn()
+				# the turn the screen showed: one a player ended meanwhile is not ended twice
+				"next": return ctx.commands.next_turn({"by": "gm", "expect": intent.get("from")})
 				"previous": return ctx.commands.previous_turn()
 				"end": return ctx.commands.stop_turns()
 				"mode": return ctx.commands.set_turn_mode(str(intent.get("mode", "free")))

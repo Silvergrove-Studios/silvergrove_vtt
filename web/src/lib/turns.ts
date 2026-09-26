@@ -27,6 +27,21 @@ function owned(t: Dict, me: string): boolean {
   return !!me && String(t.owner ?? '') === me;
 }
 
+/** Said to a player whose turn (`at`) the DM ended: "The DM moved on: it's
+ *  Jin's turn." — or '' when it ended some other way. A playtest's player
+ *  pressed End turn after the DM's Next, and ended the next one's too. */
+export function movedOn(scene: Dict, at: { round: number; turn: number }): string {
+  const turns: Dict = scene.turns ?? {};
+  const last: Dict | null = turns.last && typeof turns.last === 'object' ? turns.last : null;
+  if (!last || String(last.by ?? '') !== 'gm' || Number(last.round) !== at.round || Number(last.turn) !== at.turn) return '';
+  const tokens: Dict[] = (scene.tokens as Dict[]) ?? [];
+  const up = currentTurnTokens(turns, tokens)
+    .map((id) => tokens.find((t) => t.id === id))
+    .filter((t): t is Dict => !!t)
+    .map((t) => String(t.name ?? ''));
+  return up.length ? `The DM moved on: it's ${up.join(', ')}'s turn.` : 'The DM moved on.';
+}
+
 /** One line for a player's header, and whether it is their move. */
 export function turnSummary(scene: Dict, me: string): { text: string; mine: boolean } {
   const turns: Dict = scene.turns ?? {};

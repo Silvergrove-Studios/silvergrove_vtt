@@ -748,9 +748,13 @@ func launch(enc_id: String, show := true) -> String:
 		return "the encounter's map could not be loaded"
 	var entry := ctx.campaign.map_entry(str(e.get("map", "")))
 	# a fight the players are brought to has its own turns: another's end (a
-	# playtest's second fight opened on the first one's order, in raw ids)
+	# playtest's second fight opened on the first one's order, in raw ids),
+	# and whatever order was left behind goes (another opened on the lookout
+	# fight's, one of its new goblins in it)
 	if show and bool(ctx.encounter().turns.get("running", false)):
 		ctx.commands.stop_turns()
+	if not bool(ctx.encounter().turns.get("running", false)):
+		ctx.commands.clear_turns()
 	var previous := ctx.encounter().active_scene_id
 	var scene := Encounter.new_scene(m, str(e.get("level", m.levels[0].get("id", "ground"))), str(e.get("name", "")), str(entry.get("path", "")))
 	scene.fog.enabled = true
@@ -761,10 +765,14 @@ func launch(enc_id: String, show := true) -> String:
 	var acts := _entry_actions()
 	var made := []
 	var problems := PackedStringArray()
-	# creatures with no cell of their own stand side by side, each on a free
-	# cell, east of the middle (a fight the DM made at the table put them all
-	# on the map's corner, one on top of another)
-	var taken := {}
+	# every creature on a free cell: its own cell when it is free, the nearest
+	# free one when not, and those after it the nearest free ones to that —
+	# never on another token, a pillar or a pew, nor in a fire (a playtest's
+	# boss stood on a pew, the Warden on a pillar, the goblins in a line
+	# through the nave). Those with no cell of their own stand east of the
+	# middle (a fight the DM made at the table put them all on the map's
+	# corner, one on top of another).
+	var taken := blocked_cells(m.grid, ctx.state.effective_level(str(scene.id)), ctx.art)
 	for tk in ctx.state.tokens(str(scene.id)):
 		taken[m.grid.world_to_axial(Vision.token_pos(tk))] = true
 	var east := m.grid.offset_to_axial(int(m.grid.columns * 2 / 3), int(m.grid.rows / 2))
@@ -777,20 +785,18 @@ func launch(enc_id: String, show := true) -> String:
 		if record.is_empty():
 			problems.append("no entry %s" % str(c.get("entry", "")))
 			continue
-		var pos := Vector2.ZERO
+		var anchor := east
 		var cell := str(c.get("cell", ""))
 		if cell.contains(","):
 			var parts := cell.split(",")
-			pos = m.grid.cell_center(m.grid.offset_to_axial(int(parts[0]), int(parts[1])))
+			anchor = m.grid.offset_to_axial(int(parts[0]), int(parts[1]))
 		var act: Dictionary = acts[coll]
-		# one dispatch per creature (rulesets need not know `count`), each a cell along
+		# one dispatch per creature (rulesets need not know `count`), each on a free cell
 		for n in int(c.get("count", 1)):
 			var before := ctx.encounter().actors.keys()
-			var at := pos + Vector2(float(n) * 1.0, 0.0)
-			if not cell.contains(","):
-				var free := _free_cell(m.grid, east, taken)
-				taken[free] = true
-				at = m.grid.cell_center(free)
+			var free := _free_cell(m.grid, anchor, taken)
+			taken[free] = true
+			var at := m.grid.cell_center(free)
 			var pc := ctx.host.dispatch(act.plugin, act.action, {"entry": record, "collection": coll, "scene": str(scene.id), "x": at.x, "y": at.y,
 				"count": 1, "hidden": bool(c.get("hidden", true))})
 			if pc.status == PluginHost.PluginCall.ERROR:
@@ -828,7 +834,7 @@ func place_party(scene_id: String, m: HexMap, e: Dictionary) -> String:
 	var spec := str(e.get("party_cell", ""))
 	if spec.contains(","):
 		start = grid.offset_to_axial(int(spec.get_slice(",", 0)), int(spec.get_slice(",", 1)))
-	var taken := {}
+	var taken := blocked_cells(grid, ctx.state.effective_level(scene_id), ctx.art)
 	var here := {}
 	for tk in ctx.state.tokens(scene_id):
 		taken[grid.world_to_axial(Vision.token_pos(tk))] = true
@@ -862,6 +868,36 @@ func place_party(scene_id: String, m: HexMap, e: Dictionary) -> String:
 	return ctx.commands.run_all(events, "The party arrives")
 
 
+## The cells no creature is put on, {axial cell: true}: under a prop that
+## blocks movement (a pillar, a pew, a tree) or, with `fires`, burns (a
+## campfire) — the cell it stands on and any whose centre its footprint
+## covers. A prop whose art isn't here is not known to block.
+static func blocked_cells(grid: HexGrid, level: Dictionary, art: PackLibrary, fires := true) -> Dictionary:
+	var out := {}
+	if art == null:
+		return out
+	for p in level.get("props", []):
+		var def := art.prop(str(p.get("asset", "")))
+		if def.is_empty():
+			continue
+		var blocks: Dictionary = def.get("blocks", {}) if def.get("blocks") is Dictionary else {}
+		if not bool(blocks.get("move", false)) and not (fires and (def.get("tags", []) as Array).has("fire")):
+			continue
+		var pos := Vector2(float(p.pos[0]), float(p.pos[1]))
+		var size: Array = def.get("size", [1, 1]) if def.get("size") is Array else [1, 1]
+		var anchor: Array = def.get("anchor", [0.5, 0.5]) if def.get("anchor") is Array else [0.5, 0.5]
+		var w := float(size[0]) * float(p.get("scale", 1.0))
+		var h := float(size[1]) * float(p.get("scale", 1.0))
+		var under := grid.world_to_axial(pos)
+		out[under] = true
+		for c in grid.spiral(under, ceili(maxf(w, h))):
+			# the cell's centre in the prop's own frame, turned back by its rotation
+			var d := (grid.cell_center(c) - pos).rotated(-deg_to_rad(float(p.get("rot", 0.0))))
+			if d.x >= -float(anchor[0]) * w and d.x <= (1.0 - float(anchor[0])) * w and d.y >= -float(anchor[1]) * h and d.y <= (1.0 - float(anchor[1])) * h:
+				out[c] = true
+	return out
+
+
 ## The free cell nearest `from` (itself, then ring by ring), on the map.
 static func _free_cell(grid: HexGrid, from: Vector2i, taken: Dictionary) -> Vector2i:
 	var seen := {from: true}
@@ -889,6 +925,7 @@ func go(enc_id: String) -> String:
 		return "the players are already there"
 	if bool(ctx.encounter().turns.get("running", false)):
 		ctx.commands.stop_turns()
+	ctx.commands.clear_turns()
 	var why := ctx.commands.activate_scene(sid)
 	if why != "":
 		return why
@@ -923,18 +960,23 @@ func return_from(enc_id: String) -> String:
 	if e.is_empty() or not e.has("live") or (e.live as Dictionary).is_empty():
 		return "nothing to return from"
 	var live: Dictionary = e.live
-	# the fight's turns end first: what lasted rounds ends with them
-	if bool(ctx.encounter().turns.get("running", false)):
-		ctx.commands.stop_turns()
-	var events := []
 	var sid := str(live.get("scene", ""))
-	for aid in live.get("actors", []):
-		events.append_array(ctx.encounter().actor_removal_events(str(aid)))
+	# the fight's turns end first: what lasted rounds ends with them (the turns
+	# of another fight, on the scene the players see, are not this one's to
+	# end or clear)
+	var turns := ctx.encounter().turns
+	var theirs := str(turns.get("scene", "")) in ["", sid] or ctx.encounter().active_scene_id == sid
+	if theirs and bool(turns.get("running", false)):
+		ctx.commands.stop_turns()
+	var events := ctx.encounter().removal_events(live.get("actors", []))
 	if not ctx.encounter().scene(sid).is_empty():
 		events.append({"t": "scene.remove", "id": sid})
 	var why := ctx.commands.run_all(events, "Return from " + str(e.get("name", ""))) if not events.is_empty() else ""
 	if why != "":
 		return why
+	# and its order goes with it: the next fight's starts clean
+	if theirs:
+		ctx.commands.clear_turns()
 	var previous := str(live.get("previous", ""))
 	if previous != "" and not ctx.encounter().scene(previous).is_empty():
 		ctx.commands.activate_scene(previous)

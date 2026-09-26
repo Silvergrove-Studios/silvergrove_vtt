@@ -10,7 +10,7 @@
   import type { Cell, Vec } from '../grid';
   import { onArt } from '../art';
   import { game, type Dict } from '../game.svelte';
-  import { drawFrame, drawTerrain, prepare, tokenAt, tokenPos, type Camera, type TerrainCache } from './render';
+  import { drawFrame, drawTerrain, layout, prepare, tokenAt, tokenPos, type Camera, type TerrainCache } from './render';
 
   interface Props {
     map: Dict | null;
@@ -61,7 +61,9 @@
   let dpr = $state(1);
   const cam: Camera = $state({ x: 0, y: 0, scale: 40 });
   let hover = $state<Cell | null>(null);
-  let drag = $state<{ id: string; pos: Vec } | null>(null);
+  // a token being dragged, or dropped and waiting for the table: where it is
+  // drawn, and (dropped) where the table last had it
+  let drag = $state<{ id: string; pos: Vec; from?: Vec } | null>(null);
   let artTick = $state(0);
   let fitted = '';
   // the camera is still the one fit() chose (nobody has panned or zoomed
@@ -70,6 +72,9 @@
 
   const prep = $derived(map && scene?.id ? prepare(map, scene, gm) : null);
   const tokens = $derived(((scene?.tokens as Dict[]) ?? []) as Dict[]);
+  // where each token is drawn: tokens sharing a cell fan out, and a tap is
+  // theirs where they are drawn
+  const placed = $derived(prep ? layout(tokens, prep.grid, drag?.id ?? '') : undefined);
 
   // ----------------------------------------------------------- terrain --
   let terrain: TerrainCache | null = null;
@@ -139,14 +144,21 @@
     }
   });
 
-  // a dropped token stays where it was dropped until the table says where it is
+  // a dropped token stays where it was dropped until the table says where it
+  // is: there, or anywhere else it moved it to (a playtest's party star, put
+  // on a cell of the table's choosing, hung where it was dropped, and the
+  // DM's next drag started on nothing)
   $effect(() => {
     if (!drag) return;
     const t = tokens.find((x) => x.id === drag!.id);
-    if (!t || !pressing) {
-      const p = t ? tokenPos(t) : null;
-      if (!t || (p && Math.hypot(p.x - drag.pos.x, p.y - drag.pos.y) < 0.01)) drag = null;
+    if (!t) {
+      drag = null;
+      return;
     }
+    if (pressing) return;
+    const p = tokenPos(t);
+    const moved = !!drag.from && Math.hypot(p.x - drag.from.x, p.y - drag.from.y) > 0.01;
+    if (moved || Math.hypot(p.x - drag.pos.x, p.y - drag.pos.y) < 0.01) drag = null;
   });
 
   // the token followed moved (the DM moved it, or its player on another
@@ -251,7 +263,12 @@
     pointers.set(e.pointerId, p);
     if (pointers.size === 1) {
       // (a reach of at least 16 px on screen, 22 on a touch screen)
-      const t = tokenAt(tokens, toWorld(p.x, p.y), (e.pointerType === 'mouse' ? 16 : 22) / cam.scale);
+      const w = toWorld(p.x, p.y);
+      const reach = (e.pointerType === 'mouse' ? 16 : 22) / cam.scale;
+      // a token dropped and not yet where the table has it is where it is
+      // drawn, and where the table has it too
+      const drawn = drag && placed ? new Map(placed).set(drag.id, { pos: drag.pos, k: 1 }) : placed;
+      const t = tokenAt(tokens, w, reach, drawn) ?? tokenAt(tokens, w, reach, placed);
       press = { id: e.pointerId, at: p, token: t, moved: false, cam: { x: cam.x, y: cam.y } };
       pressing = true;
     } else if (pointers.size === 2) {
@@ -314,7 +331,8 @@
     } else if (drag && was.token && prep) {
       // onto a cell's centre, or where it was let go on a map with no grid drawn
       const c = map?.style?.show_grid === false ? drag.pos : prep.grid.center(prep.grid.cellAt(drag.pos));
-      drag = { id: drag.id, pos: c };
+      const now = tokens.find((x) => x.id === drag!.id);
+      drag = { id: drag.id, pos: c, from: now ? tokenPos(now) : undefined };
       onTokenDrop?.(was.token, [c.x, c.y]);
       // (if the table refuses, the token goes back)
       const id = drag.id;
@@ -354,7 +372,7 @@
   export function screenOf(id: string): { x: number; y: number } | null {
     const t = tokens.find((x) => x.id === id);
     if (!t || !canvas) return null;
-    const p = tokenPos(t);
+    const p = placed?.get(String(t.id))?.pos ?? tokenPos(t);
     const r = canvas.getBoundingClientRect();
     return { x: r.left + width / 2 + (p.x - cam.x) * cam.scale, y: r.top + height / 2 + (p.y - cam.y) * cam.scale };
   }

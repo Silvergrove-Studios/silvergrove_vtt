@@ -2,7 +2,8 @@
 // the DM's screen and two players' screens (one a phone), the village
 // (a place's card, shown to the players, chat and a private message), a
 // character sheet, and the chapel fight (launched, initiative, an attack
-// picked on the map, ended). Screenshots of each step go to the output
+// picked on the map, a token moved by tapping it and then where it goes,
+// ended). Screenshots of each step go to the output
 // folder; a step that does not happen fails the run.
 //
 //   node tests/e2e/journey.mjs <host.json> <out dir>
@@ -359,10 +360,14 @@ await step('the DM drags Wren beside a goblin', async () => {
 });
 
 await step('the DM moves the turns on to Wren', async () => {
+  const now = () => dm.evaluate(() => `${window.hexmap.game.scene.turns?.round}/${window.hexmap.game.scene.turns?.turn}`);
   for (let i = 0; i < 12; i++) {
     if (await dm.locator('.fightbar').getByText(/Wren’s turn/).count()) return;
+    // (each step seen through before the next: a look taken before the turn
+    // reached the screen went one past Wren's)
+    const was = await now();
     await dm.getByRole('button', { name: 'Next turn ›' }).click();
-    await dm.waitForTimeout(300);
+    await dm.waitForFunction((b) => `${window.hexmap.game.scene.turns?.round}/${window.hexmap.game.scene.turns?.turn}` !== b, was, { timeout: 5000 });
   }
   throw new Error('Wren’s turn never came');
 });
@@ -393,6 +398,44 @@ await step('Ana attacks: a target picked on the map, the roll in the log', async
   await ana.waitForFunction((n) => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length > n, before, { timeout: 8000 });
   await ana.getByRole('tab', { name: /Chat/ }).click();
   await shot(ana, 'ana_attack_rolled');
+});
+
+// (a playtest's tablet player never managed to drag her token: tap it, then where it goes)
+await step('Ana taps Wren, then where she goes, and says yes', async () => {
+  await ana.getByRole('tab', { name: /Map/ }).click();
+  const w = await ana.evaluate(() => {
+    const g = window.hexmap.game;
+    const toks = g.scene.tokens ?? [];
+    const t = toks.find((x) => x.owner === g.me);
+    const c = document.querySelector('canvas');
+    if (!t || !c?.screenOf) return null;
+    const at = c.screenOf(t.id);
+    const px = c.pxPerHex();
+    // two cells off, where no one stands
+    for (const [dx, dy] of [[-2, 0], [0, -1.7], [0, 1.7], [2, 0]]) {
+      const x = Number(t.pos[0]) + dx;
+      const y = Number(t.pos[1]) + dy;
+      if (!toks.some((o) => Math.hypot(Number(o.pos[0]) - x, Number(o.pos[1]) - y) < 0.8)) return { id: t.id, name: t.name, pos: t.pos, at, to: { x: at.x + dx * px, y: at.y + dy * px } };
+    }
+    return null;
+  });
+  if (!w) throw new Error('Ana has no token, or nowhere free beside it');
+  await ana.mouse.click(w.at.x, w.at.y);
+  await ana.getByText(`Move ${w.name}: tap where to go`).waitFor({ timeout: 5000 });
+  await ana.mouse.click(w.to.x, w.to.y);
+  // on a touch screen the move asks first
+  await ana.getByRole('dialog', { name: 'Confirm the move' }).waitFor({ timeout: 5000 });
+  await shot(ana, 'ana_confirm_move');
+  await ana.getByRole('button', { name: 'Move', exact: true }).click();
+  await ana.waitForFunction(
+    ([id, pos]) => {
+      const t = (window.hexmap.game.scene.tokens ?? []).find((x) => x.id === id);
+      return t && (t.pos[0] !== pos[0] || t.pos[1] !== pos[1]);
+    },
+    [w.id, w.pos],
+    { timeout: 5000 },
+  );
+  await shot(ana, 'ana_moved');
 });
 
 await step('the DM ends the fight', async () => {

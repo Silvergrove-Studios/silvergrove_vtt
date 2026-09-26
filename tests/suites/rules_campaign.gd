@@ -564,6 +564,77 @@ func test_targets_picked_on_the_table() -> void:
 	await tree.process_frame
 
 
+## "Goblins in the chapel" where the book puts them, by the map's features:
+## the boss beside the altar, the Warden on the trapdoor, the goblins round
+## their fire — each on a free cell, never on a pew, a pillar or in the fire
+## (a playtest's boss stood on a pew, the Warden on a pillar, the goblins in
+## a line through the nave).
+func test_the_chapel_fight_where_the_book_puts_it() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://campaign_chapel_fight_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_chapel_fight.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	var c := Campaign.create("The chapel")
+	c.plugins.append({"id": "sample.degrees"})
+	check(c.save(dir.path_join("chapel.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("chapel.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var mp := win.maps
+	check(mp.add_map(example("ruined_chapel.hexmap")) == "", "the chapel in the library")
+	var mid := str(ctx.campaign.maps[0].id)
+	var m := mp.load_map(mid)
+	var g := m.grid
+	var note := func(title: String) -> Vector2i:
+		for n in m.level(0).notes:
+			if str(n.title) == title:
+				return g.world_to_axial(Vector2(float(n.pos[0]), float(n.pos[1])))
+		return Vector2i(-99, -99)
+	var col_row := func(cell: Vector2i, nudge := Vector2i.ZERO) -> String:
+		var o := g.axial_to_offset(cell) + nudge
+		return "%d,%d" % [o.x, o.y]
+	var altar: Vector2i = note.call("Altar")
+	var trapdoor: Vector2i = note.call("Trapdoor")
+	var fire: Vector2i = note.call("Fire of broken pews")
+	check(fire != Vector2i(-99, -99), "the map has the goblins' fire of broken pews")
+	var enc := mp.new_encounter("Goblins in the chapel", mid, "ground")
+	mp.add_creature(enc, {"collection": "creatures", "id": "goblin", "name": "Goblin skirmisher"}, 3, col_row.call(fire), true)
+	mp.add_creature(enc, {"collection": "creatures", "id": "goblin-chief", "name": "Goblin chief"}, 1, col_row.call(altar, Vector2i(-1, 0)), true)
+	mp.add_creature(enc, {"collection": "creatures", "id": "skeleton", "name": "Skeleton guard"}, 1, col_row.call(trapdoor), true)
+	# and one given a pew's cell by hand
+	mp.add_creature(enc, {"collection": "creatures", "id": "wolf", "name": "Wolf"}, 1, "10,6", true)
+	check(mp.launch(enc) == "", "launched")
+	var live: Dictionary = ctx.campaign.encounter_entry(enc).live
+	var cells := {}
+	for tk in ctx.state.tokens(str(live.scene)):
+		var aid := str(tk.get("actor", ""))
+		if (live.actors as Array).has(aid):
+			var source := str(ctx.encounter().actor(aid).ext["sample.degrees"].get("source", ""))
+			if not cells.has(source):
+				cells[source] = []
+			cells[source].append(g.world_to_axial(Vision.token_pos(tk)))
+	check((cells.get("goblin-chief", []) as Array).size() == 1 and g.steps(cells["goblin-chief"][0], altar) <= 1, "the chief within a cell of the altar: %s" % [cells.get("goblin-chief")])
+	check(cells.get("skeleton", []) == [trapdoor], "the skeleton on the trapdoor")
+	check((cells.get("goblin", []) as Array).size() == 3 and (cells.goblin as Array).all(func(x: Vector2i) -> bool: return g.steps(x, fire) == 1), "the goblins round their fire, not in it: %s" % [cells.get("goblin")])
+	var pew := g.offset_to_axial(10, 6)
+	check((cells.get("wolf", []) as Array).size() == 1 and cells.wolf[0] != pew and g.steps(cells.wolf[0], pew) == 1, "the one given a pew stands beside it")
+	var all := {}
+	var blocked := MapsPanel.blocked_cells(g, ctx.state.effective_level(str(live.scene)), ctx.art)
+	for k in cells:
+		for x in cells[k]:
+			all[x] = true
+	check(all.size() == 6 and not all.keys().any(func(x: Vector2i) -> bool: return blocked.has(x)), "six creatures, six cells, none under a pew, a pillar or in the fire")
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("chapel.campaign"))
+
+
 func test_table_campaign_panel_and_dialogs() -> void:
 	var app := App.new("user://test_prefs_campaign.json")
 	var table := TableWindow.new()
