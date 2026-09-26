@@ -6,13 +6,34 @@
 <script lang="ts">
   import { comp, dmOp, game, notice, uploadPicture, type Dict } from '../lib/game.svelte';
   import { prepare } from '../lib/pictures';
-  import { book, type Item, type Node } from './contents';
+  import { book, kindWord, type Item, type Node } from './contents';
 
   let { current = '', onopen }: { current?: string; onopen: (ref: string) => void } = $props();
 
   let q = $state('');
   // (Pictures open: a playtest's DM found the Warden's picture only after the game)
   let closed = $state<Record<string, boolean>>({ 'section:shown': true });
+  // what was shown and what the players wrote grow all campaign: their newest
+  // three, and the rest a press away (a playtest's book was a long column)
+  const NEWEST_ONLY = ['section:shown', 'section:from_players'];
+  let whole = $state<Record<string, boolean>>({});
+
+  // each kind of thing its icon; its name is said after the label (a place,
+  // its fight and its picture can share a name: a playtest's DM opened the
+  // picture "The ruined chapel" meaning the place)
+  const ICONS: Record<string, string> = {
+    place: 'M12 21c-4-4.4-6-7.9-6-11a6 6 0 0 1 12 0c0 3.1-2 6.6-6 11z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+    fight: 'M4 4l11 11 M13 17l4-4 M16 16l4 4 M20 4L9 15 M7 13l4 4 M8 16l-4 4',
+    person: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0',
+    character: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0 M9 17l3 2 3-2',
+    note: 'M6 3h9l4 4v14H6z M14 3v5h5 M9 13h6 M9 17h4',
+    handout: 'M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h5',
+    shown: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+    from_player: 'M4 5h16v11H9l-5 4z',
+    picture: 'M4 5h16v14H4z M4 16l5-5 4 4 2.5-2.5L20 17 M17 9.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z',
+    map: 'M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15 M15 6v15',
+    rule: 'M6 3h11a2 2 0 0 1 2 2v16H8a2 2 0 0 1-2-2z M6 19a2 2 0 0 1 2-2h11',
+  };
   let menu = $state('');
   // a picture of the DM's own into Pictures, to show the players (a playtest's DM
   // could add none): made smaller here, kept by the table, filed in the book
@@ -53,7 +74,7 @@
     for (const coll of (game.view.collections as string[]) ?? []) {
       comp(coll, { query: { text, per_page: 6, fields: ['name'] } }).then((reply) => {
         if (mine !== seq) return;
-        for (const e of (reply.page?.entries as Dict[]) ?? []) found.push({ label: String(e.name ?? e.id), sub: coll.replace(/_/g, ' '), ref: `entry:${coll}/${e.id}` });
+        for (const e of (reply.page?.entries as Dict[]) ?? []) found.push({ label: String(e.name ?? e.id), kind: 'rule', sub: coll.replace(/_/g, ' '), ref: `entry:${coll}/${e.id}` });
         rules = [...found];
       });
     }
@@ -109,7 +130,11 @@
 
 {#snippet item(it: Item, depth: number)}
   <button type="button" class="item" class:on={current === it.ref} style:padding-left={`${12 + depth * 14}px`} onclick={() => onopen(it.ref)}>
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d={ICONS[it.kind] ?? ''} /></svg>
     <span class="label">{it.label}</span>
+    <!-- what it is, after its name (a name is what's looked for first): in sight
+         when searching and when something else has the name, else for a screen reader -->
+    <span class="kindword" class:sr-only={!q && !it.twin}>{kindWord(it.kind)}</span>
     {#if it.sub}<span class="sub">{it.sub}</span>{/if}
   </button>
   {#each it.children ?? [] as c (c.ref)}
@@ -119,11 +144,14 @@
 
 {#snippet group(n: Node, depth: number)}
   {@const isClosed = !q && (closed[n.node] ?? false)}
+  {@const newestOnly = !q && !whole[n.node] && NEWEST_ONLY.includes(n.node) && n.items.length > 3}
   <div class="group" class:folder={n.node.startsWith('folder:')}>
     <div class="head" style:padding-left={`${6 + depth * 14}px`}>
       <button type="button" class="fold" aria-expanded={!isClosed} onclick={() => (closed[n.node] = !isClosed)}>
         <span class="caret" class:closed={isClosed}>▸</span>
         <span class="title">{n.title}</span>
+        <!-- (beside the title, not in it: the title is the section's name alone) -->
+        {#if n.count}<span class="count">{n.count}</span>{/if}
       </button>
       <button type="button" class="quiet dots" aria-label={`Arrange ${n.title}`} onclick={() => (menu = menu === n.node ? '' : n.node)}>⋯</button>
       {#if menu === n.node}
@@ -145,7 +173,10 @@
     </div>
     {#if !isClosed}
       {#each n.folders as f (f.node)}{@render group(f, depth + 1)}{/each}
-      {#each n.items as it (it.ref)}{@render item(it, depth + 1)}{/each}
+      {#each newestOnly ? n.items.slice(0, 3) : n.items as it (it.ref)}{@render item(it, depth + 1)}{/each}
+      {#if newestOnly}
+        <button type="button" class="item more" style:padding-left={`${12 + (depth + 1) * 14}px`} onclick={() => (whole[n.node] = true)}>Show all {n.items.length}</button>
+      {/if}
       {#if n.node === 'section:fights' && !q}
         <button type="button" class="item newfight" style:padding-left={`${12 + (depth + 1) * 14}px`} onclick={newFight}>+ New fight</button>
       {:else if n.folders.length === 0 && n.items.length === 0}
@@ -244,6 +275,19 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .count {
+    flex: none;
+    min-width: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
   .title.plain {
     padding: 6px 10px;
@@ -284,10 +328,15 @@
   .newfight {
     color: var(--accent);
   }
+  .more {
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
   .item {
+    position: relative;
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
     text-align: left;
     border: 0;
@@ -296,12 +345,42 @@
     min-height: 34px;
     border-radius: 8px;
   }
+  .item .icon {
+    flex: none;
+    align-self: center;
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    color: var(--muted);
+  }
+  .item.on .icon {
+    color: var(--accent);
+  }
+  /* short of room, the line beside a name gives way first (it has only the
+     room left over), then the name */
   .item .label {
+    flex: 0 1 auto;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .item .kindword {
+    flex: none;
+    padding: 0 5px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
   .item .sub {
+    flex: 1 1 0;
+    min-width: 0;
     color: var(--muted);
     font-size: 0.82rem;
     white-space: nowrap;

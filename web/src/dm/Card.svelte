@@ -14,7 +14,7 @@
   import FightCard from './FightCard.svelte';
   import TokenPicture from '../common/TokenPicture.svelte';
   import { cardData, cardSchema } from '../lib/views/viewlib';
-  import { audienceWords, folderChoices, layout } from './contents';
+  import { audienceWords, folderChoices, kindWord, layout } from './contents';
 
   let starting = $state(false);
   let { ref, onopen, onclose, popout }: { ref: string; onopen: (ref: string) => void; onclose?: () => void; popout?: () => void } = $props();
@@ -32,6 +32,12 @@
   // a fight prepared or of the DM's own (fight:<id>)
   const fightEntry = $derived(kind === 'fight' ? ((dm.encounters as Dict[]) ?? []).find((e) => String(e.id) === id) : undefined);
   const viewActor = $derived(kind === 'actor' ? ((game.view.actors ?? {}) as Dict)[id] : undefined);
+  // what it is, in the book's words: a place that holds a fight is a place
+  const itsKind = $derived(
+    kind === 'actor' ? (person?.kind === 'pc' ? 'character' : 'person')
+    : kind === 'note' ? (note?.kind === 'handout' ? 'handout' : 'note')
+    : ({ handout: 'shown', pnote: 'from_player', entry: 'rule' } as Record<string, string>)[kind] ?? kind,
+  );
   const shownNow = $derived(((dm.shown as Dict[]) ?? []).filter((h) => String(h.ref ?? '') === ref));
   const folders = $derived(folderChoices(dm));
   const filedIn = $derived(String(layout(dm).in[ref] ?? ''));
@@ -114,7 +120,7 @@
 <article class="card">
   <header class="head">
     <div class="titles">
-      <p class="kind">{kind === 'fight' ? 'A fight' : kind === 'place' ? (place?.kind === 'encounter' ? 'A fight' : 'A place') : kind === 'actor' ? (person?.kind === 'pc' ? 'A player character' : 'A person') : kind === 'note' ? 'A note' : kind === 'handout' ? 'Shown to the players' : kind === 'picture' ? 'A picture' : kind === 'map' ? 'A map' : kind === 'pnote' ? 'From a player' : kind === 'entry' ? 'Rules' : ''}</p>
+      <p class="kind">{kindWord(itsKind)}</p>
       <h2>{place?.name ?? person?.name ?? note?.title ?? picture?.name ?? mapEntry?.name ?? pnote?.title ?? fightEntry?.name ?? entry?.data?.entry?.name ?? (kind === 'entry' || kind === 'fight' ? '' : 'Not found')}</h2>
     </div>
     <div class="tools">
