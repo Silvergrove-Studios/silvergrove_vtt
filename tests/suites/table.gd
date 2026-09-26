@@ -849,6 +849,23 @@ func test_a_fight_leaves_no_order_behind() -> void:
 	DirAccess.remove_absolute(dir.path_join("two.campaign"))
 
 
+## The cells a fight's creatures are not put on (a playtest's boss stood on a
+## pew, the Warden on a pillar): under what blocks movement, and in a fire.
+func test_cells_no_creature_is_put_on() -> void:
+	var m := HexMap.load_file(_example("ruined_chapel.hexmap"))
+	var g := m.grid
+	var art := PackLibrary.new()
+	art.reload()
+	var blocked := MapsPanel.blocked_cells(g, m.level(0), art)
+	var at := func(col: int, row: int) -> bool: return blocked.has(g.offset_to_axial(col, row))
+	check(at.call(7, 5) and at.call(13, 10), "the pillars")
+	check(at.call(10, 6) and at.call(12, 9), "the pews")
+	check(at.call(17, 8), "the altar")
+	check(not at.call(13, 8) and not at.call(9, 8), "not the trapdoor, nor the bones on the floor")
+	check(at.call(11, 8) and not MapsPanel.blocked_cells(g, m.level(0), art, false).has(g.offset_to_axial(11, 8)), "the goblins' fire, when creatures are put down; not a wall to walk into")
+	check(not at.call(11, 7) and not at.call(16, 8), "the nave's floor is free")
+
+
 ## A player's move reaches the rules as theirs (`by`: their id), so a ruleset
 ## can refuse a move a player may not make and the DM may (in a playtest a
 ## goblin and a player's character ended up on one cell); and no player is

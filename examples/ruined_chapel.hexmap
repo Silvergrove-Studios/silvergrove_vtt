@@ -120,6 +120,23 @@
           ],
           "shadows": true,
           "z": 0.5
+        },
+        {
+          "angle": 360,
+          "animation": "torch",
+          "bright": 1.5,
+          "color": "#ffa040",
+          "dim": 3,
+          "direction": 0,
+          "hidden": false,
+          "id": "l_f1ee0001",
+          "intensity": 1,
+          "pos": [
+            11.5,
+            7.506
+          ],
+          "shadows": true,
+          "z": 0.5
         }
       ],
       "name": "Ground floor",
@@ -143,6 +160,16 @@
           ],
           "text": "The chalice is silver, not holy. The candles relight themselves.",
           "title": "Altar"
+        },
+        {
+          "gm_only": true,
+          "id": "n_f1ee0001",
+          "pos": [
+            11.5,
+            7.506
+          ],
+          "text": "The goblins burn the pews they broke up, and sit round the fire, loud and careless.",
+          "title": "Fire of broken pews"
         }
       ],
       "props": [
@@ -673,6 +700,20 @@
           "pos": [
             3,
             12.5
+          ],
+          "rot": 0,
+          "scale": 1,
+          "z": 0
+        },
+        {
+          "asset": "woodland:campfire",
+          "flip": false,
+          "height": 0.5,
+          "hidden": false,
+          "id": "p_f1ee0001",
+          "pos": [
+            11.5,
+            7.506
           ],
           "rot": 0,
           "scale": 1,
@@ -2906,6 +2947,9 @@
             },
             {
               "ref": "props:p_e9f9ddf3"
+            },
+            {
+              "ref": "props:p_f1ee0001"
             }
           ],
           "id": "f_props",
@@ -2984,6 +3028,9 @@
             },
             {
               "ref": "lights:l_ef2e2228"
+            },
+            {
+              "ref": "lights:l_f1ee0001"
             }
           ],
           "id": "f_lights",
@@ -2999,6 +3046,9 @@
             },
             {
               "ref": "notes:n_a87ee56d"
+            },
+            {
+              "ref": "notes:n_f1ee0001"
             }
           ],
           "id": "f_notes",

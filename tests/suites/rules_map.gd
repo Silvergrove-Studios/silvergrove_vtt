@@ -110,8 +110,14 @@ func test_map_sight_and_light() -> void:
 	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 10, "mode": "dark"}, "light": null}}], "Darkvision")
 	var dv := mq.can_see(sid, "token:t_h", "token:t_g")
 	check(dv.why != "dark" if not dv.sees else true, "dark vision does not fail for darkness: %s" % [dv])
-	# darkvision with a range: the goblin is five hexes off at the edge
+	# darkvision with a range: the goblin is five hexes off at the edge, and the
+	# goblins' fire in the nave is out
 	k.commit([{"t": "element.set", "scene": sid, "ref": "walls:" + str(door.id), "changes": {"state": "open"}}], "Open")
+	var fire_light := ""
+	for l in st.level_for(sid).lights:
+		if Vector2(float(l.pos[0]), float(l.pos[1])).distance_to(g.cell_center(g.offset_to_axial(11, 8))) < 0.01:
+			fire_light = str(l.id)
+	check(fire_light != "" and k.commit([{"t": "element.set", "scene": sid, "ref": LayerTree.ref("lights", fire_light), "changes": {"on": false}}], "The fire out") == "", "the goblins' fire put out")
 	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 10, "dark_radius": 4}}}], "Short darkvision")
 	var near_dark := mq.can_see(sid, "token:t_h", "token:t_g")
 	check(mq.light_at(sid, "token:t_g").level == "dark", "the goblin stands in the dark")

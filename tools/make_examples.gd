@@ -399,6 +399,15 @@ func _ruined_chapel() -> HexMap:
 	_prop(crypt, "dungeons_and_castles:torch_sconce", g.cell_center(g.offset_to_axial(11, 8)) + Vector2(0, -1.2))
 	_light(crypt, g.cell_center(g.offset_to_axial(11, 8)) + Vector2(0, -1.2), 1.0, 2.0, "#ffa040", "torch")
 	_note(crypt, g.cell_center(g.offset_to_axial(9, 8)) + Vector2(-1.0, 0), "Secret door", "Leads to a collapsed tunnel heading west.")
+	# The goblins' fire of broken pews in the nave, where The Ruined Chapel puts
+	# them: made last, with ids of its own and no random draws, so the rest of
+	# every example stays as it was
+	var fire := g.cell_center(g.offset_to_axial(11, 8))
+	var at := [snappedf(fire.x, 0.001), snappedf(fire.y, 0.001)]
+	lvl.props.append({"id": "p_f1ee0001", "asset": "woodland:campfire", "pos": at, "rot": 0.0, "scale": 1.0, "flip": false, "z": 0, "height": 0.5, "hidden": false, "layer": "objects"})
+	lvl.lights.append({"id": "l_f1ee0001", "pos": at, "z": 0.5, "bright": 1.5, "dim": 3.0, "color": "#ffa040", "intensity": 1.0, "angle": 360, "direction": 0,
+		"shadows": true, "animation": "torch", "hidden": false})
+	lvl.notes.append({"id": "n_f1ee0001", "pos": at, "title": "Fire of broken pews", "text": "The goblins burn the pews they broke up, and sit round the fire, loud and careless.", "gm_only": true})
 	return m
 
 
