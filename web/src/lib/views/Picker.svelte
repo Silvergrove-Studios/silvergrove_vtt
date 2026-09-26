@@ -8,7 +8,7 @@
 -->
 <script lang="ts">
   import { viewUi } from './context';
-  import { fillIntent, optionId, optionLabel, valueOf, type Dict, clone } from './viewlib';
+  import { fillIntent, matchWords, optionId, optionLabel, valueOf, type Dict, clone } from './viewlib';
   import { resolve } from './fieldcheck';
   import { Expr } from '../expr';
 
@@ -48,7 +48,7 @@
       let all: any[] = [];
       if (Array.isArray(raw)) all = raw;
       else if (raw && typeof raw === 'object') all = Object.entries(raw).map(([k, v]) => (v && typeof v === 'object' ? v : { id: k, name: String(v) }));
-      items = all.filter((it) => !text || optionLabel(it).toLowerCase().includes(text));
+      items = all.filter((it) => matchWords(optionLabel(it), text));
       status = items.length === 0 ? (text ? 'Nothing matches' : String(node.empty ?? 'Nothing to pick')) : '';
     }
   }

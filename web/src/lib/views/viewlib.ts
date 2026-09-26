@@ -131,6 +131,19 @@ export function withOptions(field: Dict, ctx: Dict): Dict {
   return f;
 }
 
+/** A name's or a search's words, as the compendium's index splits them (letters and digits). */
+export function wordsOf(s: string): string[] {
+  return String(s ?? '').toLowerCase().match(/[a-z0-9]+/g) ?? [];
+}
+
+/** Does a name answer what was typed: every word typed is the start of a word
+ * in it, in any order ("hooded lan" finds "Lantern, Hooded"; "thieves' tools"
+ * finds "Thieves' Tools" — a playtest's DM found nothing for either)? */
+export function matchWords(name: string, query: string): boolean {
+  const have = wordsOf(name);
+  return wordsOf(query).every((w) => have.some((h) => h.startsWith(w)));
+}
+
 /** The value an enum option stands for: a record's id, or the string itself. */
 export function optionValue(o: unknown): string {
   if (o && typeof o === 'object') {

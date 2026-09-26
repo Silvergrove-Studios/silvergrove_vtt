@@ -35,9 +35,21 @@ func test_compendium_index_and_layers() -> void:
 		{"id": "burglars-pack", "name": "Burglar's Pack", "text": "A backpack, a bag of ball bearings, rope, a bell and candles."},
 		{"id": "climbers-kit", "name": "Climber's Kit", "text": "Pitons, boot tips, gloves and a harness; use it with rope."},
 		{"id": "rope-silk", "name": "Rope, Silk", "text": "Fifty feet."},
-		{"id": "rope", "name": "Rope", "text": "Fifty feet of hempen rope."}]}) == "", "a little gear")
+		{"id": "rope", "name": "Rope", "text": "Fifty feet of hempen rope."},
+		{"id": "lantern-bullseye", "name": "Lantern, Bullseye", "text": "Like a hooded lantern, its light a cone."},
+		{"id": "lantern-hooded", "name": "Lantern, Hooded", "text": "Bright light; lower the hood to dim it."},
+		{"id": "thieves-tools", "name": "Thieves' Tools", "text": "Picks and a file."},
+		{"id": "tinkers-tools", "name": "Tinker's Tools", "text": "For small repairs, even of thieves' kit."}]}) == "", "a little gear")
 	var names: Array = gear.query("items", {"text": "rope"}).entries.map(func(x: Dictionary) -> String: return str(x.name))
 	check(names == ["Rope", "Rope, Silk", "Burglar's Pack", "Climber's Kit"], "the name first, then what says it: %s" % [names])
+	# the words typed as the index has them, in any order (a playtest's DM typed
+	# "Lantern, Hooded" and "thieves' tools" and found nothing)
+	var by_name := func(q: String) -> Array: return gear.query("items", {"text": q}).entries.map(func(x: Dictionary) -> String: return str(x.id))
+	check(by_name.call("hooded lantern") == ["lantern-hooded", "lantern-bullseye"], "\"hooded lantern\": the hooded one first, then the one that says it: %s" % [by_name.call("hooded lantern")])
+	check(by_name.call("Lantern, Hooded") == ["lantern-hooded", "lantern-bullseye"], "\"Lantern, Hooded\" as the catalogue writes it: %s" % [by_name.call("Lantern, Hooded")])
+	check(by_name.call("thieves' tools") == ["thieves-tools", "tinkers-tools"], "\"thieves' tools\": %s" % [by_name.call("thieves' tools")])
+	check(by_name.call("lan hoo")[0] == "lantern-hooded" and by_name.call("lantern")[0] == "lantern-bullseye", "the starts of words; a name's start before the rest")
+	check(gear.query("items", {"text": "' ,"}).total == gear.count("items"), "no words typed: nothing narrows")
 	r = c.query("creatures", {"sort": "-level", "fields": ["name", "level"]})
 	check(r.entries[0].id == "ogre" and r.entries[0].keys().size() == 4 and not r.entries[0].has("stats"), "sort descending; only the fields asked for")
 	r = c.query("creatures", {"per_page": 4, "page": 2})

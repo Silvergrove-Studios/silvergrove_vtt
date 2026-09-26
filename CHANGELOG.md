@@ -97,6 +97,18 @@
   point buy from 8s, an array or the rolls not given to anything yet —
   and *Suggested for a …* is a button to press (the team: a suggestion
   put in unasked takes the fun out of it).
+- For making a character and finding things: a wizard step's `text` may
+  be `{expr}` over the answers, and reads as rules text on the Table too
+  (the maker's last step says what the choices give: a playtest's
+  criminal never heard of Alert); the Table's wizard puts the record an
+  answer picked from a list in `@chosen`, as the web one does (the
+  weapons step reads the packages chosen before it), and its pickers
+  show their `sub` beside each name (what a player buys, at its price).
+  Searching takes the words typed in any order, each the start of a
+  word, punctuation aside — the compendium's queries, a picker's list, a
+  `choose` field's filter (a playtest's DM found nothing for "Lantern,
+  Hooded" nor "thieves' tools") — and a name made of the words typed
+  comes first.
 
 The team's notes on making a character in the third playtest
 (`docs/playtest-3.md`, T1–T6), on the web screens and the plugin API.

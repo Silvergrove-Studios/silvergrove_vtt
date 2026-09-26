@@ -229,6 +229,30 @@ static func _tokens(e: Dictionary) -> Dictionary:
 	return out
 
 
+## A search's or a name's words, split as the index splits entries:
+## "Lantern, Hooded" → lantern, hooded; "thieves' tools" → thieves, tools.
+static func words_in(s: String) -> PackedStringArray:
+	if _word_re == null:
+		_word_re = RegEx.create_from_string("[a-z0-9]+")
+	var out := PackedStringArray()
+	for m in _word_re.search_all(s.to_lower()):
+		out.append(m.get_string())
+	return out
+
+
+## Is every word typed the start of one of a name's words?
+static func _starts_all(typed: PackedStringArray, named: PackedStringArray) -> bool:
+	for w in typed:
+		var found := false
+		for n in named:
+			if n.begins_with(w):
+				found = true
+				break
+		if not found:
+			return false
+	return true
+
+
 # ---------------------------------------------------------------- queries --
 
 func collections() -> Array:
@@ -326,42 +350,45 @@ func query(coll: String, opts: Dictionary = {}) -> Dictionary:
 		var hit := _filter_hits(coll, str(field), filter[field], all)
 		ids = hit if not started else _intersect(ids, hit)
 		started = true
-	# text: every word (prefix) must match
+	# text: every word (prefix) must match, its words split as the index
+	# splits the entries' (a playtest's DM typed "Lantern, Hooded" and
+	# "thieves' tools" and found nothing: "lantern," and "thieves'" were no
+	# word's start)
 	var text := str(opts.get("text", "")).to_lower().strip_edges()
-	if text != "":
-		for w in text.split(" ", false):
-			var hit := {}
-			for word in _words.get(coll, {}):
-				if str(word).begins_with(w):
-					for id in _words[coll][word]:
-						hit[id] = true
-			ids = hit if not started else _intersect(ids, hit)
-			started = true
+	var typed := words_in(text)
+	for w in typed:
+		var hit := {}
+		for word in _words.get(coll, {}):
+			if str(word).begins_with(w):
+				for id in _words[coll][word]:
+					hit[id] = true
+		ids = hit if not started else _intersect(ids, hit)
+		started = true
 	var sort := str(opts.get("sort", "name"))
 	var list: Array
 	if started:
 		list = ids.keys()
 		_sort(list, all, sort)
 		# by name, a name that matches comes first (a playtest's DM looked for
-		# "Rope" and was offered Burglar's Pack): the whole name, the name's
-		# start, every word in the name, then what says it in its text
-		if text != "" and sort == "name":
+		# "Rope" and was offered Burglar's Pack): the name's own words in any
+		# order ("hooded lantern" is "Lantern, Hooded"), the name's start, every
+		# word the start of one in the name, then what says it in its text
+		if not typed.is_empty() and sort == "name":
 			var buckets := [[], [], [], []]
-			var words := text.split(" ", false)
+			var same := Array(typed)
+			same.sort()
+			var start := " ".join(typed)
 			for id in list:
-				var name := str(all[id].get("name", "")).to_lower()
+				var named := words_in(str(all[id].get("name", "")))
+				var mine := Array(named)
+				mine.sort()
 				var r := 3
-				if name == text:
+				if mine == same:
 					r = 0
-				elif name.begins_with(text):
+				elif " ".join(named).begins_with(start):
 					r = 1
-				else:
-					var every := true
-					for w in words:
-						if not name.contains(w):
-							every = false
-					if every:
-						r = 2
+				elif _starts_all(typed, named):
+					r = 2
 				buckets[r].append(id)
 			list = buckets[0] + buckets[1] + buckets[2] + buckets[3]
 	else:

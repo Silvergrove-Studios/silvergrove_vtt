@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atPointer, facts, fillIntent, num, optionsFrom, putValue, textOf, valueOf } from '../src/lib/views/viewlib';
+import { atPointer, facts, fillIntent, matchWords, num, optionsFrom, putValue, textOf, valueOf, wordsOf } from '../src/lib/views/viewlib';
 
 describe('views', () => {
   const data = { actor: { name: 'Ana', stats: { dex: 14 } }, list: [{ id: 'a', name: 'Alpha', ok: true }, { id: 'b', name: 'Beta', ok: false }], 'a/b': 1 };
@@ -23,6 +23,16 @@ describe('views', () => {
       { id: '', name: 'None' },
       { id: 'a', name: 'Alpha' },
     ]);
+  });
+  it('finds a name by the starts of its words, in any order, whatever the punctuation', () => {
+    // (a playtest's DM found nothing for "Lantern, Hooded" nor "thieves' tools")
+    expect(wordsOf("Thieves' Tools")).toEqual(['thieves', 'tools']);
+    expect(matchWords('Lantern, Hooded', 'hooded lan')).toBe(true);
+    expect(matchWords('Lantern, Hooded', 'Lantern, Hooded')).toBe(true);
+    expect(matchWords("Thieves' Tools", "thieves' tools")).toBe(true);
+    expect(matchWords('Anything', '  ')).toBe(true);
+    expect(matchWords('Lantern, Hooded', 'hooded lamp')).toBe(false);
+    expect(matchWords('Rope', 'ope')).toBe(false);
   });
   it('shows numbers as the sheets do', () => {
     expect(num(3)).toBe('3');

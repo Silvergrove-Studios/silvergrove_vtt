@@ -2,12 +2,13 @@
   One step at a time, with Back and Next; the last step's button submits
   every step's values together ($values).
 
-  A step or a field may have an `if`, and a field's properties may be
-  `{expr = "…"}`: both see the view's data and `@values` (the answers so
-  far) and `@chosen` (for an answer picked from a compendium or a list of
-  records, that record — the class chosen, with its skill choices and
-  spell counts). Next waits until the step's fields are right (a name
-  typed, the points spent, the skills chosen) and says what is missing.
+  A step or a field may have an `if`, and a field's properties and a
+  step's `text` may be `{expr = "…"}`: both see the view's data and
+  `@values` (the answers so far) and `@chosen` (for an answer picked from
+  a compendium or a list of records, that record — the class chosen,
+  with its skill choices and spell counts). Next waits until the step's
+  fields are right (a name typed, the points spent, the skills chosen)
+  and says what is missing.
   The step and the answers are kept in this browser until the wizard is
   done, so a phone that drops the page while in another app comes back to
   where it was.
@@ -64,6 +65,12 @@
   });
   const step = $derived((visible[index] ?? {}) as Dict);
   const last = $derived(index >= visible.length - 1);
+  // a step's text may be `{expr}` too, worked out from the answers (the maker's
+  // last step says what the choices give: a playtest's criminal never heard of Alert)
+  const stepText = $derived.by(() => {
+    const t = resolve(step.text, wctx);
+    return t === null || t === undefined ? '' : String(t);
+  });
 
   function fieldsOf(s: Dict): Dict[] {
     return ((s.fields as Dict[]) ?? []).filter((f) => f && typeof f === 'object' && 'key' in f).map((f) => withOptions(resolve(f, wctx), wctx));
@@ -108,7 +115,10 @@
             if (asked.get(key) === want && reply.entry) chosen[key] = reply.entry;
           });
         } else {
-          const recs = options[key] ?? (Array.isArray(f.options) ? (f.options as Dict[]) : null);
+          // (the field's own options, worked out, when it hasn't been drawn since a
+          // reload: the packages chosen a step before the class's weapons)
+          const listed = options[key] ?? resolve(f.options, wctx);
+          const recs = Array.isArray(listed) ? (listed as Dict[]) : null;
           const rec = recs?.find((o) => o && typeof o === 'object' && String(o.id ?? '') === v);
           if (rec && chosen[key]?.id !== rec.id) chosen[key] = rec;
         }
@@ -154,7 +164,7 @@
     <div class="dots" aria-hidden="true">
       {#each visible as s, i (i)}<span class:on={i === index} class:done={i < index} title={String(s.title ?? '')}></span>{/each}
     </div>
-    {#if step.text}<div class="prose">{@html markdown(String(step.text))}</div>{/if}
+    {#if stepText}<div class="prose">{@html markdown(stepText)}</div>{/if}
     {#key `${index}/${String(step.title ?? '')}`}
       <Form {fields} bind:values bind:options ctx={wctx} />
     {/key}

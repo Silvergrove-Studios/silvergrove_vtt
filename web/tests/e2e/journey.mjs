@@ -216,15 +216,18 @@ await step('a new player makes a character with the wizard', async () => {
   await cara.getByText('From your background').first().waitFor({ timeout: 5000 });
   for (const s of ['Perception', 'Survival']) await cara.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
   await next.click();
+  // equipment (before the class's choices, as the SRD 5.2 orders them): the fighter's package A, the soldier's package A
+  for (const r of await cara.getByRole('radio', { name: /^Package A/ }).all()) await r.click();
+  await shot(cara, 'cara_equipment');
+  await next.click();
   // the class's choices at level 1: a Fighting Style feat, three kinds of weapons to master
   await cara.getByText('What your class lets you choose at level 1.').waitFor({ timeout: 8000 });
   await cara.getByRole('radio', { name: /^Defense/ }).click({ timeout: 8000 });
   for (const w of ['Longsword', 'Greatsword', 'Longbow']) await cara.getByRole('checkbox', { name: new RegExp(`^${w}`) }).click();
   await shot(cara, 'cara_class_features');
   await next.click();
-  // equipment: the fighter's package A, the soldier's package A
-  for (const r of await cara.getByRole('radio', { name: /^Package A/ }).all()) await r.click();
-  await shot(cara, 'cara_equipment');
+  // what her choices give, then the character
+  await cara.getByText('From your background, Soldier:').waitFor({ timeout: 8000 });
   await next.click();
   await cara.getByText('Human Fighter 1').first().waitFor({ timeout: 10000 });
   await shot(cara, 'cara_sheet');

@@ -669,11 +669,20 @@ func _picker(n: Dictionary, ctx: Dictionary) -> Control:
 	status.name = "status"
 	status.theme_type_variation = "DimLabel"
 	box.add_child(status)
-	# each row keeps the record it stands for as its metadata
+	# each row keeps the record it stands for as its metadata; its `sub` (an
+	# Expr over @item: a price, a spell's level) beside its name, as the web
+	# draws it under it
 	var fill := func(items: Array, total: int) -> void:
 		list.clear()
 		for it in items:
-			list.add_item(_option_label(it))
+			var label := _option_label(it)
+			if n.has("sub") and it is Dictionary:
+				var sub_ctx: Dictionary = ctx.duplicate()
+				sub_ctx.item = it
+				var sub := _text(Expr.evaluate(str(n.sub), sub_ctx))
+				if sub != "":
+					label += "  ·  " + sub
+			list.add_item(label)
 			list.set_item_metadata(list.item_count - 1, it)
 		status.text = "" if total <= items.size() else "%d of %d — narrow the search" % [items.size(), total]
 		if items.is_empty():
@@ -711,7 +720,7 @@ func _picker(n: Dictionary, ctx: Dictionary) -> Control:
 				items = raw
 			var shown := []
 			for it in items:
-				if q == "" or _option_label(it).to_lower().contains(q):
+				if match_words(_option_label(it), q):
 					shown.append(it)
 			fill.call(shown, shown.size())
 	search.text_changed.connect(func(_t: String) -> void: load.call())
@@ -746,6 +755,35 @@ static func _option_label(it: Variant) -> String:
 	if it is Dictionary:
 		return str(it.get("name", it.get("label", it.get("id", ""))))
 	return str(it)
+
+
+static var _word_re: RegEx
+
+## A name's or a search's words, as the compendium's index splits them.
+static func words_of(s: String) -> PackedStringArray:
+	if _word_re == null:
+		_word_re = RegEx.create_from_string("[a-z0-9]+")
+	var out := PackedStringArray()
+	for m in _word_re.search_all(s.to_lower()):
+		out.append(m.get_string())
+	return out
+
+
+## Does a name answer what was typed: every word typed is the start of a word
+## in it, in any order ("hooded lan" finds "Lantern, Hooded"; "thieves' tools"
+## finds "Thieves' Tools" — a playtest's DM found nothing for either)?
+## The web's viewlib.matchWords.
+static func match_words(name: String, query: String) -> bool:
+	var have := words_of(name)
+	for w in words_of(query):
+		var found := false
+		for h in have:
+			if h.begins_with(w):
+				found = true
+				break
+		if not found:
+			return false
+	return true
 
 
 static func _option_id(it: Variant) -> String:
@@ -820,10 +858,17 @@ func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
 		holder.add_child(pf)
 		form_ref[0] = pf
 		_fill_choices(fields, pf)
-		if step.has("text"):
-			var t := Label.new()
-			t.text = str(step.text)
-			t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		# a step's text may be `{expr}` too, worked out from the answers (the maker's
+		# last step says what the choices give: a playtest's criminal never heard of
+		# Alert), and reads as the SRDs write, as on the web
+		var said: Variant = resolve_props(step.get("text"), wctx.call()) if step.has("text") else null
+		if said != null and _text(said) != "":
+			var t := RichTextLabel.new()
+			t.bbcode_enabled = true
+			t.fit_content = true
+			t.scroll_active = false
+			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			t.text = markdown_to_bbcode(_text(said))
 			holder.add_child(t)
 			holder.move_child(t, 0)
 		back.disabled = i == 0
@@ -835,23 +880,43 @@ func _wizard(n: Dictionary, ctx: Dictionary) -> Control:
 				values[k] = got[k]
 	var keep := func() -> void:
 		keep_form.call()
-		# the record behind an answer picked from the compendium: the step
-		# is drawn again when it comes (a phone asks the Table for it), with
-		# what was typed kept
-		if comp_source.is_valid():
-			for st in steps:
-				for f in (st.get("fields", []) if st is Dictionary else []):
-					if f is Dictionary and str(f.get("collection", "")) != "" and str(f.get("type", "")) != "choose" and values.get(f.get("key")) is String and str(values[f.key]) != "":
-						var key := str(f.key)
-						var want := str(values[key])
-						if chosen.get(key) is Dictionary and str(chosen[key].get("id", "")) == want:
-							continue
-						comp_source.call(str(f.collection), {"id": want}, func(reply: Dictionary) -> void:
-							if reply.get("entry") is Dictionary and str(values.get(key, "")) == want and not (chosen.get(key) is Dictionary and str(chosen[key].get("id", "")) == want):
-								chosen[key] = reply.entry
-								if is_instance_valid(box):
-									keep_form.call()
-									show.call())
+		var c: Dictionary = wctx.call()
+		# the options the step just left was drawn with (a collection's, once come)
+		var drawn := {}
+		if form_ref[0] != null and is_instance_valid(form_ref[0]):
+			for item in (form_ref[0] as PropertyForm)._schema:
+				if item is Dictionary and item.get("options") is Array:
+					drawn[str(item.get("key", ""))] = item.options
+		for st in steps:
+			for f in (st.get("fields", []) if st is Dictionary else []):
+				if not (f is Dictionary) or not f.has("key"):
+					continue
+				var key := str(f.key)
+				if not (values.get(key) is String) or str(values[key]) == "":
+					chosen.erase(key)
+					continue
+				var want := str(values[key])
+				if str(f.get("collection", "")) != "" and str(f.get("type", "")) != "choose":
+					# the record behind an answer picked from the compendium: the step
+					# is drawn again when it comes (a phone asks the Table for it), with
+					# what was typed kept
+					if not comp_source.is_valid() or (chosen.get(key) is Dictionary and str(chosen[key].get("id", "")) == want):
+						continue
+					comp_source.call(str(f.collection), {"id": want}, func(reply: Dictionary) -> void:
+						if reply.get("entry") is Dictionary and str(values.get(key, "")) == want and not (chosen.get(key) is Dictionary and str(chosen[key].get("id", "")) == want):
+							chosen[key] = reply.entry
+							if is_instance_valid(box):
+								keep_form.call()
+								show.call())
+				else:
+					# one picked from a list of records (a package, an order): that
+					# record, as the web wizard has it (the maker's weapons step reads
+					# the packages chosen the step before)
+					var listed: Variant = drawn.get(key, resolve_props(f.get("options"), c))
+					if listed is Array:
+						for o in listed:
+							if o is Dictionary and str(o.get("id", "")) == want:
+								chosen[key] = o
 	back.pressed.connect(func() -> void:
 		keep.call()
 		at[0] = maxi(0, at[0] - 1)
