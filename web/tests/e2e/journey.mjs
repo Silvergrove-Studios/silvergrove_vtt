@@ -365,8 +365,8 @@ await step('Ana attacks: a target picked on the map, the roll in the log', async
 });
 
 await step('the DM ends the fight', async () => {
-  await dm.getByRole('button', { name: 'End the fight' }).first().click();
-  await dm.locator('.fightbar').getByRole('button', { name: 'End the fight' }).last().click();
+  await dm.locator('.fightbar').getByRole('button', { name: 'End the fight' }).click();
+  await dm.getByRole('dialog', { name: 'End the fight?' }).getByRole('button', { name: 'End the fight' }).click();
   await dm.locator('.fightbar').waitFor({ state: 'detached', timeout: 8000 });
   await shot(dm, 'dm_after_fight');
 });

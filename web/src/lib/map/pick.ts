@@ -50,10 +50,25 @@ export function pickTarget(grid: Grid, tokens: Dict[], payload: Dict, p: Vec, gm
   return null;
 }
 
-/** The intent to send once its target is picked. */
-export function withTarget(payload: Dict, target: string | Dict, scene: string): Dict {
+/** How many creatures a pick takes: a spell for up to three (Bless) says so
+ *  in `picks` (a playtest's Bless took the first tap and no more). */
+export function pickCount(payload: Dict): number {
+  if (String(payload.pick ?? '') !== 'token') return 1;
+  const n = Math.floor(Number(payload.picks ?? 1));
+  return Number.isFinite(n) && n > 1 ? n : 1;
+}
+
+/** A creature tapped while picking several: added, or (tapped again) taken back. */
+export function togglePicked(picked: string[], target: string, max: number): string[] {
+  if (picked.includes(target)) return picked.filter((x) => x !== target);
+  return picked.length >= max ? picked : [...picked, target];
+}
+
+/** The intent to send once its target (or, picking several, its targets) is picked. */
+export function withTarget(payload: Dict, target: string | Dict | string[], scene: string): Dict {
   const out = clone(payload);
   delete out.pick;
+  delete out.picks;
   delete out.area;
   delete out.label;
   if (!out.ctx || typeof out.ctx !== 'object') out.ctx = {};
@@ -64,6 +79,8 @@ export function withTarget(payload: Dict, target: string | Dict, scene: string):
 
 /** What the banner says while a pick is waiting. */
 export function pickWords(payload: Dict): string {
+  const many = pickCount(payload);
+  if (many > 1) return `${String(payload.label ?? 'Choose')}: tap up to ${many} creatures on the map, then Done`;
   const what = String(payload.pick ?? 'target');
   const noun = what === 'token' ? 'a creature' : what === 'cell' ? 'a space' : 'where it goes';
   return `${String(payload.label ?? 'Choose')}: tap ${noun} on the map`;

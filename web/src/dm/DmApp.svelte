@@ -22,7 +22,7 @@
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
-  import { pickTarget, pickWords, withTarget } from '../lib/map/pick';
+  import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
   import { liveFight } from './fight';
   import { currentTurnTokens } from '../lib/turns';
 
@@ -35,6 +35,8 @@
   let bookOpen = $state(false);
   let selected = $state('');
   let pick = $state<Dict | null>(null);
+  // the creatures tapped so far, for a pick of several (Bless: up to three)
+  let picked = $state<string[]>([]);
   let mapsMenu = $state(false);
   let guideGone = $state('');
   let seenChat = $state(0);
@@ -46,7 +48,10 @@
       else if (p?.kind === 'show' && p.actor) open(`actor:${p.actor}`);
       else intent(p);
     },
-    pick: (p) => (pick = p),
+    pick: (p) => {
+      pick = p;
+      picked = [];
+    },
     comp,
     picture: pictureUrl,
   });
@@ -59,6 +64,16 @@
   const session = $derived((dm.session ?? {}) as Dict);
   const chatCount = $derived((((game.view.log as Dict[]) ?? []).filter((e) => e?.kind === 'chat' || e?.kind === 'roll')).length);
   const activeToken = $derived(currentTurnTokens((game.scene.turns ?? {}) as Dict, (game.scene.tokens as Dict[]) ?? [])[0] ?? '');
+  // the fight panel follows the turn to a creature the DM runs (a playtest's DM
+  // kept seeing the last creature tapped, not the one whose turn it was)
+  let followedTurn = '';
+  $effect(() => {
+    const at = activeToken;
+    if (!fight || !at || at === followedTurn) return;
+    followedTurn = at;
+    const t = ((game.scene.tokens as Dict[]) ?? []).find((x) => String(x.id) === at);
+    if (t && !t.owner) selected = at;
+  });
   const people = $derived((dm.people as Dict[]) ?? []);
   // what the rules ask the DM (a monster's opportunity attack): answered here, first come
   const prompts = $derived(((game.view.prompts as Dict[]) ?? []).map((p, i) => ({ p, i })).filter(({ p }) => p && String(p.to ?? 'gm') === 'gm'));
@@ -149,8 +164,23 @@
       notice('Nothing to pick there — try again, or Cancel', 'error');
       return;
     }
+    if (pickCount(pick) > 1 && typeof target === 'string') {
+      picked = togglePicked(picked, target, pickCount(pick));
+      return;
+    }
+    sendPick(target);
+  }
+
+  function sendPick(target: string | Dict | string[]): void {
+    if (!pick) return;
     intent(withTarget($state.snapshot(pick) as Dict, target, String(game.scene.id ?? '')));
     pick = null;
+    picked = [];
+  }
+
+  function pickedName(ref: string): string {
+    const t = ((game.scene.tokens as Dict[]) ?? []).find((x) => `token:${x.id}` === ref);
+    return String(t?.name ?? 'a creature');
   }
 
   function onTokenDrop(t: Dict, pos: [number, number]): void {
@@ -273,8 +303,15 @@
             {onTokenClick}
             {onCellClick}
             {onTokenDrop}
-            onCancelPick={() => (pick = null)}
+            onCancelPick={() => ((pick = null), (picked = []))}
           />
+          {#if pick && pickCount(pick) > 1}
+            <div class="multi-pick" role="dialog" aria-label="Choose the targets">
+              <span>{String(pick.label ?? 'Cast')} → {picked.length ? picked.map(pickedName).join(', ') : 'tap each one'} ({picked.length} of up to {pickCount(pick)})</span>
+              <button type="button" class="quiet" onclick={() => ((pick = null), (picked = []))}>Cancel</button>
+              <button type="button" class="accent" disabled={!picked.length} onclick={() => sendPick([...picked])}>Done</button>
+            </div>
+          {/if}
           {#if guide && guideGone !== guide.key && !card}
             <div class="guide" role="note">
               <p class="label">Your next step <span class="dim">· only you see this</span></p>
@@ -338,6 +375,24 @@
 {/if}
 
 <style>
+  .multi-pick {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 6;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  .multi-pick span {
+    flex: 1;
+  }
   .nope {
     height: 100%;
     display: grid;

@@ -191,6 +191,36 @@ func effect(id: String) -> Dictionary:
 	return doc.effects.get(id, {})
 
 
+## The events that take an actor off the table with everything kept under
+## it: the effects on it and on its tokens, its pools and theirs, its tokens,
+## then the actor (a playtest's removed goblins left their deaths behind, and
+## the next ones given their ids came back dead). [] for no such actor.
+func actor_removal_events(id: String) -> Array:
+	if not doc.actors.has(id):
+		return []
+	var refs := ["actor:" + id]
+	var tokens := []
+	for sc in scenes:
+		for tk in sc.tokens:
+			if str(tk.get("actor", "")) == id:
+				refs.append("token:" + str(tk.id))
+				tokens.append({"t": "token.remove", "scene": str(sc.id), "id": str(tk.id)})
+	var events := []
+	var fids: Array = doc.effects.keys()
+	fids.sort()
+	for fid in fids:
+		if refs.has(str(doc.effects[fid].get("on", ""))):
+			events.append({"t": "effect.remove", "id": str(fid)})
+	for ref in refs:
+		var held: Dictionary = doc.resources.get(ref, {})
+		for plugin in held:
+			for name in held[plugin]:
+				events.append({"t": "resource.set", "ref": ref, "plugin": str(plugin), "name": str(name), "record": null})
+	events.append_array(tokens)
+	events.append({"t": "actor.remove", "id": id})
+	return events
+
+
 func player(id: String) -> Dictionary:
 	for p in players:
 		if str(p.get("id", "")) == id:

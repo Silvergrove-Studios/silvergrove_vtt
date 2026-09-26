@@ -61,6 +61,8 @@ var uploads_dir := ""
 var upload_handler: Callable = Callable()
 ## The least time between one screen's uploads.
 const UPLOAD_GAP_MS := 1500
+## How much of the sessions before a view carries (the newest).
+const CHAT_HISTORY_SENT := 400
 var _server := TCPServer.new()
 var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
 var _listening := false
@@ -389,14 +391,24 @@ func projection(c: Dictionary) -> Dictionary:
 	out.notes = PlayerNotes.for_viewer(notes_source.call(), pid, role) if notes_source.is_valid() else []
 	# what can be looked up (the web screens search across these)
 	out.collections = kernel.comp.collections()
-	# the chat of sessions before, as far as this viewer may read it
+	# the chat of sessions before, as far as this viewer may read it: not what
+	# the live log still holds (a session ended but still open has its chat in
+	# both, and a playtest's list put the whole evening above its first hour)
 	out.chat_history = []
 	if chat_source.is_valid():
+		var live := {}
+		for entry in kernel.state.encounter.log:
+			live[str(entry.get("id", ""))] = true
 		var hist: Array = chat_source.call()
-		for i in range(maxi(0, hist.size() - 400), hist.size()):
+		var kept := []
+		for i in range(hist.size() - 1, -1, -1):
+			if kept.size() >= CHAT_HISTORY_SENT:
+				break
 			var m: Variant = hist[i]
-			if m is Dictionary and Views.can_see(str(m.get("audience", "all")), pid, role):
-				out.chat_history.append(JsonDoc.deep(m))
+			if m is Dictionary and not live.has(str(m.get("id", ""))) and Views.can_see(str(m.get("audience", "all")), pid, role):
+				kept.append(JsonDoc.deep(m))
+		kept.reverse()
+		out.chat_history = kept
 	out.journal = []
 	if journal_source.is_valid():
 		for entry in journal_source.call():
@@ -618,6 +630,21 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			return kernel.pending.contribute(str(intent.get("roll", "")), pid, str(intent.get("name", "")), str(intent.get("expr", "")))
 		"chat":
 			return _chat(c, intent)
+		# a free roll ("/roll 1d20+4 Stealth" in the chat): anyone's dice, the DM's in
+		# secret if asked (a playtest's DM had no dice of his own)
+		"roll":
+			var expr := str(intent.get("expr", "")).strip_edges()
+			if expr == "" or expr.length() > 60:
+				return "what to roll? e.g. 1d20+4"
+			var what := str(intent.get("label", "")).strip_edges().left(80)
+			var who := "The DM" if gm else _player_name(pid)
+			var spec := {"expr": expr, "kind": "free"}
+			if gm and bool(intent.get("secret", false)):
+				spec.visibility = "gm"
+			var entry := kernel.roll(spec, {"by": pid if not gm else "gm"}, "%s: %s" % [who, what if what != "" else expr])
+			if entry.is_empty():
+				return kernel.last_veto if kernel.last_veto != "" else "that isn't a roll: %s (try 1d20+4)" % expr
+			return ""
 		"dm":
 			if c.role != Views.ROLE_DM:
 				return "only the DM's screen does that"

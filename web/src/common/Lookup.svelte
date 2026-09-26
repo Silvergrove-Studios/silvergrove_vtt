@@ -37,11 +37,22 @@
       return;
     }
     const found: typeof results = [];
+    // the best names first, whichever collection answers first: "Advantage/Disadvantage"
+    // before the conditions that mention it (a playtest's new player searched
+    // "advantage" and saw only those)
+    const t = text.toLowerCase();
+    const score = (name: string): number => {
+      const n = name.toLowerCase();
+      if (n === t) return 0;
+      if (n.startsWith(t)) return 1;
+      if (n.split(/[^a-z0-9']+/).some((w) => w.startsWith(t))) return 2;
+      return 3;
+    };
     for (const coll of (game.view.collections as string[]) ?? []) {
       comp(coll, { query: { text, per_page: 8, fields: ['name'] } }).then((reply) => {
         if (mine !== seq) return;
         for (const e of (reply.page?.entries as Dict[]) ?? []) found.push({ collection: coll, id: String(e.id ?? ''), name: String(e.name ?? e.id ?? '') });
-        results = [...found];
+        results = [...found].sort((x, y) => score(x.name) - score(y.name));
       });
     }
   });

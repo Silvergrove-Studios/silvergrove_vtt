@@ -109,6 +109,10 @@ static func refill(state: EncounterState, kind: String, plugin := "") -> Array:
 	var refs := state.encounter.resources.keys()
 	refs.sort()
 	for ref in refs:
+		# a removed actor's or token's pools stay behind: nothing to refill (a DM's
+		# long rest after a fight whose creatures had gone was refused whole)
+		if state._need_ref(str(ref), "refill") != "":
+			continue
 		var plugins: Dictionary = state.encounter.resources[ref]
 		var pids := plugins.keys()
 		pids.sort()

@@ -273,12 +273,7 @@ func _retire() -> void:
 	if selected == "":
 		return
 	var a := ctx.encounter().actor(selected)
-	var events := [{"t": "actor.remove", "id": selected}]
-	for sc in ctx.encounter().scenes:
-		for tk in sc.tokens:
-			if str(tk.get("actor", "")) == selected:
-				events.push_front({"t": "token.remove", "scene": str(sc.id), "id": str(tk.id)})
-	ctx.commands.run_all(events, "Retire " + str(a.get("name", "")))
+	ctx.commands.run_all(ctx.encounter().actor_removal_events(selected), "Retire " + str(a.get("name", "")))
 	selected = ""
 	refresh()
 

@@ -15,6 +15,7 @@
   import { cardData, cardSchema } from '../lib/views/viewlib';
   import { audienceWords, folderChoices, layout } from './contents';
 
+  let starting = $state(false);
   let { ref, onopen, onclose, popout }: { ref: string; onopen: (ref: string) => void; onclose?: () => void; popout?: () => void } = $props();
 
   const dm = $derived(game.dm);
@@ -159,7 +160,8 @@
                 <p class="dim">{encounter.creatures.map((c: Dict) => `${c.count ?? 1} × ${c.name ?? c.entry ?? c.id ?? '?'}`).join(', ')}</p>
               {/if}
             </div>
-            <button type="button" class="accent" onclick={() => dmOp('go_place', { place: id })}>Start the fight</button>
+            <!-- (one press: the fight takes a moment to set up, and a second press started it twice) -->
+            <button type="button" class="accent" disabled={starting} onclick={() => { starting = true; dmOp('go_place', { place: id }); setTimeout(() => (starting = false), 5000); }}>{starting ? 'Starting…' : 'Start the fight'}</button>
           {/if}
         </div>
         {#if encounter?.notes}<div class="prose dmnotes">{@html markdown(String(encounter.notes))}</div>{/if}

@@ -4,7 +4,8 @@
   inside them — and one search over all of it and the rules.
 -->
 <script lang="ts">
-  import { comp, dmOp, game, type Dict } from '../lib/game.svelte';
+  import { comp, dmOp, game, notice, uploadPicture, type Dict } from '../lib/game.svelte';
+  import { prepare } from '../lib/pictures';
   import { book, type Item, type Node } from './contents';
 
   let { current = '', onopen }: { current?: string; onopen: (ref: string) => void } = $props();
@@ -12,6 +13,30 @@
   let q = $state('');
   let closed = $state<Record<string, boolean>>({ 'section:shown': true, 'section:pictures': true });
   let menu = $state('');
+  // a picture of the DM's own into Pictures, to show the players (a playtest's DM
+  // could add none): made smaller here, kept by the table, filed in the book
+  let pictureInput: HTMLInputElement | undefined = $state();
+  let addingPicture = $state(false);
+  async function addPicture(e: Event): Promise<void> {
+    const f = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
+    (e.currentTarget as HTMLInputElement).value = '';
+    if (!f) return;
+    const name = (prompt('Name the picture', f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ')) ?? '').trim();
+    addingPicture = true;
+    try {
+      const r = await uploadPicture('picture', await prepare(f, 'picture'));
+      if (!r.ref) {
+        notice(r.why ?? 'The table did not keep it', 'error');
+        return;
+      }
+      dmOp('add_picture', { upload: r.ref, name });
+      notice(`${name || 'The picture'} is in Pictures`);
+    } catch (err) {
+      notice(`That picture could not be used: ${String((err as Error)?.message ?? err)}`, 'error');
+    } finally {
+      addingPicture = false;
+    }
+  }
   let rules = $state<Item[]>([]);
   let seq = 0;
 
@@ -90,6 +115,9 @@
         <div class="menu" role="menu">
           <button type="button" role="menuitem" class="quiet" onclick={() => rename(n)}>Rename</button>
           <button type="button" role="menuitem" class="quiet" onclick={() => newFolder(n.node)}>New folder inside</button>
+          {#if n.node === 'section:pictures'}
+            <button type="button" role="menuitem" class="quiet" disabled={addingPicture} onclick={() => { menu = ''; pictureInput?.click(); }}>{addingPicture ? 'Sending the picture…' : 'Add a picture…'}</button>
+          {/if}
           {#if n.node.startsWith('folder:')}
             <button type="button" role="menuitem" class="quiet" onclick={() => { menu = ''; dmOp('folder', { do: 'move', id: n.node.slice(7), parent: '' }); }}>Move to the top</button>
             <button type="button" role="menuitem" class="quiet danger" onclick={() => remove(n)}>Delete the folder</button>
@@ -137,6 +165,8 @@
     {/if}
   </div>
 </div>
+
+<input bind:this={pictureInput} type="file" accept="image/*" aria-label="A picture for the book" style="display:none" onchange={addPicture} />
 
 <style>
   .book {

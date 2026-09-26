@@ -59,10 +59,15 @@ async function openPage() {
     if (m.type() === 'error') events.push(`console error: ${m.text()}`);
     note('console', { type: m.type(), text: cut(m.text(), 2000) });
   });
+  // a box that asks for text gets the answer set with answer(), or what it
+  // already holds (a run's browsers answered every question with nothing, and
+  // "Name the new folder" made no folder)
   page.on('dialog', async (d) => {
-    events.push(`a ${d.type()} box said: "${d.message()}" (answered OK)`);
-    note('dialog', { type: d.type(), message: d.message() });
-    await d.accept().catch(() => {});
+    const typed = d.type() === 'prompt' ? (nextAnswer ?? d.defaultValue()) : undefined;
+    nextAnswer = null;
+    events.push(`a ${d.type()} box said: "${d.message()}" (answered OK${typed !== undefined ? `, with "${typed}"` : ''})`);
+    note('dialog', { type: d.type(), message: d.message(), answer: typed ?? null });
+    await d.accept(typed).catch(() => {});
   });
   page.on('framenavigated', (f) => {
     if (f === page.mainFrame()) note('navigated', { url: f.url() });
@@ -84,6 +89,7 @@ await openPage();
 let n = readdirSync(`${dir}/shots`).filter((f) => f.endsWith('.png')).length;
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 50) || 'screen';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let nextAnswer = null;
 
 const helpers = {
   sleep,
@@ -127,6 +133,10 @@ const helpers = {
     const [fc] = await Promise.all([page.waitForEvent('filechooser', { timeout: 8000 }), locator.click()]);
     await fc.setFiles(resolve(dir, file));
     return `picked ${file}`;
+  },
+  answer(t) {
+    nextAnswer = String(t);
+    return `the next box that asks for text will get "${nextAnswer}"`;
   },
   async reopen() {
     await page.close().catch(() => {});

@@ -178,10 +178,8 @@ func op(intent: Dictionary) -> String:
 		"launch":
 			return maps.launch(str(intent.get("encounter", "")))
 		"end_fight":
-			for enc in ctx.campaign.encounters:
-				if enc.get("live") is Dictionary and not (enc.live as Dictionary).is_empty():
-					return maps.return_from(str(enc.id))
-			return "no fight is running"
+			var fight := maps.live_fight()
+			return maps.return_from(fight) if fight != "" else "no fight is running"
 		"turns":
 			var sid := ctx.encounter().active_scene_id
 			match str(intent.get("do", "")):
@@ -239,6 +237,20 @@ func op(intent: Dictionary) -> String:
 			return str(r.get("error", ""))
 		"save":
 			return ctx.save_campaign()
+		# a picture of the DM's own into the book's Pictures, from an upload (a playtest's
+		# DM could add none: the Pictures folder offered Rename and New folder only)
+		"add_picture":
+			var up := str(intent.get("upload", ""))
+			if not Uploads.is_ref(up) or ctx.campaign == null:
+				return "which picture?"
+			var path := Uploads.path_of(Uploads.dir_of(ctx.campaign), up)
+			if not FileAccess.file_exists(path):
+				return "that picture isn't at the table"
+			var added := CampaignPictures.add_file(ctx, path, str(intent.get("name", "")).strip_edges())
+			if added.has("why"):
+				return str(added.why)
+			ctx.campaign_changed.emit()
+			return ""
 	return "unknown DM operation '%s'" % str(intent.get("op", ""))
 
 

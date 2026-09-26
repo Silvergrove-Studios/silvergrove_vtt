@@ -308,9 +308,14 @@ export function handouts(): Dict[] {
 
 /** The chat, the rolls and what the rules said (an item given, an action taken) this viewer may read: the campaign's earlier sessions, then this one's log. */
 export function chatLog(): Dict[] {
+  const log = (game.view.log as Dict[]) ?? [];
+  // what the live log holds goes where the log has it (a session ended but
+  // still open is in both; a playtest's list put the evening above its first hour)
+  const live = new Set(log.map((e) => String(e?.id ?? '')).filter((id) => id !== ''));
+  const before = ((game.view.chat_history as Dict[]) ?? []).filter((h) => !live.has(String(h?.id ?? '')));
   const seen = new Set<string>();
   const out: Dict[] = [];
-  for (const e of [...((game.view.chat_history as Dict[]) ?? []), ...((game.view.log as Dict[]) ?? [])]) {
+  for (const e of [...before, ...log]) {
     if (!e || typeof e !== 'object') continue;
     if (e.kind !== 'chat' && e.kind !== 'roll' && !(e.kind === 'note' && e.text)) continue;
     const id = String(e.id ?? '');

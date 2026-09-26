@@ -112,6 +112,12 @@ func test_web_scene() -> void:
 	st.apply({"t": "token.set", "scene": sid, "id": far, "changes": {"hidden": false, "pos": [40.0, 40.0]}})
 	var ids := (WebScene.build(st, sid, ana, false).tokens as Array).map(func(t: Dictionary) -> String: return str(t.id))
 	check(ids.has(gob) and not ids.has(far), "a revealed goblin beside her is there; one she cannot see is not")
+	# the rest of the party, wherever they are (a playtest's player saw a
+	# friend's token vanish through a doorway, and took it for a dropped connection)
+	var ben_tk := Encounter.new_token("Ben's rogue", Vector2(40.5, 40.5), {"owner": "pl_393eb25a", "hidden": false})
+	st.apply({"t": "token.add", "scene": sid, "token": ben_tk})
+	ids = (WebScene.build(st, sid, ana, false).tokens as Array).map(func(t: Dictionary) -> String: return str(t.id))
+	check(ids.has(str(ben_tk.id)) and not ids.has(far), "Ben's rogue, far out of her sight, is still on Ana's map; the goblin there is not")
 	check(WebScene.build(st, "nope", ana, false).is_empty(), "no such scene: nothing")
 
 
@@ -244,7 +250,23 @@ func test_web_clients_on_the_host() -> void:
 	check((texts.call(ben_view) as Array).has("Ben, a word") and not (texts.call(dm_view) as Array).has("Ben, a word") and not (texts.call(cara_view) as Array).has("Ben, a word"), "Ben reads it; the DM and Cara do not")
 	check((texts.call(dm_view) as Array).has("DM, a question") and not (texts.call(ben_view) as Array).has("DM, a question"), "Cara's question: the DM reads it, Ben does not")
 	check((texts.call(cara_view) as Array).has("DM, a question"), "and Cara sees what she sent")
+	# free rolls: a player's, the DM's in secret, and one that isn't a roll
+	ana.send({"t": "intent", "intent": {"kind": "roll", "expr": "1d20+4", "label": "Stealth"}})
+	dm.send({"t": "intent", "intent": {"kind": "roll", "expr": "2d6", "secret": true}})
+	ana.send({"t": "intent", "intent": {"kind": "roll", "expr": "lots of dice"}})
+	var rolls := func() -> Array: return st.encounter.log.filter(func(x: Dictionary) -> bool: return str(x.get("kind", "")) == "roll")
+	check(_pump(host, [ana, dm], func() -> bool: return (rolls.call() as Array).size() == 2 and not ana.last("refused").is_empty()), "two rolls kept, one refused: %s" % [ana.last("refused")])
+	var labels := (rolls.call() as Array).map(func(x: Dictionary) -> String: return "%s|%s" % [x.label, x.audience])
+	check(labels.has("Ana: Stealth|all") and labels.has("The DM: 2d6|gm"), "Ana's for all, the DM's for the DM: %s" % [labels])
 	check((texts.call(ben_view) as Array).has("Hello all"), "what is said to everyone, everyone reads")
+	# a session ended but still open: its chat is in the campaign's history and
+	# still in the live log (a playtest's list put the evening above its first hour)
+	var banked: Array = [{"id": "m_old", "kind": "chat", "text": "Last week", "audience": "all", "session": 1}]
+	for x in chats.call():
+		banked.append(JsonDoc.deep(x))
+	host.chat_source = func() -> Array: return banked
+	var hist := (host.projection({"player": ben, "role": Views.ROLE_PLAYER}).chat_history as Array).map(func(x: Dictionary) -> String: return str(x.text))
+	check(hist == ["Last week"], "the history a view carries is the sessions before, not the live log again: %s" % [hist])
 	host.stop()
 	check(not host.is_running() and host.web == null, "stopped, the web side too")
 

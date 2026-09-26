@@ -43,7 +43,7 @@ const TOOLS = [
   {
     name: 'act',
     description:
-      "Do something in your browser, the way a person would, with a few lines of Playwright script. `page` is your page: page.getByRole('button', { name: 'Join' }).click(), page.getByLabel(...).fill(...), page.getByText(...), page.keyboard.press('Enter'), and so on. Helpers: look(selector?) the accessibility tree; text(selector?) the visible text; shot(label) saves a screenshot and returns its path; changed(selector?, ms?) waits for that part of the page to change; waitForText(text, ms?); sleep(ms); choose(locator, 'photos/<file>') clicks a button that opens a file picker and picks that file. `return` what you want to see. Keep it under 90 seconds.",
+      "Do something in your browser, the way a person would, with a few lines of Playwright script. `page` is your page: page.getByRole('button', { name: 'Join' }).click(), page.getByLabel(...).fill(...), page.getByText(...), page.keyboard.press('Enter'), and so on. Helpers: look(selector?) the accessibility tree; text(selector?) the visible text; shot(label) saves a screenshot and returns its path; changed(selector?, ms?) waits for that part of the page to change; waitForText(text, ms?); sleep(ms); choose(locator, 'photos/<file>') clicks a button that opens a file picker and picks that file; answer('text') types that into the next box that pops up asking for text (call it before the click that opens it). `return` what you want to see. Keep it under 90 seconds.",
     inputSchema: { type: 'object', properties: { script: { type: 'string', description: 'The lines of script (the body of an async function).' } }, required: ['script'] },
     run: async (a) => ({ content: [{ type: 'text', text: textOf(await seat(String(a.script ?? ''))) }] }),
   },

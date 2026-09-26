@@ -20,7 +20,7 @@
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
-  import { pickTarget, pickWords, withTarget } from '../lib/map/pick';
+  import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
   import { turnSummary } from '../lib/turns';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
@@ -46,6 +46,8 @@
     }
   });
   let pick = $state<Dict | null>(null);
+  // the creatures tapped so far, for a pick of several (Bless: up to three)
+  let picked = $state<string[]>([]);
   // on a touch screen a tap on a creature asks before it acts: in a playtest a
   // phone's double tap to zoom fired an attack
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -94,6 +96,7 @@
     },
     pick: (p) => {
       pick = p;
+      picked = [];
       if (!wide) tab = 'map';
     },
     comp,
@@ -161,7 +164,8 @@
     if (mine && !wasMine) {
       notice(turn.text);
       try {
-        navigator.vibrate?.(180);
+        // (only once the page has been touched: before that the browser refuses, and says so)
+        if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive !== false) navigator.vibrate?.(180);
       } catch {
         /* not a phone */
       }
@@ -211,6 +215,10 @@
       notice('Nothing to pick there — try again, or Cancel', 'error');
       return;
     }
+    if (pickCount(pick) > 1 && typeof target === 'string') {
+      picked = togglePicked(picked, target, pickCount(pick));
+      return;
+    }
     if (coarse) {
       confirmPick = { target, words: `${String(pick.label ?? 'This')} → ${targetName(target)}` };
       return;
@@ -218,10 +226,11 @@
     sendPick(target);
   }
 
-  function sendPick(target: string | Dict): void {
+  function sendPick(target: string | Dict | string[]): void {
     if (!pick) return;
     intent(withTarget($state.snapshot(pick) as Dict, target, String(game.scene.id ?? '')));
     pick = null;
+    picked = [];
     confirmPick = null;
   }
 
@@ -305,12 +314,24 @@
           {onTokenClick}
           {onCellClick}
           {onTokenDrop}
-          onCancelPick={() => ((pick = null), (confirmPick = null))}
+          onCancelPick={() => ((pick = null), (picked = []), (confirmPick = null))}
         />
         {#if dragTip && !pick}
           <div class="drag-tip" role="status">
             <span>Your token is yours to move: drag it on the map.</span>
             <button type="button" class="quiet" onclick={dragTipSeen}>Got it</button>
+          </div>
+        {/if}
+        {#if game.scene.fog && !confirmPick && !(pick && pickCount(pick) > 1)}
+          <!-- (a playtest's players all took the dark for a broken map, the
+               enemies it hid for missing ones) -->
+          <p class="sight-note">The dark is out of your character's sight: walls, trees and distance hide what's there.</p>
+        {/if}
+        {#if pick && pickCount(pick) > 1}
+          <div class="confirm-pick" role="dialog" aria-label="Choose the targets">
+            <span>{String(pick.label ?? 'Cast')} → {picked.length ? picked.map(targetName).join(', ') : 'tap each one'} ({picked.length} of up to {pickCount(pick)})</span>
+            <button type="button" class="quiet" onclick={() => ((pick = null), (picked = []))}>Cancel</button>
+            <button type="button" class="accent" disabled={!picked.length} onclick={() => sendPick([...picked])}>Done</button>
           </div>
         {/if}
         {#if confirmPick}
@@ -405,6 +426,21 @@
     border-radius: 999px;
     box-shadow: var(--shadow);
     font-size: 0.9rem;
+  }
+  .sight-note {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 4;
+    margin: 0;
+    max-width: calc(100% - 110px);
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel) 82%, transparent);
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.3;
+    pointer-events: none;
   }
   .confirm-pick {
     position: absolute;

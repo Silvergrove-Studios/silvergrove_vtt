@@ -421,6 +421,12 @@ func test_token_pictures_from_the_screens() -> void:
 	check(bool(win.upload("", true, {"kind": "token", "actor": "a_b", "data": data}).ok) and Uploads.is_ref(str(ctx.encounter().actor("a_b").token.art)), "the DM's on anyone's")
 	var pic := win.upload("pl_2", false, {"kind": "picture", "data": data})
 	check(bool(pic.ok) and Uploads.is_ref(str(pic.ref)), "a journal's picture: kept, its ref sent back")
+	# the DM's own picture into the book's Pictures (a playtest's DM could add none)
+	var dm_pic := win.upload("", true, {"kind": "picture", "data": data})
+	check(win.web_dm.op({"op": "add_picture", "upload": str(dm_pic.ref), "name": "The warden, sketched"}) == "", "the DM files an upload in Pictures")
+	var names := CampaignPictures.all(ctx).map(func(p: Dictionary) -> String: return str(p.name))
+	check(names.has("The warden, sketched"), "and it's one of the campaign's pictures, to show: %s" % [names])
+	check(win.web_dm.op({"op": "add_picture", "upload": "upload:" + "0".repeat(32)}) != "", "not a picture the table doesn't have")
 	check(bool(win.upload("pl_1", false, {"kind": "token", "actor": "a_h", "clear": true}).ok) and str(ctx.state.token(sid, "t_h").art) == "" and str(ctx.encounter().actor("a_h").token.art) == "", "taken off: the initials again")
 	check(str(win.upload("pl_1", false, {"kind": "token", "actor": "a_h", "data": "bm90IGEgcGljdHVyZQ=="}).why).contains("not a picture"), "what is not a picture is refused")
 	win.queue_free()
@@ -664,8 +670,32 @@ func test_campaign_first() -> void:
 				check(bool(tk.get("hidden", false)) and Vision.token_pos(tk).distance_to(cell9) < 2.5, "a goblin token, hidden, at or beside 9,8 (%s)" % [tk.pos])
 		check(placed == 2, "both placed on the scene")
 	check(ctx.campaign.encounter_entry(enc).played == [0], "played this (zeroth) session")
+	# a second fight shown while the first one's turns run: they end, and End
+	# the fight means the one the players see (a playtest's second fight opened
+	# on the first one's turn order, and End ended the older one)
+	check(ctx.commands.start_turns(str(live.scene)) == "" and bool(ctx.encounter().turns.get("running", false)), "the first fight's turns run")
+	check(mp.live_fight() == enc, "the fight on show is the one to end")
+	var enc2 := mp.new_encounter("The belfry", mid, "ground")
+	check(mp.launch(enc2) == "" and not bool(ctx.encounter().turns.get("running", false)), "a second fight shown: the first one's turns end")
+	check(mp.live_fight() == enc2, "and End the fight means the second")
+	check(mp.return_from(enc2) == "" and ctx.encounter().active_scene_id == str(live.scene) and mp.live_fight() == enc, "ended: back at the first, the one to end now")
+	# a creature that leaves with its fight takes what was kept under it (a
+	# playtest's fight, launched again, came back with its goblins dead)
+	var kept_under := []
+	for aid in live.get("actors", []):
+		kept_under.append("actor:" + str(aid))
+		check(ctx.commands.run({"t": "effect.apply", "effect": {"id": "fx_" + str(aid), "on": "actor:" + str(aid), "key": "dead", "label": "Dead"}}, "dies") == "", "a goblin dies")
+		check(ctx.commands.run({"t": "resource.set", "ref": "actor:" + str(aid), "plugin": "test", "name": "hp", "record": {"current": 0, "max": 7, "kind": "pool"}}, "at 0") == "", "at 0 hit points")
 	check(mp.return_from(enc) == "", "returned")
 	check(ctx.encounter().scenes.size() == scenes_before and ctx.encounter().actors.size() == actors_before and not ctx.campaign.encounter_entry(enc).has("live"), "the goblins and the scene are gone; the party stays")
+	var left := []
+	for fid in ctx.encounter().effects:
+		if kept_under.has(str(ctx.encounter().effects[fid].get("on", ""))):
+			left.append(fid)
+	for ref in kept_under:
+		if ctx.encounter().resources.has(ref):
+			left.append(ref)
+	check(left.is_empty(), "and nothing of theirs is left behind: %s" % [left])
 	check(mp.show_map(mid) == "" and ctx.encounter().scenes.size() == 1, "Show makes a scene over a library map")
 	# a regional map: the forest road, with a place that launches the chapel fight and the party marker
 	check(mp.add_map(_example("forest_road.hexmap"), "regional") == "", "the forest road as a regional map")

@@ -229,6 +229,10 @@ func test_resources() -> void:
 	var refill := Resources.refill(st, "rest")
 	check(refill.size() == 1 and refill[0].name == "hp" and refill[0].record.current == 9.0, "refill by recharge kind touches the pools that need it")
 	check(Resources.refill(st, "long_rest")[0].record.marked == 0 and Resources.refill(st, "session").is_empty(), "…and clears tracks")
+	# a pool left behind by an actor who has gone is not refilled (a DM's long rest
+	# after a fight whose creatures had gone was refused whole)
+	st.apply(Resources.set_event("actor:a_gone", "sample", "hp", Resources.pool(1, 5, "rest")))
+	check(Resources.refill(st, "rest").all(func(e: Dictionary) -> bool: return str(e.get("ref", "")) != "actor:a_gone"), "nothing for an actor who is not there")
 	var inv := st.apply(Resources.set_event(ref, "sample", "hp", null))
 	check(Resources.get_record(st, ref, "sample", "hp").is_empty() and inv.record.current == 4.0, "removing a record inverts to the old record")
 	st.apply(inv)

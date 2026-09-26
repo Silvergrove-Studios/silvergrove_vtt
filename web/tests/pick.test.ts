@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
-import { pickTarget, withTarget } from '../src/lib/map/pick';
+import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../src/lib/map/pick';
 
 describe('picking a target', () => {
   const grid = new Grid({ columns: 10, rows: 8 });
@@ -25,5 +25,18 @@ describe('picking a target', () => {
   it('sends the intent with its target', () => {
     const sent = withTarget({ kind: 'action', pick: 'token', label: 'Attack', ctx: { actor: 'hero' } }, 'token:g', 's1');
     expect(sent).toEqual({ kind: 'action', ctx: { actor: 'hero', target: 'token:g', scene: 's1' } });
+  });
+  it('picks several creatures for a spell that takes them (Bless: up to three)', () => {
+    const bless = { kind: 'action', pick: 'token', picks: 3, label: 'Cast', ctx: { actor: 'hero' } };
+    expect(pickCount(bless)).toBe(3);
+    expect(pickCount({ pick: 'cell', picks: 3 })).toBe(1);
+    expect(pickCount({ pick: 'token', picks: '' })).toBe(1);
+    expect(pickWords(bless)).toBe('Cast: tap up to 3 creatures on the map, then Done');
+    let picked = togglePicked([], 'token:a', 3);
+    picked = togglePicked(picked, 'token:b', 3);
+    picked = togglePicked(picked, 'token:c', 3);
+    expect(togglePicked(picked, 'token:d', 3)).toEqual(['token:a', 'token:b', 'token:c']);
+    expect(togglePicked(picked, 'token:b', 3)).toEqual(['token:a', 'token:c']);
+    expect(withTarget(bless, picked, 's1')).toEqual({ kind: 'action', ctx: { actor: 'hero', target: ['token:a', 'token:b', 'token:c'], scene: 's1' } });
   });
 });

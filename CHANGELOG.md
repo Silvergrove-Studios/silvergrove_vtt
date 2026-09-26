@@ -30,6 +30,33 @@
   `web_host.gd --log` and `--work` (a second host no longer empties the
   first one's folder).
 
+- **The second table played the whole campaign**: The Ruined Chapel from
+  the first scene to its epilogue in real time, the talking as much as the
+  fighting, with the players going off script (shopping, keepsakes, a
+  goblin child taken in) and the DM tuning the adventure as it went. The
+  harness's browsers now answer a box that asks for text (`answer()`).
+  What that table found:
+- On the web screens: a name above the chat chooses only that person
+  (Shift, Ctrl or ⌘ adds more), and the line saying who will read it
+  stands out when it isn't everyone (a DM's second whisper went to two
+  players); `/roll 1d20+4` rolls any dice in chat (`/gmroll`, for the DM,
+  in secret); the chat keeps its order after a session ends (the evening
+  had come to sit above its first hour); a spell for several creatures
+  (Bless) takes that many taps, then Done; a player's map says that the
+  dark is what their character can't see, and keeps the rest of the party
+  on it wherever they are; the DM's End the fight asks in a dialog, a
+  turn order never shows a token's inner name, Next turn and Start wait
+  for the table, the map follows whoever's turn it is, the book's
+  pictures take one of the DM's own, and Look up puts a name that
+  matches first.
+- On the Table: a wall that limits sight (a stream bank, tall grass) is
+  seen across and not through (a stream hid everything beyond it); a
+  fight's end takes its creatures' effects and pools with them (a fight
+  launched again came back with its goblins dead), a fight shown to the
+  players ends another's turns, and End the fight ends the one they see;
+  a long rest no longer fails over a creature that has gone; the host
+  rolls a screen's own dice (intent `roll`).
+
 - **Pictures from the table** (the team, after the character maker): a
   player gives their character's token a picture of their own — chosen on
   the phone, placed in a round window (drag, come closer), kept by the

@@ -61,7 +61,11 @@ for (const e of lines(hostLog)) {
       const it = m.intent ?? {};
       const to = (Array.isArray(it.to) ? it.to : [it.to]).filter((x) => x && x !== 'all').map((x) => names[x] ?? x);
       if (it.kind === 'chat') add(e.at, who, `says${to.length ? ` to ${to.join(', ')}` : ''}${it.private ? ' (private)' : ''}: ${one(it.text, 400)}`);
-      else add(e.at, who, `${it.kind ?? 'intent'}${it.action ? ` ${it.action}` : ''}${it.plugin ? ` (${it.plugin})` : ''} ${one(JSON.stringify(it.args ?? it.ctx ?? {}), 200)}`);
+      else if (it.kind === 'dm') {
+        const { kind, op, ...rest } = it;
+        add(e.at, who, `(DM screen) ${op ?? '?'} ${one(JSON.stringify(rest), 200)}`);
+      } else if (it.kind === 'action') add(e.at, who, `${it.action ?? '?'} ${one(JSON.stringify(it.ctx ?? {}), 200)}`);
+      else add(e.at, who, `${it.kind ?? 'intent'} ${one(JSON.stringify({ ...it, kind: undefined }), 200)}`);
     } else if (!['hello', 'view', 'ack', 'pong', 'need'].includes(m.t)) add(e.at, who, `${m.t} ${one(JSON.stringify({ ...m, t: undefined }), 200)}`);
   } else if (e.dir === 'event') {
     const ev = e.ev ?? {};
@@ -93,6 +97,9 @@ for (const p of people) {
 
 out.sort((a, b) => a.t - b.t);
 const hhmmss = (t) => new Date(t).toTimeString().slice(0, 8);
-const md = [`# Timeline of ${run}`, '', ...out.map((e) => `- ${hhmmss(e.t)} **${e.who}** ${e.what}`)].join('\n') + '\n';
-writeFileSync(join(run, 'timeline.md'), md);
-console.log(`${out.length} moments in ${join(run, 'timeline.md')}`);
+const line = (e) => `- ${hhmmss(e.t)} **${e.who}** ${e.what}`;
+writeFileSync(join(run, 'timeline.md'), [`# Timeline of ${run}`, '', ...out.map(line)].join('\n') + '\n');
+// the story alone: what happened at the table, not each agent's clicks
+const table = out.filter((e) => !e.what.startsWith('['));
+writeFileSync(join(run, 'table.md'), [`# At the table: ${run}`, '', ...table.map(line)].join('\n') + '\n');
+console.log(`${out.length} moments in ${join(run, 'timeline.md')}; ${table.length} at the table in ${join(run, 'table.md')}`);

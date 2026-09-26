@@ -89,6 +89,25 @@ func test_lighting() -> void:
 	# a->b points +y, so the right-hand side is +x: a light at x=+1 strikes the right face.
 	check(not Lighting.is_lit(Vector2(1, 0), 5.0, Vector2(-1, 0), one), "ray striking the right side is blocked")
 	check(Lighting.is_lit(Vector2(-1, 0), 5.0, Vector2(1, 0), one), "ray striking the left side passes")
+	# Limited (terrain: a stream bank, tall grass): seen across, not through.
+	# (a playtest's players saw nothing across a stream: its bank hid the far side)
+	var vale := HexMap.new_level("v", "V")
+	vale.walls.append({"id": "bank", "points": [[2, -3], [2.2, 0], [2, 3]], "blocks": {"move": false, "sight": true, "light": true, "sound": false}, "sight_mode": "limited"})
+	var sight := Lighting.blocking_segments(vale, {}, "sight")
+	check(sight.size() == 2 and bool(sight[0].limited), "a stream bank's segments are limited: %s" % [sight])
+	check(Lighting.is_lit(o, 9.0, Vector2(4, 1.5), sight), "across one bank: seen")
+	check(Lighting.is_lit(o, 9.0, Vector2(4, 0), sight), "and where the bank's two segments meet (at 2.2, 0), still one crossing")
+	vale.walls.append({"id": "far bank", "points": [[5, -3], [5, 3]], "blocks": {"move": false, "sight": true, "light": true, "sound": false}, "sight_mode": "limited"})
+	sight = Lighting.blocking_segments(vale, {}, "sight")
+	check(Lighting.is_lit(o, 9.0, Vector2(4, 0), sight) and not Lighting.is_lit(o, 9.0, Vector2(6, 0), sight), "through two: not seen past the second")
+	var tall := Lighting.visibility_polygon(o, 9.0, sight)
+	var reach := 0.0
+	for p in tall:
+		if absf(p.y) < 0.3 and p.x > 0.0:
+			reach = maxf(reach, p.x)
+	check(reach > 4.9 and reach < 5.1, "the polygon stops at the second bank: %.2f" % reach)
+	vale.walls.append({"id": "wall", "points": [[3, -3], [3, 3]], "blocks": {"move": true, "sight": true, "light": true, "sound": true}})
+	check(not Lighting.is_lit(o, 9.0, Vector2(4, 0), Lighting.blocking_segments(vale, {}, "sight")), "a wall after one bank still blocks")
 	var fan := Lighting.fan(o, 3.0, poly, 100.0)
 	check(fan.vertices.size() == poly.size() * 3 and fan.uvs.size() == fan.vertices.size(), "fan triangles")
 	check(fan.uvs[0] == Vector2(0.5, 0.5), "centre uv")

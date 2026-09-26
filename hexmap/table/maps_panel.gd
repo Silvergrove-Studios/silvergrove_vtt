@@ -745,6 +745,10 @@ func launch(enc_id: String, show := true) -> String:
 	if m == null:
 		return "the encounter's map could not be loaded"
 	var entry := ctx.campaign.map_entry(str(e.get("map", "")))
+	# a fight the players are brought to has its own turns: another's end (a
+	# playtest's second fight opened on the first one's order, in raw ids)
+	if show and bool(ctx.encounter().turns.get("running", false)):
+		ctx.commands.stop_turns()
 	var previous := ctx.encounter().active_scene_id
 	var scene := Encounter.new_scene(m, str(e.get("level", m.levels[0].get("id", "ground"))), str(e.get("name", "")), str(entry.get("path", "")))
 	scene.fog.enabled = true
@@ -870,6 +874,8 @@ func go(enc_id: String) -> String:
 		return "the staged scene is gone"
 	if ctx.encounter().active_scene_id == sid:
 		return "the players are already there"
+	if bool(ctx.encounter().turns.get("running", false)):
+		ctx.commands.stop_turns()
 	var why := ctx.commands.activate_scene(sid)
 	if why != "":
 		return why
@@ -878,6 +884,22 @@ func go(enc_id: String) -> String:
 	ctx.campaign.touch()
 	ctx.campaign_changed.emit()
 	return ""
+
+
+## The running fight to end: the one the players see, or else the last
+## running one ("" for none). (A playtest's End the fight ended an older one
+## still running, not the one in front of everybody.)
+func live_fight() -> String:
+	if ctx.campaign == null:
+		return ""
+	var last := ""
+	for e in ctx.campaign.encounters:
+		if not (e.get("live") is Dictionary) or (e.live as Dictionary).is_empty():
+			continue
+		if str(e.live.get("scene", "")) == ctx.encounter().active_scene_id:
+			return str(e.id)
+		last = str(e.id)
+	return last
 
 
 ## Return: the fight's creatures and its scene go (and whatever they
@@ -894,12 +916,7 @@ func return_from(enc_id: String) -> String:
 	var events := []
 	var sid := str(live.get("scene", ""))
 	for aid in live.get("actors", []):
-		if ctx.encounter().actors.has(aid):
-			for sc in ctx.encounter().scenes:
-				for tk in sc.tokens:
-					if str(tk.get("actor", "")) == str(aid):
-						events.append({"t": "token.remove", "scene": str(sc.id), "id": str(tk.id)})
-			events.append({"t": "actor.remove", "id": str(aid)})
+		events.append_array(ctx.encounter().actor_removal_events(str(aid)))
 	if not ctx.encounter().scene(sid).is_empty():
 		events.append({"t": "scene.remove", "id": sid})
 	var why := ctx.commands.run_all(events, "Return from " + str(e.get("name", ""))) if not events.is_empty() else ""

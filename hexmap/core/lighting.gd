@@ -8,8 +8,11 @@ extends RefCounted
 ## you see while editing is honest about where a torch reaches.
 
 ## Segments from a level's walls that block `what` ("light" for lights,
-## "sight" for vision): [{a, b, one_way}] where one_way is 0 both / 1 left /
-## 2 right (right-hand rule walking a -> b). Open doors never block.
+## "sight" for vision): [{a, b, one_way, limited}] where one_way is 0 both /
+## 1 left / 2 right (right-hand rule walking a -> b), and limited is a wall of
+## sight mode "limited" (terrain: a stream bank, tall grass), seen across but
+## not through: only the second one a ray crosses blocks it. Open doors never
+## block.
 static func blocking_segments(level: Dictionary, visible: Dictionary = {}, what := "light") -> Array:
 	var out: Array = []
 	for w in level.get("walls", []):
@@ -25,11 +28,15 @@ static func blocking_segments(level: Dictionary, visible: Dictionary = {}, what 
 		match w.get("one_way", null):
 			"left": one_way = 1
 			"right": one_way = 2
+		# (light through a wall that blocks it but not sight is blocked whole,
+		# as the Foundry export has it)
+		var limited := str(w.get("sight_mode", "normal")) == "limited" and (what == "sight" or bool(blocks.get("sight", true)))
 		for i in pts.size() - 1:
 			out.append({
 				"a": Vector2(float(pts[i][0]), float(pts[i][1])),
 				"b": Vector2(float(pts[i + 1][0]), float(pts[i + 1][1])),
 				"one_way": one_way,
+				"limited": limited,
 			})
 	return out
 
@@ -45,9 +52,12 @@ static func nearby(segments: Array, origin: Vector2, radius: float) -> Array:
 
 
 ## Distance along the ray (origin, dir) to the nearest blocking segment, or
-## INF. One-way segments block only rays arriving from their blocking side.
+## INF. One-way segments block only rays arriving from their blocking side;
+## limited ones only where the ray crosses its second (a playtest's players
+## saw nothing across a stream: its bank hid the whole far side).
 static func ray_hit(origin: Vector2, dir: Vector2, segments: Array, max_t: float) -> float:
 	var best := INF
+	var limited := PackedFloat32Array()
 	for s in segments:
 		var a: Vector2 = s.a
 		var b: Vector2 = s.b
@@ -67,7 +77,24 @@ static func ray_hit(origin: Vector2, dir: Vector2, segments: Array, max_t: float
 			var from_right := dir.dot(normal) < 0.0
 			if (s.one_way == 2) != from_right:
 				continue
+		if bool(s.get("limited", false)):
+			limited.append(t)
+			continue
 		best = t
+	if limited.size() >= 2:
+		limited.sort()
+		var crossed := 0
+		var last := -INF
+		for t in limited:
+			if t >= best:
+				break
+			# (where two segments of one wall meet, the ray crosses once)
+			if t - last > 1e-4:
+				crossed += 1
+				last = t
+				if crossed == 2:
+					best = t
+					break
 	return best
 
 

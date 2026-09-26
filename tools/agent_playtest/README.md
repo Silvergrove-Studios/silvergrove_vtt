@@ -40,7 +40,9 @@ Everything a run did can be read back:
   (the browser: scripts run, console, page errors, dialogs, the socket),
   `timelapse/` (the screen every two minutes), `shots/` (the agent's own
   screenshots), `diary.md` and `review.md`;
-- `timeline.mjs <run>` merges them into one timeline.
+- `timeline.mjs <run>` merges them into one timeline (`timeline.md`: every tool
+  call too) and the story alone (`table.md`: chat, rolls, the DM's moves,
+  refusals, who joined).
 
 ## A run
 

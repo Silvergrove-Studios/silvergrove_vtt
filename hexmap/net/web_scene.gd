@@ -15,6 +15,9 @@ extends RefCounted
 
 ## The snapshot of `scene_id` for a viewer: a player (their id), or the GM
 ## (`gm`), who sees every token and gets the players' sight as a preview.
+## A player sees the rest of the party wherever they are (a playtest's
+## player saw a friend's token vanish through a doorway, and took it for a
+## dropped connection); everything else only in their characters' sight.
 static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool) -> Dictionary:
 	var e := state.encounter
 	var sc := e.scene(scene_id)
@@ -31,7 +34,7 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 		if not gm:
 			if bool(tk.get("hidden", false)):
 				continue
-			if fog and not _owns(state, tk, player_id) and not Vision.sees(sight.polygons, Vision.token_pos(tk)):
+			if fog and not _owns(state, tk, player_id) and not _party(state, tk) and not Vision.sees(sight.polygons, Vision.token_pos(tk)):
 				continue
 		tokens.append(token_out(state, tk, gm))
 	var lvl := state.effective_level(scene_id)
@@ -101,6 +104,13 @@ static func _owns(state: EncounterState, tk: Dictionary, player_id: String) -> b
 	if tk.get("owner", null) != null and str(tk.owner) == player_id:
 		return true
 	return str(tk.get("actor", "")) != "" and str(state.encounter.actor(str(tk.actor)).get("owner", "")) == player_id
+
+
+## A token of the party: a player's, or a player's character's.
+static func _party(state: EncounterState, tk: Dictionary) -> bool:
+	if str(tk.get("owner", "") if tk.get("owner", null) != null else "") != "":
+		return true
+	return str(tk.get("actor", "")) != "" and str(state.encounter.actor(str(tk.actor)).get("owner", "")) != ""
 
 
 static func _points(p: PackedVector2Array) -> Array:
