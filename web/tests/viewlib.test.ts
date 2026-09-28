@@ -24,6 +24,17 @@ describe('views', () => {
       { id: 'a', name: 'Alpha' },
     ]);
   });
+  it('puts its last choices after the data', () => {
+    // (a DM's "Someone else…" after the party's characters: a playtest's DM found
+    // the world's people among the characters)
+    expect(optionsFrom({ bind: '/list', first: [{ id: '', name: 'The whole party' }], last: [{ id: 'else', name: 'Someone else…' }] }, data)).toEqual([
+      { id: '', name: 'The whole party' },
+      { id: 'a', name: 'Alpha' },
+      { id: 'b', name: 'Beta' },
+      { id: 'else', name: 'Someone else…' },
+    ]);
+    expect(optionsFrom({ bind: '/nothing', last: [{ id: 'else', name: 'Someone else…' }] }, data)).toEqual([{ id: 'else', name: 'Someone else…' }]);
+  });
   it('finds a name by the starts of its words, in any order, whatever the punctuation', () => {
     // (a playtest's DM found nothing for "Lantern, Hooded" nor "thieves' tools")
     expect(wordsOf("Thieves' Tools")).toEqual(['thieves', 'tools']);

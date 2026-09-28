@@ -245,6 +245,11 @@ func test_choice_fields_come_from_the_data() -> void:
 	check(sent.size() == 1 and str(sent[0].ctx.form.who) == "a_2", "the id is what is sent: %s" % [sent])
 	check(ViewRenderer.options_from({"bind": "/actors", "label": "@item.name .. ' (' .. @item.kind .. ')'"}, data).map(func(o: Dictionary) -> String: return str(o.name)) == ["Brakka (pc)", "Goblin (monster)", "Mira (pc)"], "a label expression")
 	check(ViewRenderer.options_from({"bind": "/nothing"}, data).is_empty(), "nothing at the pointer: no choices")
+	# its `last` records after the data: a DM's "Someone else…" after the party's characters
+	# (a playtest's DM found the world's people among the characters)
+	var who := ViewRenderer.options_from({"bind": "/actors", "if": "@item.kind == 'pc'", "first": [{"id": "", "name": "The whole party"}], "last": [{"id": "else", "name": "Someone else…"}]}, data)
+	check(who.map(func(o: Dictionary) -> String: return str(o.name)) == ["The whole party", "Brakka", "Mira", "Someone else…"] and str(who[3].id) == "else", "the whole party, the characters, then Someone else…: %s" % [who])
+	check(ViewRenderer.options_from({"bind": "/nothing", "last": [{"id": "else", "name": "Someone else…"}]}, data).size() == 1, "and its last with nothing at the pointer")
 	r.queue_free()
 	await tree.process_frame
 

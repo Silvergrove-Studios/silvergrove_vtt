@@ -415,7 +415,9 @@ A field may also take its choices from the view's own data: `{key =
 'pc'", first = {{id = "", name = "The whole party"}}}}` — the `first`
 records, then each record at `bind` passing `if` (an Expr over `@item`),
 as `{id = <id expr, default @item.id>, name = <label expr, default
-@item.name>}`.
+@item.name>}`, then the `last` records (`last = {{id = "else", name =
+"Someone else…"}}`: a choice that points to another field, after the
+characters).
 
 `"$values"` and `"$value"` are replaced wherever they sit in the intent.
 

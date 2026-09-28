@@ -1121,18 +1121,19 @@ static func _with_options(field: Dictionary, ctx: Dictionary) -> Dictionary:
 
 
 ## The choices a `from` spec names: its `first` records, then the records
-## at `bind` passing `if`, as {id, name}.
+## at `bind` passing `if`, then its `last` records (a DM's "Someone else…"
+## after the party's characters), as {id, name}.
 static func options_from(spec: Dictionary, ctx: Dictionary) -> Array:
 	var out: Array = []
-	for r in spec.get("first", []):
-		if r is Dictionary:
-			out.append({"id": str(r.get("id", "")), "name": str(r.get("name", r.get("id", "")))})
+	var fixed := func(list: Variant) -> void:
+		for r in (list if list is Array else []):
+			if r is Dictionary:
+				out.append({"id": str(r.get("id", "")), "name": str(r.get("name", r.get("id", "")))})
+	fixed.call(spec.get("first", []))
 	var items: Variant = at_pointer(ctx, str(spec.get("bind", "")))
 	if items is Dictionary:
 		items = (items as Dictionary).values()
-	if not (items is Array):
-		return out
-	for it in items:
+	for it in (items if items is Array else []):
 		var sub: Dictionary = ctx.duplicate()
 		sub.item = it
 		if spec.has("if") and not Expr.truthy(Expr.evaluate(str(spec["if"]), sub)):
@@ -1140,6 +1141,7 @@ static func options_from(spec: Dictionary, ctx: Dictionary) -> Array:
 		var id: Variant = Expr.evaluate(str(spec.get("id", "@item.id")), sub)
 		var label: Variant = Expr.evaluate(str(spec.get("label", "@item.name")), sub)
 		out.append({"id": str(id) if id != null else "", "name": str(label) if label != null else str(id)})
+	fixed.call(spec.get("last", []))
 	return out
 
 

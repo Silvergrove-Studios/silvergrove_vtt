@@ -110,20 +110,25 @@ export function optionId(it: unknown): string {
   return String(it);
 }
 
-/** The choices a `from` spec names: its `first` records, then the records at `bind` passing `if`. */
+/** The choices a `from` spec names: its `first` records, then the records at
+ * `bind` passing `if`, then its `last` records (a DM's "Someone else…" after
+ * the party's characters). */
 export function optionsFrom(spec: Dict, ctx: Dict): { id: string; name: string }[] {
   const out: { id: string; name: string }[] = [];
-  for (const r of (spec.first as Dict[]) ?? []) if (r && typeof r === 'object') out.push({ id: String(r.id ?? ''), name: String(r.name ?? r.id ?? '') });
+  const fixed = (list: unknown): void => {
+    for (const r of Array.isArray(list) ? list : []) if (r && typeof r === 'object') out.push({ id: String(r.id ?? ''), name: String(r.name ?? r.id ?? '') });
+  };
+  fixed(spec.first);
   let items = atPointer(ctx, String(spec.bind ?? ''));
   if (items && typeof items === 'object' && !Array.isArray(items)) items = Object.values(items);
-  if (!Array.isArray(items)) return out;
-  for (const it of items) {
+  for (const it of Array.isArray(items) ? items : []) {
     const sub = { ...ctx, item: it };
     if ('if' in spec && !truthy(Expr.evaluate(String(spec.if), sub))) continue;
     const id = Expr.evaluate(String(spec.id ?? '@item.id'), sub);
     const label = Expr.evaluate(String(spec.label ?? '@item.name'), sub);
     out.push({ id: id === null ? '' : String(id), name: label === null ? String(id) : String(label) });
   }
+  fixed(spec.last);
   return out;
 }
 
