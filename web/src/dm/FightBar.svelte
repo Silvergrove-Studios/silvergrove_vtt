@@ -113,6 +113,14 @@
     flex: 1;
     min-width: 180px;
   }
+  /* each on a line of its own, never two: the bar keeps its height, and the
+     map below it stays where it is (a playtest's DM clicked where the map
+     had been a moment before) */
+  .what > * {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .buttons {
     display: flex;
     gap: 6px;

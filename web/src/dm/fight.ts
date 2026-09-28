@@ -2,6 +2,39 @@
 // turn order as rows to show, and the ruleset's own "roll initiative".
 import type { Dict } from '../lib/game.svelte';
 import { currentTurnTokens, turnMembers } from '../lib/turns';
+import { isDead } from '../lib/map/render';
+
+/** A name as the book and the map may both say it: "The Chapel Warden",
+ *  "Chapel Warden 2" and the rules' "chapel-warden" are one creature. */
+function stem(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/^the\s+/, '')
+    .replace(/\s+\d+$/, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** The fight's token an entry of the book stands for, or '': a person with
+ *  a token on its map, or a picture or a creature's rules named as one of
+ *  its creatures is ("The Chapel Warden" for the Warden) — the one whose
+ *  turn it is (`up`), else one alive, else the first. A playtest's DM, the
+ *  Warden risen, clicked its name in the book and got its picture. */
+export function fightToken(ref: string, dm: Dict, tokens: Dict[], up = ''): string {
+  const kind = ref.split(':')[0];
+  const id = ref.slice(kind.length + 1);
+  let found: Dict[] = [];
+  if (kind === 'actor') found = tokens.filter((t) => String(t.actor ?? '') === id);
+  else {
+    let name = '';
+    if (kind === 'picture') name = String(((dm.pictures as Dict[]) ?? []).find((p) => String(p.ref) === id)?.name ?? '');
+    else if (kind === 'entry' && id.startsWith('creatures/')) name = id.slice('creatures/'.length);
+    const want = stem(name);
+    if (want) found = tokens.filter((t) => t.actor && stem(String(t.name ?? '')) === want);
+  }
+  const t = found.find((x) => String(x.id) === up) ?? found.find((x) => !isDead(x)) ?? found[0];
+  return t ? String(t.id) : '';
+}
 
 export function liveFight(dm: Dict): Dict | null {
   for (const e of (dm.encounters as Dict[]) ?? []) {
