@@ -813,6 +813,84 @@ func test_campaign_first() -> void:
 	DirAccess.remove_absolute(dir)
 
 
+## The DM puts the party where the story is (a playtest's party always came
+## in at the chapel's west edge, inside by the story, and the DM dragged all
+## four in), puts down a thing with no stat block (the peddler's cart) and
+## takes it off again, and sends the party's star to a place from its card
+## (the star had stopped where it was last dropped). Each map's role reaches
+## the web screens with its scene.
+func test_the_party_and_things_where_the_story_is() -> void:
+	var dir := "user://table_party_here_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_table_party_here.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	var c := Campaign.create("Where the story is")
+	c.players.append({"id": "pl_1", "name": "Ana", "color": "#4f9cf6"})
+	c.players.append({"id": "pl_2", "name": "Ben", "color": "#e0a040"})
+	c.actors["a_h"] = {"id": "a_h", "kind": "pc", "name": "Hero", "owner": "pl_1"}
+	c.actors["a_r"] = {"id": "a_r", "kind": "pc", "name": "Rogue", "owner": "pl_2"}
+	check(c.save(dir.path_join("here.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("here.campaign"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var mp := win.maps
+	var dm := win.web_dm
+	check(mp.add_map(_example("ruined_chapel.hexmap")) == "" and mp.add_map(_example("forest_road.hexmap"), "regional") == "", "the chapel, and the road as the region")
+	var chapel := str(ctx.campaign.maps[0].id)
+	var road := str(ctx.campaign.maps[1].id)
+	var enc := mp.new_encounter("The barrow wakes", chapel, "ground")
+	check(mp.launch(enc) == "", "a fight on the chapel")
+	var sid := str(ctx.campaign.encounter_entry(enc).live.scene)
+	var grid := ctx.state.map_for(sid).grid
+	var ours := func() -> Array: return ctx.state.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.get("actor", "")) in ["a_h", "a_r"])
+	var west := (ours.call() as Array).map(func(t: Dictionary) -> Vector2: return Vision.token_pos(t))
+	check(west.size() == 2 and west.all(func(p: Vector2) -> bool: return grid.axial_to_offset(grid.world_to_axial(p)).x <= 2), "the party came in at the west edge: %s" % [west])
+	# "Move the party here": inside, by the altar
+	var inside := Vector2i(12, 7)
+	check(dm.op({"op": "party_here", "scene": sid, "cell": [inside.x, inside.y]}) == "", "the DM moves the party inside")
+	var cells := {}
+	var blocked := MapsPanel.blocked_cells(grid, ctx.state.effective_level(sid), ctx.art)
+	for tk in ours.call():
+		cells[grid.world_to_axial(Vision.token_pos(tk))] = true
+	var at := grid.offset_to_axial(inside.x, inside.y)
+	check(cells.size() == 2 and cells.keys().all(func(k: Vector2i) -> bool: return grid.steps(k, at) <= 2 and not blocked.has(k)), "side by side where the DM tapped, on no pew or fire: %s" % [cells.keys()])
+	check(ctx.history.undo_label() == "The party is here", "one undo step: %s" % ctx.history.undo_label())
+	check(dm.op({"op": "party_here", "scene": sid, "cell": [400, 400]}) != "" and dm.op({"op": "party_here", "cell": [1]}) != "", "off the map, or nowhere: refused")
+	# a thing with no stat block: named, its initials, its colour; and off again
+	var cart_at := grid.cell_center(grid.offset_to_axial(4, 3))
+	check(dm.op({"op": "add_token", "scene": sid, "name": "Vask's cart", "color": "#8a6a3a", "pos": [cart_at.x, cart_at.y]}) == "", "the peddler's cart on the map")
+	var things := ctx.state.tokens(sid).filter(func(t: Dictionary) -> bool: return (t.get("tags", []) as Array).has("thing"))
+	check(things.size() == 1 and str(things[0].name) == "Vask's cart" and str(things[0].label) == "VC" and str(things[0].color) == "#8a6a3a" and not things[0].has("actor") and not bool(things[0].hidden),
+		"a token of its own, its initials VC, in sight, no rules behind it: %s" % [things])
+	check(dm.op({"op": "add_token", "scene": sid, "name": "Hollis", "label": "ho", "color": "red", "pos": [cart_at.x, cart_at.y + 1]}) == "", "a villager, initials given")
+	var hollis := ctx.state.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Hollis")
+	check(hollis.size() == 1 and str(hollis[0].label) == "HO" and str(hollis[0].color) == "#8a7a5a", "its label as given, a colour that isn't one plain")
+	check(dm.op({"op": "add_token", "scene": sid, "name": " ", "pos": [1, 1]}) != "", "a thing with no name is refused")
+	var hero_tk: Dictionary = ours.call()[0]
+	check(dm.op({"op": "remove_token", "scene": sid, "id": str(hero_tk.id)}) != "" and not ctx.state.token(sid, str(hero_tk.id)).is_empty(), "a character's token doesn't come off that way")
+	check(dm.op({"op": "remove_token", "scene": sid, "id": str(things[0].id)}) == "" and ctx.state.token(sid, str(things[0].id)).is_empty(), "the cart comes off")
+	# the region: the star to a place, from its card; the region's role is said to the web screens
+	check(mp.return_from(enc) == "", "the fight over")
+	check(mp.show_map(road) == "" and mp.add_place("Aldous's hut", "", "", Vector2i(3, 6)) == "" and mp.add_place("Thornwick", "", "", Vector2i(14, 3)) == "", "the region, with two places")
+	check(mp.set_party(Vector2i(3, 6)) == "", "the star at the hut")
+	var town := str(ctx.campaign.places[1].id)
+	check(dm.op({"op": "party_to_place", "place": town}) == "" and ctx.campaign.doc.party.cell == "14,3", "the DM sends the party to Thornwick from its card")
+	var rgrid := ctx.state.map_for(ctx.scene_id).grid
+	var star: Array = ctx.state.tokens(ctx.scene_id).filter(func(t: Dictionary) -> bool: return (t.get("tags", []) as Array).has("party"))
+	check(star.size() == 1 and Vision.token_pos(star[0]).distance_to(rgrid.cell_center(rgrid.offset_to_axial(14, 3))) < 0.01, "and the star is there")
+	check(dm.op({"op": "party_to_place", "place": "nowhere"}) != "", "no such place")
+	win._set_hosting(true)
+	check(str(win.host.map_role.call(road)) == "regional" and str(win.host.map_role.call(chapel)) == "battle" and str(win.host.map_role.call("nope")) == "", "the host says which map is the region")
+	win._set_hosting(false)
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("here.campaign"))
+	DirAccess.remove_absolute(dir.path_join("here.campaign.autosave"))
+	DirAccess.remove_absolute(dir)
+
+
 ## A fight's order goes with it (a playtest's chapel fight opened on the
 ## lookout fight's order, and a new goblin given a removed one's id took its
 ## place in it): a creature taken out mid-fight leaves the order, Return

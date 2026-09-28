@@ -1447,6 +1447,8 @@ func _set_hosting(on: bool) -> void:
 		host.dm_handler = func(intent: Dictionary) -> String: return web_dm.op(intent)
 		host.dm_state_source = func() -> Dictionary: return web_dm.state()
 		host.chat_source = func() -> Array: return ctx.campaign.chat_log if ctx.campaign != null else []
+		# which maps are the region: a scene there has no battle map to pick a target on
+		host.map_role = func(mid: String) -> String: return str(ctx.campaign.map_entry(mid).get("role", "")) if ctx.campaign != null else ""
 		# pictures from the screens: a token's, a journal's, kept in the campaign's uploads
 		host.uploads_dir = Uploads.dir_of(ctx.campaign)
 		host.upload_handler = func(pid: String, gm: bool, msg: Dictionary) -> Dictionary: return upload(pid, gm, msg)

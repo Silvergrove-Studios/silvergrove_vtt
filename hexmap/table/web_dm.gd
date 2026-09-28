@@ -210,6 +210,28 @@ func op(intent: Dictionary) -> String:
 			if cell.size() != 2:
 				return "where?"
 			return maps.set_party(Vector2i(int(cell[0]), int(cell[1])))
+		# the party's marker to a place, from its card
+		"party_to_place":
+			return maps.party_to_place(str(intent.get("place", "")))
+		# on a battle map, the party's tokens where the DM tapped ("Move the party here")
+		"party_here":
+			var here: Array = intent.get("cell", []) if intent.get("cell") is Array else []
+			if here.size() != 2:
+				return "where?"
+			return maps.party_here(str(intent.get("scene", ctx.encounter().active_scene_id)), Vector2i(int(here[0]), int(here[1])))
+		# a token for a thing or a person with no stat block, where the DM tapped
+		# (a playtest's DM couldn't put the peddler's cart, nor the two on the
+		# bell rope, on the map)
+		"add_token":
+			return _add_thing(intent)
+		"remove_token":
+			var sid := str(intent.get("scene", ctx.encounter().active_scene_id))
+			var tk := ctx.state.token(sid, str(intent.get("id", "")))
+			if tk.is_empty():
+				return "no such token"
+			if not (tk.get("tags", []) as Array).has("thing"):
+				return "only a token put down by hand comes off the map this way"
+			return ctx.commands.run({"t": "token.remove", "scene": sid, "id": str(tk.id)}, "Take off " + str(tk.get("name", "a token")))
 		"share":
 			return Sharing.share(ctx, str(intent.get("ref", "")), str(intent.get("title", "")), str(intent.get("text", "")), str(intent.get("image", "")), str(intent.get("audience", "all")))
 		"unshare":
@@ -323,6 +345,32 @@ func op(intent: Dictionary) -> String:
 			ctx.campaign_changed.emit()
 			return ""
 	return "unknown DM operation '%s'" % str(intent.get("op", ""))
+
+
+## A token for a thing or a person with no stat block (a cart, a villager):
+## its name, its label (the initials it is given, or its name's), its
+## colour, where it goes, whether the players see it. Tagged `thing`: no
+## pick takes it, and the DM's screen can take it off again. "" or why.
+func _add_thing(intent: Dictionary) -> String:
+	var ctx := win.ctx
+	var sid := str(intent.get("scene", ctx.encounter().active_scene_id))
+	if ctx.encounter().scene(sid).is_empty():
+		return "no map on the table to put it on"
+	var named := str(intent.get("name", "")).strip_edges()
+	if named == "":
+		return "give it a name"
+	var pos: Array = intent.get("pos", []) if intent.get("pos") is Array else []
+	if pos.size() != 2:
+		return "where?"
+	var label := str(intent.get("label", "")).strip_edges().to_upper().left(3)
+	if label == "":
+		var words := named.split(" ", false)
+		label = (words[0].left(1) + (words[1].left(1) if words.size() > 1 else words[0].substr(1, 1))).to_upper()
+	var color := str(intent.get("color", ""))
+	if not color.begins_with("#") or not color.is_valid_html_color():
+		color = "#8a7a5a"
+	var tk := Encounter.new_token(named, Vector2(float(pos[0]), float(pos[1])), {"label": label, "color": color, "hidden": bool(intent.get("hidden", false)), "tags": ["thing"], "vision": null})
+	return ctx.commands.add_token(sid, tk)
 
 
 ## A map's first level (the one a new fight is on).

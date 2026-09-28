@@ -54,6 +54,10 @@ var dm_handler: Callable = Callable()
 var dm_state_source: Callable = Callable()
 ## () -> Array: the chat banked from sessions before (the campaign's).
 var chat_source: Callable = Callable()
+## (map_id: String) -> String: what the campaign has a map as, "battle" or
+## "regional" ("" when it doesn't say): a web scene says it as `role`, and
+## on the region a player's spell is cast with no target to tap.
+var map_role: Callable = Callable()
 ## Where the campaign keeps the pictures the table uploads ("" for none).
 var uploads_dir := ""
 ## (player_id: String, gm: bool, msg: Dictionary) -> {ok, ref, why}: a
@@ -445,6 +449,8 @@ func _send_scene(c: Dictionary) -> void:
 		sid = e.active_scene_id
 	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c)) if sid != "" else {},
 		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
+	if not (msg.scene as Dictionary).is_empty():
+		msg.scene.role = str(map_role.call(str(msg.scene.get("map", "")))) if map_role.is_valid() else ""
 	if _is_gm(c):
 		msg.scenes = e.scenes.map(func(s: Dictionary) -> Dictionary: return {"id": str(s.id), "name": str(s.get("name", "")), "map": str(s.get("map", "")), "active": str(s.id) == e.active_scene_id})
 		# seeing as a player: that player's snapshot of the scene, as their screen has it

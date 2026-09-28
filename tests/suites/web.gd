@@ -316,6 +316,8 @@ func test_web_clients_on_the_host() -> void:
 		return ""
 	host.dm_state_source = func() -> Dictionary: return {"campaign": {"name": "Chapel"}}
 	host.dm_token = "sesame"
+	var chapel_map := str(st.encounter.scene(st.encounter.active_scene_id).get("map", ""))
+	host.map_role = func(mid: String) -> String: return "battle" if mid == chapel_map else ""
 	check(host.start(0, false, 0) == OK and host.web != null and host.web.port > 0, "the host serves the web clients beside its WebSocket (ws %d, web %d)" % [host.port, host.web.port])
 	check(host.join_urls().size() >= 0, "and knows the addresses to join at: %s" % [host.join_urls()])
 	# someone new joins by name, from a browser
@@ -327,6 +329,8 @@ func test_web_clients_on_the_host() -> void:
 	var added := st.encounter.players.filter(func(p: Dictionary) -> bool: return str(p.name) == "Cara")
 	check(added.size() == 1 and str(cara.last("joined").player) == str(added[0].id), "Cara is new at the table: added, and joined as herself")
 	check(not cara.last("view").is_empty(), "with her view of the rules")
+	# (on the region there is no battle map to pick a target on: the scene says which it is)
+	check(str(cara.last("scene").scene.get("role", "")) == "battle", "and what the campaign has its map as: %s" % [cara.last("scene").scene.get("role")])
 	# someone who was here before is found, whatever the case
 	var ana := WebClient.new(host.port)
 	_pump(host, [ana], func() -> bool: return ana.open())
