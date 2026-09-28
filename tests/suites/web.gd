@@ -430,6 +430,38 @@ func test_web_clients_on_the_host() -> void:
 	check(not host.is_running() and host.web == null, "stopped, the web side too")
 
 
+## A player's move the turns don't allow is refused saying why: in a
+## playtest a player moved her own token onto the chapel's battle map
+## before initiative, and was told only "not allowed".
+func test_a_refused_move_says_why() -> void:
+	var st := _chapel_state()
+	var host := HostSession.new(st, PackLibrary.new())
+	host.add_player = func(ev: Dictionary) -> String:
+		st.apply(ev)
+		return ""
+	check(host.start(0, false, 0) == OK, "hosting")
+	var ana := WebClient.new(host.port)
+	_pump(host, [ana], func() -> bool: return ana.open())
+	ana.send({"t": "hello", "version": Protocol.VERSION, "name": "phone", "web": true})
+	ana.send({"t": "join", "role": "player", "name": "Ana"})
+	check(_pump(host, [ana], func() -> bool: return not ana.last("joined").is_empty()), "Ana joins from her phone")
+	var sid := st.encounter.active_scene_id
+	var move := func(id: String) -> String:
+		var before := ana.count("refused")
+		ana.send({"t": "request", "ev": {"t": "token.set", "scene": sid, "id": id, "changes": {"pos": [3.5, 6.6]}}})
+		if not _pump(host, [ana], func() -> bool: return ana.count("refused") > before):
+			return ""
+		return str(ana.last("refused").get("why", ""))
+	# the example's turns are in order and not yet running: a fight whose initiative isn't rolled
+	check(move.call("t_bdb237f2") == "The fight hasn't started: wait for initiative", "her own token before initiative: told why")
+	check(move.call("t_01365979") == "That's not your token", "Ben's ranger: not hers")
+	st.apply({"t": "turns.set", "changes": {"running": true, "turn": 1}})
+	check(move.call("t_bdb237f2") == "It's not your turn: Ben's ranger's turn", "Ben's turn: whose it is")
+	st.apply({"t": "turns.set", "changes": {"turn": 2}})
+	check(move.call("t_bdb237f2") == "It's not your turn", "a hidden goblin's turn: not whose")
+	host.stop()
+
+
 ## The DM screen's Next says the turn it showed (`from`): in a playtest a
 ## player's End turn and the DM's Next a few seconds apart took two turns.
 func test_dm_next_names_the_turn_it_ends() -> void:

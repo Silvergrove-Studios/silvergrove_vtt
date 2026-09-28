@@ -50,28 +50,12 @@ func request(ev: Dictionary) -> String:
 	if state == null:
 		return "no encounter open"
 	if not state.allowed(ev, player_id):
-		return why_not(state, ev)
+		return state.refusal(ev, player_id)
 	var why := state.validate(ev)
 	if why != "":
 		return why
 	state.apply(ev)
 	return ""
-
-
-## A player-facing reason a request was refused.
-static func why_not(state: EncounterState, ev: Dictionary) -> String:
-	if str(ev.get("t", "")) != "token.set":
-		return "Only the DM can do that"
-	var tk := state.token(str(ev.get("scene", "")), str(ev.get("id", "")))
-	if tk.is_empty():
-		return "No such token"
-	var turns := state.encounter.turns
-	match str(turns.get("mode", "free")):
-		"dm":
-			return "The DM has not given you the move"
-		"ordered":
-			return "Not your turn" if bool(turns.get("running", false)) else "Turns have not begun"
-	return "You cannot move that"
 
 
 ## Reload when the file changed on disk. Call every frame with the delta.

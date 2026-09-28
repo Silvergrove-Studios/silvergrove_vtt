@@ -617,6 +617,37 @@ func allowed(ev: Dictionary, player_id: String) -> bool:
 	return true
 
 
+## Why `player_id` may not send this event, in words for them — "" when
+## allowed() says they may. A playtest's player, moving her own token onto
+## the chapel's battle map before initiative, was told only "not allowed".
+func refusal(ev: Dictionary, player_id: String) -> String:
+	if allowed(ev, player_id):
+		return ""
+	if str(ev.get("t", "")) != "token.set":
+		return "Only the DM can do that"
+	var tk := token(str(ev.get("scene", "")), str(ev.get("id", "")))
+	if tk.is_empty() or (bool(tk.get("hidden", false)) and not _owns(tk, player_id)):
+		return "No such token"
+	if not (ev.get("changes") is Dictionary) or (ev.changes as Dictionary).keys().any(func(k: Variant) -> bool: return not PLAYER_TOKEN_FIELDS.has(str(k))):
+		return "A player moves a token; the DM changes the rest"
+	if bool(tk.get("hidden", false)):
+		return "The DM has hidden your token"
+	var turns := encounter.turns
+	var mode := str(turns.get("mode", "free"))
+	if mode in ["dm", "ordered"] and not _owns(tk, player_id):
+		return "That's not your token"
+	if mode == "dm":
+		return "The DM hasn't given you the move yet"
+	if mode == "ordered" and not bool(turns.get("running", false)):
+		return "The fight hasn't started: wait for initiative"
+	if mode == "ordered":
+		# whose turn it is, unless only the DM can see who (a hidden creature's)
+		var up := current_turn_tokens().map(func(id: Variant) -> Dictionary: return find_token(str(id))).filter(func(t: Dictionary) -> bool: return not t.is_empty() and not bool(t.get("hidden", false)))
+		var who := ", ".join(PackedStringArray(up.map(func(t: Dictionary) -> String: return str(t.get("name", "")))))
+		return "It's not your turn: %s's turn" % who if who != "" else "It's not your turn"
+	return "You can't move that now"
+
+
 ## Whether a player may move a token right now, by the turn mode:
 ## free — any token they can see; dm — one of theirs the DM has enabled;
 ## ordered — one of theirs whose turn it is.

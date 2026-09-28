@@ -97,7 +97,7 @@ func request(ev: Dictionary) -> String:
 	if not joined:
 		return "Not joined yet"
 	if not is_gm() and not state.allowed(ev, player_id):
-		return LocalSession.why_not(state, ev)
+		return state.refusal(ev, player_id)
 	var why := state.validate(ev)
 	if why != "":
 		return why

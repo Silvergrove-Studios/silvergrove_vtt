@@ -553,9 +553,11 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if not _is_gm(c) and (c.player == "" or c.role != Views.ROLE_PLAYER):
 				_send(c, Protocol.refused(ev, "join as a player first"))
 				return
-			# a co-GM may ask for any scene event the Table itself could apply
+			# a co-GM may ask for any scene event the Table itself could apply;
+			# a player is told why not (a playtest's, moving her own token before
+			# initiative, heard only "not allowed")
 			if not _is_gm(c) and not state.allowed(ev, c.player):
-				_send(c, Protocol.refused(ev, "not allowed"))
+				_send(c, Protocol.refused(ev, state.refusal(ev, c.player)))
 				return
 			var why := state.validate(ev)
 			if why == "":
