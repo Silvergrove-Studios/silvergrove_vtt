@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
   import View from '../lib/views/View.svelte';
-  import { comp, dmOp, game, playerName, type Dict } from '../lib/game.svelte';
+  import { comp, dmOp, game, playerName, submit, type Dict } from '../lib/game.svelte';
   import { markdown } from '../lib/markdown';
   import { pictureUrl } from '../lib/art';
   import AddPicture from '../common/AddPicture.svelte';
@@ -76,6 +76,14 @@
     if (picture) return { ref, title: picture.name, text: '', image: picture.ref };
     return null;
   });
+
+  // the place's fight started: busy until the table has it (the card then gives way to the fight's map)
+  async function startHere(): Promise<void> {
+    if (starting) return;
+    starting = true;
+    const r = await submit({ kind: 'dm', op: 'go_place', place: id });
+    setTimeout(() => (starting = false), r.ok ? 5000 : 0);
+  }
 
   function show(audience: string): void {
     if (!share) return;
@@ -169,8 +177,12 @@
                 <p class="dim">{encounter.creatures.map((c: Dict) => `${c.count ?? 1} × ${c.name ?? c.entry ?? c.id ?? '?'}`).join(', ')}</p>
               {/if}
             </div>
-            <!-- (one press: the fight takes a moment to set up, and a second press started it twice) -->
-            <button type="button" class="accent" disabled={starting} onclick={() => { starting = true; dmOp('go_place', { place: id }); setTimeout(() => (starting = false), 5000); }}>{starting ? 'Starting…' : 'Start the fight'}</button>
+            <!-- (one press: the fight takes a moment to set up, and a second press started it
+                 twice; busy till the table has it, and something moves meanwhile: a playtest's
+                 DM watched "Starting…" three seconds and nearly pressed again) -->
+            <button type="button" class="accent" disabled={starting} aria-busy={starting ? 'true' : undefined} onclick={startHere}>
+              {#if starting}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start the fight{/if}
+            </button>
           {/if}
           {#if encounter}<button type="button" class="quiet" onclick={() => onopen(`fight:${encounter.id}`)}>Its creatures and map</button>{/if}
         </div>

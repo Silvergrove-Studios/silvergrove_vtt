@@ -7,6 +7,7 @@
 // hello and joins again by itself.
 import { Connection, PROTOCOL, type Msg } from './net';
 import { Waiting } from './waiting';
+import { TYPING_SHOWN_MS } from './typing';
 
 export type Dict = Record<string, any>;
 
@@ -46,6 +47,9 @@ export const game = $state({
   packs: {} as Record<string, Dict>,
   dm: {} as Dict,
   notices: [] as { id: number; text: string; kind: 'info' | 'error' }[],
+  /** Who is writing in the chat now (a player's id, or "gm"): the id of their
+   *  newest line when they began, so the line they send ends it. */
+  typing: {} as Record<string, { after: string }>,
 });
 
 let conn: Connection | null = null;
@@ -63,6 +67,23 @@ const intentsWaiting = new Waiting<Answer>('i', 10000, () => {
 });
 let joinMsg: Msg | null = null;
 let byName = '';
+const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function stopTyping(from: string): void {
+  clearTimeout(typingTimers.get(from));
+  typingTimers.delete(from);
+  delete game.typing[from];
+}
+
+/** The id of the newest line of chat from `from` in this viewer's log ('' for none). */
+function newestLineOf(from: string): string {
+  const log = (game.view.log as Dict[]) ?? [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i];
+    if (e && e.kind === 'chat' && String(e.from ?? '') === from) return String(e.id ?? '');
+  }
+  return '';
+}
 
 export function notice(text: string, kind: 'info' | 'error' = 'info'): void {
   const id = ++noticeSeq;
@@ -164,7 +185,19 @@ function handle(m: Msg): void {
       break;
     case 'view':
       game.view = (m.view as Dict) ?? {};
+      // who was typing and has sent it: no longer typing
+      for (const [from, t] of Object.entries(game.typing)) if (newestLineOf(from) !== t.after) stopTyping(from);
       break;
+    case 'typing': {
+      // someone writing in the chat, as the table relays it (never kept): shown
+      // until they send it, or for a few seconds after they last said so
+      const from = String(m.from ?? '');
+      if (!from || from === (game.role === 'dm' ? 'gm' : game.me)) break;
+      game.typing[from] = { after: game.typing[from]?.after ?? newestLineOf(from) };
+      clearTimeout(typingTimers.get(from));
+      typingTimers.set(from, setTimeout(() => stopTyping(from), TYPING_SHOWN_MS));
+      break;
+    }
     case 'scene':
       game.scene = (m.scene as Dict) ?? {};
       game.players = (m.players as Dict[]) ?? game.players;
@@ -338,13 +371,14 @@ export function handouts(): Dict[] {
   return [...byKey.values()];
 }
 
-/** The chat, the rolls and what the rules said (an item given, an action taken) this viewer may read: the campaign's earlier sessions, then this one's log. */
-export function chatLog(): Dict[] {
-  const log = (game.view.log as Dict[]) ?? [];
+/** The chat, the rolls and what the rules said (an item given, an action taken) this viewer may read: the campaign's earlier sessions, then this one's log.
+ *  (`src`: another's, as the DM sees as a player: {log, chat_history}.) */
+export function chatLog(src: Dict = game.view): Dict[] {
+  const log = (src.log as Dict[]) ?? [];
   // what the live log holds goes where the log has it (a session ended but
   // still open is in both; a playtest's list put the evening above its first hour)
   const live = new Set(log.map((e) => String(e?.id ?? '')).filter((id) => id !== ''));
-  const before = ((game.view.chat_history as Dict[]) ?? []).filter((h) => !live.has(String(h?.id ?? '')));
+  const before = ((src.chat_history as Dict[]) ?? []).filter((h) => !live.has(String(h?.id ?? '')));
   const seen = new Set<string>();
   const out: Dict[] = [];
   for (const e of [...before, ...log]) {

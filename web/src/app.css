@@ -100,6 +100,36 @@ button.quiet:hover:not(:disabled) {
 button.danger {
   color: var(--danger);
 }
+/* a press waiting on the table (lib/views/ActButton.svelte, Start the fight):
+   something moves, so nobody presses again to see whether the first went */
+.spin {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: 0.45em;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.8;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 2.4s;
+  }
+}
+button[aria-busy='true'] {
+  cursor: progress;
+}
+button[aria-disabled='true'] {
+  cursor: default;
+}
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

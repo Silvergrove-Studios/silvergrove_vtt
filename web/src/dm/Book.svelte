@@ -7,6 +7,19 @@
   import { comp, dmOp, game, notice, uploadPicture, type Dict } from '../lib/game.svelte';
   import { prepare } from '../lib/pictures';
   import { book, kindWord, type Item, type Node } from './contents';
+  import Ask from '../common/Ask.svelte';
+
+  // a name to type, or a yes: asked in the table's own words (Ask), never the browser's
+  type Question = { title: string; text?: string; value?: string | null; yes?: string; danger?: boolean };
+  let question = $state<{ q: Question; settle: (a: string | true | null) => void } | null>(null);
+  function ask(q: Question): Promise<string | true | null> {
+    return new Promise((settle) => (question = { q, settle }));
+  }
+  function answered(a: string | true | null): void {
+    const settle = question?.settle;
+    question = null;
+    settle?.(a);
+  }
 
   let { current = '', onopen }: { current?: string; onopen: (ref: string) => void } = $props();
 
@@ -43,7 +56,9 @@
     const f = (e.currentTarget as HTMLInputElement).files?.[0] ?? null;
     (e.currentTarget as HTMLInputElement).value = '';
     if (!f) return;
-    const name = (prompt('Name the picture', f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ')) ?? '').trim();
+    const named = await ask({ title: 'Name the picture', value: f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '), yes: 'Add it' });
+    if (named === null) return;
+    const name = String(named).trim();
     addingPicture = true;
     try {
       const r = await uploadPicture('picture', await prepare(f, 'picture'));
@@ -115,21 +130,23 @@
     onopen(`fight:${id}`);
   }
 
-  function rename(node: Node): void {
+  async function rename(node: Node): Promise<void> {
     menu = '';
-    const t = prompt(node.node.startsWith('section:') ? 'A new name for this section (empty: its own name)' : 'A new name for this folder', node.title);
-    if (t !== null) dmOp('folder', { do: 'rename', node: node.node, title: t });
+    const section = node.node.startsWith('section:');
+    const t = await ask({ title: section ? 'Rename the section' : 'Rename the folder', text: section ? 'A new name for this section (empty: its own name)' : 'A new name for this folder', value: node.title, yes: 'Rename' });
+    if (typeof t === 'string') dmOp('folder', { do: 'rename', node: node.node, title: t });
   }
 
-  function newFolder(parent: string): void {
+  async function newFolder(parent: string): Promise<void> {
     menu = '';
-    const t = prompt('Name the new folder', 'New folder');
-    if (t !== null && t.trim()) dmOp('folder', { do: 'new', parent, title: t.trim() });
+    const t = await ask({ title: 'A new folder', text: 'Name the new folder', value: 'New folder', yes: 'Make it' });
+    if (typeof t === 'string' && t.trim()) dmOp('folder', { do: 'new', parent, title: t.trim() });
   }
 
-  function remove(node: Node): void {
+  async function remove(node: Node): Promise<void> {
     menu = '';
-    if (confirm(`Delete the folder “${node.title}”? What is in it goes back to its own section.`)) dmOp('folder', { do: 'delete', id: node.node.slice(7) });
+    const yes = await ask({ title: 'Delete the folder?', text: `“${node.title}” goes; what is in it goes back to its own section.`, yes: 'Delete the folder', danger: true });
+    if (yes === true) dmOp('folder', { do: 'delete', id: node.node.slice(7) });
   }
 
   function first(): string {
@@ -240,6 +257,9 @@
 </div>
 
 <input bind:this={pictureInput} type="file" accept="image/*" aria-label="A picture for the book" style="display:none" onchange={addPicture} />
+{#if question}
+  <Ask {...question.q} onanswer={answered} />
+{/if}
 
 <style>
   .book {

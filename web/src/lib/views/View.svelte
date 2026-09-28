@@ -12,9 +12,11 @@
   import Wizard from './Wizard.svelte';
   import LogLine from './LogLine.svelte';
   import FieldInput from './FieldInput.svelte';
-  import { viewUi } from './context';
+  import ActButton from './ActButton.svelte';
+  import { PAGE_INTENTS, viewUi } from './context';
   import { markdown } from '../markdown';
   import { assetArt } from '../art';
+  import { actedWords } from '../acted';
   import { breakdown, fillIntent, num, putValue, shown, signedOf, textOf, valueOf, withOptions, type Dict, clone } from './viewlib';
   import { Expr, truthy } from '../expr';
   import { resolve } from './fieldcheck';
@@ -65,6 +67,30 @@
     return !('enabled' in b) || truthy(Expr.evaluate(String(b.enabled), ctx));
   }
 
+  // a button's press waits for the table (ActButton: busy, then ✓); what it
+  // did is said by name where nothing else shows it ("Cast Minor Illusion":
+  // a playtest's bard cast it, saw nothing change, and couldn't tell whether
+  // the tap had gone). A pick goes to the map and says so once it lands; what
+  // the page does itself (a lookup) waits for nothing.
+  function act(b: Dict): Promise<{ ok: boolean }> | void {
+    const payload = fillIntent(b.intent, ctx);
+    const item = ctx.item && typeof ctx.item === 'object' ? (ctx.item as Dict) : null;
+    const words = actedWords(buttonLabel(b), typeof item?.name === 'string' ? item.name : '');
+    if (payload && typeof payload === 'object' && String(payload.pick ?? '') !== '') {
+      ui.pick(payload, words);
+      return;
+    }
+    if (!ui.submit || !payload || typeof payload !== 'object' || PAGE_INTENTS.includes(String(payload.kind ?? ''))) {
+      ui.intent(payload);
+      return;
+    }
+    const since = performance.now();
+    return ui.submit(payload).then((r) => {
+      if (r.ok) ui.acted?.(words, since);
+      return r;
+    });
+  }
+
   function prompted(rec: Dict): Dict {
     const form: Dict = rec.form && typeof rec.form === 'object' ? rec.form : {};
     return {
@@ -110,15 +136,27 @@
       return;
     }
     sending = true;
+    const since = performance.now();
     const r = await ui.submit(payload);
     sending = false;
     if (!r.ok) return;
+    // (a form gone once it's done — a level's choices made, a question answered —
+    // can't say so beside its button: the page says it, where nothing else does;
+    // two playtest players weren't sure a short rest's answer had gone)
+    if (gone) {
+      ui.acted?.(type === 'prompt' ? 'Answer sent' : actedWords(String(f.submit_label ?? '')), since);
+      return;
+    }
     if (!f.keep) formValues = f.values && typeof f.values === 'object' ? clone(f.values) : {};
     said = String(f.done ?? 'Done ✓');
     clearTimeout(saidTimer);
     saidTimer = setTimeout(() => (said = ''), 4000);
   }
-  $effect(() => () => clearTimeout(saidTimer));
+  let gone = false;
+  $effect(() => () => {
+    gone = true;
+    clearTimeout(saidTimer);
+  });
 
   // a form's starting values, once for each form drawn here (a tab switch
   // draws another in this place: it starts from its own)
@@ -272,11 +310,11 @@
       </span>
     </div>
   {:else if type === 'button'}
-    <button type="button" class:accent={n.accent} title={n.tooltip ?? ''} disabled={!enabled(n)} onclick={() => send(n.intent)}>{buttonLabel(n)}</button>
+    <ActButton label={buttonLabel(n)} accent={!!n.accent} title={n.tooltip ?? ''} disabled={!enabled(n)} act={() => act(n)} />
   {:else if type === 'action_bar'}
     <div class="actions">
-      {#each ((n.actions as Dict[]) ?? []).filter((a) => a && typeof a === 'object' && shown(a, ctx)) as a}
-        <button type="button" class:accent={a.accent} title={a.tooltip ?? ''} disabled={!enabled(a)} onclick={() => send(a.intent)}>{buttonLabel(a)}</button>
+      {#each ((n.actions as Dict[]) ?? []).filter((a) => a && typeof a === 'object' && shown(a, ctx)) as a, i (`${i}:${buttonLabel(a)}`)}
+        <ActButton label={buttonLabel(a)} accent={!!a.accent} title={a.tooltip ?? ''} disabled={!enabled(a)} act={() => act(a)} />
       {/each}
     </div>
   {:else if type === 'tracker'}

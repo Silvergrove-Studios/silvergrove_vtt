@@ -140,8 +140,37 @@
     if (lastRead) saveRead(game.table, 'dm', lastRead);
   });
 
-  const guide = $derived.by((): { key: string; text: string; button?: string; act?: () => void } | null => {
+  // the table's rules chosen before anyone makes a character: one is made by
+  // the rules as they are then (a playtest's DM found Rules settings just
+  // before the players came); once looked at, this browser remembers it
+  const rulesKey = $derived(`hexmap.dm.rules-seen/${String(dm.campaign?.id ?? game.table)}`);
+  let rulesSeen = $state<Record<string, boolean>>({});
+  function seenRules(): boolean {
+    if (rulesSeen[rulesKey]) return true;
+    try {
+      return localStorage.getItem(rulesKey) === '1';
+    } catch {
+      return false;
+    }
+  }
+  function openRules(): void {
+    rulesOpen = true;
+    rulesDone();
+  }
+  function rulesDone(): void {
+    rulesSeen[rulesKey] = true;
+    try {
+      localStorage.setItem(rulesKey, '1');
+    } catch {
+      /* private mode */
+    }
+  }
+  const hasRules = $derived(((dm.rules as Dict[]) ?? []).some((g) => g && Array.isArray(g.settings) && g.settings.length > 0));
+
+  const guide = $derived.by((): { key: string; text: string; button?: string; act?: () => void; gotIt?: () => void } | null => {
     if (!dm.campaign || fight) return null;
+    if (hasRules && !seenRules() && !people.some((a) => a.kind === 'pc'))
+      return { key: 'rules', text: 'Before you invite players: choose your table’s rules (Rules settings) — how characters are made, and the optional rules. A character is made by the rules as they are when it’s made.', button: 'Choose the rules', act: openRules, gotIt: rulesDone };
     if (game.players.every((p) => !online.has(String(p.id))))
       return { key: 'invite', text: 'Invite your players: they scan a code with their phone, or open an address. Nothing to install.', button: 'Invite players', act: () => (inviting = true) };
     if (!session.open) return { key: 'session', text: 'Start the session when everyone is here: what happens is kept as the session’s.', button: `Start session ${Number(session.n ?? 0) + 1}`, act: () => dmOp('session', { do: 'start' }) };
@@ -249,8 +278,11 @@
     return !tags.includes('place');
   }
 
+  // End the session asks in the table's own words (never the browser's bare OK)
+  let ending = $state(false);
   function endSession(): void {
-    if (confirm('End the session? What happened is kept as its recap; the next one starts from here.')) dmOp('session', { do: 'end' });
+    ending = false;
+    dmOp('session', { do: 'end' });
   }
 
   onMount(() => {
@@ -294,7 +326,7 @@
       <div class="session">
         {#if session.open}
           <span class="chip"><span class="dot on"></span>Session {session.n}</span>
-          <button type="button" class="quiet" onclick={endSession}>End the session</button>
+          <button type="button" class="quiet" onclick={() => (ending = true)}>End the session</button>
         {:else}
           <span class="chip">{Number(session.n ?? 0) > 0 ? `Between sessions (${session.n} played)` : 'No session yet'}</span>
           <button type="button" onclick={() => dmOp('session', { do: 'start' })}>Start session {Number(session.n ?? 0) + 1}</button>
@@ -305,7 +337,7 @@
           <span class="dim saved">Saved</span>
         {/if}
         {#if ((dm.rules as Dict[]) ?? []).length}
-          <button type="button" class="quiet" title="How the rules are played at this table: how characters are made, optional rules" onclick={() => (rulesOpen = true)}>Rules settings</button>
+          <button type="button" class="quiet" title="How the rules are played at this table: how characters are made, optional rules" onclick={openRules}>Rules settings</button>
         {/if}
       </div>
       <div class="players">
@@ -410,7 +442,7 @@
               <p>{guide.text}</p>
               <div class="gbtns">
                 {#if guide.button}<button type="button" class="accent" onclick={() => guide.act?.()}>{guide.button}</button>{/if}
-                <button type="button" class="quiet" onclick={() => (guideGone = guide.key)}>Got it</button>
+                <button type="button" class="quiet" onclick={() => (guide.gotIt?.(), (guideGone = guide.key))}>Got it</button>
               </div>
             </div>
           {/if}
@@ -472,6 +504,15 @@
   </main>
   {#if inviting}<Invite onclose={() => (inviting = false)} />{/if}
   {#if rulesOpen}<RulesSettings onclose={() => (rulesOpen = false)} />{/if}
+  {#if ending}
+    <Modal title="End the session?" onclose={() => (ending = false)}>
+      <p class="ask">What happened is kept as its recap; the next session starts from here.</p>
+      {#snippet actions()}
+        <button type="button" class="quiet" onclick={() => (ending = false)}>Not yet</button>
+        <button type="button" class="danger" onclick={endSession}>End the session</button>
+      {/snippet}
+    </Modal>
+  {/if}
   {#if asking}
     <Modal title="The rules ask you" onclose={() => (putOff = [...putOff, String(asking.p.id)])}>
       <View node={{ type: 'prompt', bind: `/prompts/${asking.i}` }} ctx={game.view} />
@@ -484,6 +525,9 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+  .ask {
+    margin: 0;
   }
   .wallsbtn {
     min-height: 30px;

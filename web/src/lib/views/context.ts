@@ -8,10 +8,18 @@ export interface ViewUi {
   intent(payload: Dict): void;
   /** An intent whose answer the page waits for, a form's: done, or refused and why. Without it a form's intent goes as any other. */
   submit?(payload: Dict): Promise<{ ok: boolean; why?: string }>;
-  pick(payload: Dict): void;
+  /** An intent that wants a target on the map; `words` say what it does once done ("Cast Bless"). */
+  pick(payload: Dict, words?: string): void;
+  /** A button's action the table has done (`since`: when it was pressed, performance.now()):
+   *  the page may say so where nothing else on the screen shows it. */
+  acted?(words: string, since: number): void;
   comp(collection: string, req: Dict): Promise<Dict>;
   picture(ref: string): string;
 }
+
+/** The intents a page does itself (a lookup opens a card; the DM's "show"
+ *  opens a sheet): nothing is sent to the table, and nothing waits for it. */
+export const PAGE_INTENTS = ['lookup', 'show'];
 
 const KEY = Symbol('view-ui');
 

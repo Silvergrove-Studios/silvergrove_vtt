@@ -399,6 +399,15 @@ func test_web_clients_on_the_host() -> void:
 	check((texts.call(ben_view) as Array).has("Ben, a word") and not (texts.call(dm_view) as Array).has("Ben, a word") and not (texts.call(cara_view) as Array).has("Ben, a word"), "Ben reads it; the DM and Cara do not")
 	check((texts.call(dm_view) as Array).has("DM, a question") and not (texts.call(ben_view) as Array).has("DM, a question"), "Cara's question: the DM reads it, Ben does not")
 	check((texts.call(cara_view) as Array).has("DM, a question"), "and Cara sees what she sent")
+	# the DM seeing as Ben sees his chat too, but never what players keep from the
+	# DM (a playtest's DM couldn't check what had reached the players' chat)
+	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "see_as", "player": ben}})
+	check(_pump(host, [dm], func() -> bool: return str(dm.last("view").view.get("preview_chat", {}).get("as", "")) == ben), "seeing as Ben: his chat comes with the DM's view")
+	var seen: Array = (dm.last("view").view.preview_chat.log as Array).map(func(x: Dictionary) -> String: return str(x.get("text", "")))
+	check(seen.has("Hello all") and not seen.has("DM, a question"), "what Ben reads, not what he doesn't: %s" % [seen])
+	check(not seen.has("Ben, a word"), "and not Ana's private word to him: the DM may not read it")
+	dm.send({"t": "intent", "intent": {"kind": "dm", "op": "see_as", "player": ""}})
+	check(_pump(host, [dm], func() -> bool: return not dm.last("view").view.has("preview_chat")), "back to the DM's own: no one else's chat")
 	# free rolls: a player's, the DM's in secret, and one that isn't a roll
 	ana.send({"t": "intent", "intent": {"kind": "roll", "expr": "1d20+4", "label": "Stealth"}})
 	dm.send({"t": "intent", "intent": {"kind": "roll", "expr": "2d6", "secret": true}})
@@ -413,6 +422,17 @@ func test_web_clients_on_the_host() -> void:
 	check(ana.count("done") == 0, "intents sent without one hear nothing when they are done, as before")
 	ana.send({"t": "intent", "req": "i7", "intent": {"kind": "chat", "text": "Numbered", "to": "all"}})
 	check(_pump(host, [ana], func() -> bool: return str(ana.last("done").get("req", "")) == "i7"), "one with a req, done: it hears so")
+	# …after the view that has what it did: a button that waited reads its result
+	# as it hears (and says what was done only where no roll shows it)
+	var at_done := -1
+	var at_view := -1
+	for i in ana.inbox.size():
+		var m: Dictionary = ana.inbox[i]
+		if str(m.get("t", "")) == "done" and str(m.get("req", "")) == "i7":
+			at_done = i
+		if at_view < 0 and str(m.get("t", "")) == "view" and (m.view.get("log", []) as Array).any(func(x: Dictionary) -> bool: return str(x.get("text", "")) == "Numbered"):
+			at_view = i
+	check(at_view >= 0 and at_view < at_done, "the view with it came first (view %d, done %d)" % [at_view, at_done])
 	ana.send({"t": "intent", "req": "i8", "intent": {"kind": "roll", "expr": "lots of dice"}})
 	check(_pump(host, [ana], func() -> bool: return str(ana.last("refused").get("req", "")) == "i8"), "one refused: the refusal carries its req: %s" % [ana.last("refused")])
 	ana.send({"t": "intent", "req": "i9", "intent": "not a dictionary"})
@@ -428,6 +448,56 @@ func test_web_clients_on_the_host() -> void:
 	check(hist == ["Last week"], "the history a view carries is the sessions before, not the live log again: %s" % [hist])
 	host.stop()
 	check(not host.is_running() and host.web == null, "stopped, the web side too")
+
+
+## "Leo is typing…": a screen says it is writing in the chat, and the table
+## tells the screens that would read the message — not the one writing, not
+## a player a private word leaves out — and keeps none of it (a playtest's
+## DM and players crossed messages many times).
+func test_typing_is_said_not_kept() -> void:
+	var st := _chapel_state()
+	var host := HostSession.new(st, PackLibrary.new())
+	host.kernel = RulesKernel.new(st)
+	host.dm_token = "sesame"
+	host.dm_state_source = func() -> Dictionary: return {}
+	check(host.start(0, false, 0) == OK, "hosting")
+	var ana_id := "pl_fe0170c1"
+	var ben_id := "pl_393eb25a"
+	var seat := func(join: Dictionary) -> WebClient:
+		var w := WebClient.new(host.port)
+		_pump(host, [w], func() -> bool: return w.open())
+		w.send({"t": "hello", "version": Protocol.VERSION, "name": "screen", "web": true})
+		w.send(join)
+		_pump(host, [w], func() -> bool: return not w.last("joined").is_empty())
+		return w
+	var ana: WebClient = seat.call({"t": "join", "role": "player", "name": "Ana"})
+	var ben: WebClient = seat.call({"t": "join", "role": "player", "name": "Ben"})
+	var dm: WebClient = seat.call({"t": "join", "role": "dm", "token": "sesame"})
+	check(str(ana.last("joined").player) == ana_id and str(ben.last("joined").player) == ben_id and dm.last("joined").has("role"), "Ana, Ben and the DM's screen at the table")
+	var all := [ana, ben, dm]
+	var kept := st.encounter.log.size()
+	ana.send({"t": "intent", "intent": {"kind": "typing", "to": "all"}})
+	check(_pump(host, all, func() -> bool: return ben.count("typing") == 1 and dm.count("typing") == 1), "Ana writing to everyone: Ben and the DM hear of it")
+	check(str(ben.last("typing").from) == ana_id and str(ben.last("typing").name) == "Ana", "who it is: %s" % [ben.last("typing")])
+	check(ana.count("typing") == 0, "Ana isn't told of herself")
+	check(st.encounter.log.size() == kept and ana.count("refused") == 0, "nothing kept, nothing refused")
+	# said again at once: not passed on again (a screen says it every few seconds at most)
+	ana.send({"t": "intent", "intent": {"kind": "typing", "to": "all"}})
+	_pump(host, all, func() -> bool: return false, 200)
+	check(ben.count("typing") == 1, "a second one straight after isn't passed on")
+	# a private word to Ben: the DM isn't told of it
+	OS.delay_msec(HostSession.TYPING_GAP_MS + 50)
+	ana.send({"t": "intent", "intent": {"kind": "typing", "to": [ben_id], "private": true}})
+	check(_pump(host, all, func() -> bool: return ben.count("typing") == 2), "Ana writing privately to Ben: he hears of it")
+	_pump(host, all, func() -> bool: return false, 200)
+	check(dm.count("typing") == 1, "the DM doesn't")
+	# the DM writing to Ben only: Ana isn't told
+	dm.send({"t": "intent", "intent": {"kind": "typing", "to": [ben_id]}})
+	check(_pump(host, all, func() -> bool: return ben.count("typing") == 3), "the DM writing to Ben: he hears of it")
+	check(str(ben.last("typing").from) == "gm" and str(ben.last("typing").name) == "the DM", "from the DM: %s" % [ben.last("typing")])
+	_pump(host, all, func() -> bool: return false, 200)
+	check(ana.count("typing") == 0 and st.encounter.log.size() == kept, "Ana doesn't, and still nothing is kept")
+	host.stop()
 
 
 ## The DM screen's Next says the turn it showed (`from`): in a playtest a

@@ -90,6 +90,20 @@ async function who(page, name, species, background, klass) {
 const dm = await open(info.dm, { width: 1440, height: 900 }, 'dm');
 const lia = await open(info.player, { width: 390, height: 844 }, 'lia');
 
+// (a playtest's DM found Rules settings just before the players came, and a
+// character is made by the rules as they are when it's made)
+await step('the DM’s first step, before anyone makes a character: the table’s rules', async () => {
+  const guide = dm.locator('.guide');
+  await guide.getByText(/^Before you invite players/).waitFor({ timeout: 10000 });
+  await guide.getByRole('button', { name: 'Choose the rules' }).click();
+  const settings = dm.getByRole('dialog', { name: 'Rules settings' });
+  await settings.waitFor({ timeout: 5000 });
+  await shot(dm, 'dm_rules_first');
+  await settings.getByRole('button', { name: 'Done' }).click();
+  // once looked at, the next step is the invitation
+  await guide.getByText(/^Invite your players/).waitFor({ timeout: 5000 });
+});
+
 await step('Lia starts a druid: nothing moves on until it is chosen', async () => {
   await lia.locator('#name').fill('Lia');
   await lia.getByRole('button', { name: 'Join' }).click();
