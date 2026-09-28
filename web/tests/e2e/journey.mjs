@@ -1,9 +1,13 @@
 // The next playtest's journey, in a real browser against a real table:
 // the DM's screen and two players' screens (one a phone), the village
 // (a place's card, shown to the players, chat and a private message), a
-// character sheet, and the chapel fight (launched, initiative, an attack
-// picked on the map, a token moved by tapping it and then where it goes,
-// ended). Screenshots of each step go to the output
+// character sheet, the party's star sent to a place and tapped elsewhere,
+// and the chapel fight (launched, a move before initiative told why not,
+// initiative, the party put inside, a cart put down and taken off, a
+// creature opened from the book, an attack's targets listed by name, the
+// DM's map staying put, an attack picked on the map, a token moved by
+// tapping it and then where it goes, ended), then an attack on the region
+// sent with no target. Screenshots of each step go to the output
 // folder; a step that does not happen fails the run.
 //
 //   node tests/e2e/journey.mjs <host.json> <out dir>
@@ -23,9 +27,22 @@ const browser = await chromium.launch({ channel: process.env.HEXMAP_BROWSER ?? '
 const problems = [];
 let n = 0;
 
+// what each screen sent the table, as it went (an intent's exact shape)
+const sent = new Map();
+
 async function open(url, viewport, name) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, hasTouch: viewport.width < 600 });
   const page = await ctx.newPage();
+  sent.set(name, []);
+  page.on('websocket', (ws) =>
+    ws.on('framesent', (f) => {
+      try {
+        sent.get(name).push(JSON.parse(String(f.payload)));
+      } catch {
+        /* not a message */
+      }
+    }),
+  );
   page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() === 'error') problems.push(`${name} console: ${m.text()}`);
@@ -294,6 +311,33 @@ await step('a place marked on the players’ map', async () => {
   await shot(ana, 'ana_ford_marked');
 });
 
+// (the fifth playtest's DM: the star "worked twice and then stopped following my drags")
+await step('the DM sends the party to a place from its card, then taps where they are', async () => {
+  const star = () => dm.evaluate(() => (window.hexmap.game.scene.tokens ?? []).find((t) => (t.tags ?? []).includes('party'))?.pos ?? null);
+  await dm.locator('.book').getByRole('button', { name: /^Thornwick/ }).first().click();
+  await dm.locator('.reader').getByRole('button', { name: 'Move the party here' }).click();
+  await dm.waitForFunction(() => {
+    const g = window.hexmap.game;
+    const town = (g.dm.places ?? []).find((p) => p.name === 'Thornwick');
+    return town && g.dm.party?.cell === town.cell;
+  }, null, { timeout: 5000 });
+  await dm.getByRole('button', { name: 'Close the card' }).click();
+  const was = await star();
+  await dm.locator('.mapbar').getByRole('button', { name: 'Move the party here' }).click();
+  await dm.getByText('Move the party here: tap where they are').waitFor({ timeout: 5000 });
+  const box = await dm.locator('.mapholder canvas').boundingBox();
+  await dm.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.55);
+  await dm.waitForFunction(
+    (p) => {
+      const t = (window.hexmap.game.scene.tokens ?? []).find((x) => (x.tags ?? []).includes('party'));
+      return t && (t.pos[0] !== p[0] || t.pos[1] !== p[1]);
+    },
+    was,
+    { timeout: 5000 },
+  );
+  await shot(dm, 'dm_party_moved_by_tap');
+});
+
 await step('the book says which is which, and a search ends once used', async () => {
   // "The ruined chapel" is a place and a picture: each says what it is
   const book = dm.locator('aside.book');
@@ -318,6 +362,42 @@ await step('the chapel: the DM starts the fight', async () => {
   await shot(dm, 'dm_fight');
 });
 
+// where the DM's map begins, with the fight's bar over it: it stays put
+// whatever the bar says (the fifth playtest's DM clicked where the map had
+// been a moment before)
+let mapTop = 0;
+const topOfMap = () => dm.evaluate(() => document.querySelector('.mapholder')?.getBoundingClientRect().top ?? -1);
+
+// (the fifth playtest's player moved her token before initiative and was told only "not allowed")
+await step('Ana moves Wren before initiative: told why not', async () => {
+  mapTop = await topOfMap();
+  await ana.getByRole('tab', { name: /Map/ }).click();
+  await ana.waitForFunction(() => window.hexmap.game.scene.role === 'battle' && window.hexmap.game.scene.turns?.mode === 'ordered', null, { timeout: 8000 });
+  const w = await ana.evaluate(() => {
+    const g = window.hexmap.game;
+    const toks = g.scene.tokens ?? [];
+    const t = toks.find((x) => x.owner === g.me);
+    const c = document.querySelector('canvas');
+    if (!t || !c?.screenOf) return null;
+    const at = c.screenOf(t.id);
+    const px = c.pxPerHex();
+    for (const [dx, dy] of [[2, 0], [0, -1.7], [0, 1.7], [-2, 0]]) {
+      const x = Number(t.pos[0]) + dx;
+      const y = Number(t.pos[1]) + dy;
+      if (!toks.some((o) => Math.hypot(Number(o.pos[0]) - x, Number(o.pos[1]) - y) < 0.8)) return { name: t.name, pos: t.pos, id: t.id, at, to: { x: at.x + dx * px, y: at.y + dy * px } };
+    }
+    return null;
+  });
+  if (!w) throw new Error('Ana has no token, or nowhere free beside it');
+  await ana.mouse.click(w.at.x, w.at.y);
+  await ana.getByText(`Move ${w.name}: tap where to go`).waitFor({ timeout: 5000 });
+  await ana.mouse.click(w.to.x, w.to.y);
+  await ana.getByRole('dialog', { name: 'Confirm the move' }).waitFor({ timeout: 5000 });
+  await ana.getByRole('button', { name: 'Move', exact: true }).click();
+  await ana.getByText("The fight hasn't started: wait for initiative").waitFor({ timeout: 5000 });
+  await shot(ana, 'ana_move_before_initiative');
+});
+
 await step('initiative is rolled; the order shows', async () => {
   await dm.getByRole('button', { name: 'Roll initiative' }).click();
   await dm.getByText('Turn order').waitFor({ timeout: 8000 });
@@ -330,6 +410,80 @@ await step('the DM chooses a creature: its stat block', async () => {
   await dm.locator('.order .row').filter({ hasNotText: /Wren|Brakka/ }).first().click();
   await dm.locator('.chosen').waitFor({ timeout: 5000 });
   await shot(dm, 'dm_statblock');
+});
+
+// (the fifth playtest's party always came in at the chapel's west edge; the
+// DM dragged all four inside)
+await step('the DM moves the party inside, where the story has them', async () => {
+  const where = await dm.evaluate(() => {
+    const toks = window.hexmap.game.scene.tokens ?? [];
+    const gob = toks.find((t) => /Goblin/.test(t.name ?? ''));
+    const c = document.querySelector('canvas');
+    if (!gob || !c?.screenOf) return null;
+    return { at: c.screenOf(gob.id), px: c.pxPerHex(), gob: gob.pos, party: toks.filter((t) => t.owner).map((t) => ({ id: t.id, pos: t.pos })) };
+  });
+  if (!where || !where.party.length) throw new Error('no goblin, or no party, on the DM’s map');
+  await dm.locator('.mapbar').getByRole('button', { name: 'Move the party here' }).click();
+  await dm.getByText('Move the party here: tap where they are').waitFor({ timeout: 5000 });
+  await dm.mouse.click(where.at.x - where.px * 2, where.at.y);
+  await dm.waitForFunction(
+    ([party, gob]) =>
+      party.every((p) => {
+        const t = (window.hexmap.game.scene.tokens ?? []).find((x) => x.id === p.id);
+        return t && (t.pos[0] !== p.pos[0] || t.pos[1] !== p.pos[1]) && Math.hypot(t.pos[0] - (gob[0] - 2), t.pos[1] - gob[1]) < 3;
+      }),
+    [where.party, where.gob],
+    { timeout: 5000 },
+  );
+  await shot(dm, 'dm_party_inside');
+});
+
+// (the fifth playtest's DM couldn't put the peddler's cart on the map)
+await step('the DM puts a cart on the map, and takes it off', async () => {
+  await dm.getByRole('button', { name: '+ A token' }).click();
+  await dm.locator('.quick').getByLabel('Name').fill('Vask’s cart');
+  await dm.locator('.quick').getByRole('button', { name: 'Put it on the map' }).click();
+  await dm.getByText('Vask’s cart: tap where it goes').waitFor({ timeout: 5000 });
+  const box = await dm.locator('.mapholder canvas').boundingBox();
+  await dm.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.3);
+  await dm.waitForFunction(() => (window.hexmap.game.scene.tokens ?? []).some((t) => t.name === 'Vask’s cart' && t.label === 'VC' && (t.tags ?? []).includes('thing')), null, { timeout: 5000 });
+  const at = await dm.evaluate(() => {
+    const t = (window.hexmap.game.scene.tokens ?? []).find((x) => x.name === 'Vask’s cart');
+    return document.querySelector('canvas').screenOf(t.id);
+  });
+  await dm.mouse.click(at.x, at.y);
+  await shot(dm, 'dm_cart');
+  await dm.locator('.thingbar').getByRole('button', { name: 'Take it off the map' }).click();
+  await dm.waitForFunction(() => !(window.hexmap.game.scene.tokens ?? []).some((t) => t.name === 'Vask’s cart'), null, { timeout: 5000 });
+});
+
+// (the fifth playtest's DM, the Warden risen, clicked its name in the book and got its picture)
+await step('a creature of the fight opened from the book: its stat block, not its picture', async () => {
+  await dm.locator('.book').getByRole('button', { name: /^The Chapel Warden/ }).first().click();
+  await dm.locator('.chosen').filter({ hasText: 'Chapel Warden' }).waitFor({ timeout: 5000 });
+  if (await dm.locator('.reader').count()) throw new Error('a card opened over the map');
+  await shot(dm, 'dm_book_statblock');
+});
+
+// (a screen reader can't tap a canvas, and the fifth playtest's agents fought line of sight far harder than people)
+await step('Ben’s attack lists the creatures he sees, by name and map label', async () => {
+  await ben.getByRole('tab', { name: /^Character/ }).click();
+  await ben.getByRole('tab', { name: 'Combat' }).click();
+  await ben.getByRole('button', { name: 'Attack' }).first().click();
+  const banner = ben.getByRole('group', { name: 'Choose the target' });
+  await banner.waitFor({ timeout: 5000 });
+  const first = banner.locator('.choice').first();
+  await first.waitFor({ timeout: 5000 });
+  const said = await first.innerText();
+  if (!/\(.+\)/.test(said)) throw new Error(`a choice without its map label: ${said}`);
+  await banner.getByRole('button', { name: 'No target: just roll' }).waitFor({ timeout: 5000 });
+  const done = banner.getByRole('button', { name: 'Done' });
+  if (!(await done.isDisabled())) throw new Error('Done before anything is chosen');
+  await first.click();
+  if ((await first.getAttribute('aria-pressed')) !== 'true' || (await done.isDisabled())) throw new Error('choosing one did not choose it');
+  await shot(ben, 'ben_pick_by_name');
+  await banner.getByRole('button', { name: 'Cancel' }).click();
+  await banner.waitFor({ state: 'detached', timeout: 5000 });
 });
 
 await step('the DM drags Wren beside a goblin', async () => {
@@ -370,6 +524,11 @@ await step('the DM moves the turns on to Wren', async () => {
     await dm.waitForFunction((b) => `${window.hexmap.game.scene.turns?.round}/${window.hexmap.game.scene.turns?.turn}` !== b, was, { timeout: 5000 });
   }
   throw new Error('Wren’s turn never came');
+});
+
+await step('the DM’s map stayed where it was while the fight’s bar changed', async () => {
+  const now = await topOfMap();
+  if (!(mapTop > 0) || Math.abs(now - mapTop) > 0.5) throw new Error(`the map began at ${mapTop} px before initiative and at ${now} px now`);
 });
 
 await step('Ana attacks: a target picked on the map, the roll in the log', async () => {
@@ -443,6 +602,26 @@ await step('the DM ends the fight', async () => {
   await dm.getByRole('dialog', { name: 'End the fight?' }).getByRole('button', { name: 'End the fight' }).click();
   await dm.locator('.fightbar').waitFor({ state: 'detached', timeout: 8000 });
   await shot(dm, 'dm_after_fight');
+});
+
+// (the owner: theatre of the mind, with no tokens, the rolls still seen)
+await step('on the region, Ana’s attack goes with no target to tap', async () => {
+  await ana.waitForFunction(() => window.hexmap.game.scene.role === 'regional', null, { timeout: 8000 });
+  const before = sent.get('ana').length;
+  await ana.getByRole('tab', { name: /Character/ }).click();
+  await ana.getByRole('tab', { name: 'Combat' }).click();
+  await ana.getByRole('button', { name: 'Attack' }).first().click();
+  await ana.waitForTimeout(600);
+  if (await ana.getByRole('group', { name: 'Choose the target' }).count()) throw new Error('a pick waits on the region');
+  const went = sent
+    .get('ana')
+    .slice(before)
+    .map((m) => m.intent)
+    .filter((i) => i?.kind === 'action' && i.action === 'attack');
+  if (!went.length) throw new Error('no attack went to the table');
+  const ctx = went[went.length - 1].ctx ?? {};
+  if (ctx.no_target !== true || 'target' in ctx || 'pick' in went[went.length - 1]) throw new Error(`the attack went as ${JSON.stringify(went[went.length - 1])}`);
+  await shot(ana, 'ana_attack_no_target');
 });
 
 await step('the DM sees the map as Ana does, and back', async () => {

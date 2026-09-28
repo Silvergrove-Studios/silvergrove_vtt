@@ -183,16 +183,18 @@ export interface PickChoice {
  *  a playtest's agents, playing through the page's structure, fought line
  *  of sight far harder than people): the pickables in the picker's sight
  *  (`sees`: the rest of the party is on a player's map wherever they are),
- *  nearest the picker first. */
+ *  nearest the picker first, the party after the rest (most picks are an
+ *  attack's or a spell's at a foe). */
 export function pickChoices(tokens: Dict[], payload: Dict, opts: { gm?: boolean; sees?: (p: Vec) => boolean } = {}): PickChoice[] {
   if (String(payload.pick ?? '') !== 'token') return [];
   const from = tokens.find((t) => String(t.id) === pickFrom(payload, tokens));
   const o = from ? tokenPos(from) : null;
   const away = (t: Dict) => (o ? Math.hypot(tokenPos(t).x - o.x, tokenPos(t).y - o.y) : 0);
+  const ours = (t: Dict) => (String(t.owner ?? '') !== '' ? 1 : 0);
   return pickables(tokens, payload, opts.gm)
     .filter((t) => !opts.sees || opts.sees(tokenPos(t)))
     .map((t, i) => ({ t, i, d: away(t) }))
-    .sort((a, b) => a.d - b.d || a.i - b.i)
+    .sort((a, b) => ours(a.t) - ours(b.t) || a.d - b.d || a.i - b.i)
     .map(({ t }) => {
       const name = String(t.name ?? '') || String(t.label ?? '') || 'a creature';
       const label = String(t.label ?? '');

@@ -169,8 +169,13 @@ describe('picking a target', () => {
     const list = pickChoices(toks, attack, { sees });
     expect(list.map((c) => c.target)).toEqual(['token:g1', 'token:g2']);
     expect(list[0]).toEqual({ target: 'token:g1', name: 'Goblin Warrior', label: 'GW1', party: false, hidden: false });
-    // in sight, a friend is listed and says so; the DM's list has the hidden too
-    expect(pickChoices(toks, attack).find((c) => c.target === 'token:br')?.party).toBe(true);
+    // in sight, a friend is listed and says so, after the rest however near; the DM's list has the hidden too
+    const close = { ...brakka, pos: [1.5, 1] };
+    expect(pickChoices([wren, close, far, near], attack).map((c) => [c.target, c.party])).toEqual([
+      ['token:g1', false],
+      ['token:g2', false],
+      ['token:br', true],
+    ]);
     expect(pickChoices(toks, attack, { gm: true }).map((c) => c.target)).toEqual(['token:g1', 'token:gb', 'token:g2', 'token:br']);
     // no creature in sight but a friend behind a wall: nothing in sight (a playtest's cleric, outside the chapel)
     expect(pickWords(attack, [wren, brakka], sees)).toBe(NOTHING_IN_SIGHT);
