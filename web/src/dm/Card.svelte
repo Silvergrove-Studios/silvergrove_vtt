@@ -215,6 +215,11 @@
           The players can see it on the map
         </label>
       {/if}
+      <!-- the party's star to the place, without a drag (a playtest's DM asked
+           for it here: the star had stopped where it was last dropped) -->
+      {#if place.map && place.cell}
+        <button type="button" class="quiet small" onclick={() => dmOp('party_to_place', { place: id })}>Move the party here</button>
+      {/if}
       <button type="button" class="quiet small" onclick={() => (editing = !editing)}>{editing ? 'Done editing' : 'Edit the name and the words'}</button>
     {:else if person}
       {#if person.image && pictureUrl(String(person.image))}<img class="portrait" src={pictureUrl(String(person.image))} alt="" />{/if}

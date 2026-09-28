@@ -36,6 +36,8 @@ export interface Look {
   seeAs?: boolean;
   /** the creatures a player seen as can't see, each with `why` */
   ghosts?: Dict[];
+  /** a fight is on: the DM's notes go under the tokens */
+  fight?: boolean;
 }
 
 /** A creature's outer ring: the side it is on, beside its shape. */
@@ -67,6 +69,13 @@ export function tokenRadius(t: Dict): number {
   return 0.5 * Number(t.size ?? 1) * 0.92;
 }
 
+/** A creature the rules say is dead (the ruleset's tag): drawn faded and
+ *  small, under the living, and no pick's target (a playtest's Sacred Flame
+ *  went to a dead goblin whose X sat beside the living Warden). */
+export function isDead(t: Dict): boolean {
+  return Array.isArray(t.tags) && (t.tags as unknown[]).includes('dead');
+}
+
 export function pointInPolygon(p: Vec, poly: number[][]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -86,19 +95,26 @@ export interface Placed {
 /** How far apart two tokens on one cell sit, and how big each is drawn. */
 export const FAN_APART = 0.22;
 export const FAN_SIZE = 0.62;
+/** How big the dead are drawn, and how far off the middle of a cell the
+ *  living share they lie. */
+export const DEAD_SIZE = 0.55;
+export const DEAD_APART = 0.3;
 
 /** Where each token is drawn: tokens of size 1 or less on the same cell fan
  *  out — two side by side, three or four round a circle — each smaller
  *  (in a playtest two tokens drawn one on the other were one to see, and a
- *  tap went to the one underneath). `skip` (a token being dragged) stays
- *  where it is. By token id; a token alone is drawn where it stands. */
+ *  tap went to the one underneath). The dead are small, and on a cell with
+ *  the living they lie off to its corners, the living where they would be
+ *  without them (a playtest's cleric tapped a goblin's corpse for the
+ *  Warden beside it). `skip` (a token being dragged) stays where it is. By
+ *  token id; a token alone is drawn where it stands. */
 export function layout(tokens: Dict[], grid: Grid, skip = ''): Map<string, Placed> {
   const out = new Map<string, Placed>();
   const cells = new Map<string, Dict[]>();
   for (const t of tokens) {
     const id = String(t.id);
     if (Number(t.size ?? 1) > 1 || id === skip) {
-      out.set(id, { pos: tokenPos(t), k: 1 });
+      out.set(id, { pos: tokenPos(t), k: id !== skip && isDead(t) ? DEAD_SIZE : 1 });
       continue;
     }
     const key = cellKey(grid.cellAt(tokenPos(t)));
@@ -106,24 +122,45 @@ export function layout(tokens: Dict[], grid: Grid, skip = ''): Map<string, Place
     if (here) here.push(t);
     else cells.set(key, [t]);
   }
-  for (const here of cells.values()) {
-    if (here.length === 1) {
-      out.set(String(here[0].id), { pos: tokenPos(here[0]), k: 1 });
+  for (const all of cells.values()) {
+    const living = all.filter((t) => !isDead(t));
+    const dead = all.filter(isDead);
+    fanOut(living, out, 1, FAN_SIZE);
+    if (!living.length) {
+      fanOut(dead, out, DEAD_SIZE, DEAD_SIZE);
       continue;
     }
-    // round where they stand (a cell's centre, on a map with a grid)
-    const mid = here.reduce((m, t) => ({ x: m.x + tokenPos(t).x / here.length, y: m.y + tokenPos(t).y / here.length }), { x: 0, y: 0 });
-    here.forEach((t, i) => {
-      let off: Vec;
-      if (here.length === 2) off = { x: i === 0 ? -FAN_APART : FAN_APART, y: 0 };
-      else {
-        const a = -Math.PI / 2 + (here.length === 4 ? Math.PI / 4 : 0) + (i * 2 * Math.PI) / here.length;
-        off = { x: Math.cos(a) * FAN_APART * 1.1, y: Math.sin(a) * FAN_APART * 1.1 };
-      }
-      out.set(String(t.id), { pos: { x: mid.x + off.x, y: mid.y + off.y }, k: FAN_SIZE });
+    // beside the living: the cell's corners, the lower ones first
+    const mid = middle(all);
+    dead.forEach((t, i) => {
+      const a = [1, 3, -1, -3][i % 4] * (Math.PI / 4);
+      out.set(String(t.id), { pos: { x: mid.x + Math.cos(a) * DEAD_APART, y: mid.y + Math.sin(a) * DEAD_APART }, k: DEAD_SIZE });
     });
   }
   return out;
+}
+
+function middle(here: Dict[]): Vec {
+  return here.reduce<Vec>((m, t) => ({ x: m.x + tokenPos(t).x / here.length, y: m.y + tokenPos(t).y / here.length }), { x: 0, y: 0 });
+}
+
+/** Tokens on one cell: one where it stands (at `k1` of its size), several
+ *  round where they stand (a cell's centre, on a map with a grid), at `kn`. */
+function fanOut(here: Dict[], out: Map<string, Placed>, k1: number, kn: number): void {
+  if (here.length === 1) {
+    out.set(String(here[0].id), { pos: tokenPos(here[0]), k: k1 });
+    return;
+  }
+  const mid = middle(here);
+  here.forEach((t, i) => {
+    let off: Vec;
+    if (here.length === 2) off = { x: i === 0 ? -FAN_APART : FAN_APART, y: 0 };
+    else {
+      const a = -Math.PI / 2 + (here.length === 4 ? Math.PI / 4 : 0) + (i * 2 * Math.PI) / here.length;
+      off = { x: Math.cos(a) * FAN_APART * 1.1, y: Math.sin(a) * FAN_APART * 1.1 };
+    }
+    out.set(String(t.id), { pos: { x: mid.x + off.x, y: mid.y + off.y }, k: kn });
+  });
 }
 
 /** The token under a point: within its own radius or `least` (a reach on
@@ -367,13 +404,19 @@ export function drawFrame(f: Frame): void {
   const tokens = (scene.tokens as Dict[]) ?? [];
   // (labels come as the host works them out over every token: GW1, GW2)
   const placed = layout(tokens, grid, look.dragging?.id ?? '');
-  for (const t of tokens) {
+  const drawn = tokens.map((t) => {
     const drag = look.dragging && look.dragging.id === t.id ? look.dragging.pos : null;
     const at = placed.get(String(t.id));
-    drawToken(ctx, t, drag ?? at?.pos ?? tokenPos(t), look, cam.scale, dpr, drag ? 1 : (at?.k ?? 1));
-  }
+    return { t, pos: drag ?? at?.pos ?? tokenPos(t), k: drag ? 1 : (at?.k ?? 1) };
+  });
+  // in a fight the DM's notes lie under the tokens, faded where one is over
+  // them (a playtest's "Fire of broken pews" covered two goblins and the Warden)
+  const under = look.gm && look.fight === true;
+  if (under) drawNotes(ctx, lvl, cam.scale, drawn.map((d) => ({ x: d.pos.x, y: d.pos.y, r: tokenRadius(d.t) * d.k })));
+  // the dead first: the living over them
+  for (const d of [...drawn.filter((d) => isDead(d.t)), ...drawn.filter((d) => !isDead(d.t))]) drawToken(ctx, d.t, d.pos, look, cam.scale, dpr, d.k);
   drawNameTags(ctx, tokens, look, cam.scale, placed);
-  if (look.gm) drawNotes(ctx, lvl, cam.scale);
+  if (look.gm && !under) drawNotes(ctx, lvl, cam.scale);
   if (look.hoverCell && look.picking) {
     const path = new Path2D();
     cellPath(path, grid, look.hoverCell);
@@ -487,11 +530,38 @@ function drawSeen(ctx: CanvasRenderingContext2D, prep: Prepared, look: Look, siz
   if (look.ghosts?.length) drawGhosts(ctx, look.ghosts, scale);
 }
 
-/** The DM's notes on the map: a yellow pin and its title. */
-function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): void {
+/** A box on the map, in map units. */
+export interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Whether any of these discs (a token as drawn: its centre and radius) is over a box. */
+export function underDiscs(box: Box, discs: { x: number; y: number; r: number }[]): boolean {
+  return discs.some((d) => {
+    const cx = Math.max(box.x0, Math.min(d.x, box.x1));
+    const cy = Math.max(box.y0, Math.min(d.y, box.y1));
+    return Math.hypot(d.x - cx, d.y - cy) < d.r;
+  });
+}
+
+/** The DM's notes on the map: a yellow pin and its title. With `tokens`
+ *  (in a fight, drawn under them), a note a token is over is faded. */
+function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number, tokens?: { x: number; y: number; r: number }[]): void {
+  const fs = 12 / scale;
   for (const n of (lvl.notes as Dict[]) ?? []) {
     const [x, y] = ((n.pos as number[]) ?? [0, 0]).map(Number);
     const r = Math.max(5 / scale, 0.12);
+    const title = String(n.title ?? '');
+    ctx.save();
+    ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+    if (tokens) {
+      const w = title ? ctx.measureText(title).width + r * 1.5 : r;
+      const box = { x0: x - r, y0: y - Math.max(r, fs * 0.6), x1: x + w, y1: y + Math.max(r, fs * 0.6) };
+      if (underDiscs(box, tokens)) ctx.globalAlpha = 0.3;
+    }
     ctx.beginPath();
     ctx.arc(x, y, r + 2 / scale, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -500,10 +570,7 @@ function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): voi
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = '#f0d060';
     ctx.fill();
-    const title = String(n.title ?? '');
     if (title) {
-      const fs = 12 / scale;
-      ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = fs * 0.25;
@@ -512,6 +579,7 @@ function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): voi
       ctx.fillStyle = '#fff';
       ctx.fillText(title, x + r * 1.5, y);
     }
+    ctx.restore();
   }
 }
 
@@ -523,7 +591,8 @@ function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number): voi
 export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look: Look, scale: number, dpr = 1, k = 1): void {
   const r = tokenRadius(t) * k;
   const hidden = Boolean(t.hidden);
-  const alpha = hidden ? 0.5 : 1;
+  // (the dead faded: what is still fighting stands out)
+  const alpha = (hidden ? 0.5 : 1) * (isDead(t) ? 0.5 : 1);
   const tags: string[] = Array.isArray(t.tags) ? (t.tags as string[]) : [];
   const ring = t.owner ? look.playerColors[String(t.owner)] ?? '#ffffff' : '#ffffff';
   const rot = (Number(t.rot ?? 0) * Math.PI) / 180;

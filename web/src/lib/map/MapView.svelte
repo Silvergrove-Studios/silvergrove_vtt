@@ -6,8 +6,8 @@
   picking a target a banner says so and the cell under the pointer is lit.
 -->
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
-  import type { Cell, Vec } from '../grid';
+  import { onMount, untrack, type Snippet } from 'svelte';
+  import { cellKey, type Cell, type Vec } from '../grid';
   import { onArt } from '../art';
   import { game, type Dict } from '../game.svelte';
   import { drawFrame, drawTerrain, layout, prepare, tokenAt, tokenPos, type Camera, type TerrainCache } from './render';
@@ -33,8 +33,14 @@
      *  the creatures that player can't see (`ghosts`, each with `why`) */
     seeAs?: boolean;
     ghosts?: Dict[];
+    /** a fight is on: the DM's notes lie under the tokens */
+    fight?: boolean;
+    /** what the pick's banner holds, instead of its words and Cancel (the
+     *  creatures to choose by name, No target, Done) */
+    banner?: Snippet;
     canDrag?: (t: Dict) => boolean;
-    onTokenClick?: (t: Dict) => void;
+    /** a token tapped, and where (in map units) */
+    onTokenClick?: (t: Dict, at: Vec) => void;
     onCellClick?: (cell: Cell, at: Vec) => void;
     onTokenDrop?: (t: Dict, pos: [number, number]) => void;
     onCancelPick?: () => void;
@@ -54,6 +60,8 @@
     showWalls = true,
     seeAs = false,
     ghosts = [],
+    fight = false,
+    banner,
     canDrag = () => false,
     onTokenClick,
     onCellClick,
@@ -135,7 +143,7 @@
       scene,
       prep,
       terrain,
-      look: { gm, selected, dragging: drag, picking: picking !== '', hoverCell: hover, playerColors, activeToken, showGrid, showWalls, seeAs, ghosts },
+      look: { gm, selected, dragging: drag, picking: picking !== '', hoverCell: hover, playerColors, activeToken, showGrid, showWalls, seeAs, ghosts, fight },
     });
   }
 
@@ -143,9 +151,9 @@
     void [prep, cam.x, cam.y, cam.scale, selected, picking, hover, drag, gm, showGrid, activeToken, width, height, dpr, artTick, playerColors, Object.keys(game.packs).length];
     schedule();
   });
-  // (what the DM's Walls and See as change)
+  // (what the DM's Walls and See as change, and a fight starting or ending)
   $effect(() => {
-    void [showWalls, seeAs, ghosts];
+    void [showWalls, seeAs, ghosts, fight];
     schedule();
   });
 
@@ -266,7 +274,9 @@
 
   // ------------------------------------------------------------- input --
   const pointers = new Map<number, Vec>();
-  let press: { id: number; at: Vec; token: Dict | null; moved: boolean; cam: Vec } | null = null;
+  // what a press is on: the token nearest (a tap's), and the nearest the
+  // page lets be dragged (a drag's)
+  let press: { id: number; at: Vec; token: Dict | null; drags: Dict | null; moved: boolean; cam: Vec } | null = null;
   let pinch: { d: number; scale: number; world: Vec } | null = null;
   let pressing = $state(false);
 
@@ -283,7 +293,18 @@
       // drawn, and where the table has it too
       const drawn = drag && placed ? new Map(placed).set(drag.id, { pos: drag.pos, k: 1 }) : placed;
       const t = tokenAt(tokens, w, reach, drawn) ?? tokenAt(tokens, w, reach, placed);
-      press = { id: e.pointerId, at: p, token: t, moved: false, cam: { x: cam.x, y: cam.y } };
+      // a drag takes the token that can be dragged of those fanned out on
+      // one cell, when the one nearer the press can't be: the party's star
+      // at a place is drawn small beside the place's marker, and a drag begun
+      // a few pixels to the marker's side panned the map instead (a
+      // playtest's DM, the star left at a place: it "stopped following my drags")
+      let drags = t && canDrag(t) ? t : null;
+      if (t && !drags && prep) {
+        const cell = cellKey(prep.grid.cellAt(tokenPos(t)));
+        const movable = tokens.filter((x) => canDrag(x) && cellKey(prep!.grid.cellAt(tokenPos(x))) === cell);
+        drags = tokenAt(movable, w, reach, drawn) ?? tokenAt(movable, w, reach, placed);
+      }
+      press = { id: e.pointerId, at: p, token: t, drags, moved: false, cam: { x: cam.x, y: cam.y } };
       pressing = true;
     } else if (pointers.size === 2) {
       press = null;
@@ -315,8 +336,8 @@
     const dy = p.y - press.at.y;
     if (!press.moved && Math.hypot(dx, dy) > (e.pointerType === 'mouse' ? 4 : 8)) press.moved = true;
     if (!press.moved) return;
-    if (press.token && !picking && canDrag(press.token)) {
-      drag = { id: String(press.token.id), pos: toWorld(p.x, p.y) };
+    if (press.drags && !picking) {
+      drag = { id: String(press.drags.id), pos: toWorld(p.x, p.y) };
     } else {
       auto.on = false;
       cam.x = press.cam.x - dx / cam.scale;
@@ -340,14 +361,14 @@
     pressing = false;
     if (!was.moved) {
       const w = toWorld(p.x, p.y);
-      if (was.token) onTokenClick?.(was.token);
+      if (was.token) onTokenClick?.(was.token, w);
       else if (prep) onCellClick?.(prep.grid.cellAt(w), w);
-    } else if (drag && was.token && prep) {
+    } else if (drag && was.drags && prep) {
       // onto a cell's centre, or where it was let go on a map with no grid drawn
       const c = map?.style?.show_grid === false ? drag.pos : prep.grid.center(prep.grid.cellAt(drag.pos));
       const now = tokens.find((x) => x.id === drag!.id);
       drag = { id: drag.id, pos: c, from: now ? tokenPos(now) : undefined };
-      onTokenDrop?.(was.token, [c.x, c.y]);
+      onTokenDrop?.(was.drags, [c.x, c.y]);
       // (if the table refuses, the token goes back)
       const id = drag.id;
       setTimeout(() => {
@@ -444,7 +465,9 @@
   {#if !map || !scene?.id}
     <div class="empty">{scene?.id ? 'The map is on its way…' : 'Nothing is on the table yet.'}</div>
   {/if}
-  {#if picking}
+  {#if picking && banner}
+    <div class="banner rich">{@render banner()}</div>
+  {:else if picking}
     <div class="banner" role="status">
       <span>{picking}</span>
       {#if onCancelPick}<button type="button" onclick={() => onCancelPick?.()}>Cancel</button>{/if}
@@ -510,6 +533,16 @@
     font: inherit;
     font-weight: 600;
     cursor: pointer;
+  }
+  /* a pick's banner with its creatures to choose: a card, scrolling when long */
+  .banner.rich {
+    display: block;
+    width: min(620px, calc(100% - 24px));
+    max-height: 48%;
+    overflow-y: auto;
+    padding: 10px 12px;
+    border-radius: 16px;
+    z-index: 7;
   }
   .zoom {
     position: absolute;

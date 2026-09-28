@@ -22,8 +22,10 @@
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
-  import { pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
-  import { liveFight } from './fight';
+  import { DEAD_WORDS, moveTo, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
+  import PickBanner from '../lib/map/PickBanner.svelte';
+  import QuickToken from './QuickToken.svelte';
+  import { fightToken, liveFight } from './fight';
   import { currentTurnTokens } from '../lib/turns';
   import { ghostsOf } from '../lib/map/sight';
   import { WALL_COLORS, WALL_KEY } from '../lib/map/walls';
@@ -50,10 +52,7 @@
       else intent(p);
     },
     submit,
-    pick: (p) => {
-      pick = p;
-      picked = [];
-    },
+    pick: (p) => startPick(p),
     comp,
     picture: pictureUrl,
   });
@@ -245,9 +244,13 @@
     window.open(`/dm/card#t=${encodeURIComponent(token)}&ref=${encodeURIComponent(card)}`, `card-${card}`, 'width=720,height=900');
   }
 
-  function onTokenClick(t: Dict): void {
+  function onTokenClick(t: Dict, at?: { x: number; y: number }): void {
     if (pick) {
-      resolvePick({ x: Number(t.pos?.[0] ?? 0), y: Number(t.pos?.[1] ?? 0) }, t);
+      resolvePick(at ?? { x: Number(t.pos?.[0] ?? 0), y: Number(t.pos?.[1] ?? 0) }, t);
+      return;
+    }
+    if (placing) {
+      placeAt(at ?? { x: Number(t.pos?.[0] ?? 0), y: Number(t.pos?.[1] ?? 0) });
       return;
     }
     const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
@@ -262,6 +265,7 @@
 
   function onCellClick(_c: unknown, at: { x: number; y: number }): void {
     if (pick) resolvePick(at);
+    else if (placing) placeAt(at);
     else selected = '';
   }
 
@@ -270,14 +274,94 @@
     if (!pick || !map) return;
     const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, true, hit);
     if (target === null) {
-      notice('Nothing to pick there — try again, or Cancel', 'error');
+      notice(tappedTheDead(hit, pick) ? DEAD_WORDS : 'Nothing to pick there — try again, or Cancel', 'error');
       return;
     }
     if (pickCount(pick) > 1 && typeof target === 'string') {
-      picked = togglePicked(picked, target, pickCount(pick));
+      picked = togglePicked(picked, target, pickCount(pick), pickEach(pick) !== '');
       return;
     }
     sendPick(target);
+  }
+
+  // --- a pick by name, or with no target ---
+
+  // a creature's Use waits for a target on the map; with no battle map
+  // shown (the region, or nothing) it goes at once with no target: rolled,
+  // nothing applied, as a player's does (theatre of the mind)
+  function startPick(p: Dict): void {
+    placing = null;
+    if (String(p.pick ?? '') === 'token' && !onBattleMap(game.scene)) {
+      intent(withNoTarget(p, String(game.scene.id ?? '')));
+      return;
+    }
+    pick = p;
+    picked = [];
+  }
+
+  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { gm: true }) : []);
+
+  function chooseListed(target: string): void {
+    if (!pick) return;
+    const many = pickCount(pick);
+    picked = many > 1 ? togglePicked(picked, target, many, pickEach(pick) !== '') : picked[0] === target ? [] : [target];
+  }
+
+  function pickNoTarget(): void {
+    if (!pick) return;
+    intent(withNoTarget($state.snapshot(pick) as Dict, String(game.scene.id ?? '')));
+    pick = null;
+    picked = [];
+  }
+
+  function pickDone(): void {
+    if (!pick || !picked.length) return;
+    sendPick(pickCount(pick) > 1 ? [...picked] : picked[0]);
+  }
+
+  // --- the party and things, where the DM taps ---
+
+  // what a tap on the map puts down: the party (a battle map's tokens, the
+  // region's star: a playtest's party always came in at the map's edge, and
+  // the DM dragged all four inside), or a thing with no stat block
+  let placing = $state<{ kind: 'party' } | { kind: 'thing'; name: string; label: string; color: string; hidden: boolean } | null>(null);
+
+  function placeAt(at: { x: number; y: number }): void {
+    if (!placing || !map) return;
+    const g = new Grid(map.grid ?? {});
+    const cell = g.cellAt(at);
+    if (!g.inBounds(cell)) {
+      notice('That’s off the map', 'error');
+      return;
+    }
+    const scene = String(game.scene.id ?? '');
+    if (placing.kind === 'party') {
+      const o = g.toOffset(cell);
+      dmOp(onBattleMap(game.scene) ? 'party_here' : 'party_move', { scene, cell: [o.col, o.row] });
+    } else {
+      const to = moveTo(g, { pos: [at.x, at.y] }, at, map.style?.show_grid !== false);
+      if (to) dmOp('add_token', { scene, name: placing.name, label: placing.label, color: placing.color, hidden: placing.hidden, pos: to.pos });
+    }
+    placing = null;
+  }
+
+  // a thing the DM put down, chosen: shown or hidden, or taken off
+  const thing = $derived(((game.scene.tokens as Dict[]) ?? []).find((t) => String(t.id) === selected && Array.isArray(t.tags) && t.tags.includes('thing')));
+
+  // in a fight, a creature of it opened from the book is its stat block
+  // beside the map (a playtest's DM, the Warden risen, clicked its name in
+  // the book and got its picture)
+  function openFromBook(ref: string): void {
+    const tid = fight ? fightToken(ref, dm, (game.scene.tokens as Dict[]) ?? [], activeToken) : '';
+    if (!tid) {
+      open(ref);
+      return;
+    }
+    selected = tid;
+    side = 'fight';
+    card = '';
+    history = [];
+    bookOpen = false;
   }
 
   function sendPick(target: string | Dict | string[]): void {
@@ -384,11 +468,15 @@
 
     <div class="main">
       <aside class="book" class:open={bookOpen}>
-        <Book current={card} onopen={open} />
+        <Book current={card} onopen={openFromBook} />
       </aside>
 
       <section class="center">
-        {#if fight}<FightBar {fight} />{/if}
+        <!-- the fight's bar has a height of its own: taller (two lines, the
+             "already ended their turn" question) it lies over what is below
+             it, and the map never moves under a tap (a playtest's DM clicked
+             empty ground: "Nothing to pick there") -->
+        {#if fight}<div class="fightslot"><FightBar {fight} /></div>{/if}
         <div class="mapbar">
           <div class="seen">
             <span class="dim">The players see</span>
@@ -416,6 +504,11 @@
             </label>
             {#if hasWalls > 0}
               <button type="button" class="quiet wallsbtn" aria-pressed={showWalls} class:on={showWalls} title="The walls on the map, each kind in its colour" onclick={toggleWalls}>Walls</button>
+            {/if}
+            <!-- the party where the story has them, and things with no stat block -->
+            <button type="button" class="quiet wallsbtn" class:on={placing?.kind === 'party'} aria-pressed={placing?.kind === 'party'} title="Tap the map where the party is" onclick={() => ((pick = null), (placing = placing?.kind === 'party' ? null : { kind: 'party' }))}>Move the party here</button>
+            {#if onBattleMap(game.scene)}
+              <QuickToken onplace={(spec) => ((pick = null), (placing = { kind: 'thing', ...spec }))} />
             {/if}
           {/if}
           <label class="seeas">
@@ -454,21 +547,41 @@
             playerColors={playerColors()}
             {selected}
             {activeToken}
-            picking={pick ? pickWords(pick) : ''}
+            fight={!!fight}
+            picking={pick ? pickWords(pick) : placing?.kind === 'party' ? 'Move the party here: tap where they are' : placing ? `${placing.name}: tap where it goes` : ''}
+            banner={pick ? pickBanner : undefined}
             {canDrag}
             {onTokenClick}
             {onCellClick}
             {onTokenDrop}
-            onCancelPick={() => ((pick = null), (picked = []))}
+            onCancelPick={() => ((pick = null), (picked = []), (placing = null))}
           />
-          {#if pick && pickCount(pick) > 1}
-            <div class="multi-pick" role="dialog" aria-label="Choose the targets">
-              <span>{String(pick.label ?? 'Cast')} → {picked.length ? picked.map(pickedName).join(', ') : 'tap each one'} ({picked.length} of up to {pickCount(pick)})</span>
-              <button type="button" class="quiet" onclick={() => ((pick = null), (picked = []))}>Cancel</button>
-              <button type="button" class="accent" disabled={!picked.length} onclick={() => sendPick([...picked])}>Done</button>
+          {#snippet pickBanner()}
+            {#if pick}
+              <PickBanner
+                words={pickWords(pick)}
+                {choices}
+                {picked}
+                many={pickCount(pick)}
+                each={pickEach(pick)}
+                status={pickedWords(pick, picked, pickedName)}
+                noTarget={offersNoTarget(pick)}
+                onChoose={chooseListed}
+                onUnchoose={(t) => (picked = unpick(picked, t))}
+                onDone={pickDone}
+                onCancel={() => ((pick = null), (picked = []))}
+                onNoTarget={pickNoTarget}
+              />
+            {/if}
+          {/snippet}
+          {#if thing && !pick && !placing}
+            <div class="thingbar" role="group" aria-label={String(thing.name ?? 'A token')}>
+              <span><strong>{thing.name}</strong> <span class="dim">· no stat block{thing.hidden ? ' · hidden from the players' : ''}</span></span>
+              <button type="button" class="quiet" onclick={() => dmOp('token', { scene: String(game.scene.id ?? ''), id: thing.id, hidden: !thing.hidden })}>{thing.hidden ? 'Show the players' : 'Hide it'}</button>
+              <button type="button" class="quiet" onclick={() => { dmOp('remove_token', { scene: String(game.scene.id ?? ''), id: thing.id }); selected = ''; }}>Take it off the map</button>
             </div>
           {/if}
-          {#if guide && guideGone !== guide.key && !card}
+          {#if guide && guideGone !== guide.key && !card && !thing}
             <div class="guide" role="note">
               <p class="label">Your next step <span class="dim">· only you see this</span></p>
               <p>{guide.text}</p>
@@ -478,9 +591,10 @@
               </div>
             </div>
           {/if}
-          <!-- (put away while a pick waits, and back after: a playtest's DM
-               armed a player's attack and the card covered the creatures) -->
-          {#if card && !pick}
+          <!-- (put away while a pick waits, or a tap puts the party or a thing
+               down, and back after: a playtest's DM armed a player's attack and
+               the card covered the creatures) -->
+          {#if card && !pick && !placing}
             <div class="reader scroll">
               {#if history.length}<button type="button" class="quiet backbtn" onclick={back}>‹ Back</button>{/if}
               {#key card}
@@ -668,23 +782,36 @@
     color: var(--muted);
     border-bottom: 1px solid var(--border-soft);
   }
-  .multi-pick {
+  /* the fight's bar keeps one height in the column; what grows lies over the map */
+  .fightslot {
+    position: relative;
+    flex: none;
+    height: 58px;
+    z-index: 12;
+  }
+  .fightslot > :global(.fightbar) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    min-height: 58px;
+    box-sizing: border-box;
+  }
+  .thingbar {
     position: absolute;
     left: 12px;
-    right: 12px;
     bottom: 12px;
     z-index: 6;
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 6px 8px;
     align-items: center;
-    padding: 10px 12px;
+    max-width: calc(100% - 80px);
+    padding: 8px 10px 8px 14px;
     background: var(--panel);
-    border: 1px solid var(--accent);
+    border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: var(--shadow);
-  }
-  .multi-pick span {
-    flex: 1;
   }
   .nope {
     height: 100%;

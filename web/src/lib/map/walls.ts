@@ -1,10 +1,10 @@
 // The walls on a map: what kind each is, in the colours the host's map
-// canvas gives them (hexmap/render/map_canvas.gd, wall_color), which of
+// canvas gives them (hexmap/render/map_canvas.gd, wall_color), what of
 // them a player has seen, and drawing them. The DM sees every wall,
-// colour-coded, with a key; a player the walls their characters have seen,
-// a secret door as the wall it looks like and no hidden wall at all. (At a
-// playtest the DM's map showed no walls, only doors, and the DM couldn't
-// tell why a player's screen was black: the walls were the why.)
+// colour-coded, with a key; a player the stretches their characters have
+// seen, a secret door as the wall it looks like and no hidden wall at all.
+// (At a playtest the DM's map showed no walls, only doors, and the DM
+// couldn't tell why a player's screen was black: the walls were the why.)
 import { cellKey, type Grid, type Vec } from '../grid';
 import type { Dict } from '../game.svelte';
 import { polygonTest } from './sight';
@@ -51,37 +51,78 @@ export function wallKind(w: Dict): WallKind {
   return 'other';
 }
 
-/** The walls a player has seen: one with a point beside it, on either side
- *  and every half hex along it, in their sight now or in a cell they have
- *  explored. Hidden walls never (the chapel's pillars are drawn by their
- *  props). */
+/** A point along a wall, and whether it is seen: one beside it, on either
+ *  side, in the viewer's sight now or in a cell they have explored. */
+interface Sample {
+  p: Vec;
+  seen: boolean;
+}
+
+/** Points every half hex along a wall's line, each once (a corner is the
+ *  end of one stretch and the start of the next: seen from either). */
+function samples(pts: Vec[], near: (p: Vec) => boolean): Sample[] {
+  const out: Sample[] = [];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 1e-9) continue;
+    // a nudge off the wall, to either side
+    const nx = (-(b.y - a.y) / len) * 0.12;
+    const ny = ((b.x - a.x) / len) * 0.12;
+    const n = Math.max(1, Math.ceil(len / 0.5));
+    for (let k = 0; k <= n; k++) {
+      const p = { x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n };
+      const seen = near({ x: p.x + nx, y: p.y + ny }) || near({ x: p.x - nx, y: p.y - ny });
+      const last = out[out.length - 1];
+      if (k === 0 && last && Math.hypot(last.p.x - p.x, last.p.y - p.y) < 1e-9) last.seen = last.seen || seen;
+      else out.push({ p, seen });
+    }
+  }
+  return out;
+}
+
+/** What a player has seen of the walls: each wall cut into runs at the
+ *  points sampled along it, a stretch kept where the points at both its
+ *  ends are seen. A wall is often one long line — the chapel's whole
+ *  outline is one — and a playtest's player who saw its west face was
+ *  drawn the whole building, the far sides too. A run keeps its wall's
+ *  fields and id; a wall seen whole comes back as it is. A door is one
+ *  thing, seen whole where any of it is (a closed secret door is the wall
+ *  it looks like); a hidden wall never (the chapel's pillars are drawn by
+ *  their props). */
 export function seenWalls(walls: Dict[], grid: Grid, visible: number[][][], explored: Set<string>): Dict[] {
   const inSight = polygonTest(visible);
   const near = (p: Vec) => inSight(p) || explored.has(cellKey(grid.cellAt(p)));
-  return walls.filter((w) => {
-    if (w.hidden) return false;
+  const out: Dict[] = [];
+  for (const w of walls) {
+    if (w.hidden) continue;
     const pts = ((w.points as number[][]) ?? []).map((p) => ({ x: Number(p[0]), y: Number(p[1]) }));
-    for (let i = 0; i + 1 < pts.length; i++) {
-      const a = pts[i];
-      const b = pts[i + 1];
-      const len = Math.hypot(b.x - a.x, b.y - a.y);
-      if (len < 1e-9) continue;
-      // a nudge off the wall, to either side
-      const nx = (-(b.y - a.y) / len) * 0.12;
-      const ny = ((b.x - a.x) / len) * 0.12;
-      const n = Math.max(1, Math.ceil(len / 0.5));
-      for (let k = 0; k <= n; k++) {
-        const x = a.x + ((b.x - a.x) * k) / n;
-        const y = a.y + ((b.y - a.y) * k) / n;
-        if (near({ x: x + nx, y: y + ny }) || near({ x: x - nx, y: y - ny })) return true;
-      }
+    const along = samples(pts, near);
+    if (!along.some((s) => s.seen)) continue;
+    const door = String(w.door ?? 'none');
+    const whole = door === 'door' || (door === 'secret' && String(w.state ?? 'closed') === 'open');
+    if (whole || along.every((s) => s.seen)) {
+      out.push(w);
+      continue;
     }
-    return false;
-  });
+    // a run goes on while the points are seen; one seen alone is no stretch
+    let run: Vec[] = [];
+    const end = () => {
+      if (run.length >= 2) out.push({ ...w, points: run.map((p) => [p.x, p.y]) });
+      run = [];
+    };
+    for (const s of along) {
+      if (s.seen) run.push(s.p);
+      else end();
+    }
+    end();
+  }
+  return out;
 }
 
 /** The walls to draw for a viewer: every one for the DM (and for the DM
- *  seeing as a player); for a player the ones they have seen. */
+ *  seeing as a player); for a player what they have seen of them. */
 export function wallsFor(lvl: Dict, grid: Grid, scene: Dict, all: boolean): Dict[] {
   const walls = ((lvl.walls as Dict[]) ?? []).filter((w) => Array.isArray(w.points) && w.points.length >= 2);
   if (all) return walls;

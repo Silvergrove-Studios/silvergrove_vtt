@@ -435,21 +435,96 @@ func set_party(cell: Vector2i) -> String:
 	var entry := shown_map_entry()
 	if entry.is_empty():
 		return "show a library map first"
-	var m := ctx.map()
-	var pos := m.grid.cell_center(m.grid.offset_to_axial(cell.x, cell.y))
-	var why := ""
-	var existing := ""
-	for tk in ctx.state.tokens(ctx.scene_id):
-		if (tk.get("tags", []) as Array).has("party"):
-			existing = str(tk.id)
-	if existing != "":
-		why = ctx.commands.move_token(ctx.scene_id, existing, pos)
+	return party_to(str(entry.id), cell)
+
+
+## The party marker on a library map, at a cell ("col,row" as the campaign
+## keeps it): on the scene over that map — the one the Table shows, else
+## any — or, with none, only in the campaign, for when the map is shown.
+## "" or why.
+func party_to(mid: String, cell: Vector2i) -> String:
+	var m := load_map(mid)
+	if m == null:
+		return "no such map"
+	var sid := ""
+	if str(ctx.scene().get("map", "")) == mid:
+		sid = ctx.scene_id
 	else:
-		why = ctx.commands.add_token(ctx.scene_id, Encounter.new_token("The party", pos, {"id": JsonDoc.new_id("party"), "label": "★", "color": "#4f9cf6", "hidden": false, "tags": ["party"], "vision": {"radius": 3}}))
+		for sc in ctx.encounter().scenes:
+			if str(sc.get("map", "")) == mid:
+				sid = str(sc.id)
+	var why := ""
+	if sid != "":
+		var pos := m.grid.cell_center(m.grid.offset_to_axial(cell.x, cell.y))
+		var existing := ""
+		for tk in ctx.state.tokens(sid):
+			if (tk.get("tags", []) as Array).has("party"):
+				existing = str(tk.id)
+		if existing != "":
+			why = ctx.commands.move_token(sid, existing, pos)
+		else:
+			why = ctx.commands.add_token(sid, Encounter.new_token("The party", pos, {"id": JsonDoc.new_id("party"), "label": "★", "color": "#4f9cf6", "hidden": false, "tags": ["party"], "vision": {"radius": 3}}))
 	if why == "":
-		ctx.campaign.doc.party = {"map": str(entry.id), "cell": "%d,%d" % [cell.x, cell.y]}
+		ctx.campaign.doc.party = {"map": mid, "cell": "%d,%d" % [cell.x, cell.y]}
 		ctx.campaign.touch()
 		ctx.campaign_changed.emit()
+	return why
+
+
+## The party at a place: its marker to the place's cell on the place's map
+## (a playtest's DM asked for this on the place's card, the star having
+## stopped where it was last dropped). "" or why.
+func party_to_place(pid: String) -> String:
+	for p in ctx.campaign.places:
+		if str(p.get("id", "")) != pid:
+			continue
+		var parts := str(p.get("cell", "")).split(",")
+		if str(p.get("map", "")) == "" or parts.size() != 2:
+			return "%s isn't on a map" % str(p.get("name", "The place"))
+		return party_to(str(p.map), Vector2i(int(parts[0]), int(parts[1])))
+	return "no such place"
+
+
+## The party where the story has them on a fight's map: each character's
+## token (a player's character or a companion) side by side from a cell
+## ("col,row"), the first on it, none on another token, a pillar or a fire,
+## as the party is put down when a fight starts. A playtest's party always
+## came in at the map's west edge while the story had them inside the
+## chapel, and the DM dragged all four in by hand. "" or why.
+func party_here(scene_id: String, cell: Vector2i) -> String:
+	var enc := ctx.encounter()
+	if enc.scene(scene_id).is_empty():
+		return "no such scene"
+	var m := ctx.state.map_for(scene_id)
+	if m == null:
+		return "the scene has no map"
+	var grid := m.grid
+	var start := grid.offset_to_axial(cell.x, cell.y)
+	if not grid.in_bounds(start):
+		return "that's off the map"
+	var taken := blocked_cells(grid, ctx.state.effective_level(scene_id), ctx.art)
+	var ours := []
+	for tk in ctx.state.tokens(scene_id):
+		var a: Dictionary = enc.actors.get(str(tk.get("actor", "")), {})
+		if str(a.get("kind", "")) in ["pc", "companion"]:
+			ours.append(tk)
+		else:
+			taken[grid.world_to_axial(Vision.token_pos(tk))] = true
+	if ours.is_empty():
+		return "no character of the party is on this map"
+	ours.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a.get("name", "")).naturalnocasecmp_to(str(b.get("name", ""))) < 0)
+	var events := []
+	for tk in ours:
+		var c := _free_cell(grid, start, taken)
+		taken[c] = true
+		var at := grid.cell_center(c)
+		events.append({"t": "token.set", "scene": scene_id, "id": str(tk.id), "changes": {"pos": [at.x, at.y]}})
+	# one undo step, what they see from there explored with it, as when they arrive
+	ctx.commands.begin_group()
+	var why := ctx.commands.run_all(events, "The party is here")
+	if why == "":
+		ctx.commands.explore_from(scene_id, ours.map(func(t: Dictionary) -> Dictionary: return ctx.state.token(scene_id, str(t.id))))
+	ctx.commands.end_group("The party is here")
 	return why
 
 

@@ -13,6 +13,9 @@ extends SceneTree
 ##                    user://web_host-<web port> on another port); emptied first
 ##       [--log file] every message from a screen, every refusal, every change
 ##                    the table applies, and who joined or left: JSON lines
+##       [--web-root path] the built web clients to serve, a folder or a zip
+##                    (default the project's webclient.zip): a build of work
+##                    in progress, tried out with the zip left as it is
 
 class NoBonjour extends Bonjour:
 	func available() -> bool:
@@ -115,6 +118,9 @@ func _run() -> void:
 		push_error("web_host: could not host")
 		quit(1)
 		return
+	var web_root := _arg(args, "--web-root")
+	if web_root != "":
+		win.host.web.root = ProjectSettings.globalize_path(web_root) if not web_root.begins_with("/") else web_root
 	var out := {"dm": win.dm_url(), "player": "http://localhost:%d/" % win.host.web.port, "web_port": win.host.web.port, "ws_port": win.host.port,
 		"campaign": ctx.campaign.name if ctx.campaign != null else ""}
 	print("web_host: ", JSON.stringify(out))

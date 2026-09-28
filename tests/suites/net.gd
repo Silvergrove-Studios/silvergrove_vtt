@@ -120,7 +120,7 @@ func test_host_and_net_session() -> void:
 	check(_pump(host, [client], func() -> bool: return client.joined), "joined as Ana")
 	check(joined == [str(ana.id)] and host.connected_players() == [str(ana.id)], "the host says so too")
 	# The example is ordered-not-running: the client refuses locally with the reason, nothing is sent.
-	check(client.request(mv) == "Turns have not begun" and applied.is_empty(), "pre-checked locally")
+	check(client.request(mv) == "The fight hasn't started: wait for initiative" and applied.is_empty(), "pre-checked locally")
 	cmds.set_turn_mode("free")
 	check(_pump(host, [client], func() -> bool: return client.state.encounter.turns.mode == "free"), "the host's change reached the client as an event")
 	check(client.request(mv) == "", "in free mode the request goes out")
@@ -173,7 +173,7 @@ func test_host_and_net_session() -> void:
 	client2._send({"t": "request", "ev": {"t": "element.set", "scene": sid, "ref": "walls:x", "changes": {"state": "open"}}})
 	var told2 := []
 	client2.status.connect(func(t: String) -> void: told2.append(t))
-	check(_pump(host, [client, client2], func() -> bool: return told2.has("not allowed")), "the host refuses a forged request")
+	check(_pump(host, [client, client2], func() -> bool: return told2.has("Only the DM can do that")), "the host refuses a forged request, saying why")
 	# Packs: the client pretends it lacks the swamp pack and gets it streamed.
 	cpacks.packs.erase("swamp")
 	(st.maps.values()[0] as HexMap).doc.packs["swamp"] = "0.1.0"

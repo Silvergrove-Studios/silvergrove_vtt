@@ -316,6 +316,8 @@ func test_web_clients_on_the_host() -> void:
 		return ""
 	host.dm_state_source = func() -> Dictionary: return {"campaign": {"name": "Chapel"}}
 	host.dm_token = "sesame"
+	var chapel_map := str(st.encounter.scene(st.encounter.active_scene_id).get("map", ""))
+	host.map_role = func(mid: String) -> String: return "battle" if mid == chapel_map else ""
 	check(host.start(0, false, 0) == OK and host.web != null and host.web.port > 0, "the host serves the web clients beside its WebSocket (ws %d, web %d)" % [host.port, host.web.port])
 	check(host.join_urls().size() >= 0, "and knows the addresses to join at: %s" % [host.join_urls()])
 	# someone new joins by name, from a browser
@@ -327,6 +329,8 @@ func test_web_clients_on_the_host() -> void:
 	var added := st.encounter.players.filter(func(p: Dictionary) -> bool: return str(p.name) == "Cara")
 	check(added.size() == 1 and str(cara.last("joined").player) == str(added[0].id), "Cara is new at the table: added, and joined as herself")
 	check(not cara.last("view").is_empty(), "with her view of the rules")
+	# (on the region there is no battle map to pick a target on: the scene says which it is)
+	check(str(cara.last("scene").scene.get("role", "")) == "battle", "and what the campaign has its map as: %s" % [cara.last("scene").scene.get("role")])
 	# someone who was here before is found, whatever the case
 	var ana := WebClient.new(host.port)
 	_pump(host, [ana], func() -> bool: return ana.open())
@@ -611,3 +615,81 @@ func test_uploads_over_the_socket() -> void:
 	ana.send({"t": "upload", "req": "r3", "kind": "token", "actor": "a_other", "data": ""})
 	check(_pump(host, [ana], func() -> bool: return str(ana.last("upload_failed").get("req", "")) == "r3") and str(ana.last("upload_failed").why).contains("not your character"), "the Table's refusal, said")
 	host.stop()
+
+
+## A player's move the turns don't allow is refused saying why: in a
+## playtest a player moved her own token onto the chapel's battle map
+## before initiative, and was told only "not allowed".
+func test_a_refused_move_says_why() -> void:
+	var st := _chapel_state()
+	var host := HostSession.new(st, PackLibrary.new())
+	host.add_player = func(ev: Dictionary) -> String:
+		st.apply(ev)
+		return ""
+	check(host.start(0, false, 0) == OK, "hosting")
+	var ana := WebClient.new(host.port)
+	_pump(host, [ana], func() -> bool: return ana.open())
+	ana.send({"t": "hello", "version": Protocol.VERSION, "name": "phone", "web": true})
+	ana.send({"t": "join", "role": "player", "name": "Ana"})
+	check(_pump(host, [ana], func() -> bool: return not ana.last("joined").is_empty()), "Ana joins from her phone")
+	var sid := st.encounter.active_scene_id
+	var move := func(id: String) -> String:
+		var before := ana.count("refused")
+		ana.send({"t": "request", "ev": {"t": "token.set", "scene": sid, "id": id, "changes": {"pos": [3.5, 6.6]}}})
+		if not _pump(host, [ana], func() -> bool: return ana.count("refused") > before):
+			return ""
+		return str(ana.last("refused").get("why", ""))
+	# the example's turns are in order and not yet running: a fight whose initiative isn't rolled
+	check(move.call("t_bdb237f2") == "The fight hasn't started: wait for initiative", "her own token before initiative: told why")
+	check(move.call("t_01365979") == "That's not your token", "Ben's ranger: not hers")
+	st.apply({"t": "turns.set", "changes": {"running": true, "turn": 1}})
+	check(move.call("t_bdb237f2") == "It's not your turn: Ben's ranger's turn", "Ben's turn: whose it is")
+	st.apply({"t": "turns.set", "changes": {"turn": 2}})
+	check(move.call("t_bdb237f2") == "It's not your turn", "a hidden goblin's turn: not whose")
+	host.stop()
+
+
+## An action sent with no target at all goes to the ruleset as it is (the
+## owner: people play theatre of the mind with no tokens all the time, and
+## still need to see the rolls: the ruleset rolls and applies nothing); the
+## host checks a target only when the intent doesn't say it has none. In
+## the fifth playtest's journey an attack with no target never reached the
+## rules: "this action wants a token as its target".
+func test_an_action_with_no_target_reaches_the_rules() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://web_no_target_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_web_no_target.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	var c := Campaign.create("No tokens")
+	c.plugins.append({"id": "sample.ordered"})
+	check(c.save(dir.path_join("none.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("none.campaign"))
+	await tree.process_frame
+	win.host_port = 0
+	win.web_port = 0
+	win._set_hosting(true)
+	var host := win.host
+	check(host != null and host.plugins != null and host.plugins.plugins.has("sample.ordered"), "hosting, with the sample rules")
+	var dm := WebClient.new(host.port)
+	_pump(host, [dm], func() -> bool: return dm.open())
+	dm.send({"t": "hello", "version": Protocol.VERSION, "name": "dm", "web": true})
+	dm.send({"t": "join", "role": "dm", "token": host.dm_token})
+	check(_pump(host, [dm], func() -> bool: return not dm.last("joined").is_empty()), "the DM's screen joins")
+	var shove := func(ctx: Dictionary, req: String) -> String:
+		dm.send({"t": "intent", "req": req, "intent": {"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": ctx}})
+		_pump(host, [dm], func() -> bool: return str(dm.last("refused").get("req", "")) == req or str(dm.last("done").get("req", "")) == req)
+		return str(dm.last("refused").get("why", "")) if str(dm.last("refused").get("req", "")) == req else ""
+	check(shove.call({"actor": "a_x"}, "n1") == "this action wants a token as its target", "a shove with no target, not saying so: the host asks for one")
+	var why: String = shove.call({"actor": "a_x", "no_target": true}, "n2")
+	check(why != "" and not why.contains("as its target"), "one sent with no target reaches the rules, which say what they make of it: %s" % why)
+	win._set_hosting(false)
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("none.campaign"))
+	DirAccess.remove_absolute(dir)

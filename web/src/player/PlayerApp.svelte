@@ -24,8 +24,9 @@
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
-  import { moveTo, moveWords, pickCount, pickTarget, pickWords, togglePicked, withTarget } from '../lib/map/pick';
-  import { fogOf, fogWords } from '../lib/map/sight';
+  import { DEAD_WORDS, moveTo, moveWords, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
+  import PickBanner from '../lib/map/PickBanner.svelte';
+  import { fogOf, fogWords, polygonTest } from '../lib/map/sight';
   import type { Cell } from '../lib/grid';
   import { movedOn, turnSummary } from '../lib/turns';
 
@@ -131,6 +132,11 @@
       pickDone = words ?? '';
       picked = [];
       stopMoving();
+      // with no battle map on this screen (the region, or nothing on the table)
+      // there is nothing to tap: it goes at once with no target, rolled and
+      // nothing applied (the owner: people play theatre of the mind with no
+      // tokens all the time, and still need the rolls)
+      if (!onBattleMap(game.scene)) return pickNoTarget();
       if (!wide) tab = 'map';
     },
     acted,
@@ -293,9 +299,9 @@
     join(opts.name !== undefined ? { name: opts.name.trim() } : { player: opts.player });
   }
 
-  function onTokenClick(t: Dict): void {
+  function onTokenClick(t: Dict, at?: { x: number; y: number }): void {
     if (pick) {
-      resolvePick(t.pos ? { x: Number(t.pos[0]), y: Number(t.pos[1]) } : null, t);
+      resolvePick(at ?? (t.pos ? { x: Number(t.pos[0]), y: Number(t.pos[1]) } : null), t);
       return;
     }
     if (moving) {
@@ -370,11 +376,11 @@
     if (!pick || !at || !map) return;
     const target = pickTarget(new Grid(map.grid ?? {}), (game.scene.tokens as Dict[]) ?? [], pick, at, false, hit);
     if (target === null) {
-      notice('Nothing to pick there — try again, or Cancel', 'error');
+      notice(tappedTheDead(hit, pick) ? DEAD_WORDS : 'Nothing to pick there — try again, or Cancel', 'error');
       return;
     }
     if (pickCount(pick) > 1 && typeof target === 'string') {
-      picked = togglePicked(picked, target, pickCount(pick));
+      picked = togglePicked(picked, target, pickCount(pick), pickEach(pick) !== '');
       return;
     }
     // one of the party asks first, however the tap came (a playtest's tap
@@ -410,6 +416,34 @@
     const t = ((game.scene.tokens as Dict[]) ?? []).find((x) => String(x.id) === id);
     const actor = t?.actor ? (game.view.actors as Dict)?.[String(t.actor)] : null;
     return String(t?.name || (actor as Dict | null)?.name || 'that creature');
+  }
+
+  // --- a pick by name, or with no target ---
+
+  // what the player's characters see: the rest of the party is on the map
+  // wherever they are, and is listed only when in sight
+  const sees = $derived(game.scene.fog ? polygonTest((game.scene.visible as number[][][]) ?? []) : undefined);
+  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { sees }) : []);
+
+  // a creature chosen from the banner's list: the one (again: not), one of
+  // several, or another dart
+  function chooseListed(target: string): void {
+    if (!pick) return;
+    const many = pickCount(pick);
+    picked = many > 1 ? togglePicked(picked, target, many, pickEach(pick) !== '') : picked[0] === target ? [] : [target];
+  }
+
+  function sendChosen(): void {
+    if (!pick || !picked.length) return;
+    sendPick(pickCount(pick) > 1 ? [...picked] : picked[0]);
+  }
+
+  function pickNoTarget(): void {
+    if (!pick) return;
+    intent(withNoTarget($state.snapshot(pick) as Dict, String(game.scene.id ?? '')));
+    pick = null;
+    picked = [];
+    confirmPick = null;
   }
 
   function onTokenDrop(t: Dict, pos: [number, number]): void {
@@ -488,7 +522,8 @@
           playerColors={playerColors()}
           {selected}
           activeToken={''}
-          picking={pick ? pickWords(pick, (game.scene.tokens as Dict[]) ?? []) : moving ? moveWords(moving) : ''}
+          picking={pick ? pickWords(pick, (game.scene.tokens as Dict[]) ?? [], sees) : moving ? moveWords(moving) : ''}
+          banner={pick ? pickBanner : undefined}
           centerOn={followed}
           follow={followed}
           canDrag={(t) => String(t.owner ?? '') === game.me}
@@ -497,13 +532,31 @@
           {onTokenDrop}
           onCancelPick={() => ((pick = null), (picked = []), (confirmPick = null), stopMoving())}
         />
+        {#snippet pickBanner()}
+          {#if pick}
+            <PickBanner
+              words={pickWords(pick, (game.scene.tokens as Dict[]) ?? [], sees)}
+              {choices}
+              {picked}
+              many={pickCount(pick)}
+              each={pickEach(pick)}
+              status={pickedWords(pick, picked, targetName)}
+              noTarget={offersNoTarget(pick)}
+              onChoose={chooseListed}
+              onUnchoose={(t) => (picked = unpick(picked, t))}
+              onDone={sendChosen}
+              onCancel={() => ((pick = null), (picked = []), (confirmPick = null))}
+              onNoTarget={pickNoTarget}
+            />
+          {/if}
+        {/snippet}
         {#if dragTip && !pick && !moving}
           <div class="drag-tip" role="status">
             <span>{coarse ? 'Your token is yours to move: tap it, then tap where it goes.' : 'Your token is yours to move: drag it, or click it and then where it goes.'}</span>
             <button type="button" class="quiet" onclick={dragTipSeen}>Got it</button>
           </div>
         {/if}
-        {#if game.scene.fog && !confirmPick && !confirmMove && !(pick && pickCount(pick) > 1)}
+        {#if game.scene.fog && !confirmPick && !confirmMove}
           <!-- (a playtest's players all took the dark for a broken map, the
                enemies it hid for missing ones; at the next, nobody could say
                whether it was the dark or the walls) -->
@@ -512,13 +565,6 @@
               ? 'Navy is in your sight but too dark to see; black is behind walls. Tap either to be told.'
               : "Black is out of your character's sight: walls are in the way. Tap it to be told."}
           </p>
-        {/if}
-        {#if pick && pickCount(pick) > 1}
-          <div class="confirm-pick" role="dialog" aria-label="Choose the targets">
-            <span>{String(pick.label ?? 'Cast')} → {picked.length ? picked.map(targetName).join(', ') : 'tap each one'} ({picked.length} of up to {pickCount(pick)})</span>
-            <button type="button" class="quiet" onclick={() => ((pick = null), (picked = []))}>Cancel</button>
-            <button type="button" class="accent" disabled={!picked.length} onclick={() => sendPick([...picked])}>Done</button>
-          </div>
         {/if}
         {#if confirmPick}
           <div class="confirm-pick" role="dialog" aria-label="Confirm the target">
