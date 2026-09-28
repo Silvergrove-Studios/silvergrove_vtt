@@ -27,9 +27,11 @@ npm run build   # dist/ → ../webclient.zip — commit it with the sources
 ```
 
 It writes the DM's address (`dm`) and the players' (`player`) to the info
-file and stops when its time is up or the stop file appears. Then the
-journey — DM, a phone, a laptop; a place shown, chat, a sheet, a fight with
-an attack picked on the map — in Chrome, with screenshots:
+file and stops when its time is up or the stop file appears. To try work
+in progress with the zip left as it is, build it elsewhere
+(`npx vite build --outDir /tmp/webdist`) and add `--web-root /tmp/webdist`.
+Then the journey — DM, a phone, a laptop; a place shown, chat, a sheet, a
+fight with an attack picked on the map — in Chrome, with screenshots:
 
 ```sh
 npm run e2e -- /tmp/host.json /tmp/journey
