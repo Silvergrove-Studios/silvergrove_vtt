@@ -299,6 +299,32 @@ await step('the standard array: each number given once', async () => {
   await shot(ari, 'ari_array');
 });
 
+// (the owner: the DM picks milestones or experience in the campaign's settings,
+// and "really ideally the dm would trigger level ups": the player takes theirs)
+await step('levels are the DM’s: milestones in Rules settings, Give a level, Rolf takes his', async () => {
+  await dm.getByRole('button', { name: 'Rules settings' }).click();
+  await dm.getByRole('combobox', { name: 'How characters gain levels' }).selectOption({ label: 'Milestones: the DM gives the party a level when the story has earned it' });
+  await dm.waitForTimeout(800);
+  await dm.getByRole('button', { name: 'Close' }).first().click();
+  await dm.getByRole('tab', { name: 'Party' }).click();
+  const party = dm.locator('.party');
+  // (the rules load again with the setting: the party view that comes back awards no experience)
+  await party.getByRole('heading', { name: 'Award experience' }).waitFor({ state: 'detached', timeout: 8000 });
+  await party.getByRole('heading', { name: 'Give a level' }).waitFor({ timeout: 8000 });
+  // Rolf's sheet: no level of his own to take yet
+  await rolf.getByText('Levels come from the DM (milestones)').first().waitFor({ timeout: 8000 });
+  expect((await rolf.getByRole('button', { name: /Gain a level/ }).count()) === 0, 'no Gain a level before the DM gives one');
+  await shot(rolf, 'rolf_milestones');
+  await party.getByRole('button', { name: 'Give a level', exact: true }).click();
+  await party.getByText('Given: said in the chat').waitFor({ timeout: 8000 });
+  await dm.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => /^The party goes up a level: .*Rolf to level 2/.test(String(e.text ?? ''))), null, { timeout: 8000 });
+  await shot(dm, 'dm_gives_a_level');
+  await rolf.getByText('Level 2 given: ready to take').first().waitFor({ timeout: 8000 });
+  await rolf.getByRole('button', { name: 'Ready for level 2: Gain a level' }).click();
+  await rolf.getByText('Human Fighter 2').first().waitFor({ timeout: 10000 });
+  await shot(rolf, 'rolf_level_2');
+});
+
 for (const [, p] of pages) await p.context().close();
 await browser.close();
 if (problems.length) {
