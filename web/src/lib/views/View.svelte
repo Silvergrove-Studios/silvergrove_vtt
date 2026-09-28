@@ -17,7 +17,7 @@
   import { markdown } from '../markdown';
   import { assetArt } from '../art';
   import { actedWords } from '../acted';
-  import { breakdown, fillIntent, num, putValue, shown, signedOf, textOf, valueOf, withOptions, type Dict, clone } from './viewlib';
+  import { breakdown, fillIntent, num, putValue, shown, signedOf, textOf, timeLeft, valueOf, withOptions, type Dict, clone } from './viewlib';
   import { Expr, truthy } from '../expr';
   import { resolve } from './fieldcheck';
 
@@ -280,7 +280,8 @@
       {#if n.label}<span class="label">{n.label}</span>{/if}
       <span class="badges">
         {#each list as fx}
-          <span class="badge" title={String(fx.key ?? '')}>{fx.label ?? fx.key ?? '?'}{fx.value !== undefined && fx.value !== null ? ` ${num(fx.value)}` : ''}</span>
+          {@const left = timeLeft(fx, ctx.clock)}
+          <span class="badge" title={String(fx.key ?? '')}>{fx.label ?? fx.key ?? '?'}{fx.value !== undefined && fx.value !== null ? ` ${num(fx.value)}` : ''}{#if left}<span class="left"> · {left}</span>{/if}</span>
         {:else}
           <span class="dim">{n.empty ?? 'none'}</span>
         {/each}
@@ -611,6 +612,9 @@
     background: var(--panel-2);
     border: 1px solid var(--border);
     font-size: 0.88em;
+  }
+  .badge .left {
+    color: var(--muted);
   }
   .card {
     min-width: 72px;

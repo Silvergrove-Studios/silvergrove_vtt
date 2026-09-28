@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atPointer, facts, fillIntent, matchWords, num, optionsFrom, pickLabel, putValue, textOf, valueOf, wordsOf } from '../src/lib/views/viewlib';
+import { atPointer, facts, fillIntent, matchWords, num, optionsFrom, pickLabel, putValue, textOf, timeLeft, valueOf, wordsOf } from '../src/lib/views/viewlib';
 
 describe('views', () => {
   const data = { actor: { name: 'Ana', stats: { dex: 14 } }, list: [{ id: 'a', name: 'Alpha', ok: true }, { id: 'b', name: 'Beta', ok: false }], 'a/b': 1 };
@@ -64,5 +64,28 @@ describe('views', () => {
       'concentration',
       'level 3',
     ]);
+  });
+});
+
+describe('timeLeft', () => {
+  // day 2, 10:00: 1440 + 600 minutes from the first day's start
+  const clock = { day: 2, minute: 600 };
+  const until = (m: number) => ({ key: 'concentrating', duration: { kind: 'time', until: 2040 + m } });
+  it("says what's left of a timed effect", () => {
+    expect(timeLeft(until(8), clock)).toBe('8 min left');
+    expect(timeLeft(until(80), clock)).toBe('1 h 20 min left');
+    expect(timeLeft(until(480), clock)).toBe('8 h left');
+    expect(timeLeft(until(1440 * 3), clock)).toBe('3 days left');
+    expect(timeLeft(until(0.5), clock)).toBe('under a minute left');
+    expect(timeLeft({ duration: { kind: 'rounds', rounds: 1 } }, clock)).toBe('1 round left');
+    expect(timeLeft({ duration: { kind: 'rounds', rounds: 7 } }, clock)).toBe('7 rounds left');
+  });
+  it('says nothing of an effect that is over, untimed, or with no clock', () => {
+    expect(timeLeft(until(0), clock)).toBe('');
+    expect(timeLeft(until(-5), clock)).toBe('');
+    expect(timeLeft({ duration: { kind: 'until_cleared' } }, clock)).toBe('');
+    expect(timeLeft({ duration: { kind: 'turn_start', of: 'tok_1' } }, clock)).toBe('');
+    expect(timeLeft({ key: 'prone' }, clock)).toBe('');
+    expect(timeLeft(until(8), undefined)).toBe('');
   });
 });

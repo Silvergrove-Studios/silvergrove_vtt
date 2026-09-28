@@ -464,6 +464,36 @@ func _track(n: Dictionary, ctx: Dictionary) -> Control:
 	return _labelled(str(n.get("label", "")), row)
 
 
+## What is left of a timed effect, as its badge says it: "8 min left",
+## "1 h 20 min left", "3 rounds left"; "" for one that isn't timed, or with no
+## clock to count from (a playtest's DM asked for the time left beside
+## "Concentrating: Detect Magic", which had outlived its ten minutes). The web
+## screens' twin is viewlib.ts timeLeft.
+static func time_left(fx: Dictionary, clock: Variant) -> String:
+	var d: Variant = fx.get("duration")
+	if not (d is Dictionary):
+		return ""
+	var kind := str(d.get("kind", ""))
+	if kind == "rounds":
+		var n := int(d.get("rounds", 0))
+		return ("%d %s left" % [n, "round" if n == 1 else "rounds"]) if n > 0 else ""
+	if kind != "time" or not (clock is Dictionary) or not d.has("until"):
+		return ""
+	var now := (float(clock.get("day", 1)) - 1.0) * 1440.0 + float(clock.get("minute", 0))
+	var left := float(d.until) - now
+	if left <= 0.0:
+		return ""
+	if left < 1.0:
+		return "under a minute left"
+	var mins := int(floor(left))
+	if mins < 60:
+		return "%d min left" % mins
+	if mins < 1440:
+		return ("%d h %d min left" % [mins / 60, mins % 60]) if mins % 60 != 0 else ("%d h left" % (mins / 60))
+	var days := mins / 1440
+	return "%d %s left" % [days, "day" if days == 1 else "days"]
+
+
 func _effects(n: Dictionary, ctx: Dictionary) -> Control:
 	var list: Variant = value_of(n, ctx)
 	var flow := HFlowContainer.new()
@@ -473,7 +503,8 @@ func _effects(n: Dictionary, ctx: Dictionary) -> Control:
 			if not (fx is Dictionary):
 				continue
 			var b := Button.new()
-			b.text = str(fx.get("label", fx.get("key", "?"))) + ((" %s" % _num(fx.value)) if fx.has("value") and fx.value != null else "")
+			var left := time_left(fx, ctx.get("clock"))
+			b.text = str(fx.get("label", fx.get("key", "?"))) + ((" %s" % _num(fx.value)) if fx.has("value") and fx.value != null else "") + ((" · " + left) if left != "" else "")
 			b.tooltip_text = str(fx.get("key", ""))
 			b.disabled = true
 			flow.add_child(b)

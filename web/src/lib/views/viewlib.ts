@@ -72,6 +72,33 @@ export function num(v: unknown): string {
   return Math.abs(f - Math.floor(f)) < 1e-9 ? String(Math.floor(f)) : f.toFixed(1);
 }
 
+/** What is left of a timed effect, as its badge says it: "8 min left",
+ *  "1 h 20 min left", "3 rounds left"; '' for one that isn't timed, or with
+ *  no clock to count from. (A playtest's DM asked for the time left beside
+ *  "Concentrating: Detect Magic", which had outlived its ten minutes.) The
+ *  clock's minutes run from the first day: an end is (day - 1) × 1440 + minute. */
+export function timeLeft(fx: Dict, clock: unknown): string {
+  const d = fx?.duration && typeof fx.duration === 'object' ? (fx.duration as Dict) : null;
+  if (!d) return '';
+  if (d.kind === 'rounds') {
+    const n = Math.floor(Number(d.rounds ?? 0));
+    return n > 0 ? `${n} ${n === 1 ? 'round' : 'rounds'} left` : '';
+  }
+  if (d.kind !== 'time' || !clock || typeof clock !== 'object') return '';
+  const c = clock as Dict;
+  const until = Number(d.until);
+  const now = (Number(c.day ?? 1) - 1) * 1440 + Number(c.minute ?? 0);
+  if (!Number.isFinite(until) || !Number.isFinite(now)) return '';
+  const left = until - now;
+  if (left <= 0) return '';
+  if (left < 1) return 'under a minute left';
+  const mins = Math.floor(left);
+  if (mins < 60) return `${mins} min left`;
+  if (mins < 1440) return `${Math.floor(mins / 60)} h${mins % 60 ? ` ${mins % 60} min` : ''} left`;
+  const days = Math.floor(mins / 1440);
+  return `${days} ${days === 1 ? 'day' : 'days'} left`;
+}
+
 export function textOf(v: unknown): string {
   if (v === null || v === undefined) return '';
   if (isTyped(v)) return num(v.total);

@@ -397,6 +397,28 @@ func test_title_facts_and_tags() -> void:
 	await tree.process_frame
 
 
+## A timed effect's badge says what's left of it, counted on the table's
+## clock from the first day (a playtest's DM asked for it beside
+## "Concentrating: Detect Magic"); the web screens' timeLeft says the same.
+func test_effects_say_the_time_left() -> void:
+	var clock := {"day": 2, "minute": 600}
+	var at := func(m: float) -> Dictionary: return {"key": "concentrating", "duration": {"kind": "time", "until": 2040.0 + m}}
+	check(ViewRenderer.time_left(at.call(8.0), clock) == "8 min left", "minutes")
+	check(ViewRenderer.time_left(at.call(80.0), clock) == "1 h 20 min left" and ViewRenderer.time_left(at.call(480.0), clock) == "8 h left", "hours")
+	check(ViewRenderer.time_left(at.call(1440.0 * 3), clock) == "3 days left", "days")
+	check(ViewRenderer.time_left(at.call(0.5), clock) == "under a minute left", "a round's worth")
+	check(ViewRenderer.time_left({"duration": {"kind": "rounds", "rounds": 1}}, clock) == "1 round left" and ViewRenderer.time_left({"duration": {"kind": "rounds", "rounds": 7}}, clock) == "7 rounds left", "rounds")
+	check(ViewRenderer.time_left(at.call(0.0), clock) == "" and ViewRenderer.time_left({"duration": {"kind": "until_cleared"}}, clock) == "" and ViewRenderer.time_left({"key": "prone"}, clock) == "", "nothing for one that's over or untimed")
+	check(ViewRenderer.time_left(at.call(8.0), null) == "", "nothing without a clock")
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	r.render({"type": "effects", "label": "Conditions", "bind": "/effects"}, {"clock": clock, "effects": [
+		{"key": "concentrating", "label": "Concentrating: Detect Magic", "duration": {"kind": "time", "until": 2048.0}}, {"key": "prone", "label": "Prone"}]})
+	check(_find(r, "Button", "Concentrating: Detect Magic · 8 min left") != null and _find(r, "Button", "Prone") != null, "the badge says it; an untimed one doesn't")
+	r.queue_free()
+	await tree.process_frame
+
+
 ## `choose` and `scores` fields on the desktop: check boxes that stop at
 ## the count with what is had already ticked and locked; spin boxes under
 ## the method with the background's bonus where the class wants it.
