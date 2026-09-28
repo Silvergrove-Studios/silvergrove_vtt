@@ -527,9 +527,10 @@
               </div>
             </div>
           {/if}
-          <!-- (put away while a pick waits, and back after: a playtest's DM
-               armed a player's attack and the card covered the creatures) -->
-          {#if card && !pick}
+          <!-- (put away while a pick waits, or a tap puts the party or a thing
+               down, and back after: a playtest's DM armed a player's attack and
+               the card covered the creatures) -->
+          {#if card && !pick && !placing}
             <div class="reader scroll">
               {#if history.length}<button type="button" class="quiet backbtn" onclick={back}>‹ Back</button>{/if}
               {#key card}

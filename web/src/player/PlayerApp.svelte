@@ -114,7 +114,17 @@
       else intent(p);
     },
     submit,
-    pick: (p) => startPick(p),
+    pick: (p) => {
+      pick = p;
+      picked = [];
+      stopMoving();
+      // with no battle map on this screen (the region, or nothing on the table)
+      // there is nothing to tap: it goes at once with no target, rolled and
+      // nothing applied (the owner: people play theatre of the mind with no
+      // tokens all the time, and still need the rolls)
+      if (!onBattleMap(game.scene)) return pickNoTarget();
+      if (!wide) tab = 'map';
+    },
     comp,
     picture: pictureUrl,
   });
@@ -375,22 +385,6 @@
 
   // --- a pick by name, or with no target ---
 
-  // a pick waits on the map; with no battle map on this screen (the region,
-  // or nothing on the table) there is nothing to tap, and it goes at once
-  // with no target: rolled, nothing applied (the owner: people play
-  // theatre of the mind with no tokens all the time, and still need the rolls)
-  function startPick(p: Dict): void {
-    if (!onBattleMap(game.scene)) {
-      intent(withNoTarget(p, String(game.scene.id ?? '')));
-      return;
-    }
-    pick = p;
-    picked = [];
-    confirmPick = null;
-    stopMoving();
-    if (!wide) tab = 'map';
-  }
-
   // what the player's characters see: the rest of the party is on the map
   // wherever they are, and is listed only when in sight
   const sees = $derived(game.scene.fog ? polygonTest((game.scene.visible as number[][][]) ?? []) : undefined);
@@ -404,7 +398,7 @@
     picked = many > 1 ? togglePicked(picked, target, many, pickEach(pick) !== '') : picked[0] === target ? [] : [target];
   }
 
-  function pickDone(): void {
+  function sendChosen(): void {
     if (!pick || !picked.length) return;
     sendPick(pickCount(pick) > 1 ? [...picked] : picked[0]);
   }
@@ -505,7 +499,7 @@
               noTarget={offersNoTarget(pick)}
               onChoose={chooseListed}
               onUnchoose={(t) => (picked = unpick(picked, t))}
-              onDone={pickDone}
+              onDone={sendChosen}
               onCancel={() => ((pick = null), (picked = []), (confirmPick = null))}
               onNoTarget={pickNoTarget}
             />

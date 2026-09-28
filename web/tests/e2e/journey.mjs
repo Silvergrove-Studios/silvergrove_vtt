@@ -1,13 +1,9 @@
 // The next playtest's journey, in a real browser against a real table:
 // the DM's screen and two players' screens (one a phone), the village
 // (a place's card, shown to the players, chat and a private message), a
-// character sheet, the party's star sent to a place and tapped elsewhere,
-// and the chapel fight (launched, a move before initiative told why not,
-// initiative, the party put inside, a cart put down and taken off, a
-// creature opened from the book, an attack's targets listed by name, the
-// DM's map staying put, an attack picked on the map, a token moved by
-// tapping it and then where it goes, ended), then an attack on the region
-// sent with no target. Screenshots of each step go to the output
+// character sheet, and the chapel fight (launched, initiative, an attack
+// picked on the map, a token moved by tapping it and then where it goes,
+// ended). Screenshots of each step go to the output
 // folder; a step that does not happen fails the run.
 //
 //   node tests/e2e/journey.mjs <host.json> <out dir>
@@ -526,11 +522,6 @@ await step('the DM moves the turns on to Wren', async () => {
   throw new Error('Wren’s turn never came');
 });
 
-await step('the DM’s map stayed where it was while the fight’s bar changed', async () => {
-  const now = await topOfMap();
-  if (!(mapTop > 0) || Math.abs(now - mapTop) > 0.5) throw new Error(`the map began at ${mapTop} px before initiative and at ${now} px now`);
-});
-
 await step('Ana attacks: a target picked on the map, the roll in the log', async () => {
   await ana.getByRole('tab', { name: /Character/ }).click();
   await ana.getByRole('tab', { name: 'Combat' }).click();
@@ -597,31 +588,16 @@ await step('Ana taps Wren, then where she goes, and says yes', async () => {
   await shot(ana, 'ana_moved');
 });
 
+await step('the DM’s map stayed where it was while the fight’s bar changed', async () => {
+  const now = await topOfMap();
+  if (!(mapTop > 0) || Math.abs(now - mapTop) > 0.5) throw new Error(`the map began at ${mapTop} px before initiative and at ${now} px now`);
+});
+
 await step('the DM ends the fight', async () => {
   await dm.locator('.fightbar').getByRole('button', { name: 'End the fight' }).click();
   await dm.getByRole('dialog', { name: 'End the fight?' }).getByRole('button', { name: 'End the fight' }).click();
   await dm.locator('.fightbar').waitFor({ state: 'detached', timeout: 8000 });
   await shot(dm, 'dm_after_fight');
-});
-
-// (the owner: theatre of the mind, with no tokens, the rolls still seen)
-await step('on the region, Ana’s attack goes with no target to tap', async () => {
-  await ana.waitForFunction(() => window.hexmap.game.scene.role === 'regional', null, { timeout: 8000 });
-  const before = sent.get('ana').length;
-  await ana.getByRole('tab', { name: /Character/ }).click();
-  await ana.getByRole('tab', { name: 'Combat' }).click();
-  await ana.getByRole('button', { name: 'Attack' }).first().click();
-  await ana.waitForTimeout(600);
-  if (await ana.getByRole('group', { name: 'Choose the target' }).count()) throw new Error('a pick waits on the region');
-  const went = sent
-    .get('ana')
-    .slice(before)
-    .map((m) => m.intent)
-    .filter((i) => i?.kind === 'action' && i.action === 'attack');
-  if (!went.length) throw new Error('no attack went to the table');
-  const ctx = went[went.length - 1].ctx ?? {};
-  if (ctx.no_target !== true || 'target' in ctx || 'pick' in went[went.length - 1]) throw new Error(`the attack went as ${JSON.stringify(went[went.length - 1])}`);
-  await shot(ana, 'ana_attack_no_target');
 });
 
 await step('the DM sees the map as Ana does, and back', async () => {
@@ -650,6 +626,26 @@ await step('the DM makes a fight of their own: a goblin, started, ended', async 
   await dm.locator('.fightbar').getByRole('button', { name: 'End the fight' }).click();
   await dm.getByRole('dialog', { name: 'End the fight?' }).getByRole('button', { name: 'End the fight' }).click();
   await dm.locator('.fightbar').waitFor({ state: 'detached', timeout: 8000 });
+});
+
+// (the owner: theatre of the mind, with no tokens, the rolls still seen)
+await step('on the region, Ana’s attack goes with no target to tap', async () => {
+  await ana.waitForFunction(() => window.hexmap.game.scene.role === 'regional', null, { timeout: 8000 });
+  const before = sent.get('ana').length;
+  await ana.getByRole('tab', { name: /Character/ }).click();
+  await ana.getByRole('tab', { name: 'Combat' }).click();
+  await ana.getByRole('button', { name: 'Attack' }).first().click();
+  await ana.waitForTimeout(600);
+  if (await ana.getByRole('group', { name: 'Choose the target' }).count()) throw new Error('a pick waits on the region');
+  const went = sent
+    .get('ana')
+    .slice(before)
+    .map((m) => m.intent)
+    .filter((i) => i?.kind === 'action' && i.action === 'attack');
+  if (!went.length) throw new Error('no attack went to the table');
+  const ctx = went[went.length - 1].ctx ?? {};
+  if (ctx.no_target !== true || 'target' in ctx || 'pick' in went[went.length - 1]) throw new Error(`the attack went as ${JSON.stringify(went[went.length - 1])}`);
+  await shot(ana, 'ana_attack_no_target');
 });
 
 await step('Ana’s journal keeps what she was shown', async () => {
