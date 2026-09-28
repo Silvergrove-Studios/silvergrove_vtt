@@ -164,7 +164,7 @@ await step('shown to the players: it comes up on their screens', async () => {
 await step('chat: Ana to everyone (Ben sees her typing), Ben privately to Ana', async () => {
   await ben.getByRole('tab', { name: /Chat/ }).click();
   await ana.getByRole('tab', { name: /Chat/ }).click();
-  await ana.getByLabel('Message').fill('Hello, Thornwick!');
+  await ana.getByLabel('Message', { exact: true }).fill('Hello, Thornwick!');
   // who is writing shows under the chat (a playtest's messages crossed many times)
   await ben.getByText('Ana is typing…').waitFor({ timeout: 5000 });
   await shot(ben, 'ben_sees_ana_typing');
@@ -174,7 +174,7 @@ await step('chat: Ana to everyone (Ben sees her typing), Ben privately to Ana', 
   await ben.getByText('Ana is typing…').waitFor({ state: 'detached', timeout: 5000 });
   await ben.locator('.to').getByRole('button', { name: 'Ana' }).click();
   await ben.getByText('keep it from the DM').click();
-  await ben.getByLabel('Message').fill('Psst — watch the reeve.');
+  await ben.getByLabel('Message', { exact: true }).fill('Psst — watch the reeve.');
   await ben.getByRole('button', { name: 'Send' }).click();
   await ana.getByText('Psst — watch the reeve.').waitFor({ timeout: 5000 });
   await dm.getByRole('tab', { name: /Chat/ }).click();
@@ -187,12 +187,12 @@ await step('chat: Ana to everyone (Ben sees her typing), Ben privately to Ana', 
 await step('Ben looks something up: what he types goes into the search, and what it finds are buttons', async () => {
   // (his chat box has the keyboard, as a playtest's player's did when her
   // "cover" went into the chat instead)
-  await ben.getByLabel('Message').click();
+  await ben.getByLabel('Message', { exact: true }).click();
   await ben.getByRole('button', { name: 'Look up' }).click();
   await ben.keyboard.type('cover');
   // (the best name first, whichever collection answers first)
   await ben.getByRole('list', { name: 'Found' }).getByRole('button', { name: /^Cover\b/ }).first().waitFor({ timeout: 5000 });
-  if (await ben.getByLabel('Message').inputValue()) throw new Error('what he typed went into the chat box');
+  if (await ben.getByLabel('Message', { exact: true }).inputValue()) throw new Error('what he typed went into the chat box');
   await shot(ben, 'ben_lookup');
   await ben.keyboard.press('Enter');
   await ben.getByRole('dialog', { name: /^Cover/ }).waitFor({ timeout: 5000 });
@@ -280,6 +280,10 @@ await step('a new player makes a character with the wizard', async () => {
   await next.click();
   // equipment (before the class's choices, as the SRD 5.2 orders them): the fighter's package A, the soldier's package A
   for (const r of await cara.getByRole('radio', { name: /^Package A/ }).all()) await r.click();
+  // the soldier's gaming set: which one (the fourth table's sheets said only "Gaming Set")
+  const set = cara.getByRole('radio', { name: /^Gaming Set, / }).first();
+  await set.waitFor({ timeout: 5000 });
+  await set.click();
   await shot(cara, 'cara_equipment');
   await next.click();
   // the class's choices at level 1: a Fighting Style feat, three kinds of weapons to master
@@ -298,7 +302,7 @@ await step('a new player makes a character with the wizard', async () => {
 await step('the DM asks the party for a roll; each player rolls their own', async () => {
   await dm.getByRole('tab', { name: 'Party' }).click();
   // the chat under the party, not behind a tab (a playtest's DM lost a first message behind Party)
-  await dm.locator('.sidechat').getByLabel('Message').waitFor({ timeout: 5000 });
+  await dm.locator('.sidechat').getByLabel('Message', { exact: true }).waitFor({ timeout: 5000 });
   const rolls = () => dm.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length);
   const before = await rolls();
   await dm.getByRole('button', { name: 'Ask', exact: true }).click();
@@ -709,7 +713,7 @@ await step('the DM makes a fight of their own: a goblin, started, ended', async 
   await dm.getByRole('button', { name: 'Start the fight' }).click();
   await dm.locator('.fightbar').waitFor({ timeout: 10000 });
   // the chat beside the fight, a pane of its own
-  await dm.locator('.sidechat').getByLabel('Message').waitFor({ timeout: 5000 });
+  await dm.locator('.sidechat').getByLabel('Message', { exact: true }).waitFor({ timeout: 5000 });
   await dm.locator('.sidechat').getByRole('heading', { name: 'Chat & rolls' }).waitFor({ timeout: 5000 });
   // as tall as the DM makes it: the bar between takes the keys, and its height is kept
   const bar = dm.getByRole('separator', { name: "The chat's height" });
@@ -730,23 +734,39 @@ await step('the DM makes a fight of their own: a goblin, started, ended', async 
 });
 
 // (the owner: theatre of the mind, with no tokens, the rolls still seen)
-await step('on the region, Ana’s attack goes with no target to tap', async () => {
-  await ana.waitForFunction(() => window.hexmap.game.scene.role === 'regional', null, { timeout: 8000 });
-  const before = sent.get('ana').length;
-  await ana.getByRole('tab', { name: /Character/ }).click();
-  await ana.getByRole('tab', { name: 'Combat' }).click();
-  await ana.getByRole('button', { name: 'Attack' }).first().click();
-  await ana.waitForTimeout(600);
-  if (await ana.getByRole('group', { name: 'Choose the target' }).count()) throw new Error('a pick waits on the region');
+await step('on the region, Ben’s attack goes with no target to tap, rolled for everyone to see', async () => {
+  // (Ben's Brakka: Ana's Wren is down from the goblin's opportunity attack, and
+  // a dying character's attack is refused, as it should be)
+  await ben.waitForFunction(() => window.hexmap.game.scene.role === 'regional', null, { timeout: 8000 });
+  const before = sent.get('ben').length;
+  await ben.getByRole('tab', { name: /Character/ }).click();
+  await ben.getByRole('tab', { name: 'Combat' }).click();
+  await ben.getByRole('button', { name: 'Attack' }).first().click();
+  await ben.waitForTimeout(600);
+  if (await ben.getByRole('group', { name: 'Choose the target' }).count()) throw new Error('a pick waits on the region');
   const went = sent
-    .get('ana')
+    .get('ben')
     .slice(before)
     .map((m) => m.intent)
     .filter((i) => i?.kind === 'action' && i.action === 'attack');
   if (!went.length) throw new Error('no attack went to the table');
   const ctx = went[went.length - 1].ctx ?? {};
   if (ctx.no_target !== true || 'target' in ctx || 'pick' in went[went.length - 1]) throw new Error(`the attack went as ${JSON.stringify(went[went.length - 1])}`);
-  await shot(ana, 'ana_attack_no_target');
+  // rolled and said, nothing applied: the DM's chat and Ana's have the roll and the line
+  for (const [who, page] of [['the DM', dm], ['Ana', ana]]) {
+    const ok = await page
+      .waitForFunction(
+        () => {
+          const log = window.hexmap.game.view.log ?? [];
+          return log.some((e) => e.kind === 'roll' && String(e.label ?? '').includes('(no target)')) && log.some((e) => /\(no target\): /.test(String(e.text ?? '')));
+        },
+        null,
+        { timeout: 8000 },
+      )
+      .then(() => true, () => false);
+    if (!ok) throw new Error(`${who} didn't see the attack's roll with no target`);
+  }
+  await shot(ben, 'ben_attack_no_target');
 });
 
 await step('Ana’s journal keeps what she was shown', async () => {
@@ -757,7 +777,7 @@ await step('Ana’s journal keeps what she was shown', async () => {
 
 await step('a reload keeps what Ana has read of the chat', async () => {
   await ben.getByRole('tab', { name: /Chat/ }).click();
-  await ben.getByLabel('Message').fill('One more thing before we go.');
+  await ben.getByLabel('Message', { exact: true }).fill('One more thing before we go.');
   await ben.getByRole('button', { name: 'Send' }).click();
   const badge = ana.getByRole('tab', { name: /Chat/ }).locator('.badge');
   // (the badge may be up already, from the fight's rolls: wait for Ben's line itself)

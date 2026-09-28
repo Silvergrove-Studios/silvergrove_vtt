@@ -440,7 +440,10 @@
 
   function pickNoTarget(): void {
     if (!pick) return;
-    intent(withNoTarget($state.snapshot(pick) as Dict, String(game.scene.id ?? '')));
+    // (waited on like any other press, and said once it's done where no roll of mine shows it)
+    const words = pickDone;
+    const since = performance.now();
+    void submit(withNoTarget($state.snapshot(pick) as Dict, String(game.scene.id ?? ''))).then((r) => r.ok && acted(words, since));
     pick = null;
     picked = [];
     confirmPick = null;
