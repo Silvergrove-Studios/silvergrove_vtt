@@ -212,6 +212,16 @@ func test_wire_views_intents_and_roles() -> void:
 	told.clear()
 	player.session.intent({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana", "target": "actor:a_ben2"}})
 	check(pump.call(func() -> bool: return told.any(func(t: String) -> bool: return t.contains("wants a token")), 2000), "the wrong kind of target is refused: %s" % [told])
+	# no target at all, and saying so (the theatre of the mind, a fight with no
+	# battle map: "No target: just roll"): past the table's check, to the
+	# ruleset, whose own check it is (the sample's shove wants a token, and
+	# says so itself); with no word of it, refused at the table as before
+	told.clear()
+	player.session.intent({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana", "no_target": true}})
+	check(pump.call(func() -> bool: return not told.is_empty(), 2000) and not told.any(func(t: String) -> bool: return t.contains("wants a token")), "an intent with no target, saying so, reaches the ruleset: %s" % [told])
+	told.clear()
+	player.session.intent({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana"}})
+	check(pump.call(func() -> bool: return told.any(func(t: String) -> bool: return t.contains("wants a token")), 2000), "with no target and no word of it, refused at the table: %s" % [told])
 	check(pump.call(func() -> bool: return player.session.state.token(sid, ben_token).get("actor", "") == "a_ben2"), "the phone caught up with the scene")
 	var ben_before := Vision.token_pos(player.session.state.token(sid, ben_token))
 	player.tool.begin_pick({"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": {"actor": "a_ana"}, "pick": "token", "label": "Shove"})
