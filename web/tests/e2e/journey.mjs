@@ -1,9 +1,11 @@
 // The next playtest's journey, in a real browser against a real table:
 // the DM's screen and two players' screens (one a phone), the village
-// (a place's card, shown to the players, chat and a private message), a
-// character sheet, and the chapel fight (launched, initiative, an attack
-// picked on the map, a token moved by tapping it and then where it goes,
-// ended). Screenshots of each step go to the output
+// (a place's card, shown to the players, chat with who is typing and a
+// private message, a rule looked up), a character sheet, and the chapel
+// fight (launched, initiative, Next asking before a player's turn is cut
+// short, an attack picked on the map, a token moved by tapping it and
+// then where it goes, ended), the DM seeing as a player, and leaving the
+// table and coming back. Screenshots of each step go to the output
 // folder; a step that does not happen fails the run.
 //
 //   node tests/e2e/journey.mjs <host.json> <out dir>
@@ -128,17 +130,35 @@ await step('shown to the players: it comes up on their screens', async () => {
   await dm.getByRole('button', { name: 'Show the players' }).first().click();
   await ana.getByRole('dialog', { name: 'Thornwick' }).waitFor({ timeout: 5000 });
   await shot(ana, 'ana_shown');
+  // all its words there to read: in sight, or "More ↓" says there's more (a
+  // playtest's second paragraph sat below the fold, unseen)
+  const below = await ana.evaluate(() => {
+    const body = document.querySelector('[role="dialog"] .body');
+    return body ? body.scrollHeight - body.scrollTop - body.clientHeight > 24 : false;
+  });
+  const more = ana.getByRole('button', { name: 'More ↓' });
+  const says = await more.isVisible();
+  if (below !== says) throw new Error(`words below the fold: ${below}; "More ↓" in sight: ${says}`);
+  if (below) {
+    await more.click();
+    await shot(ana, 'ana_shown_more');
+  }
   await ana.getByRole('button', { name: /it is in your Journal/ }).click();
   await ben.getByRole('dialog', { name: 'Thornwick' }).waitFor({ timeout: 5000 });
   await ben.getByRole('button', { name: /it is in your Journal/ }).click();
 });
 
-await step('chat: Ana to everyone, Ben privately to Ana', async () => {
+await step('chat: Ana to everyone (Ben sees her typing), Ben privately to Ana', async () => {
+  await ben.getByRole('tab', { name: /Chat/ }).click();
   await ana.getByRole('tab', { name: /Chat/ }).click();
   await ana.getByLabel('Message').fill('Hello, Thornwick!');
+  // who is writing shows under the chat (a playtest's messages crossed many times)
+  await ben.getByText('Ana is typing…').waitFor({ timeout: 5000 });
+  await shot(ben, 'ben_sees_ana_typing');
   await ana.getByRole('button', { name: 'Send' }).click();
-  await ben.getByRole('tab', { name: /Chat/ }).click();
   await ben.getByText('Hello, Thornwick!').waitFor({ timeout: 5000 });
+  // …until it's sent
+  await ben.getByText('Ana is typing…').waitFor({ state: 'detached', timeout: 5000 });
   await ben.locator('.to').getByRole('button', { name: 'Ana' }).click();
   await ben.getByText('keep it from the DM').click();
   await ben.getByLabel('Message').fill('Psst — watch the reeve.');
@@ -151,6 +171,25 @@ await step('chat: Ana to everyone, Ben privately to Ana', async () => {
   await shot(dm, 'dm_chat');
 });
 
+await step('Ben looks something up: what he types goes into the search, and what it finds are buttons', async () => {
+  // (his chat box has the keyboard, as a playtest's player's did when her
+  // "cover" went into the chat instead)
+  await ben.getByLabel('Message').click();
+  await ben.getByRole('button', { name: 'Look up' }).click();
+  await ben.keyboard.type('cover');
+  // (the best name first, whichever collection answers first)
+  await ben.getByRole('list', { name: 'Found' }).getByRole('button', { name: /^Cover\b/ }).first().waitFor({ timeout: 5000 });
+  if (await ben.getByLabel('Message').inputValue()) throw new Error('what he typed went into the chat box');
+  await shot(ben, 'ben_lookup');
+  await ben.keyboard.press('Enter');
+  await ben.getByRole('dialog', { name: /^Cover/ }).waitFor({ timeout: 5000 });
+  await ben.keyboard.press('Escape');
+  await ben.getByRole('dialog').waitFor({ state: 'detached', timeout: 5000 });
+  // …and the keyboard is back where it was: on Look up
+  const back = await ben.evaluate(() => document.activeElement?.textContent?.trim());
+  if (back !== 'Look up') throw new Error(`the keyboard went to ${back || 'nowhere'}, not back to Look up`);
+});
+
 await step('Ana’s character sheet', async () => {
   await ana.getByRole('tab', { name: /Character/ }).click();
   await ana.getByText('Wren').first().waitFor({ timeout: 5000 });
@@ -158,12 +197,18 @@ await step('Ana’s character sheet', async () => {
 });
 
 await step('the DM makes a folder of their own and files someone in it', async () => {
-  const answer = (text) => dm.once('dialog', (d) => d.accept(text));
+  // (asked in the table's own words, never the browser's bare prompt)
+  const answer = async (title, text, yes) => {
+    const asked = dm.getByRole('dialog', { name: title });
+    await asked.getByRole('textbox').fill(text);
+    await asked.getByRole('button', { name: yes, exact: true }).click();
+    await asked.waitFor({ state: 'detached', timeout: 5000 });
+  };
   const people = dm.locator('.book .group').filter({ has: dm.locator('.head .title', { hasText: /^People$/ }) }).first();
   await people.locator('.head').hover();
   await people.getByRole('button', { name: 'Arrange People' }).click();
-  answer('Suspects');
   await dm.getByRole('menuitem', { name: 'New folder inside' }).click();
+  await answer('A new folder', 'Suspects', 'Make it');
   await dm.locator('.book').getByText('Suspects').waitFor({ timeout: 5000 });
   await dm.locator('.book').getByRole('button', { name: /^Reeve Hollis Dunmore/ }).first().click();
   const option = await dm.locator('.file select option', { hasText: 'Suspects' }).first().getAttribute('value');
@@ -173,8 +218,8 @@ await step('the DM makes a folder of their own and files someone in it', async (
   await folder.getByText('Reeve Hollis Dunmore').waitFor({ timeout: 5000 });
   await folder.locator('.head').first().hover();
   await folder.getByRole('button', { name: 'Arrange Suspects' }).click();
-  answer('The reeve’s circle');
   await dm.getByRole('menuitem', { name: 'Rename' }).click();
+  await answer('Rename the folder', 'The reeve’s circle', 'Rename');
   await dm.locator('.book').getByText('The reeve’s circle').waitFor({ timeout: 5000 });
   await shot(dm, 'dm_folders');
   await dm.getByRole('button', { name: 'Close the card' }).click();
@@ -245,7 +290,15 @@ await step('the DM asks the party for a roll; each player rolls their own', asyn
   // the form says it went
   await dm.getByText('Done ✓').first().waitFor({ timeout: 5000 });
   const asked = [ana, ben, cara].filter(Boolean);
-  for (const p of asked) await p.getByRole('dialog', { name: 'The DM asks' }).waitFor({ timeout: 8000 });
+  for (const p of asked) {
+    // (one who pressed something a moment before finds it behind its pill,
+    // saying what it is: a playtest's taps went to cards that came up under them)
+    const card = p.getByRole('dialog', { name: 'The DM asks' });
+    const pill = p.getByRole('button', { name: /^The DM asks you to roll: Perception/ });
+    await card.or(pill).first().waitFor({ timeout: 8000 });
+    if (!(await card.count())) await pill.click();
+    await card.waitFor({ timeout: 5000 });
+  }
   await shot(ana, 'ana_asked');
   // one roll lands per tap, whoever is still to roll (a playtest's party
   // waited two minutes on its slowest player before anyone's roll was made)
@@ -359,17 +412,42 @@ await step('the DM drags Wren beside a goblin', async () => {
   await shot(dm, 'dm_dragged');
 });
 
+const turnNow = () => dm.evaluate(() => `${window.hexmap.game.scene.turns?.round}/${window.hexmap.game.scene.turns?.turn}`);
+// Next on a player's turn with an action or a bonus action unused asks first
+const stillHas = dm.locator('.fightbar').getByRole('group', { name: 'End the turn anyway?' });
+
 await step('the DM moves the turns on to Wren', async () => {
-  const now = () => dm.evaluate(() => `${window.hexmap.game.scene.turns?.round}/${window.hexmap.game.scene.turns?.turn}`);
   for (let i = 0; i < 12; i++) {
     if (await dm.locator('.fightbar').getByText(/Wren’s turn/).count()) return;
     // (each step seen through before the next: a look taken before the turn
     // reached the screen went one past Wren's)
-    const was = await now();
+    const was = await turnNow();
     await dm.getByRole('button', { name: 'Next turn ›' }).click();
+    await dm.waitForFunction(
+      (b) => `${window.hexmap.game.scene.turns?.round}/${window.hexmap.game.scene.turns?.turn}` !== b || !!document.querySelector('.fightbar [aria-label="End the turn anyway?"]'),
+      was,
+      { timeout: 5000 },
+    );
+    // (Brakka's player hasn't ended his turn: the DM ends it anyway)
+    if (await stillHas.count()) await stillHas.getByRole('button', { name: 'End it' }).click();
     await dm.waitForFunction((b) => `${window.hexmap.game.scene.turns?.round}/${window.hexmap.game.scene.turns?.turn}` !== b, was, { timeout: 5000 });
   }
   throw new Error('Wren’s turn never came');
+});
+
+// (a playtest's DM moved on twice before a bard had used his bonus action)
+await step('on Wren’s turn the DM’s Next asks first: her action and bonus action are still hers', async () => {
+  const was = await turnNow();
+  await dm.getByRole('button', { name: 'Next turn ›' }).click();
+  await stillHas.waitFor({ timeout: 5000 });
+  const words = await stillHas.innerText();
+  if (!/Wren still has an action and a bonus action\. End the turn anyway\?/.test(words)) throw new Error(`it asks: ${words}`);
+  await shot(dm, 'dm_next_asks');
+  await stillHas.getByRole('button', { name: 'Not yet' }).click();
+  await stillHas.waitFor({ state: 'detached', timeout: 5000 });
+  await dm.waitForTimeout(500);
+  if ((await turnNow()) !== was) throw new Error('Not yet ended her turn');
+  await dm.locator('.fightbar').getByText(/Wren’s turn/).waitFor({ timeout: 2000 });
 });
 
 await step('Ana attacks: a target picked on the map, the roll in the log', async () => {
@@ -445,12 +523,21 @@ await step('the DM ends the fight', async () => {
   await shot(dm, 'dm_after_fight');
 });
 
-await step('the DM sees the map as Ana does, and back', async () => {
+await step('the DM sees the map as Ana does, and her chat, and back', async () => {
   await dm.getByRole('combobox', { name: /See as/ }).selectOption({ label: 'Ana' });
   await dm.getByRole('status').filter({ hasText: 'Ana' }).first().waitFor({ timeout: 8000 });
   await shot(dm, 'dm_sees_as_ana');
-  await dm.getByRole('button', { name: 'Back to yours' }).click();
-  await dm.getByRole('button', { name: 'Back to yours' }).waitFor({ state: 'detached', timeout: 8000 });
+  // her chat too (a playtest's DM couldn't check what had reached the players'),
+  // but never what players keep from the DM: Ben's word to her stays theirs
+  await dm.getByRole('tab', { name: /Chat/ }).click();
+  const chat = dm.locator('.rightbody .chat');
+  await chat.getByRole('status').filter({ hasText: 'Ana’s chat' }).waitFor({ timeout: 8000 });
+  await chat.getByText('Hello, Thornwick!').first().waitFor({ timeout: 5000 });
+  if (await chat.getByText('Psst — watch the reeve.').count()) throw new Error('seeing as Ana, the DM read what Ben kept from the DM');
+  await shot(dm, 'dm_sees_ana_chat');
+  await dm.getByRole('button', { name: 'Back to yours' }).first().click();
+  await dm.getByRole('button', { name: 'Back to yours' }).first().waitFor({ state: 'detached', timeout: 8000 });
+  await dm.getByRole('tab', { name: 'Party' }).click();
 });
 
 await step('the DM makes a fight of their own: a goblin, started, ended', async () => {
@@ -495,6 +582,26 @@ await step('a reload keeps what Ana has read of the chat', async () => {
   const after = (await badge.count()) ? await badge.textContent() : '0';
   // (a reload counted the whole log as new: a playtest's badge said 279)
   if (after !== before) throw new Error(`Chat’s badge said ${before} before a reload and ${after} after`);
+});
+
+// (a playtest's stray click by the map landed on Leave, a bare browser OK took
+// it, and the player was out of the table)
+await step('Leave is in the ⋯ menu and asks first; Ben stays, then leaves and taps his name to come back', async () => {
+  if (await ben.getByRole('button', { name: /^Leave/ }).count()) throw new Error('Leave is out in the header');
+  await ben.getByRole('button', { name: 'More', exact: true }).click();
+  await ben.getByRole('menuitem', { name: /Leave the table/ }).click();
+  const asked = ben.getByRole('dialog', { name: 'Leave the table?' });
+  await asked.waitFor({ timeout: 5000 });
+  await shot(ben, 'ben_leave_asks');
+  await asked.getByRole('button', { name: 'Stay' }).click();
+  await asked.waitFor({ state: 'detached', timeout: 5000 });
+  if (!(await ben.evaluate(() => window.hexmap.game.joined))) throw new Error('Stay left the table');
+  await ben.getByRole('button', { name: 'More', exact: true }).click();
+  await ben.getByRole('menuitem', { name: /Leave the table/ }).click();
+  await asked.getByRole('button', { name: 'Leave the table' }).click();
+  await ben.getByText('Played here before? Tap your name.').waitFor({ timeout: 8000 });
+  await ben.getByRole('button', { name: 'Ben' }).click();
+  await ben.getByRole('tab', { name: /Character/ }).waitFor({ timeout: 10000 });
 });
 
 await browser.close();

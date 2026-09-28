@@ -6,7 +6,7 @@
   everything; a question for you comes up the same way.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import MapView from '../lib/map/MapView.svelte';
   import Chat from '../common/Chat.svelte';
   import Handout from '../common/Handout.svelte';
@@ -19,7 +19,7 @@
   import { chatLog, comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
   import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { freshRolls } from '../lib/rolls';
-  import { pillText } from '../lib/prompts';
+  import { handoutPill, pillText } from '../lib/prompts';
   import LogLine from '../lib/views/LogLine.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
@@ -82,10 +82,18 @@
   }
   let lookup = $state<{ collection: string; id: string } | null>(null);
   let lookingUp = $state(false);
+  // the header's ⋯ menu (Leave the table), and Leave asked
+  let menuOpen = $state(false);
+  let leaving = $state(false);
+  let moreMenu: HTMLDivElement | undefined = $state();
+  function closeMenu(e: PointerEvent): void {
+    if (menuOpen && moreMenu && !moreMenu.contains(e.target as Node)) menuOpen = false;
+  }
   let showing = $state<Dict | null>(null);
   // something new from the DM while you type or are in a dialog of your own waits
   // for you, behind a pill (a playtest's player lost a half-placed portrait to one,
-  // another a journal note's thread)
+  // another a journal note's thread); so does a question the DM asks (the next
+  // playtest's players' taps went to one that came up under them, four times)
   let waitingHandout = $state<Dict | null>(null);
   // when this screen was last pressed (a tap, a click)
   let pressedAt = -Infinity;
@@ -95,10 +103,15 @@
     // (a message written but not yet sent counts too: playtest players' Send
     // clicks landed on a card that came up between typing and sending)
     const draft = (document.querySelector('[aria-label="Message"]') as HTMLTextAreaElement | HTMLInputElement | null)?.value?.trim() ?? '';
-    // (and a press just made: a card that came up as a click was on its way
-    // took the click and closed unseen)
-    const pressing = performance.now() - pressedAt < 800;
-    return typing || draft !== '' || pressing || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+    // (and a target or a move being chosen on the map)
+    const picking = !!(pick || moving || confirmPick || confirmMove);
+    return typing || draft !== '' || pressedLately() || picking || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+  }
+  // a press in the last few seconds: a card that came up as a click was on its
+  // way took the click, and the next playtest's taps went on landing on cards
+  // that came up a second or two after the last
+  function pressedLately(): boolean {
+    return performance.now() - pressedAt < 3000;
   }
   let asked = $state<string>('');
   let selected = $state('');
@@ -113,15 +126,26 @@
       else intent(p);
     },
     submit,
-    pick: (p) => {
+    pick: (p, words) => {
       pick = p;
+      pickDone = words ?? '';
       picked = [];
       stopMoving();
       if (!wide) tab = 'map';
     },
+    acted,
     comp,
     picture: pictureUrl,
   });
+
+  // an action the table has done, said by name ("Cast Minor Illusion") where
+  // nothing else shows it: not when my roll came with it (its own toast says
+  // that), nor a question for me (the question is what it did)
+  let pickDone = '';
+  function acted(words: string, since: number): void {
+    if (!words || ownRollAt >= since || promptAt >= since) return;
+    notice(words);
+  }
 
   const map = $derived(game.maps[String(game.scene.map ?? '')] ?? null);
   const turn = $derived(turnSummary(game.scene, game.me));
@@ -152,18 +176,23 @@
     }
     if (game.view.actors) primed = true;
     if (newest) {
-      if (!showing && busyHere()) waitingHandout = newest;
+      // (one that comes while another shows takes its place, unless a press is
+      // on its way: then it waits, as it would while I type)
+      const waits = untrack(() => (showing ? pressedLately() : busyHere()));
+      if (waits) waitingHandout = newest;
       else showing = newest;
     }
   });
 
-  // a question for me: at the front
+  // a question for me: at the front, unless I'm busy (then its pill says what it is)
+  let promptAt = -Infinity;
   $effect(() => {
     for (const p of prompts) {
       const id = String(p.id ?? '');
       if (!seenPrompts.has(id)) {
         seenPrompts.add(id);
-        asked = id;
+        promptAt = performance.now();
+        if (untrack(() => !showing && !busyHere())) asked = id;
       }
     }
   });
@@ -175,10 +204,13 @@
   let rollsPrimed = false;
   let rolled = $state<Dict | null>(null);
   let rolledTimer: ReturnType<typeof setTimeout> | undefined;
+  // (when my last roll came in: an action that rolled has its roll to show for it)
+  let ownRollAt = -Infinity;
   $effect(() => {
     const mineIds = new Set(mine.map((a) => String(a.id ?? '')));
     const fresh = freshRolls((game.view.log as Dict[]) ?? [], mineIds, seenRolls, rollsPrimed);
     if (game.view.actors) rollsPrimed = true;
+    if (fresh.length > 0) ownRollAt = performance.now();
     const chatShows = wide ? side === 'chat' : tab === 'chat';
     if (fresh.length > 0 && !chatShows) {
       rolled = fresh[fresh.length - 1];
@@ -363,7 +395,10 @@
 
   function sendPick(target: string | Dict | string[]): void {
     if (!pick) return;
-    intent(withTarget($state.snapshot(pick) as Dict, target, String(game.scene.id ?? '')));
+    // (what it did said once it's done, where no roll of mine shows it: Bless on the party)
+    const words = pickDone;
+    const since = performance.now();
+    void submit(withTarget($state.snapshot(pick) as Dict, target, String(game.scene.id ?? ''))).then((r) => r.ok && acted(words, since));
     pick = null;
     picked = [];
     confirmPick = null;
@@ -431,7 +466,17 @@
         {#if game.status !== 'open'}<span class="chip warn">Reconnecting…</span>{/if}
         <!-- (its name is what it says: three playtest players looked for "Look up" and didn't find it) -->
         <button type="button" class="quiet" onclick={() => (lookingUp = true)} title="Look up a spell, a creature, an item or a rule">Look up</button>
-        <button type="button" class="quiet" onclick={() => { if (confirm('Leave the table? You can come back with your name.')) leave(); }}>Leave</button>
+        <!-- Leave is in a menu of its own, and asks in the table's own words: a
+             playtest's stray click by the map landed on it, a browser's bare
+             "OK" took it, and the player was out of the table -->
+        <div class="moremenu" bind:this={moreMenu}>
+          <button type="button" class="quiet morebtn" aria-label="More" title="More: leave the table" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>⋯</button>
+          {#if menuOpen}
+            <div class="menu" role="menu">
+              <button type="button" role="menuitem" class="quiet" onclick={() => ((menuOpen = false), (leaving = true))}>Leave the table…</button>
+            </div>
+          {/if}
+        </div>
       </div>
     </header>
 
@@ -526,10 +571,11 @@
   <!-- a question still waiting, whatever tab is open (three of a playtest's players
        missed the DM's roll request once its pop-up was closed) -->
   {#if waitingHandout && !showing}
-    <!-- (what a press does, with an eye: "…something: look" didn't read as a button to a playtest's player) -->
+    <!-- (what a press does, with an eye: "…something: look" didn't read as a button to a playtest's player;
+         and what it is: "a place: The Drowsy Ox") -->
     <button type="button" class="accent waiting look" onclick={() => ((showing = waitingHandout), (waitingHandout = null))}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /></svg>
-      See what the DM is showing ›
+      <span class="words">{handoutPill(waitingHandout)}</span>
     </button>
   {:else if prompts.length && promptIndex < 0 && !showing}
     <!-- (the newest first: a playtest's player was sent to an old question left open, not the live one) -->
@@ -552,7 +598,17 @@
   {#if lookup || lookingUp}
     <Lookup at={lookup} onclose={() => { lookup = null; lookingUp = false; }} />
   {/if}
+  {#if leaving}
+    <Modal title="Leave the table?" onclose={() => (leaving = false)}>
+      <p class="leave-words">You go back to the start. Your character and your journal stay at the table: tap your name there to come back.</p>
+      {#snippet actions()}
+        <button type="button" class="quiet" onclick={() => (leaving = false)}>Stay</button>
+        <button type="button" class="danger" onclick={() => ((leaving = false), leave())}>Leave the table</button>
+      {/snippet}
+    </Modal>
+  {/if}
 {/if}
+<svelte:window onpointerdown={closeMenu} onkeydown={(e) => e.key === 'Escape' && (menuOpen = false)} />
 
 <style>
   .rolled {
@@ -578,13 +634,86 @@
     z-index: 40;
     border-radius: 999px;
     box-shadow: var(--shadow);
-    max-width: calc(100% - 24px);
+    /* clear of the header's Look up and ⋯ (a pill that said what it waited
+       for grew over them on a phone) */
+    max-width: min(560px, calc(100% - 300px));
+    /* a card that waits catches the eye as it comes (a playtest's player on a
+       phone didn't see the one that had taken his tap) */
+    animation: arrive 0.9s ease-out 2;
+  }
+  @media (max-width: 600px) {
+    .waiting {
+      left: 12px;
+      transform: none;
+      max-width: calc(100% - 150px);
+      border-radius: 18px;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+  }
+  @keyframes arrive {
+    0% {
+      box-shadow: 0 0 0 0 var(--accent-soft), var(--shadow);
+    }
+    100% {
+      box-shadow: 0 0 0 14px transparent, var(--shadow);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .waiting {
+      animation: none;
+    }
   }
   .waiting.look {
     display: inline-flex;
     align-items: center;
     gap: 8px;
     white-space: nowrap;
+  }
+  .waiting.look .words {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* (two lines at most on a phone, where the pill is narrow) */
+  @media (max-width: 600px) {
+    .waiting.look {
+      white-space: normal;
+    }
+    .waiting.look .words {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+    }
+  }
+  .moremenu {
+    position: relative;
+  }
+  .morebtn {
+    min-width: 40px;
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+  .moremenu .menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 45;
+    min-width: 190px;
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  .moremenu .menu button {
+    text-align: left;
+  }
+  .leave-words {
+    margin: 0;
   }
   .waiting.look svg {
     flex: none;

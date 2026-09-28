@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { endedByPlayer, entryName, nothingSince, orderRows, turnAfter } from '../src/dm/fight';
+import { endedByPlayer, entryName, nothingSince, orderRows, turnAfter, unusedOnTurn } from '../src/dm/fight';
 
 describe('the fight on the DM’s screen', () => {
   const tokens = [
@@ -51,6 +51,28 @@ describe('the fight on the DM’s screen', () => {
     expect(nothingSince({ ...scene, turns: { ...turns, last: { ...turns.last, by: 'gm' } } }, log, players)).toBeNull();
     // a log this screen can't place the turn in: go on
     expect(nothingSince(scene, [log[0]], players)).toBeNull();
+  });
+
+  it('asks before a Next that would end a player’s turn with an action or a bonus action unused', () => {
+    // Grace's turn: her counters as the ruleset reset them when it began
+    const at = (counters: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({ ...scene, turns: { ...turns, counters, ...extra } });
+    expect(unusedOnTurn(at({ 'token:t_grace': { actions: 1, bonus: 1, reactions: 1 } }), players)).toBe('Grace still has an action and a bonus action.');
+    expect(unusedOnTurn(at({ 'token:t_grace': { actions: 0, bonus: 1, reactions: 1 } }), players)).toBe('Grace still has a bonus action.');
+    expect(unusedOnTurn(at({ 'token:t_grace': { actions: 1, bonus: 0, reactions: 0 } }), players)).toBe('Grace still has an action.');
+    // both used (a reaction is not the turn's): on
+    expect(unusedOnTurn(at({ 'token:t_grace': { actions: 0, bonus: 0, reactions: 1 } }), players)).toBe('');
+    // a creature's turn, a ruleset with no budgets, turns that aren't running or ordered: on
+    expect(unusedOnTurn(at({ 'token:t_g1': { actions: 1, bonus: 1 } }, { turn: 2 }), players)).toBe('');
+    expect(unusedOnTurn(at({}), players)).toBe('');
+    expect(unusedOnTurn(at({ 'token:t_grace': { actions: 1 } }, { running: false }), players)).toBe('');
+    expect(unusedOnTurn(at({ 'token:t_grace': { actions: 1 } }, { mode: 'dm' }), players)).toBe('');
+    // one of the party in a shared slot
+    const grouped = at({ 'token:t_grace': { actions: 0, bonus: 1 }, 'token:t_ada': { actions: 0, bonus: 0 } }, { order: ['group:pcs', 't_g1'], turn: 0, data: { groups: { pcs: { label: 'The party', tokens: ['t_ada', 't_grace'] } } } });
+    expect(unusedOnTurn(grouped, players)).toBe('Grace still has a bonus action.');
+    // at 0 hit points there is nothing to use (a dying character's turn is its death save)
+    const withActor = { ...scene, tokens: tokens.map((t) => (t.id === 't_grace' ? { ...t, actor: 'a_grace' } : t)), turns: { ...turns, counters: { 'token:t_grace': { actions: 1, bonus: 1 } } } };
+    expect(unusedOnTurn(withActor, players, { a_grace: { resources: { srd5e: { hp: { current: 0, max: 12 } } } } })).toBe('');
+    expect(unusedOnTurn(withActor, players, { a_grace: { resources: { srd5e: { hp: { current: 5, max: 12 } } } } })).toBe('Grace still has an action and a bonus action.');
   });
 
   it('shows the order that runs, or this scene’s, and no other fight’s', () => {

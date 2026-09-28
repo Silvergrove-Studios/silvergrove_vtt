@@ -5,8 +5,10 @@
   the adventure's, and couldn't bring in the mastiff the party found).
 -->
 <script lang="ts">
-  import { comp, dmOp, game, type Dict } from '../lib/game.svelte';
+  import { comp, dmOp, game, submit, type Dict } from '../lib/game.svelte';
   import { pictureUrl } from '../lib/art';
+  import Modal from '../common/Modal.svelte';
+  import ActButton from '../lib/views/ActButton.svelte';
 
   let { fightId, onclose, onopen }: { fightId: string; onclose?: () => void; onopen?: (ref: string) => void } = $props();
 
@@ -61,10 +63,26 @@
     dmOp('fight_set', { encounter: fightId, creatures: next });
   }
 
-  function add(e: Dict): void {
-    dmOp('fight_add', { encounter: fightId, collection: 'creatures', entry: String(e.id), name: String(e.name ?? e.id), count, hidden });
-    q = '';
-    found = [];
+  // (each press waits for the table and says it went: ActButton)
+  function add(e: Dict): Promise<{ ok: boolean }> {
+    return submit({ kind: 'dm', op: 'fight_add', encounter: fightId, collection: 'creatures', entry: String(e.id), name: String(e.name ?? e.id), count, hidden }).then((r) => {
+      if (r.ok) {
+        q = '';
+        found = [];
+      }
+      return r;
+    });
+  }
+
+  // Start the fight: busy until the table has it going, and the card gives way
+  // to the fight's bar (a playtest's DM watched "Starting…" for three seconds
+  // with nothing else moving, and nearly pressed again)
+  async function start(): Promise<void> {
+    if (starting) return;
+    starting = true;
+    const r = await submit({ kind: 'dm', op: 'launch', encounter: fightId });
+    // (done: the fight's state is on its way; the bar takes over when it lands)
+    setTimeout(() => (starting = false), r.ok ? 5000 : 0);
   }
 
   function cr(v: unknown): string {
@@ -72,11 +90,12 @@
     return n === 0.125 ? '1/8' : n === 0.25 ? '1/4' : n === 0.5 ? '1/2' : String(v ?? '');
   }
 
+  // Delete asks in the table's own words (never the browser's bare OK)
+  let deleting = $state(false);
   function remove(): void {
-    if (confirm(`Delete “${fight?.name ?? 'this fight'}”? Its creatures and notes go with it.`)) {
-      dmOp('fight_delete', { encounter: fightId });
-      onclose?.();
-    }
+    deleting = false;
+    dmOp('fight_delete', { encounter: fightId });
+    onclose?.();
   }
 </script>
 
@@ -151,9 +170,9 @@
           <label><input type="checkbox" bind:checked={hidden} /> hidden until you reveal them</label>
         </div>
         {#each found as e (e.id)}
-          <button type="button" class="quiet found" onclick={() => add(e)}>
-            <span>{e.name}</span><span class="dim">CR {cr(e.cr)}{e.type ? ` · ${e.type}` : ''}</span><span class="accentword">Add {count}</span>
-          </button>
+          <ActButton quiet class="foundbtn" act={() => add(e)}>
+            <span class="found"><span>{e.name}</span><span class="dim">CR {cr(e.cr)}{e.type ? ` · ${e.type}` : ''}</span><span class="accentword">Add {count}</span></span>
+          </ActButton>
         {/each}
       </section>
     {/if}
@@ -165,15 +184,24 @@
         <button type="button" onclick={() => dmOp('end_fight')}>End the fight</button>
       {:else}
         <!-- (one press: a fight takes a moment to set up, and a second press started it twice) -->
-        <button type="button" class="accent" disabled={starting || !lines.length} onclick={() => { starting = true; dmOp('launch', { encounter: fightId }); setTimeout(() => (starting = false), 5000); }}>
-          {starting ? 'Starting…' : 'Start the fight'}
+        <button type="button" class="accent" disabled={starting || !lines.length} aria-busy={starting ? 'true' : undefined} onclick={start}>
+          {#if starting}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start the fight{/if}
         </button>
         {#if !lines.length}<span class="dim">Add a creature first.</span>{/if}
-        {#if !fromPlace}<button type="button" class="quiet danger" onclick={remove}>Delete the fight</button>{/if}
+        {#if !fromPlace}<button type="button" class="quiet danger" onclick={() => (deleting = true)}>Delete the fight</button>{/if}
       {/if}
     </div>
     {#if fromPlace}<p class="dim">The adventure starts it at {fromPlace.name}; so does Start here.</p>{/if}
   </div>
+  {#if deleting}
+    <Modal title="Delete the fight?" onclose={() => (deleting = false)}>
+      <p class="ask">“{fight.name ?? 'This fight'}” goes, with its creatures and your notes on it.</p>
+      {#snippet actions()}
+        <button type="button" class="quiet" onclick={() => (deleting = false)}>Keep it</button>
+        <button type="button" class="danger" onclick={remove}>Delete the fight</button>
+      {/snippet}
+    </Modal>
+  {/if}
 {/if}
 
 <style>
@@ -239,12 +267,21 @@
   .opts input[type='number'] {
     width: 4.5em;
   }
+  .adding :global(.foundbtn) {
+    display: flex;
+    align-items: baseline;
+    width: 100%;
+    text-align: left;
+  }
   .found {
+    flex: 1;
     display: flex;
     gap: 10px;
     align-items: baseline;
     text-align: left;
-    width: 100%;
+  }
+  .ask {
+    margin: 0;
   }
   .found span:first-child {
     flex: 1;

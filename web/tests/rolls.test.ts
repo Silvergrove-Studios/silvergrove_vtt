@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { freshRolls, natural, rollSummary } from '../src/lib/rolls';
-import { pillText } from '../src/lib/prompts';
+import { handoutPill, pillText } from '../src/lib/prompts';
 
 const d20 = (face: number, kept = true) => ({ sides: 20, face, kept });
 
@@ -37,6 +37,17 @@ describe('freshRolls', () => {
     const more = [...log, { id: 'r2', kind: 'roll', actor: 'a_zeb' }, { id: 'r3', kind: 'roll', actor: 'a_ada' }];
     expect(freshRolls(more, mine, seen, true).map((e) => e.id)).toEqual(['r3']);
     expect(freshRolls(more, mine, seen, true)).toEqual([]);
+  });
+});
+
+describe('handoutPill', () => {
+  it('says what the DM is showing, while it waits', () => {
+    expect(handoutPill({ ref: 'place:p_ox', title: 'The Drowsy Ox' })).toBe('The DM is showing you a place: The Drowsy Ox ›');
+    expect(handoutPill({ ref: 'actor:a_reeve', title: 'Reeve Hollis Dunmore' })).toBe('The DM is showing you someone: Reeve Hollis Dunmore ›');
+    expect(handoutPill({ ref: 'picture:upload:abc', title: 'The bell' })).toBe('The DM is showing you a picture: The bell ›');
+    expect(handoutPill({ id: 'h1', title: 'A letter' })).toBe('The DM is showing you A letter ›');
+    expect(handoutPill({ ref: 'place:p_x', title: '' })).toBe('The DM is showing you a place ›');
+    expect(handoutPill(null)).toBe('');
   });
 });
 

@@ -63,13 +63,38 @@
   });
 </script>
 
+<!-- the search box has the keyboard as the card opens (a playtest's player
+     typed "cover" into it and the word went into the chat box beneath), is
+     named for what it does, and Enter opens the first of what it found -->
 <Modal title={entry ? String(entry.data.entry?.name ?? 'Look up') : 'Look up'} wide {onclose}>
   <div class="lookup">
-    <input type="search" placeholder="A spell, a creature, an item, a condition…" bind:value={q} />
+    <!-- svelte-ignore a11y_autofocus -->
+    <input
+      type="search"
+      aria-label="Look up"
+      placeholder="A spell, a creature, an item, a condition…"
+      bind:value={q}
+      autofocus={!at}
+      onkeydown={(e) => {
+        if (e.key === 'Enter' && results.length) {
+          e.preventDefault();
+          open(results[0].collection, results[0].id);
+          q = '';
+        }
+      }}
+    />
     {#if results.length}
-      <ul class="results">
+      <!-- (each one a button that looks like one: a playtest's player took the
+           plain rows for text and clicked around them) -->
+      <ul class="results" aria-label="Found">
         {#each results as r (r.collection + '/' + r.id)}
-          <li><button type="button" class="quiet" onclick={() => { open(r.collection, r.id); q = ''; }}>{r.name}<span class="dim"> · {r.collection.replace(/_/g, ' ')}</span></button></li>
+          <li>
+            <button type="button" class="result" onclick={() => { open(r.collection, r.id); q = ''; }}>
+              <span class="name">{r.name}</span>
+              <span class="dim kind">{r.collection.replace(/_/g, ' ')}</span>
+              <span class="go" aria-hidden="true">Open ›</span>
+            </button>
+          </li>
         {/each}
       </ul>
     {/if}
@@ -91,15 +116,41 @@
   .results {
     list-style: none;
     margin: 0;
-    padding: 4px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    max-height: 240px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 280px;
     overflow: auto;
   }
-  .results button {
+  .result {
     width: 100%;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
     text-align: left;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+  }
+  .result:hover:not(:disabled) {
+    border-color: var(--accent-soft);
+  }
+  .result .name {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--accent-soft);
+    text-underline-offset: 3px;
+  }
+  .result .kind {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.88rem;
+  }
+  .result .go {
+    color: var(--muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
   }
   .card {
     padding: 4px 2px;

@@ -61,6 +61,9 @@ var uploads_dir := ""
 var upload_handler: Callable = Callable()
 ## The least time between one screen's uploads.
 const UPLOAD_GAP_MS := 1500
+## The least time between one screen's "typing"s that are passed on (the
+## web screens say it at most every three seconds).
+const TYPING_GAP_MS := 1000
 ## How much of the sessions before a view carries (the newest).
 const CHAT_HISTORY_SENT := 400
 var _server := TCPServer.new()
@@ -258,11 +261,7 @@ func poll(delta := 0.0) -> void:
 		if c.player != "":
 			log.emit("%s left" % _player_name(c.player))
 			client_left.emit(c.player)
-	if _views_dirty:
-		_views_dirty = false
-		for c in _clients:
-			if c.joined:
-				_send_view(c)
+	_flush_views()
 	# web clients get the scene whole, a few times a second at most
 	if _scenes_dirty and Time.get_ticks_msec() - _last_scene_ms >= 50:
 		_scenes_dirty = false
@@ -279,6 +278,16 @@ func poll(delta := 0.0) -> void:
 				_send_dm(c)
 
 
+## Every joined client's view again, now, if the rules changed since the last.
+func _flush_views() -> void:
+	if not _views_dirty:
+		return
+	_views_dirty = false
+	for c in _clients:
+		if c.joined:
+			_send_view(c)
+
+
 func _player_name(pid: String) -> String:
 	return str(state.encounter.player(pid).get("name", pid))
 
@@ -287,6 +296,11 @@ func _send(c: Dictionary, msg: Dictionary) -> void:
 	(c.peer as WebSocketPeer).send_text(Protocol.encode(msg))
 	if str(msg.get("t", "")) in ["refused", "error", "upload_failed"] and not traced.get_connections().is_empty():
 		traced.emit({"dir": "out", "player": str(c.get("player", "")), "msg": msg})
+
+
+## A screen saying its chat box holds something being written (_typing).
+static func _is_typing(msg: Dictionary) -> bool:
+	return str(msg.get("t", "")) == "intent" and msg.get("intent") is Dictionary and str(msg.intent.get("kind", "")) == "typing"
 
 
 ## A message as the trace keeps it: an upload's picture by its size.
@@ -399,30 +413,53 @@ func projection(c: Dictionary) -> Dictionary:
 	out.notes = PlayerNotes.for_viewer(notes_source.call(), pid, role) if notes_source.is_valid() else []
 	# what can be looked up (the web screens search across these)
 	out.collections = kernel.comp.collections()
-	# the chat of sessions before, as far as this viewer may read it: not what
-	# the live log still holds (a session ended but still open has its chat in
-	# both, and a playtest's list put the whole evening above its first hour)
-	out.chat_history = []
-	if chat_source.is_valid():
-		var live := {}
-		for entry in kernel.state.encounter.log:
-			live[str(entry.get("id", ""))] = true
-		var hist: Array = chat_source.call()
-		var kept := []
-		for i in range(hist.size() - 1, -1, -1):
-			if kept.size() >= CHAT_HISTORY_SENT:
-				break
-			var m: Variant = hist[i]
-			if m is Dictionary and not live.has(str(m.get("id", ""))) and Views.can_see(str(m.get("audience", "all")), pid, role):
-				kept.append(JsonDoc.deep(m))
-		kept.reverse()
-		out.chat_history = kept
+	out.chat_history = _chat_history(func(aud: String) -> bool: return Views.can_see(aud, pid, role))
+	# the DM seeing as a player: that player's chat too (the DM's See as)
+	var who := str(c.get("see_as", ""))
+	if _is_gm(c) and who != "" and not state.encounter.player(who).is_empty():
+		out.preview_chat = preview_chat(who)
 	out.journal = []
 	if journal_source.is_valid():
 		for entry in journal_source.call():
 			if entry is Dictionary and str(entry.get("kind", "")) == "handout" and Views.can_see(str(entry.get("audience", "gm")), pid, role):
 				out.journal.append(JsonDoc.deep(entry))
 	return out
+
+
+## The chat of sessions before, as far as `may_read` (an audience) lets a
+## viewer read it: not what the live log still holds (a session ended but
+## still open has its chat in both, and a playtest's list put the whole
+## evening above its first hour), the newest CHAT_HISTORY_SENT.
+func _chat_history(may_read: Callable) -> Array:
+	if not chat_source.is_valid():
+		return []
+	var live := {}
+	for entry in kernel.state.encounter.log:
+		live[str(entry.get("id", ""))] = true
+	var hist: Array = chat_source.call()
+	var kept := []
+	for i in range(hist.size() - 1, -1, -1):
+		if kept.size() >= CHAT_HISTORY_SENT:
+			break
+		var m: Variant = hist[i]
+		if m is Dictionary and not live.has(str(m.get("id", ""))) and bool(may_read.call(str(m.get("audience", "all")))):
+			kept.append(JsonDoc.deep(m))
+	kept.reverse()
+	return kept
+
+
+## A player's chat as the DM seeing as them is shown it: what the player
+## reads of the talk, the rolls and the notes, this session's and before,
+## less what the DM may not read (what players keep from the DM stays
+## theirs). A playtest's DM couldn't check whether a hidden creature's
+## initiative roll had reached the players' chat.
+func preview_chat(pid: String) -> Dictionary:
+	var both := func(aud: String) -> bool: return Views.can_see(aud, pid, Views.ROLE_PLAYER) and Views.can_see(aud, "", Views.ROLE_GM)
+	var log := []
+	for entry in kernel.state.encounter.log:
+		if str(entry.get("kind", "")) in ["chat", "roll", "note"] and bool(both.call(str(entry.get("audience", "all")))):
+			log.append(JsonDoc.deep(entry))
+	return {"as": pid, "log": log, "chat_history": _chat_history(both)}
 
 
 ## Something the views draw on changed outside the encounter (the
@@ -464,7 +501,8 @@ func _send_dm(c: Dictionary) -> void:
 
 func _handle(c: Dictionary, msg: Dictionary) -> void:
 	var t := str(msg.t)
-	if t != "ping" and not traced.get_connections().is_empty():
+	# (someone typing, every few seconds, is no more the table's story than a ping)
+	if t != "ping" and not _is_typing(msg) and not traced.get_connections().is_empty():
 		traced.emit({"dir": "in", "player": str(c.get("player", "")), "gm": _is_gm(c), "msg": _traced_copy(msg)})
 	if not c.hello and t != "hello":
 		_send(c, Protocol.error("say hello first"))
@@ -544,6 +582,10 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if why != "":
 				_send(c, Protocol.intent_refused(intent, why, req))
 			elif req != "":
+				# what it did reaches the screens before the word that it's done,
+				# so the screen that waited reads its result as it hears (a button
+				# says what it did only where no roll of the player's shows it)
+				_flush_views()
 				_send(c, Protocol.done(req))
 		"request":
 			var ev = msg.get("ev", {})
@@ -656,6 +698,8 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			return kernel.pending.contribute(str(intent.get("roll", "")), pid, str(intent.get("name", "")), str(intent.get("expr", "")))
 		"chat":
 			return _chat(c, intent)
+		"typing":
+			return _typing(c, intent)
 		# a free roll ("/roll 1d20+4 Stealth" in the chat): anyone's dice, the DM's in
 		# secret if asked (a playtest's DM had no dice of his own)
 		"roll":
@@ -687,6 +731,8 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 					return "no such player"
 				c.see_as = who
 				_send_scene(c)
+				# (and their chat, which comes with the view)
+				_send_view(c)
 				return ""
 			if not dm_handler.is_valid():
 				return "no DM operations here"
@@ -753,24 +799,56 @@ func _chat(c: Dictionary, intent: Dictionary) -> String:
 	var text := str(intent.get("text", "")).strip_edges().left(2000)
 	if text == "":
 		return "say something"
-	var gm := _is_gm(c)
-	var from := "gm" if gm else str(c.player)
+	var from := "gm" if _is_gm(c) else str(c.player)
 	var to: Variant = intent.get("to", "all")
-	var audience := "all"
+	var audience := _chat_audience(c, intent)
 	var names := []
-	if to is Array and not (to as Array).is_empty() and not (to as Array).has("all"):
-		var ids := []
-		for x in to:
-			var k := str(x)
-			if k != "gm" and not state.encounter.player(k).is_empty() and not ids.has(k):
-				ids.append(k)
-		if not gm and not ids.has(from):
-			ids.append(from)
-		var private := bool(intent.get("private", false)) and not gm and not (to as Array).has("gm")
-		audience = ("private:" if private else "players:") + ",".join(PackedStringArray(ids))
+	if audience != "all":
 		names = (to as Array).map(func(x: Variant) -> String: return "the DM" if str(x) == "gm" else _player_name(str(x)))
 	var entry := {"id": JsonDoc.new_id("m"), "kind": "chat", "from": from, "text": text, "audience": audience, "to": names, "at": JsonDoc.now()}
 	return kernel.commit([{"t": "log.add", "entry": entry}], "Chat", {"by": from}, audience)
+
+
+## Who reads what a client says to `to` ("all" or [ids, "gm"]), `private`
+## or not: "all", "players:<ids>" (with the one who says it, and the DM) or
+## "private:<ids>" (players only).
+func _chat_audience(c: Dictionary, intent: Dictionary) -> String:
+	var gm := _is_gm(c)
+	var from := "gm" if gm else str(c.player)
+	var to: Variant = intent.get("to", "all")
+	if not (to is Array) or (to as Array).is_empty() or (to as Array).has("all"):
+		return "all"
+	var ids := []
+	for x in to:
+		var k := str(x)
+		if k != "gm" and not state.encounter.player(k).is_empty() and not ids.has(k):
+			ids.append(k)
+	if not gm and not ids.has(from):
+		ids.append(from)
+	var private := bool(intent.get("private", false)) and not gm and not (to as Array).has("gm")
+	return ("private:" if private else "players:") + ",".join(PackedStringArray(ids))
+
+
+## Someone writing in the chat ({to, private} as the message will have
+## them): said to the web screens that would read the message — never back
+## to the one writing, never to a player a private word leaves out — and
+## kept nowhere. "Leo is typing…" (a playtest's DM and players crossed
+## messages many times, each answering what the other had said before).
+func _typing(c: Dictionary, intent: Dictionary) -> String:
+	var now := Time.get_ticks_msec()
+	if now - int(c.get("last_typing", -TYPING_GAP_MS)) < TYPING_GAP_MS:
+		return ""
+	c["last_typing"] = now
+	var gm := _is_gm(c)
+	var from := "gm" if gm else str(c.player)
+	var audience := _chat_audience(c, intent)
+	var msg := {"t": "typing", "from": from, "name": "the DM" if gm else _player_name(from)}
+	for o in _clients:
+		if is_same(o, c) or not bool(o.web) or not bool(o.joined):
+			continue
+		if Views.can_see(audience, "" if _is_gm(o) else str(o.player), Views.ROLE_GM if _is_gm(o) else Views.ROLE_PLAYER):
+			_send(o, msg)
+	return ""
 
 
 ## What a co-GM may drive besides actions: {op: next|previous|checkpoint|restore|trigger|bulk, …}.

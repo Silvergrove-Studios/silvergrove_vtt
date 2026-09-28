@@ -25,14 +25,20 @@ extends RefCounted
 ##   (web clients: hello {web: true}; join {role: player, name} adds or
 ##   finds a player by name; join {role: dm, token} is the DM's own screen,
 ##   on this machine; intent {kind: chat, text, to, private};
+##   intent {kind: typing, to, private} while the chat box holds something
+##   being written, every few seconds at most, never kept;
 ##   intent {kind: dm, op, …}; need {kind: scene})
 ## host → client
 ##   welcome  {version, encounter}            the document without its rules blocks
 ##   joined   {player, role}                  the join was accepted
 ##   event    {ev}                            a scene event applied; apply it too
-##   view     {view}                          the client's projection (Views.project)
+##   view     {view}                          the client's projection (Views.project); the DM seeing
+##                                             as a player also gets their chat (view.preview_chat)
 ##   refused  {ev | intent, why, req?}        the request was not applied (an intent's `req` with it)
-##   done     {req}                           the intent sent with `req` was taken (a form says so, and clears)
+##   done     {req}                           the intent sent with `req` was taken (a form says so, and clears);
+##                                             sent after the views it changed, so its result is there
+##   typing   {from, name}                    a web client: someone ("gm" or a player id) is writing
+##                                             in the chat to this viewer (see intent kind typing)
 ##   map      {id, doc}                       a map document
 ##   packs    {packs: [{id, version, manifest, files}]}
 ##   file     {pack, file, data}              base64 of one pack file

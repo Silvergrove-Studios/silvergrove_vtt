@@ -5,8 +5,11 @@
   if the DM should not read it).
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
+  import { fade } from 'svelte/transition';
   import LogLine from '../lib/views/LogLine.svelte';
-  import { chat, chatLog, game, intent, playerName } from '../lib/game.svelte';
+  import { chat, chatLog, dmOp, game, intent, playerName } from '../lib/game.svelte';
+  import { TypingSignal, typingWords } from '../lib/typing';
 
   let { compact = false }: { compact?: boolean } = $props();
 
@@ -16,8 +19,15 @@
   let list: HTMLDivElement;
   let pinned = true;
 
-  const entries = $derived(chatLog());
   const dm = $derived(game.role === 'dm');
+  // the DM seeing as a player sees that player's chat too, as far as the DM
+  // may read it (a playtest's DM couldn't check whether a hidden creature's
+  // roll had reached the players' chat)
+  const preview = $derived.by(() => {
+    const p = game.view.preview_chat;
+    return dm && game.previewAs && p && typeof p === 'object' && String(p.as ?? '') === game.previewAs ? (p as Record<string, unknown>) : null;
+  });
+  const entries = $derived(preview ? chatLog(preview) : chatLog());
   const others = $derived(game.players.filter((p) => String(p.id) !== game.me));
   const actors = $derived(game.view.actors ?? {});
   const canPrivate = $derived(!dm && to.length > 0 && !to.includes('gm'));
@@ -37,9 +47,16 @@
     else to = to.length === 1 && to[0] === id ? [] : [id];
   }
 
+  // "Leo is typing…": the table is told, now and then, while this box holds
+  // something being written, and only those who'll read it hear (a playtest's
+  // DM and players crossed messages many times)
+  const typingSignal = new TypingSignal(() => intent({ kind: 'typing', to: to.length ? [...to] : 'all', private: canPrivate && priv }));
+  const typers = $derived(typingWords(Object.keys(game.typing).map((id) => playerName(id))));
+
   function sendIt(): void {
     const t = text.trim();
     if (!t) return;
+    typingSignal.sent();
     // dice: "/roll 1d20+4 Stealth" for everyone, the DM's "/gmroll 2d6" in secret
     // (a playtest's DM had no dice of his own; "/roll" went out as words)
     const r = /^\/(roll|r|gmroll)\s+(\S+)(?:\s+(.*))?$/i.exec(t);
@@ -84,10 +101,40 @@
     }
   }
   const pinnedLines = $derived(dm ? entries.filter((e) => pins.includes(String(e.id ?? ''))) : []);
+  const canPin = $derived(dm && !preview);
+
+  // one Pin, on the line the pointer is over (or tapped, or reached with the
+  // arrow keys), not one on every line: a playtest's screen reader found 413
+  // "Pin" buttons in the chat
+  let hot = $state('');
+  const pinnable = $derived(canPin ? entries.filter((e) => e.kind === 'chat' && e.id).map((e) => String(e.id)) : []);
+  async function arrows(e: KeyboardEvent): Promise<void> {
+    if (!canPin || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) || !pinnable.length) return;
+    e.preventDefault();
+    const at = pinnable.indexOf(hot);
+    let i = pinnable.length - 1;
+    if (at >= 0 && e.key === 'ArrowUp') i = Math.max(0, at - 1);
+    else if (at >= 0 && e.key === 'ArrowDown') i = Math.min(pinnable.length - 1, at + 1);
+    else if (e.key === 'Home') i = 0;
+    hot = pinnable[i];
+    await tick();
+    const btn = list?.querySelector<HTMLButtonElement>(`[data-line="${CSS.escape(hot)}"] .pinbtn`);
+    btn?.focus();
+    btn?.scrollIntoView({ block: 'nearest' });
+  }
+  function leftList(e: FocusEvent): void {
+    if (!list?.contains(e.relatedTarget as Node | null)) hot = '';
+  }
 </script>
 
 <div class="chat" class:compact>
-  {#if pinnedLines.length}
+  {#if preview}
+    <div class="seeing" role="status">
+      <span><strong>{playerName(game.previewAs)}</strong>’s chat, as they read it (what players keep from you stays theirs)</span>
+      <button type="button" class="quiet" onclick={() => dmOp('see_as', { player: '' })}>Back to yours</button>
+    </div>
+  {/if}
+  {#if pinnedLines.length && !preview}
     <div class="pins" role="region" aria-label="Pinned">
       {#each pinnedLines as entry (entry.id)}
         <div class="line-row pinned-row">
@@ -97,13 +144,24 @@
       {/each}
     </div>
   {/if}
-  <div class="entries scroll" bind:this={list} {onscroll}>
+  <!-- (a region the keyboard can scroll; the DM's arrow keys go line to line, each with its Pin) -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div class="entries scroll" role="region" aria-label="Messages and rolls" tabindex="0" bind:this={list} {onscroll} onkeydown={arrows} onfocusout={leftList}>
     {#each entries as entry (entry.id ?? JSON.stringify(entry))}
-      {#if dm && entry.kind === 'chat' && entry.id}
-        <div class="line-row">
+      {#if canPin && entry.kind === 'chat' && entry.id}
+        {@const id = String(entry.id)}
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div
+          class="line-row"
+          data-line={id}
+          onpointerenter={(e) => e.pointerType === 'mouse' && (hot = id)}
+          onpointerleave={(e) => e.pointerType === 'mouse' && hot === id && !e.currentTarget.contains(document.activeElement) && (hot = '')}
+          onclick={() => (hot = id)}
+        >
           <LogLine {entry} {actors} />
-          <button type="button" class="quiet pinbtn" class:on={pins.includes(String(entry.id))} onclick={() => pin(String(entry.id))}
-            title="Keep it above the chat until it's dealt with">{pins.includes(String(entry.id)) ? 'Unpin' : 'Pin'}</button>
+          {#if hot === id || pins.includes(id)}
+            <button type="button" class="quiet pinbtn" class:on={pins.includes(id)} onclick={() => pin(id)} title="Keep it above the chat until it's dealt with">{pins.includes(id) ? 'Unpin' : 'Pin'}</button>
+          {/if}
         </div>
       {:else}
         <LogLine {entry} {actors} />
@@ -112,6 +170,9 @@
       <p class="dim empty">Nothing said or rolled yet. Rolls land here too.</p>
     {/each}
   </div>
+  {#if typers}
+    <p class="typing dim" transition:fade={{ duration: 400 }}>{typers}</p>
+  {/if}
   <form class="compose" onsubmit={(e) => { e.preventDefault(); sendIt(); }}>
     <div class="to" role="group" aria-label="Who reads it">
       <button type="button" class="chip" class:on={to.length === 0} onclick={() => (to = [])}>Everyone</button>
@@ -130,7 +191,7 @@
       {/if}
     </div>
     <div class="line">
-      <input type="text" placeholder="Say something…" bind:value={text} maxlength="2000" aria-label="Message" />
+      <input type="text" placeholder="Say something…" bind:value={text} maxlength="2000" aria-label="Message" oninput={(e) => typingSignal.input(e.currentTarget.value)} />
       <button type="submit" class="accent" disabled={!text.trim()}>Send</button>
     </div>
   </form>
@@ -151,17 +212,35 @@
     font-size: 0.75rem;
     padding: 2px 8px;
     min-height: 0;
-    opacity: 0;
   }
-  .line-row:hover .pinbtn,
-  .line-row:focus-within .pinbtn,
-  .pinbtn.on {
-    opacity: 1;
+  .pinbtn:not(.on) {
+    color: var(--muted);
   }
-  @media (hover: none) {
-    .pinbtn {
-      opacity: 0.8;
-    }
+  .entries:focus-visible {
+    outline: 2px solid var(--accent-soft);
+    outline-offset: -2px;
+  }
+  /* who is writing, under the talk */
+  .typing {
+    flex: none;
+    margin: 0;
+    padding: 2px 14px 4px;
+    font-size: 0.82rem;
+    font-style: italic;
+  }
+  .seeing {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+    border-bottom: 1px solid var(--border);
+  }
+  .seeing span {
+    flex: 1;
+    min-width: 0;
   }
   .pins {
     flex: none;

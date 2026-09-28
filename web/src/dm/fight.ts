@@ -92,6 +92,38 @@ export function nothingSince(scene: Dict, log: Dict[], players: string[]): { end
   return { ended, up: up || 'this' };
 }
 
+/** Is an actor down: hit points (any ruleset's `hp`) at 0 or below? It has nothing of its turn to use. */
+function down(actor: Dict | undefined): boolean {
+  for (const res of Object.values((actor?.resources ?? {}) as Dict)) {
+    const hp = res && typeof res === 'object' ? (res as Dict).hp : null;
+    if (hp && typeof hp === 'object' && hp.current !== undefined && Number(hp.current) <= 0) return true;
+  }
+  return false;
+}
+
+/** Next pressed on a player's turn while its counters (the ruleset's
+ *  budgets for the turn) still hold an action or a bonus action: what to
+ *  ask with ("Leo still has a bonus action."), or '' to go on. A playtest's
+ *  DM moved on twice before a bard had used his bonus action; the turn is
+ *  the player's to end. (One at 0 hit points has nothing to use: `actors`
+ *  are the view's, by id.) */
+export function unusedOnTurn(scene: Dict, players: string[], actors: Dict = {}): string {
+  const turns: Dict = scene.turns ?? {};
+  if (!turns.running || String(turns.mode ?? 'free') !== 'ordered' || String(turns.strategy ?? 'ordered') !== 'ordered') return '';
+  const tokens: Dict[] = (scene.tokens as Dict[]) ?? [];
+  const counters: Dict = turns.counters && typeof turns.counters === 'object' ? turns.counters : {};
+  const said: string[] = [];
+  for (const id of currentTurnTokens(turns, tokens)) {
+    const t = tokens.find((x) => x.id === id);
+    const c = counters[`token:${id}`];
+    if (!t || !players.includes(String(t.owner ?? '')) || !c || typeof c !== 'object') continue;
+    if (down(actors[String(t.actor ?? '')])) continue;
+    const left = [Number(c.actions ?? 0) > 0 ? 'an action' : '', Number(c.bonus ?? 0) > 0 ? 'a bonus action' : ''].filter(Boolean);
+    if (left.length) said.push(`${String(t.name ?? 'This character')} still has ${left.join(' and ')}.`);
+  }
+  return said.join(' ');
+}
+
 /** A ruleset's action that rolls initiative (and starts the turns): {plugin, action}, or null. */
 export function initiativeAction(view: Dict): { plugin: string; action: string } | null {
   for (const [plugin, actions] of Object.entries((view.actions ?? {}) as Dict)) {

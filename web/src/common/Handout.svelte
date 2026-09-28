@@ -9,8 +9,10 @@
   const img = $derived(handout.image ? pictureUrl(String(handout.image)) : '');
 </script>
 
+<!-- (the picture leaves room for the words: a playtest's picture took the card's
+     height, and the words' second paragraph sat below the fold, unseen) -->
 <Modal title={String(handout.title || 'From the DM')} wide {onclose}>
-  <div class="shown">
+  <div class="shown" class:words={String(handout.text ?? '').trim() !== ''}>
     {#if img}<img src={img} alt={String(handout.title ?? '')} />{/if}
     {#if String(handout.text ?? '').trim()}
       <div class="prose">{@html markdown(String(handout.text))}</div>
@@ -33,6 +35,9 @@
     object-fit: contain;
     border-radius: 10px;
     background: #0b0c0f;
+  }
+  .words img {
+    max-height: 38vh;
   }
   .prose {
     font-size: 1.05rem;

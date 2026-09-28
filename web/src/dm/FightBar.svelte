@@ -4,9 +4,10 @@
   initiative, next turn, end the fight.
 -->
 <script lang="ts">
-  import { dmOp, game, intent, type Dict } from '../lib/game.svelte';
+  import { dmOp, game, submit, type Dict } from '../lib/game.svelte';
   import Modal from '../common/Modal.svelte';
-  import { endedByPlayer, initiativeAction, nothingSince, orderRows } from './fight';
+  import ActButton from '../lib/views/ActButton.svelte';
+  import { endedByPlayer, initiativeAction, nothingSince, orderRows, unusedOnTurn } from './fight';
 
   let { fight }: { fight: Dict } = $props();
   const turns = $derived((game.scene.turns ?? {}) as Dict);
@@ -19,6 +20,9 @@
   let ending = $state(false);
   // Next with nothing done since a player ended their turn: asked first
   let asking = $state<{ ended: string; up: string } | null>(null);
+  // Next on a player's turn with an action or a bonus action still theirs:
+  // asked first too (a playtest's DM moved on twice before a bard's bonus action)
+  let unused = $state('');
   // one step at a time: a button waits for the turn to move (or three seconds);
   // a playtest's DM double-clicked Next turn on a slow table and skipped a turn
   let stepping = $state(false);
@@ -29,6 +33,7 @@
     if (stepping && now !== steppedFrom) stepping = false;
     // (the turn moved while the question was up: it no longer stands)
     if (asking && now !== askedAt) asking = null;
+    if (unused && now !== askedAt) unused = '';
   });
   function next(): void {
     if (stepping) return;
@@ -38,11 +43,18 @@
       askedAt = `${turns.round}/${turns.turn}/${turns.running}`;
       return;
     }
+    const left = unusedOnTurn(game.scene, players, (game.view.actors ?? {}) as Dict);
+    if (left) {
+      unused = left;
+      askedAt = `${turns.round}/${turns.turn}/${turns.running}`;
+      return;
+    }
     step('next');
   }
   function step(what: string): void {
     if (stepping) return;
     asking = null;
+    unused = '';
     stepping = true;
     steppedFrom = `${turns.round}/${turns.turn}/${turns.running}`;
     // Next says the turn it ends: one a player ended meanwhile is not ended twice
@@ -67,13 +79,20 @@
       <button type="button" class="accent" disabled={stepping} onclick={() => step('next')}>End {asking.up}’s turn</button>
       <button type="button" class="quiet" onclick={() => (asking = null)}>Not yet</button>
     </div>
+  {:else if unused}
+    <!-- (the player's to end: "X ended their turn" is the sign to move on) -->
+    <div class="buttons ask" role="group" aria-label="End the turn anyway?">
+      <span>{unused} End the turn anyway?</span>
+      <button type="button" class="accent" disabled={stepping} onclick={() => step('next')}>End it</button>
+      <button type="button" class="quiet" onclick={() => (unused = '')}>Not yet</button>
+    </div>
   {:else}
     <div class="buttons">
       {#if turns.running}
         <button type="button" disabled={stepping} onclick={() => step('previous')}>‹ Back</button>
         <button type="button" class="accent" disabled={stepping} onclick={next}>Next turn ›</button>
       {:else if roll}
-        <button type="button" class="accent" onclick={() => intent({ kind: 'action', plugin: roll.plugin, action: roll.action, ctx: { scene: String(game.scene.id ?? '') } })}>Roll initiative</button>
+        <ActButton accent label="Roll initiative" act={() => submit({ kind: 'action', plugin: roll.plugin, action: roll.action, ctx: { scene: String(game.scene.id ?? '') } })} />
       {:else}
         <button type="button" class="accent" disabled={stepping} onclick={() => step('start')}>Start turns</button>
       {/if}

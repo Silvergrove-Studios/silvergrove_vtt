@@ -3,6 +3,21 @@
 // asked for while on another tab).
 import type { Dict } from './views/viewlib';
 
+// what the DM showed, by the kind of card it came from (its ref's prefix)
+const SHOWN_KINDS: Record<string, string> = { place: 'a place', actor: 'someone', picture: 'a picture', note: 'a handout', handout: 'a handout' };
+
+/** The pill's words for something the DM showed that waits while I'm busy:
+ *  what it is, not just "look" (a playtest's players didn't know a pill from
+ *  a portrait). */
+export function handoutPill(h: Dict | null | undefined): string {
+  if (!h || typeof h !== 'object') return '';
+  const ref = String(h.ref ?? '');
+  const kind = SHOWN_KINDS[ref.includes(':') ? ref.split(':')[0] : ''] ?? '';
+  const title = String(h.title ?? '').trim();
+  if (!title) return `The DM is showing you ${kind || 'something'} ›`;
+  return `The DM is showing you ${kind ? `${kind}: ` : ''}${title} ›`;
+}
+
 /** The pill's words for the prompts waiting on me, the newest first.
     `names` gives my characters' names by id, said only when I have several. */
 export function pillText(prompts: Dict[], names: Record<string, string> = {}): string {
