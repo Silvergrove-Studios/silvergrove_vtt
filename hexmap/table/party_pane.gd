@@ -42,7 +42,9 @@ func bind() -> void:
 
 
 func _on_changed(what: String, _s: String) -> void:
-	if what in ["actors", "resources", "effects", "players", "restore", "encounter", "turns", "clock"]:
+	# (and the rulesets' own state, which a party view draws on: srd5e's rolls asked
+	# of the players — a playtest's DM saw a roll in the chat and "waiting" here)
+	if what in ["actors", "resources", "effects", "players", "restore", "encounter", "turns", "clock", "ext"]:
 		_queue()
 
 

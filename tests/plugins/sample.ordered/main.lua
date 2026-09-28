@@ -103,6 +103,8 @@ hm.ui.register("party", {
 		{ type = "form", fields = {
 			{ key = "who", label = "Who", type = "enum", from = { bind = "/actors", ["if"] = "@item.kind == 'pc'", first = { { id = "", name = "Everyone" } } } },
 		}, submit_label = "Rest", submit = { kind = "action", plugin = hm.id, action = "rest", ctx = { form = "$values" } } },
+		-- something of this plugin's encounter state (as srd5e's rolls asked are)
+		{ type = "text", expr = "'Asked: ' .. (@state.asked ?? 'nothing')", style = "dim" },
 	},
 })
 

@@ -380,6 +380,11 @@ func test_web_clients_on_the_host() -> void:
 	var dm_before := dm.count("dm")
 	kernel.commit([{"t": "log.add", "entry": {"id": "n_hp", "kind": "note", "text": "a goblin is hurt", "audience": "gm"}}], "Note")
 	check(_pump(host, [dm], func() -> bool: return dm.count("dm") > dm_before), "a rules change: the DM's state again (its party view draws from it)")
+	# a ruleset's encounter state alone (srd5e's rolls asked: a player's roll marks theirs
+	# rolled), with no actor changed: the DM's state again too
+	dm_before = dm.count("dm")
+	kernel.commit([{"t": "ext.set", "scope": "encounter", "id": "", "plugin": "sample", "changes": {"requests": [{"id": "rq_1", "waiting": 0}]}}], "Rolled")
+	check(_pump(host, [dm], func() -> bool: return dm.count("dm") > dm_before), "the ruleset's state alone: the DM's state again")
 	# chat: to everyone, to some players (the DM reads it), privately among players
 	var ben := "pl_393eb25a"
 	ana.send({"t": "intent", "intent": {"kind": "chat", "text": "Hello all", "to": "all"}})

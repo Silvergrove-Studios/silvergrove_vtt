@@ -1166,6 +1166,20 @@ func test_world_mode() -> void:
 			check(ref.current == "actor:a_h" and _find_label(ref, "Defence") != null, "his name opens his sheet in the Reference")
 		var who := _find_first(win.party_pane, "OptionButton") as OptionButton
 		check(who != null and who.item_count == 2 and who.get_item_text(0) == "Everyone" and who.get_item_text(1) == "Hero", "a form's choices from the data: everyone, or Hero")
+		# the ruleset's encounter state, which a party view draws on (srd5e's rolls asked
+		# of the players): a change to it alone redraws the pane (a playtest's DM saw a
+		# player's roll in the chat, and "waiting" in the list)
+		await tree.process_frame
+		await tree.process_frame
+		check(_find_label(win.party_pane, "Asked: nothing") != null and not win.party_pane._queued, "the party view draws the ruleset's state, and nothing waits to be drawn")
+		check(ctx.kernel.commit([{"t": "ext.set", "scope": "encounter", "id": "", "plugin": "sample.ordered", "changes": {"asked": "Perception"}}], "Asked") == "", "the state changes, and nothing else")
+		await tree.process_frame
+		check(_find_label(win.party_pane, "Asked: Perception") != null, "the Party pane says so at once")
+		var drawn := {}
+		for pv in win.web_dm.state().party_views:
+			if str(pv.plugin) == "sample.ordered":
+				drawn = pv.data.state
+		check(str(drawn.get("asked", "")) == "Perception", "and the DM's web screen draws it from the same state: %s" % [drawn])
 		check(GmIntents.run(ctx, {"kind": "show", "actor": "a_hessa"}) == "" and ref.current == "actor:a_hessa", "a show intent by an actor's id")
 	# the chapel's card launches the fight: the Fight, then back to the World
 	ref.open("place:" + ruins)
