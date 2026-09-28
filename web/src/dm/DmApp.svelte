@@ -19,7 +19,6 @@
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
   import { chatLog, comp, connect, dmOp, game, intent, join, notice, playerColors, request, submit, type Dict } from '../lib/game.svelte';
-  import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
@@ -92,13 +91,57 @@
   const sceneName = $derived(String(game.scene.name ?? '') || String(((dm.maps as Dict[]) ?? []).find((m) => m.id === game.scene.map)?.name ?? ''));
   const online = $derived(new Set(game.online.map(String)));
   const session = $derived((dm.session ?? {}) as Dict);
-  // what of the chat is new to the DM: the lines after the last one read,
-  // which this browser keeps (a reload counted the whole log as new: a
-  // playtest's badge said 279). The fight side shows the chat too.
-  const chatLines = $derived(chatIds(chatLog()));
-  let lastRead = $state<string | null>(null); // (null till the first view)
-  const unread = $derived(lastRead === null ? 0 : unreadAfter(chatLines, lastRead));
-  const chatShown = $derived(side === 'chat' || side === 'fight');
+  // the chat under the party and the fight, as tall as the DM drags it (a
+  // playtest's DM on a 13-inch laptop went between the Party and Chat tabs
+  // dozens of times, and a first message was lost behind Party); its share of
+  // the column is kept in this browser
+  const CHAT_SHARE = { min: 20, max: 80, start: 40 };
+  const SHARE_KEY = 'hexmap.dm.chat_share';
+  let chatShare = $state(readShare());
+  let rightBody = $state<HTMLDivElement>();
+  function readShare(): number {
+    try {
+      const v = Number(localStorage.getItem(SHARE_KEY));
+      return v >= CHAT_SHARE.min && v <= CHAT_SHARE.max ? v : CHAT_SHARE.start;
+    } catch {
+      return CHAT_SHARE.start;
+    }
+  }
+  function setShare(v: number, keep = true): void {
+    chatShare = Math.round(Math.min(CHAT_SHARE.max, Math.max(CHAT_SHARE.min, v)));
+    if (!keep) return;
+    try {
+      localStorage.setItem(SHARE_KEY, String(chatShare));
+    } catch {
+      // (a browser that keeps nothing: the share lasts the page)
+    }
+  }
+  function dragShare(e: PointerEvent): void {
+    const bar = e.currentTarget as HTMLElement;
+    bar.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => {
+      const box = rightBody?.getBoundingClientRect();
+      if (box && box.height > 0) setShare(((box.bottom - m.clientY) / box.height) * 100, false);
+    };
+    const up = () => {
+      bar.removeEventListener('pointermove', move);
+      bar.removeEventListener('pointerup', up);
+      bar.removeEventListener('pointercancel', up);
+      setShare(chatShare);
+    };
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', up);
+    bar.addEventListener('pointercancel', up);
+  }
+  // the keys a window splitter takes: arrows a step, Home and End the least and most
+  function keyShare(e: KeyboardEvent): void {
+    const step = ({ ArrowUp: 5, ArrowDown: -5, PageUp: 20, PageDown: -20 } as Record<string, number>)[e.key];
+    if (step) setShare(chatShare + step);
+    else if (e.key === 'Home') setShare(CHAT_SHARE.min);
+    else if (e.key === 'End') setShare(CHAT_SHARE.max);
+    else return;
+    e.preventDefault();
+  }
   const activeToken = $derived(currentTurnTokens((game.scene.turns ?? {}) as Dict, (game.scene.tokens as Dict[]) ?? [])[0] ?? '');
   // the fight panel follows the turn to a creature the DM runs (a playtest's DM
   // kept seeing the last creature tapped, not the one whose turn it was)
@@ -127,17 +170,6 @@
     }
     if (!live && wasLive && side === 'fight') side = 'party';
     wasLive = live;
-  });
-
-  $effect(() => {
-    if (lastRead === null && 'log' in game.view) lastRead = startFrom(chatLines, loadRead(game.table, 'dm'));
-  });
-  $effect(() => {
-    const newest = chatLines[chatLines.length - 1] ?? '';
-    if (lastRead !== null && chatShown && newest !== '' && newest !== lastRead) lastRead = newest;
-  });
-  $effect(() => {
-    if (lastRead) saveRead(game.table, 'dm', lastRead);
   });
 
   // the table's rules chosen before anyone makes a character: one is made by
@@ -463,13 +495,13 @@
         <div class="tabs" role="tablist">
           <button type="button" role="tab" aria-selected={side === 'party'} class:on={side === 'party'} onclick={() => (side = 'party')}>Party</button>
           <button type="button" role="tab" aria-selected={side === 'chat'} class:on={side === 'chat'} onclick={() => (side = 'chat')}>
-            Chat &amp; rolls{#if !chatShown && unread > 0}<span class="badge">{unread}</span>{/if}
+            Chat &amp; rolls
           </button>
           {#if fight}
             <button type="button" role="tab" aria-selected={side === 'fight'} class:on={side === 'fight'} onclick={() => (side = 'fight')}>Fight</button>
           {/if}
         </div>
-        <div class="rightbody">
+        <div class="rightbody" class:split={side !== 'chat'} bind:this={rightBody} style:--top-fr={`${100 - chatShare}fr`} style:--chat-fr={`${chatShare}fr`}>
           {#if side === 'party'}
             <div class="party scroll">
               {#each (dm.party_views as Dict[]) ?? [] as pv (pv.plugin)}
@@ -482,22 +514,24 @@
                 {/each}
               {/each}
             </div>
-          {:else if side === 'chat'}
-            <Chat />
-          {:else}
-            <!-- the fight with the talk beneath it (a playtest's DM went between
-                 Fight and Chat dozens of times a fight); the talk a pane of its
-                 own, headed, so the stat block's clipped edge doesn't run into
-                 the roll cards (a playtest's DM took the chat for covering the
-                 monster's Use and Save buttons) -->
-            <div class="fightside">
-              <div class="fightpanel"><FightPanel {selected} onselect={(id) => (selected = id)} onopen={open} /></div>
-              <section class="fightchat" aria-labelledby="fightchat-head">
-                <h2 class="panehead" id="fightchat-head">Chat &amp; rolls</h2>
-                <Chat compact />
-              </section>
-            </div>
+          {:else if side === 'fight'}
+            <div class="fightpanel"><FightPanel {selected} onselect={(id) => (selected = id)} onopen={open} /></div>
           {/if}
+          {#if side !== 'chat'}
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+            <div class="divider" role="separator" aria-orientation="horizontal" aria-label="The chat's height" aria-controls="sidechat"
+              aria-valuemin={CHAT_SHARE.min} aria-valuemax={CHAT_SHARE.max} aria-valuenow={chatShare} tabindex="0"
+              title="Drag for more or less chat (double-click: as it was)"
+              onpointerdown={dragShare} onkeydown={keyShare} ondblclick={() => setShare(CHAT_SHARE.start)}></div>
+          {/if}
+          <!-- one chat for all three tabs, so a half-written message stays
+               put; headed when it shares the column, so the stat block's
+               clipped edge doesn't run into the roll cards (a playtest's DM
+               took the chat for covering the monster's Use and Save buttons) -->
+          <section class="sidechat" class:beside={side !== 'chat'} id="sidechat" aria-labelledby={side !== 'chat' ? 'sidechat-head' : undefined}>
+            {#if side !== 'chat'}<h2 class="panehead" id="sidechat-head">Chat &amp; rolls</h2>{/if}
+            <Chat compact={side !== 'chat'} />
+          </section>
         </div>
       </aside>
     </div>
@@ -594,27 +628,33 @@
   .seeing span {
     flex: 1;
   }
-  .fightside {
-    height: 100%;
-    display: grid;
-    grid-template-rows: minmax(0, 3fr) minmax(200px, 2fr);
-    min-height: 0;
-  }
   .fightpanel {
     min-height: 0;
     overflow: hidden;
   }
-  .fightchat {
+  .sidechat {
     display: flex;
     flex-direction: column;
     overflow: hidden;
     min-height: 0;
-    background: var(--panel);
-    border-top: 2px solid var(--border);
   }
-  .fightchat > :global(.chat) {
+  .sidechat.beside {
+    background: var(--panel);
+  }
+  .sidechat > :global(.chat) {
     flex: 1;
     min-height: 0;
+  }
+  .divider {
+    cursor: row-resize;
+    touch-action: none;
+    background: var(--border);
+    border-block: 3px solid var(--bg);
+  }
+  .divider:hover,
+  .divider:focus-visible {
+    background: var(--accent-soft);
+    outline: none;
   }
   .panehead {
     flex: none;
@@ -855,19 +895,6 @@
     color: var(--text);
     border-bottom-color: var(--accent);
   }
-  .badge {
-    margin-left: 6px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-ink);
-    font-size: 0.7rem;
-    font-weight: 700;
-    display: inline-grid;
-    place-items: center;
-  }
   .rightbody {
     flex: 1;
     min-height: 0;
@@ -877,6 +904,11 @@
   .rightbody > :global(*) {
     flex: 1;
     min-height: 0;
+  }
+  /* the party or the fight, the bar, the chat: as the DM last dragged it */
+  .rightbody.split {
+    display: grid;
+    grid-template-rows: minmax(0, var(--top-fr, 60fr)) 9px minmax(140px, var(--chat-fr, 40fr));
   }
   .party {
     padding: 12px 14px 32px;

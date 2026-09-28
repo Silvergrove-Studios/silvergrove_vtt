@@ -284,6 +284,8 @@ await step('a new player makes a character with the wizard', async () => {
 
 await step('the DM asks the party for a roll; each player rolls their own', async () => {
   await dm.getByRole('tab', { name: 'Party' }).click();
+  // the chat under the party, not behind a tab (a playtest's DM lost a first message behind Party)
+  await dm.locator('.sidechat').getByLabel('Message').waitFor({ timeout: 5000 });
   const rolls = () => dm.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'roll').length);
   const before = await rolls();
   await dm.getByRole('button', { name: 'Ask', exact: true }).click();
@@ -552,8 +554,20 @@ await step('the DM makes a fight of their own: a goblin, started, ended', async 
   await dm.getByRole('button', { name: 'Start the fight' }).click();
   await dm.locator('.fightbar').waitFor({ timeout: 10000 });
   // the chat beside the fight, a pane of its own
-  await dm.locator('.fightchat').getByLabel('Message').waitFor({ timeout: 5000 });
-  await dm.locator('.fightchat').getByRole('heading', { name: 'Chat & rolls' }).waitFor({ timeout: 5000 });
+  await dm.locator('.sidechat').getByLabel('Message').waitFor({ timeout: 5000 });
+  await dm.locator('.sidechat').getByRole('heading', { name: 'Chat & rolls' }).waitFor({ timeout: 5000 });
+  // as tall as the DM makes it: the bar between takes the keys, and its height is kept
+  const bar = dm.getByRole('separator', { name: "The chat's height" });
+  const share = async () => Number(await bar.getAttribute('aria-valuenow'));
+  const was = await share();
+  await bar.focus();
+  await dm.keyboard.press('ArrowUp');
+  if ((await share()) !== Math.min(80, was + 5)) throw new Error(`ArrowUp: the chat's share went from ${was} to ${await share()}`);
+  await dm.keyboard.press('Home');
+  if ((await share()) !== 20) throw new Error(`Home: the chat's share is ${await share()}`);
+  if ((await dm.evaluate(() => localStorage.getItem('hexmap.dm.chat_share'))) !== '20') throw new Error("the chat's height wasn't kept");
+  await bar.dblclick();
+  if ((await share()) !== 40) throw new Error(`a double-click left the share at ${await share()}`);
   await shot(dm, 'dm_new_fight_on');
   await dm.locator('.fightbar').getByRole('button', { name: 'End the fight' }).click();
   await dm.getByRole('dialog', { name: 'End the fight?' }).getByRole('button', { name: 'End the fight' }).click();
