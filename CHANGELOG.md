@@ -203,6 +203,54 @@ The team's notes on making a character in the third playtest
 - Players' devices are sent a map without the DM's notes on it (a note
   the DM shows arrives when shown); protocol 3.
 
+- **What the fourth table found**, and what the owner saw in its
+  screenshots: walls a player had never seen, drawn on their map. A
+  player now sees only the stretches of a wall they have seen — a
+  building's outline is often one wall, and seeing its west face drew
+  the whole building, far sides too. **Theatre of the mind:** a spell or
+  an attack needs no target. The pick has *No target: just roll*, and on
+  the region, or with no scene, Cast, Attack and a creature's Use go at
+  once with `ctx.no_target`; the host lets such an intent through even
+  for an action that wants a token, and a ruleset rolls and shows
+  everything and applies nothing (the attack roll without an AC, damage,
+  a save's DC, each dart). **Picks by name:** while a pick waits, its
+  banner lists the creatures in sight as buttons, "Goblin Warrior
+  (GW1)", the party last (agents playing through the accessibility tree
+  had far more trouble with line of sight than people, and screen-reader
+  users couldn't pick at all); several creatures toggle with a count,
+  and darts count ×n with − to take one back ("3 darts: tap a creature
+  for each dart (the same one again for another), then Done"). **The
+  dead** are drawn faded and small, under the living and off to a corner
+  of a cell they share, and are never listed or picked ("That one's
+  dead"), unless the pick is for the dead (`dead: true`). A refused move
+  says why: the fight hasn't started, whose turn it is (not a hidden
+  creature's name), or that the token isn't yours.
+- On the DM's battle map: the fight bar keeps a fixed height, so the map
+  never moves under a tap; in a fight, map notes lie under the tokens
+  and fade where one covers them; *Move the party here* (side by side
+  on free cells, or the ★ on the region; place cards have it too);
+  *+ A token*, for a thing or a person with no stat block; a creature
+  opened from the book during a fight shows its stat block; a drag on a
+  cell the ★ shares with a place takes the ★. Host operations
+  `party_here`, `party_to_place`, `add_token` and `remove_token`; each
+  web scene says its `role` (battle or regional); `web_host.gd
+  --web-root` serves a scratch build.
+- On the web screens: a button shows it's working and then ✓, and an
+  action with nothing else to show says what it did (the host sends the
+  changed views before `done`); a card or a question that arrives while
+  you're typing, or just after a press, waits behind a pill that names
+  it and pulses; Look up takes the keyboard and its results look like
+  buttons; "Leo is typing…" (intent `typing`, passed only to those who'd
+  read the line, never logged); Leave is in a ⋯ menu, and no screen uses
+  the browser's own `confirm`, `alert` or `prompt`; the DM's coach
+  starts with the table's rules, before inviting anyone; one Pin at a
+  time in the chat; a long card says *More ↓*; the DM's Next asks when
+  the player still has an action or a bonus action; *See as* shows that
+  player's chat as well; the DM's chat sits under the party and the
+  fight, as tall as the DM drags it; a timed effect says its time left
+  ("Concentrating: Detect Magic · 8 min left"), on the Table too; the
+  Table's Party pane redraws when a ruleset's state changes.
+
 ## 2.3.1 — 2026-09-25
 
 After the DM's first notes in the third playtest (`docs/playtest-3.md`).
