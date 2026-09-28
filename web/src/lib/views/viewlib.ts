@@ -102,6 +102,17 @@ export function optionLabel(it: unknown): string {
   return String(it);
 }
 
+/** What a picker's choice button says: its `pick_label` (an Expr over @item,
+ * "'Learn ' .. @item.name") when it has one, else the option's own name (a
+ * playtest's player found a spell's Read button but not how to learn it). */
+export function pickLabel(node: Dict, it: unknown, ctx: Dict): string {
+  if (node.pick_label && it && typeof it === 'object') {
+    const s = Expr.evaluateText(String(node.pick_label), { ...ctx, item: it });
+    if (s !== '') return s;
+  }
+  return optionLabel(it);
+}
+
 export function optionId(it: unknown): string {
   if (it && typeof it === 'object') {
     const d = it as Dict;
@@ -110,20 +121,25 @@ export function optionId(it: unknown): string {
   return String(it);
 }
 
-/** The choices a `from` spec names: its `first` records, then the records at `bind` passing `if`. */
+/** The choices a `from` spec names: its `first` records, then the records at
+ * `bind` passing `if`, then its `last` records (a DM's "Someone else…" after
+ * the party's characters). */
 export function optionsFrom(spec: Dict, ctx: Dict): { id: string; name: string }[] {
   const out: { id: string; name: string }[] = [];
-  for (const r of (spec.first as Dict[]) ?? []) if (r && typeof r === 'object') out.push({ id: String(r.id ?? ''), name: String(r.name ?? r.id ?? '') });
+  const fixed = (list: unknown): void => {
+    for (const r of Array.isArray(list) ? list : []) if (r && typeof r === 'object') out.push({ id: String(r.id ?? ''), name: String(r.name ?? r.id ?? '') });
+  };
+  fixed(spec.first);
   let items = atPointer(ctx, String(spec.bind ?? ''));
   if (items && typeof items === 'object' && !Array.isArray(items)) items = Object.values(items);
-  if (!Array.isArray(items)) return out;
-  for (const it of items) {
+  for (const it of Array.isArray(items) ? items : []) {
     const sub = { ...ctx, item: it };
     if ('if' in spec && !truthy(Expr.evaluate(String(spec.if), sub))) continue;
     const id = Expr.evaluate(String(spec.id ?? '@item.id'), sub);
     const label = Expr.evaluate(String(spec.label ?? '@item.name'), sub);
     out.push({ id: id === null ? '' : String(id), name: label === null ? String(id) : String(label) });
   }
+  fixed(spec.last);
   return out;
 }
 

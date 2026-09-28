@@ -4,11 +4,14 @@
   Choosing sends on_pick with @pick (or, with multi, @picks on Done). The
   query's `{expr}` values are worked out from the data (a class's spells
   up to the level it casts); `sub` is a line under each name (an Expr over
-  @item), `detail` a collection whose card a "?" opens.
+  @item), `detail` a collection whose card a "?" opens. With `pick_label`
+  (an Expr over @item: "'Learn ' .. @item.name") each choice is a button
+  saying what it does, and the card's "?" says "Read" (a playtest's player
+  found a spell's Read button, but not how to learn it).
 -->
 <script lang="ts">
   import { viewUi } from './context';
-  import { fillIntent, matchWords, optionId, optionLabel, valueOf, type Dict, clone } from './viewlib';
+  import { fillIntent, matchWords, optionId, optionLabel, pickLabel, valueOf, type Dict, clone } from './viewlib';
   import { resolve } from './fieldcheck';
   import { Expr } from '../expr';
 
@@ -91,11 +94,11 @@
           </label>
         {:else}
           <div class="row">
-            <button type="button" class="opt" onclick={() => pick(it)}>
-              <span class="name">{optionLabel(it)}</span>
+            <button type="button" class="opt" class:labelled={!!node.pick_label} onclick={() => pick(it)}>
+              <span class="name">{pickLabel(node, it, ctx)}</span>
               {#if node.sub}<span class="sub">{sub(it)}</span>{/if}
             </button>
-            {#if node.detail}<button type="button" class="more" aria-label={`Read ${optionLabel(it)}`} onclick={() => ui.intent({ kind: 'lookup', collection: String(node.detail), id: optionId(it) })}>?</button>{/if}
+            {#if node.detail}<button type="button" class="more" class:labelled={!!node.pick_label} aria-label={`Read ${optionLabel(it)}`} onclick={() => ui.intent({ kind: 'lookup', collection: String(node.detail), id: optionId(it) })}>{node.pick_label ? 'Read' : '?'}</button>{/if}
           </div>
         {/if}
       </li>
@@ -159,5 +162,18 @@
     width: 40px;
     padding: 0;
     border-radius: 8px;
+  }
+  /* a choice that says what it does looks like the button it is */
+  .opt.labelled {
+    border: 1px solid var(--accent-soft, var(--accent));
+    margin: 2px 0;
+  }
+  .opt.labelled .name {
+    font-weight: 600;
+  }
+  .more.labelled {
+    width: auto;
+    padding: 0 12px;
+    margin: 2px 0;
   }
 </style>

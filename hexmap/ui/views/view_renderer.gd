@@ -30,7 +30,7 @@ extends VBoxContainer
 ##   form {fields (PropertyForm schema), submit (intent), label}
 ##       a field of type "list" with its own `fields` is a repeater
 ##   log {bind, limit}
-##   picker {label, bind | collection, query, fields, search, multi, on_pick, per_page}
+##   picker {label, bind | collection, query, fields, search, multi, on_pick, per_page, sub, pick_label}
 ##       a searchable list to choose from: a bound list of strings or
 ##       {id, name|label}, or a compendium collection fetched through
 ##       `comp_source` a page at a time; the choice sends on_pick with
@@ -710,14 +710,19 @@ func _picker(n: Dictionary, ctx: Dictionary) -> Control:
 	box.add_child(status)
 	# each row keeps the record it stands for as its metadata; its `sub` (an
 	# Expr over @item: a price, a spell's level) beside its name, as the web
-	# draws it under it
+	# draws it under it; with `pick_label` the row says what choosing it does
+	# ("Learn Fire Bolt": a playtest's player found no word for it)
 	var fill := func(items: Array, total: int) -> void:
 		list.clear()
 		for it in items:
 			var label := _option_label(it)
+			var sub_ctx: Dictionary = ctx.duplicate()
+			sub_ctx.item = it
+			if n.has("pick_label") and it is Dictionary:
+				var said := _text(Expr.evaluate(str(n.pick_label), sub_ctx))
+				if said != "":
+					label = said
 			if n.has("sub") and it is Dictionary:
-				var sub_ctx: Dictionary = ctx.duplicate()
-				sub_ctx.item = it
 				var sub := _text(Expr.evaluate(str(n.sub), sub_ctx))
 				if sub != "":
 					label += "  ·  " + sub
@@ -1121,18 +1126,19 @@ static func _with_options(field: Dictionary, ctx: Dictionary) -> Dictionary:
 
 
 ## The choices a `from` spec names: its `first` records, then the records
-## at `bind` passing `if`, as {id, name}.
+## at `bind` passing `if`, then its `last` records (a DM's "Someone else…"
+## after the party's characters), as {id, name}.
 static func options_from(spec: Dictionary, ctx: Dictionary) -> Array:
 	var out: Array = []
-	for r in spec.get("first", []):
-		if r is Dictionary:
-			out.append({"id": str(r.get("id", "")), "name": str(r.get("name", r.get("id", "")))})
+	var fixed := func(list: Variant) -> void:
+		for r in (list if list is Array else []):
+			if r is Dictionary:
+				out.append({"id": str(r.get("id", "")), "name": str(r.get("name", r.get("id", "")))})
+	fixed.call(spec.get("first", []))
 	var items: Variant = at_pointer(ctx, str(spec.get("bind", "")))
 	if items is Dictionary:
 		items = (items as Dictionary).values()
-	if not (items is Array):
-		return out
-	for it in items:
+	for it in (items if items is Array else []):
 		var sub: Dictionary = ctx.duplicate()
 		sub.item = it
 		if spec.has("if") and not Expr.truthy(Expr.evaluate(str(spec["if"]), sub)):
@@ -1140,6 +1146,7 @@ static func options_from(spec: Dictionary, ctx: Dictionary) -> Array:
 		var id: Variant = Expr.evaluate(str(spec.get("id", "@item.id")), sub)
 		var label: Variant = Expr.evaluate(str(spec.get("label", "@item.name")), sub)
 		out.append({"id": str(id) if id != null else "", "name": str(label) if label != null else str(id)})
+	fixed.call(spec.get("last", []))
 	return out
 
 
