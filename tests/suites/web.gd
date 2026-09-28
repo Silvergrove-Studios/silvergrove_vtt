@@ -466,6 +466,52 @@ func test_a_refused_move_says_why() -> void:
 	host.stop()
 
 
+## An action sent with no target at all goes to the ruleset as it is (the
+## owner: people play theatre of the mind with no tokens all the time, and
+## still need to see the rolls: the ruleset rolls and applies nothing); the
+## host checks a target only when the intent doesn't say it has none. In
+## the fifth playtest's journey an attack with no target never reached the
+## rules: "this action wants a token as its target".
+func test_an_action_with_no_target_reaches_the_rules() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var dir := "user://web_no_target_test"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var app := App.new("user://test_prefs_web_no_target.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	var c := Campaign.create("No tokens")
+	c.plugins.append({"id": "sample.ordered"})
+	check(c.save(dir.path_join("none.campaign")) == OK, "saved")
+	win._open_path(dir.path_join("none.campaign"))
+	await tree.process_frame
+	win.host_port = 0
+	win.web_port = 0
+	win._set_hosting(true)
+	var host := win.host
+	check(host != null and host.plugins != null and host.plugins.plugins.has("sample.ordered"), "hosting, with the sample rules")
+	var dm := WebClient.new(host.port)
+	_pump(host, [dm], func() -> bool: return dm.open())
+	dm.send({"t": "hello", "version": Protocol.VERSION, "name": "dm", "web": true})
+	dm.send({"t": "join", "role": "dm", "token": host.dm_token})
+	check(_pump(host, [dm], func() -> bool: return not dm.last("joined").is_empty()), "the DM's screen joins")
+	var shove := func(ctx: Dictionary, req: String) -> String:
+		dm.send({"t": "intent", "req": req, "intent": {"kind": "action", "plugin": "sample.ordered", "action": "shove", "ctx": ctx}})
+		_pump(host, [dm], func() -> bool: return str(dm.last("refused").get("req", "")) == req or str(dm.last("done").get("req", "")) == req)
+		return str(dm.last("refused").get("why", "")) if str(dm.last("refused").get("req", "")) == req else ""
+	check(shove.call({"actor": "a_x"}, "n1") == "this action wants a token as its target", "a shove with no target, not saying so: the host asks for one")
+	var why: String = shove.call({"actor": "a_x", "no_target": true}, "n2")
+	check(why != "" and not why.contains("as its target"), "one sent with no target reaches the rules, which say what they make of it: %s" % why)
+	win._set_hosting(false)
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(dir.path_join("none.campaign"))
+	DirAccess.remove_absolute(dir)
+
+
 ## The DM screen's Next says the turn it showed (`from`): in a playtest a
 ## player's End turn and the DM's Next a few seconds apart took two turns.
 func test_dm_next_names_the_turn_it_ends() -> void:

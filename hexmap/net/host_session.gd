@@ -623,9 +623,13 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				return "that is not your character"
 			if not gm and ctx.get("token") != null and str(ctx.token) != "" and not _owns_token(pid, str(ctx.token)):
 				return "that is not your token"
-			# a target picked on the map must be one this viewer may pick
+			# a target picked on the map must be one this viewer may pick; one
+			# sent with none at all (`no_target`: theatre of the mind, with no
+			# tokens, the ruleset rolling everything and applying nothing) goes
+			# to the ruleset as it is
 			var kind := str(p.actions[action].get("target", ""))
-			if kind in ["token", "cell", "area"]:
+			var none: bool = ctx.get("no_target") == true and ctx.get("target") == null
+			if kind in ["token", "cell", "area"] and not none:
 				var sc := str(ctx.get("scene", state.encounter.active_scene_id))
 				var why_t := PluginHost.check_target(state, sc, kind, ctx.get("target"), gm)
 				if why_t != "":
