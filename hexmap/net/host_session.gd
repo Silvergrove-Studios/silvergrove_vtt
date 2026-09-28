@@ -623,13 +623,12 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				return "that is not your character"
 			if not gm and ctx.get("token") != null and str(ctx.token) != "" and not _owns_token(pid, str(ctx.token)):
 				return "that is not your token"
-			# a target picked on the map must be one this viewer may pick; one
-			# sent with none at all (`no_target`: theatre of the mind, with no
-			# tokens, the ruleset rolling everything and applying nothing) goes
-			# to the ruleset as it is
+			# a target picked on the map must be one this viewer may pick; an intent
+			# sent with no target at all, saying so (ctx.no_target: the theatre of the
+			# mind, or a fight with no battle map), is the ruleset's to roll without one
 			var kind := str(p.actions[action].get("target", ""))
-			var none: bool = ctx.get("no_target") == true and ctx.get("target") == null
-			if kind in ["token", "cell", "area"] and not none:
+			var unaimed := bool(ctx.get("no_target", false)) and (ctx.get("target") == null or str(ctx.get("target")) == "")
+			if kind in ["token", "cell", "area"] and not unaimed:
 				var sc := str(ctx.get("scene", state.encounter.active_scene_id))
 				var why_t := PluginHost.check_target(state, sc, kind, ctx.get("target"), gm)
 				if why_t != "":
