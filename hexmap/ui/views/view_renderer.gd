@@ -30,7 +30,7 @@ extends VBoxContainer
 ##   form {fields (PropertyForm schema), submit (intent), label}
 ##       a field of type "list" with its own `fields` is a repeater
 ##   log {bind, limit}
-##   picker {label, bind | collection, query, fields, search, multi, on_pick, per_page}
+##   picker {label, bind | collection, query, fields, search, multi, on_pick, per_page, sub, pick_label}
 ##       a searchable list to choose from: a bound list of strings or
 ##       {id, name|label}, or a compendium collection fetched through
 ##       `comp_source` a page at a time; the choice sends on_pick with
@@ -710,14 +710,19 @@ func _picker(n: Dictionary, ctx: Dictionary) -> Control:
 	box.add_child(status)
 	# each row keeps the record it stands for as its metadata; its `sub` (an
 	# Expr over @item: a price, a spell's level) beside its name, as the web
-	# draws it under it
+	# draws it under it; with `pick_label` the row says what choosing it does
+	# ("Learn Fire Bolt": a playtest's player found no word for it)
 	var fill := func(items: Array, total: int) -> void:
 		list.clear()
 		for it in items:
 			var label := _option_label(it)
+			var sub_ctx: Dictionary = ctx.duplicate()
+			sub_ctx.item = it
+			if n.has("pick_label") and it is Dictionary:
+				var said := _text(Expr.evaluate(str(n.pick_label), sub_ctx))
+				if said != "":
+					label = said
 			if n.has("sub") and it is Dictionary:
-				var sub_ctx: Dictionary = ctx.duplicate()
-				sub_ctx.item = it
 				var sub := _text(Expr.evaluate(str(n.sub), sub_ctx))
 				if sub != "":
 					label += "  ·  " + sub

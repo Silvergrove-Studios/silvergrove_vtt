@@ -342,7 +342,9 @@ again with a change or two), `log {limit}`, `spacer`, and:
   data (`level = {max = {expr = "@derived.spell.classes.druid.max_level"}}`:
   a class's spells up to the level it casts). `sub` is a line under each
   name (an Expr over `@item`), `detail` a collection whose card a "?"
-  opens. A choice sends `on_pick` with `@pick` (the record) and
+  opens. `pick_label` (an Expr over `@item`, `"'Learn ' .. @item.name"`)
+  makes each choice a button that says what it does, and the card's "?"
+  a Read button. A choice sends `on_pick` with `@pick` (the record) and
   `@pick_id`; with `multi`, a Done button sends `@picks` (the ids). This
   is how a Player picks a feat, prepares spells, or an encounter builder
   lists monsters. Its search, like a `choose` field's and a collection

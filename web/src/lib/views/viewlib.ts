@@ -102,6 +102,17 @@ export function optionLabel(it: unknown): string {
   return String(it);
 }
 
+/** What a picker's choice button says: its `pick_label` (an Expr over @item,
+ * "'Learn ' .. @item.name") when it has one, else the option's own name (a
+ * playtest's player found a spell's Read button but not how to learn it). */
+export function pickLabel(node: Dict, it: unknown, ctx: Dict): string {
+  if (node.pick_label && it && typeof it === 'object') {
+    const s = Expr.evaluateText(String(node.pick_label), { ...ctx, item: it });
+    if (s !== '') return s;
+  }
+  return optionLabel(it);
+}
+
 export function optionId(it: unknown): string {
   if (it && typeof it === 'object') {
     const d = it as Dict;

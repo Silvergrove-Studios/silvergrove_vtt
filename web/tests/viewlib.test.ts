@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atPointer, facts, fillIntent, matchWords, num, optionsFrom, putValue, textOf, valueOf, wordsOf } from '../src/lib/views/viewlib';
+import { atPointer, facts, fillIntent, matchWords, num, optionsFrom, pickLabel, putValue, textOf, valueOf, wordsOf } from '../src/lib/views/viewlib';
 
 describe('views', () => {
   const data = { actor: { name: 'Ana', stats: { dex: 14 } }, list: [{ id: 'a', name: 'Alpha', ok: true }, { id: 'b', name: 'Beta', ok: false }], 'a/b': 1 };
@@ -34,6 +34,14 @@ describe('views', () => {
       { id: 'else', name: 'Someone else…' },
     ]);
     expect(optionsFrom({ bind: '/nothing', last: [{ id: 'else', name: 'Someone else…' }] }, data)).toEqual([{ id: 'else', name: 'Someone else…' }]);
+  });
+  it("says what a picker's choice does", () => {
+    // (a playtest's player found a spell's Read button, but not how to learn it)
+    const spell = { id: 'fire-bolt', name: 'Fire Bolt', level: 0 };
+    expect(pickLabel({ pick_label: "'Learn ' .. @item.name" }, spell, data)).toBe('Learn Fire Bolt');
+    expect(pickLabel({}, spell, data)).toBe('Fire Bolt');
+    expect(pickLabel({ pick_label: "'Learn ' .. @item.name" }, 'plain', data)).toBe('plain');
+    expect(pickLabel({ pick_label: '@item.nothing.here' }, spell, data)).toBe('Fire Bolt');
   });
   it('finds a name by the starts of its words, in any order, whatever the punctuation', () => {
     // (a playtest's DM found nothing for "Lantern, Hooded" nor "thieves' tools")

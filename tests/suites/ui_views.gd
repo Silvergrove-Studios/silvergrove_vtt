@@ -285,6 +285,14 @@ func test_pickers_wizards_repeaters_and_fields() -> void:
 	var sl: ItemList = _all(shop, "ItemList")[0]
 	check(sl.get_item_text(0) == "Rope  ·  1 GP" and sl.get_item_text(1) == "Chalk", "the sub line beside a record's name: %s" % [sl.get_item_text(0)])
 	shop.queue_free()
+	# a `pick_label` says what choosing does (a playtest's player found a spell's
+	# Read button, but not how to learn it)
+	var learn := ViewRenderer.new()
+	root.add_child(learn)
+	learn.render({"type": "picker", "bind": "/spells", "pick_label": "'Learn ' .. @item.name", "sub": "'Cantrip'", "on_pick": {}}, {"spells": [{"id": "fire-bolt", "name": "Fire Bolt"}, "Light"]})
+	var ll: ItemList = _all(learn, "ItemList")[0]
+	check(ll.get_item_text(0) == "Learn Fire Bolt  ·  Cantrip" and ll.get_item_text(1) == "Light", "Learn Fire Bolt, with its sub: %s" % [ll.get_item_text(0)])
+	learn.queue_free()
 	lists[0].select(0)
 	lists[0].item_selected.emit(0)
 	check(sent.size() == 1 and sent[0].ctx.feat == "tough" and sent[0].ctx.name == "Tough" and sent[0].ctx.actor == "a_1", "a pick sends the intent with the record and its id: %s" % [sent])
