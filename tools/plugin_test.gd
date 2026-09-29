@@ -30,6 +30,10 @@ func _run(dir: String) -> int:
 		return 1
 	var st := EncounterState.new(Encounter.create("plugin test"))
 	var host := PluginHost.new(RulesKernel.new(st))
+	# the art Hexmap ships, so a test map's terrain has its tags (rubble is "difficult")
+	var art := PackLibrary.new()
+	art.reload()
+	host.kernel.map.art = art
 	# a ruleset's tests read all of its content, whatever a campaign would choose
 	host.all_packs = true
 	host.plugin_failed.connect(func(id: String, where: String, msg: String) -> void: print("  %s: %s: %s" % [id, where, msg]))

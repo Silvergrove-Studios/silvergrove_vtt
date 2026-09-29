@@ -15,6 +15,8 @@ extends RefCounted
 ##   regions_at(cell)          tagged regions and zones covering a cell
 ##   move events               a token and what is attached to it, with the
 ##                             regions entered and left
+##   path(from, to)            the cheapest way there, round the walls, what
+##                             its cells cost by their tags (rough ground)
 ##   cells                     neighbours, rings, lines; per-cell plugin state
 ##
 ## A ref is "token:<id>", a cell is Vector2i or "q,r", a point is Vector2.
@@ -23,6 +25,10 @@ var kernel: RulesKernel
 ## plugin id -> [{name, max}] in edge-distance hex units, ascending; the
 ## last band is what lies beyond the previous ones.
 var band_tables: Dictionary = {}
+## The art the scene's maps are painted with, for what their terrain is
+## tagged (a pack's rubble is "difficult"): the Table's own library. With
+## none, a cell's terrain carries no tags.
+var art: PackLibrary = null
 
 
 func _init(p_kernel: RulesKernel) -> void:
@@ -525,12 +531,15 @@ func cells_between(scene_id: String, a: Variant, b: Variant) -> Array:
 	return out
 
 
-## A cell's record: {ext, revealed, terrain (from the map)}.
+## A cell's record: {ext, revealed, terrain (from the map, with its art's
+## `tags` when the art is here)}.
 func cell(scene_id: String, key: Variant) -> Dictionary:
 	var k := key_of(scene_id, key)
 	var rec: Dictionary = JsonDoc.deep(scene(scene_id).get("cells", {}).get(k, {}))
 	var lvl := kernel.state.effective_level(scene_id)
 	rec.terrain = JsonDoc.deep(lvl.get("terrain", {}).get(k, {}))
+	if not (rec.terrain as Dictionary).is_empty():
+		rec.terrain.tags = _terrain_tags(str(rec.terrain.get("t", "")), {})
 	rec.key = k
 	# where it is, in hex units (a creature put on a cell the DM picked)
 	var m := kernel.state.map_for(scene_id)
@@ -538,3 +547,263 @@ func cell(scene_id: String, key: Variant) -> Dictionary:
 		var c := m.grid.cell_center(HexMap.key_cell(k))
 		rec.center = [c.x, c.y]
 	return rec
+
+
+# ------------------------------------------------------------------- paths --
+
+## The terrain's tags on a cell, from its art: [] with no art, or no terrain.
+func terrain_tags(scene_id: String, cell_ref: Variant) -> Array:
+	var t: Variant = kernel.state.effective_level(scene_id).get("terrain", {}).get(key_of(scene_id, cell_ref))
+	return _terrain_tags(str(t.get("t", "")) if t is Dictionary else "", {})
+
+
+## A terrain's tags by its art ref, remembered in `cache` for one search.
+func _terrain_tags(ref: String, cache: Dictionary) -> Array:
+	if ref == "" or art == null:
+		return []
+	if not cache.has(ref):
+		var tags: Variant = art.terrain(ref).get("tags", [])
+		cache[ref] = (tags as Array).map(func(x: Variant) -> String: return str(x)) if tags is Array else []
+	return cache[ref]
+
+
+## The cheapest way from one place to another, cell by cell (a hex's six
+## neighbours, a square's eight), round the walls that stop movement (doors
+## as they are now; on squares a diagonal never cuts a wall's corner). Each
+## cell entered costs 1 — or, the dearest that applies, what a ruleset says
+## it costs (so two kinds of rough ground are no worse than one):
+##   costs      {tag: n}    by the cell's tags: its regions' and its
+##                          terrain's (the art's: rubble is "difficult")
+##   cell_costs {"q,r": n}  single cells (another creature's space)
+##   blocked    ["q,r"]     cells that can't be entered or passed
+##   diagonals  on squares, "5-5-5" (every step 1: the default), "5-10-5"
+##              (every second diagonal 2) or "euclid" (a diagonal √2)
+##   max        a cost past which it stops looking
+## Returns {ok, cells: ["q,r", …] from the start to the end, steps, cost,
+## length (the same way with no cell dearer than 1), diagonals, costly: [the
+## cells entered for more than 1], why}. Not ok, `why` says: "walls" (no way
+## round them), "blocked" (the only ways go through blocked cells: `through`
+## lists those on the shortest), "far" (dearer than `max`: `cost` is at least
+## that), "off the map", "no map".
+func path(scene_id: String, from: Variant, to: Variant, opts: Dictionary = {}) -> Dictionary:
+	var g := grid(scene_id)
+	if g == null:
+		return _no_path("no map")
+	var start := cell_of(scene_id, from)
+	var goal := cell_of(scene_id, to)
+	if not g.in_bounds(goal) or not g.in_bounds(start):
+		return _no_path("off the map")
+	var blocked := {}
+	for k in (opts.get("blocked") as Array if opts.get("blocked") is Array else []):
+		blocked[str(k)] = true
+	var found := _search(scene_id, g, start, goal, opts, blocked)
+	if not bool(found.ok) and str(found.why) == "walls" and not blocked.is_empty():
+		# through the cells that are blocked there would be a way: they are in it
+		var free := opts.duplicate()
+		free.erase("max")
+		var through := _search(scene_id, g, start, goal, free, {})
+		if bool(through.ok):
+			found.why = "blocked"
+			found.through = (through.cells as Array).filter(func(k: Variant) -> bool: return blocked.has(str(k)))
+	return found
+
+
+static func _no_path(why: String) -> Dictionary:
+	return {"ok": false, "why": why, "cells": [], "steps": 0, "cost": 0.0, "length": 0.0, "diagonals": 0, "costly": []}
+
+
+## A* over the cells (a state is a cell and, under 5-10-5, whether the next
+## diagonal is the dear one). The heuristic is the grid's own step count,
+## never more than what is left, so the first time the goal comes off the
+## heap its way is the cheapest.
+func _search(scene_id: String, g: HexGrid, start: Vector2i, goal: Vector2i, opts: Dictionary, blocked: Dictionary) -> Dictionary:
+	var lvl := kernel.state.effective_level(scene_id)
+	var walls := _wall_buckets(Lighting.blocking_segments(lvl, {}, "move"))
+	var costs: Dictionary = opts.get("costs", {}) if opts.get("costs") is Dictionary else {}
+	var cell_costs: Dictionary = opts.get("cell_costs", {}) if opts.get("cell_costs") is Dictionary else {}
+	var rule := str(opts.get("diagonals", "5-5-5"))
+	var max_cost := float(opts.get("max")) if (opts.get("max") is float or opts.get("max") is int) else INF
+	# the tags on each cell: its regions', then its terrain's
+	var tags_of := {}
+	if not costs.is_empty():
+		var regions: Dictionary = scene(scene_id).get("regions", {})
+		for rid in regions:
+			for k in regions[rid].get("cells", []):
+				var list: Array = tags_of.get(str(k), [])
+				for tg in regions[rid].get("tags", []):
+					list.append(str(tg))
+				tags_of[str(k)] = list
+	var terrain: Dictionary = lvl.get("terrain", {})
+	var tag_cache := {}
+	var mults := {}
+	var square := g.is_square()
+	var s0 := Vector3i(start.x, start.y, 0)
+	var best := {s0: 0.0}
+	var prev := {}
+	var closed := {}
+	var heap: Array = []
+	var seq := 0
+	_heap_push(heap, [float(g.steps(start, goal)), seq, s0])
+	var reached: Variant = null
+	while not heap.is_empty():
+		var top: Array = _heap_pop(heap)
+		var st: Vector3i = top[2]
+		if closed.has(st):
+			continue
+		closed[st] = true
+		if float(top[0]) > max_cost + 1e-9:
+			var far := _no_path("far")
+			far.cost = float(top[0])
+			return far
+		var c := Vector2i(st.x, st.y)
+		if c == goal:
+			reached = st
+			break
+		var pc := g.cell_center(c)
+		var here: float = best[st]
+		for n in g.neighbors(c, square):
+			if not g.in_bounds(n):
+				continue
+			var nk := HexMap.cell_key(n)
+			if blocked.has(nk) or _walled(walls, pc, g.cell_center(n)):
+				continue
+			var base := 1.0
+			var parity := st.z
+			if square and n.x != c.x and n.y != c.y:
+				match rule:
+					"euclid":
+						base = sqrt(2.0)
+					"5-10-5":
+						base = 2.0 if parity == 1 else 1.0
+						parity = 1 - parity
+			if not mults.has(nk):
+				mults[nk] = _cell_mult(nk, costs, cell_costs, tags_of, terrain, tag_cache)
+			var ns := Vector3i(n.x, n.y, parity)
+			var cost := here + base * float(mults[nk])
+			if cost < float(best.get(ns, INF)) - 1e-9:
+				best[ns] = cost
+				prev[ns] = [st, base]
+				seq += 1
+				_heap_push(heap, [cost + float(g.steps(n, goal)), seq, ns])
+	if reached == null:
+		return _no_path("walls")
+	# back from the goal: the cells, and what each step was
+	var cells := []
+	var length := 0.0
+	var diagonals := 0
+	var costly := []
+	var at: Vector3i = reached
+	while prev.has(at):
+		var key := HexMap.cell_key(Vector2i(at.x, at.y))
+		cells.push_front(key)
+		var step: Array = prev[at]
+		var from_st: Vector3i = step[0]
+		length += float(step[1])
+		if square and from_st.x != at.x and from_st.y != at.y:
+			diagonals += 1
+		if float(mults.get(key, 1.0)) > 1.0:
+			costly.push_front(key)
+		at = from_st
+	cells.push_front(HexMap.cell_key(start))
+	return {"ok": true, "why": "", "cells": cells, "steps": cells.size() - 1, "cost": float(best[reached]), "length": length, "diagonals": diagonals, "costly": costly}
+
+
+## What entering a cell costs: 1, or the dearest of what its tags and the
+## cell itself are said to cost.
+func _cell_mult(key: String, costs: Dictionary, cell_costs: Dictionary, tags_of: Dictionary, terrain: Dictionary, cache: Dictionary) -> float:
+	var m := 1.0
+	if not costs.is_empty():
+		var tags: Array = tags_of.get(key, [])
+		var t: Variant = terrain.get(key)
+		if t is Dictionary:
+			tags = tags + _terrain_tags(str(t.get("t", "")), cache)
+		for tg in tags:
+			if costs.has(tg):
+				m = maxf(m, float(costs[tg]))
+	if cell_costs.has(key):
+		m = maxf(m, float(cell_costs[key]))
+	return m
+
+
+## Wall segments by the unit squares their boxes cover, so a step between
+## two cells tests only the few near it.
+static func _wall_buckets(segs: Array) -> Dictionary:
+	var out := {}
+	for s in segs:
+		var a: Vector2 = s.a
+		var b: Vector2 = s.b
+		for x in range(floori(minf(a.x, b.x) - 0.01), floori(maxf(a.x, b.x) + 0.01) + 1):
+			for y in range(floori(minf(a.y, b.y) - 0.01), floori(maxf(a.y, b.y) + 0.01) + 1):
+				var k := Vector2i(x, y)
+				if not out.has(k):
+					out[k] = []
+				(out[k] as Array).append([a, b])
+	return out
+
+
+## Whether a step from p to q meets a wall: crosses it, or touches it (a
+## diagonal through the corner where a wall ends is a corner cut).
+static func _walled(buckets: Dictionary, p: Vector2, q: Vector2) -> bool:
+	if buckets.is_empty():
+		return false
+	for x in range(floori(minf(p.x, q.x) - 0.01), floori(maxf(p.x, q.x) + 0.01) + 1):
+		for y in range(floori(minf(p.y, q.y) - 0.01), floori(maxf(p.y, q.y) + 0.01) + 1):
+			for s in buckets.get(Vector2i(x, y), []):
+				if _meets(p, q, s[0], s[1]):
+					return true
+	return false
+
+
+static func _meets(p: Vector2, q: Vector2, a: Vector2, b: Vector2) -> bool:
+	var r := q - p
+	var e := b - a
+	var denom := r.cross(e)
+	if absf(denom) < 1e-12:
+		return false
+	var d := a - p
+	var t := d.cross(e) / denom
+	var u := d.cross(r) / denom
+	return t >= -1e-6 and t <= 1.0 + 1e-6 and u >= -1e-6 and u <= 1.0 + 1e-6
+
+
+## A binary heap of [f, seq, state], the least f (then the first pushed) on top.
+static func _heap_push(heap: Array, item: Array) -> void:
+	heap.append(item)
+	var i := heap.size() - 1
+	while i > 0:
+		var parent := (i - 1) >> 1
+		if not _heap_less(heap[i], heap[parent]):
+			break
+		var tmp: Variant = heap[i]
+		heap[i] = heap[parent]
+		heap[parent] = tmp
+		i = parent
+
+
+static func _heap_pop(heap: Array) -> Array:
+	var top: Array = heap[0]
+	var last: Variant = heap.pop_back()
+	if heap.is_empty():
+		return top
+	heap[0] = last
+	var i := 0
+	var n := heap.size()
+	while true:
+		var l := i * 2 + 1
+		var r := l + 1
+		var least := i
+		if l < n and _heap_less(heap[l], heap[least]):
+			least = l
+		if r < n and _heap_less(heap[r], heap[least]):
+			least = r
+		if least == i:
+			break
+		var tmp: Variant = heap[i]
+		heap[i] = heap[least]
+		heap[least] = tmp
+		i = least
+	return top
+
+
+static func _heap_less(x: Array, y: Array) -> bool:
+	return float(x[0]) < float(y[0]) - 1e-9 or (absf(float(x[0]) - float(y[0])) <= 1e-9 and int(x[1]) < int(y[1]))

@@ -271,7 +271,10 @@ class SelectTool extends Tool:
 						var to := Vision.token_pos(tk) + delta
 						if not mods.shift:
 							to = ctx.snapped(to)
-						ctx.commands.move_token(ctx.scene_id, id, to)
+						# (a ruleset may refuse it — a creature's movement spent on its turn — and says why)
+						var why := ctx.commands.move_token(ctx.scene_id, id, to)
+						if why != "":
+							ctx.say("%s: %s" % [str(tk.get("name", "Token")), why])
 					if ids.size() > 1:
 						ctx.commands.end_group("Move %d tokens" % ids.size())
 			"box":

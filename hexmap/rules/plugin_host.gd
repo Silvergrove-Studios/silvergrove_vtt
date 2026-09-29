@@ -625,6 +625,8 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 		kernel = RulesKernel.new(scratch)
 		kernel.plugin_host = weakref(self)
 		kernel.validators = real_kernel.validators.duplicate()
+		# (the art the real kernel's maps are painted with: what their terrain is tagged)
+		kernel.map.art = real_kernel.map.art
 		# the plugin and its dependencies (so a layered plugin is tested
 		# over its base), fresh for each test
 		if shared == null or shared.writes > 0:
@@ -741,7 +743,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register",
 			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated",
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
-			"map_move", "map_cell", "map_cells", "map_token", "test_scene",
+			"map_move", "map_cell", "map_cells", "map_token", "map_path", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
 			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting"]:
 		t[m] = Callable(br, m)
@@ -1221,6 +1223,15 @@ class Bridge:
 
 	func map_cell(scene: String, key: Variant) -> Dictionary:
 		return _k().map.cell(str(scene), _place(key))
+
+	func map_path(scene: String, from: Variant, to: Variant, opts: Variant) -> Dictionary:
+		var o := PluginHost._as_dict(opts)
+		for k in ["costs", "cell_costs"]:
+			o[k] = PluginHost._as_dict(o.get(k, {}))
+		# (a list of cell keys, or a set of them: {["q,r"] = true})
+		var blocked: Variant = o.get("blocked", [])
+		o.blocked = blocked if blocked is Array else ((blocked as Dictionary).keys() if blocked is Dictionary else [])
+		return _k().map.path(str(scene), _place(from), _place(to), o)
 
 	func map_cells(op: String, scene: String, a: Variant, b: Variant) -> Array:
 		var m := _k().map
