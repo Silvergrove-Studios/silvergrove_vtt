@@ -4,8 +4,11 @@
 // page dropped and reloaded half way and back where it was; the skills
 // from a list; the equipment or the gold; her first spells from the
 // druid's list, one read as a card; her sheet's spells offering only what
-// a druid 1 may learn. Then the DM plays rolled scores (a player rolls,
-// the DM sees it) and the standard array. Screenshots of each step.
+// a druid 1 may prepare. Then the DM plays rolled scores (a player rolls,
+// the DM sees it) and the standard array: a Thaumaturge acolyte cleric,
+// her skills said as her background's (the sixth table's read "and
+// species"), whose level 2 asks for the spell her prepared list grows by
+// (its cleric and paladin were never asked). Screenshots of each step.
 //
 //   node tests/e2e/maker.mjs <host.json> <out dir>
 //
@@ -171,7 +174,8 @@ await step('the page reloads (the phone dropped it): back on the same step, answ
 
 await step('skills from a list: the criminal’s two locked, two of the druid’s to choose', async () => {
   await lia.getByText('Choose 2 · 2 left').waitFor({ timeout: 5000 });
-  expect((await lia.getByText('From your background and species').count()) === 3, 'Sleight of Hand and Stealth from the background, Insight from Keen Senses');
+  expect((await lia.getByText('From your background or species').count()) === 3, 'Sleight of Hand and Stealth from the background, Insight from Keen Senses');
+  await lia.getByText(/Your background, Criminal, gives Sleight of Hand and Stealth; your species’ Keen Senses gives another/).waitFor({ timeout: 5000 });
   expect((await lia.getByRole('checkbox', { name: /^Athletics/ }).count()) === 0, 'Athletics is not a druid’s');
   await lia.getByRole('checkbox', { name: /^Nature/ }).click();
   await lia.getByRole('checkbox', { name: /^Perception/ }).click();
@@ -222,12 +226,12 @@ await step('the last step: what her choices give, the criminal’s Alert among t
   await shot(lia, 'lia_sheet');
 });
 
-await step('her sheet’s spells: only what a druid 1 may learn', async () => {
+await step('her sheet’s spells: only what a druid 1 may prepare', async () => {
   await lia.getByRole('tab', { name: 'Spells' }).click();
-  await lia.getByText('Your druid spells: cantrips and spells up to level 1.').waitFor({ timeout: 5000 });
-  const find = lia.locator('.picker').filter({ hasText: 'Learn a druid spell' }).locator('input[type=search]');
+  await lia.getByText(/^Your druid spells: cantrips and spells up to level 1\./).waitFor({ timeout: 5000 });
+  const find = lia.locator('.picker').filter({ hasText: 'Prepare a druid spell' }).locator('input[type=search]');
   await find.fill('moon');
-  await lia.locator('.picker').filter({ hasText: 'Learn a druid spell' }).getByText('Nothing matches').waitFor({ timeout: 5000 });
+  await lia.locator('.picker').filter({ hasText: 'Prepare a druid spell' }).getByText('Nothing matches').waitFor({ timeout: 5000 });
   await find.fill('');
   expect((await lia.getByText('Give a spell (any list, any level)').count()) === 0, 'giving any spell is the DM’s');
   await shot(lia, 'lia_learn');
@@ -299,6 +303,35 @@ await step('the standard array: each number given once', async () => {
   await shot(ari, 'ari_array');
 });
 
+// (the sixth table: "From your background and species" on skills a dwarf's species never
+// gave; a Thaumaturge acolyte cleric, whose Magic Initiate takes two more Cleric cantrips)
+await step('Ari the cleric: her skills said as her background’s, a Thaumaturge with Magic Initiate', async () => {
+  for (const [a, v] of [['Strength', '8'], ['Wisdom', '15']]) await ari.getByRole('combobox', { name: a }).selectOption(v);
+  await next(ari).click();
+  await ari.getByText('Choose 2 · 2 left').waitFor({ timeout: 8000 });
+  await ari.getByText('What your character is trained in. Your background, Acolyte, gives Insight and Religion; your class lets you choose the rest.').waitFor({ timeout: 5000 });
+  expect((await ari.getByText('From your background, Acolyte', { exact: true }).count()) === 2, 'Insight and Religion, said as the Acolyte’s');
+  expect((await ari.getByText(/and species/).count()) === 0, 'no species named: a dwarf gives no skill');
+  await shot(ari, 'ari_skills');
+  for (const s of ['Medicine', 'Persuasion']) await ari.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
+  await next(ari).click();
+  await row(ari, 'From your class').getByRole('radio', { name: /^110 GP instead/ }).click({ timeout: 8000 });
+  await row(ari, 'From your background').getByRole('radio', { name: /^50 GP instead/ }).click();
+  await next(ari).click();
+  await ari.getByRole('radio', { name: /^Thaumaturge/ }).click({ timeout: 8000 });
+  await next(ari).click();
+  await ari.getByRole('radio', { name: /^Wisdom/ }).click({ timeout: 8000 });
+  for (const s of ['Guidance', 'Resistance']) await ari.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
+  await ari.getByRole('radio', { name: /^Healing Word/ }).click();
+  await next(ari).click();
+  await ari.getByText('Choose 4 · 4 left').first().waitFor({ timeout: 8000 });
+  for (const s of ['Light', 'Sacred Flame', 'Thaumaturgy', 'Spare the Dying', 'Bless', 'Cure Wounds', 'Guiding Bolt', 'Shield of Faith']) await ari.getByRole('checkbox', { name: new RegExp(`^${s}`) }).click();
+  await next(ari).click();
+  await ari.getByText('From your background, Acolyte:').waitFor({ timeout: 8000 });
+  await next(ari).click();
+  await ari.getByText('Dwarf Cleric 1').first().waitFor({ timeout: 10000 });
+});
+
 // (the owner: the DM picks milestones or experience in the campaign's settings,
 // and "really ideally the dm would trigger level ups": the player takes theirs)
 await step('levels are the DM’s: milestones in Rules settings, Give a level, Rolf takes his', async () => {
@@ -323,6 +356,43 @@ await step('levels are the DM’s: milestones in Rules settings, Give a level, R
   await rolf.getByRole('button', { name: 'Ready for level 2: Gain a level' }).click();
   await rolf.getByText('Human Fighter 2').first().waitFor({ timeout: 10000 });
   await shot(rolf, 'rolf_level_2');
+});
+
+// (the sixth table: "Whenever that number increases, choose additional spells from the
+// Cleric spell list" — its cleric and paladin were never asked, and each Learned, then
+// Prepared, every spell by hand)
+await step('Ari’s level 2 asks for the spell her prepared list grows by; her Spells tab prepares from the list', async () => {
+  const wiz = ari.locator('.wizard').first();
+  await ari.getByText('Ready for level 2: choose what it gives you, then Gain a level.').waitFor({ timeout: 8000 });
+  expect((await wiz.locator('.head h4').innerText()) === 'Prepared spells', `the wizard opens at its Prepared spells step: ${await wiz.locator('.head h4').innerText()}`);
+  await wiz.getByText('Your list of prepared spells grows to 5 at this level').waitFor({ timeout: 5000 });
+  await wiz.getByText('Choose 1 · 1 left').waitFor({ timeout: 8000 });
+  expect((await wiz.getByRole('checkbox', { name: /^Aid/ }).count()) === 0, 'no level 2 spell at cleric 2');
+  expect((await wiz.getByText('Prepared', { exact: true }).count()) >= 4, 'her four shown as prepared');
+  expect(await wiz.locator('.nav button.accent').isDisabled(), 'Next waits for the spell');
+  await wiz.getByRole('checkbox', { name: /^Command/ }).click();
+  await shot(ari, 'ari_level_2_prepared');
+  await wiz.locator('.nav button.accent').click();
+  expect((await wiz.locator('.head h4').innerText()) === 'The new level', 'then what the level brings');
+  await wiz.getByText('1 more prepared spell').waitFor({ timeout: 5000 });
+  await wiz.locator('.nav button.accent').click();
+  await ari.getByText('Dwarf Cleric 2').first().waitFor({ timeout: 10000 });
+  // "Whenever you gain a Cleric level, you can replace one of your cantrips": offered while the
+  // level is new
+  await ari.getByText('Cleric 2 lets you replace some things you chose before, if you like').waitFor({ timeout: 8000 });
+  const replace = ari.locator('.wizard').filter({ hasText: 'A Cleric cantrip to replace' });
+  await replace.getByRole('checkbox', { name: /^Light/ }).click();
+  await replace.getByText('In its place').waitFor({ timeout: 5000 });
+  await replace.getByRole('checkbox', { name: /^Mending/ }).click();
+  await shot(ari, 'ari_level_2_replace');
+  await replace.locator('.nav button.accent').click();
+  await ari.getByText('Cleric 2 lets you replace some things you chose before, if you like').waitFor({ state: 'detached', timeout: 8000 });
+  await ari.getByRole('tab', { name: 'Spells' }).click();
+  await ari.getByText(/^● Mending/).first().waitFor({ timeout: 5000 });
+  await ari.getByText(/prepared 5 \/ 5/).first().waitFor({ timeout: 5000 });
+  expect((await ari.locator('.picker').filter({ hasText: 'Prepare a cleric spell' }).count()) === 1, 'Prepare a cleric spell: no Learn first');
+  expect((await ari.locator('.picker').filter({ hasText: 'Learn a cleric spell' }).count()) === 0, 'and no Learn');
+  await shot(ari, 'ari_level_2_spells');
 });
 
 for (const [, p] of pages) await p.context().close();

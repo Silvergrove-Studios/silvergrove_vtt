@@ -257,6 +257,13 @@ The team's notes on making a character in the third playtest
   step (it opened at its last, with the last level's answers). A refused
   one keeps them. `web/tests/e2e/levels.mjs` walks a player through three
   levels against a table.
+- **A choice with nothing left to offer holds nothing up** (the sixth
+  table's cleric knew all seven Cleric cantrips when her level 10 asked
+  for another, and Next never came): a `choose` field needs no more picks
+  than it has on offer — all there are when fewer are left, none when none
+  is — and says so. The maker journey takes a cleric's level 2 through its
+  prepared spells and a cantrip replaced; the levels journey reads what
+  each level brings.
 
 ## 2.3.1 — 2026-09-25
 
