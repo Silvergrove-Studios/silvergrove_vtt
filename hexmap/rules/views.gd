@@ -128,12 +128,18 @@ static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, play
 	for name in pa.get("resources", {}).get(plugin, {}):
 		res[name] = pa.resources[plugin][name]
 	var effects := []
+	# the keys of those effects, for a view's `if` ("'prone' in @effect_keys"):
+	# an expression can't search a list of records
+	var keys := []
 	for fx in pa.get("effects", []):
 		if str(fx.get("plugin", plugin)) == plugin:
 			effects.append(fx)
+			var k := str(fx.get("key", ""))
+			if k != "" and not keys.has(k):
+				keys.append(k)
 	return {"me": player_id, "role": role, "actor": {"id": pa.id, "name": pa.name, "owner": pa.owner, "kind": pa.kind, "mine": pa.mine},
 		"ext": JsonDoc.deep(pa.get("ext", {}).get(plugin, {})), "derived": JsonDoc.deep(pa.get("derived", {}).get(plugin, {})),
-		"resources": res, "effects": effects, "tokens": pa.get("tokens", []),
+		"resources": res, "effects": effects, "effect_keys": keys, "tokens": pa.get("tokens", []),
 		"turns": JsonDoc.deep(kernel.state.encounter.turns), "clock": JsonDoc.deep(kernel.state.encounter.clock),
 		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {})), "party": party_of(kernel, str(pa.id))}
 

@@ -287,6 +287,8 @@ so register a new kind with `pcall(hm.ui.register, …)`). The kinds:
   actor that carries this plugin's data. Its data: `me` (player id),
   `role`, `actor {id, name, owner, kind, mine}`, `ext` and `derived`
   (this plugin's blocks), `resources` (name → record), `effects`,
+  `effect_keys` (the keys of those effects, for an `if`: `"'prone' in
+  (@effect_keys ?? [])"` — an Expr can't search a list of records),
   `tokens`, `turns`, `clock`, `state` (this plugin's encounter state),
   `party` (the other player characters and companions, `{id, name}`:
   whom to hand something to).
