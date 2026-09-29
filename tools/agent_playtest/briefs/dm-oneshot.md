@@ -20,6 +20,7 @@ The makers expect the site to get things wrong at high level, both in building l
 - Talk to the players ONLY through the game's own chat (and whatever else the game itself offers). No other channel, and no files for each other.
 - Know the site only through the screen: don't look for its source code, don't read its scripts, and don't poke at its internals with JavaScript (no digging in `window`, no reading its network traffic). Use what a person would see and click.
 - Don't read, list or search anything outside your folder.
+- Your tools for files: Read, Glob and Grep to read and search, Edit and Write to write (both work in your folder). There's no shell: a shell command is refused, and that's expected; use those tools instead.
 
 ## Your browser
 Your {{device}} already has your DM screen open. The `table` tools are your eyes and hands on it:
