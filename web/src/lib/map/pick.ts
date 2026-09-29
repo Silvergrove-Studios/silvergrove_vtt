@@ -5,6 +5,7 @@
 // at all, sent to be rolled and nothing applied (theatre of the mind).
 import { Grid, cellKey, type Vec } from '../grid';
 import { isDead, tokenPos } from './render';
+import { polygonTest } from './sight';
 import type { Dict } from '../game.svelte';
 import { clone } from '../views/viewlib';
 
@@ -108,10 +109,42 @@ export function friendlyPick(payload: Dict): boolean {
   return payload.friendly === true;
 }
 
+/** How far a pick's creature may be, in feet (0: as far as you like): the
+ *  ruleset says so on the intent, `range` — a number, or several (a weapon's
+ *  reach, range and long range) of which the farthest counts. */
+export function pickRange(payload: Dict): number {
+  const r = payload.range;
+  const nums = (Array.isArray(r) ? r : [r]).map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
+  return nums.length ? Math.max(...nums) : 0;
+}
+
+/** Whether a pick's creature must be one its picker sees ("a creature that
+ *  you can see", Haste's): unless the ruleset says not (`sight: false`: an
+ *  attack may go at one unseen, a touch needs no eyes), yes. A wall between
+ *  them stops any pick. */
+export function pickNeedsSight(payload: Dict): boolean {
+  return payload.sight !== false;
+}
+
+/** How far apart two tokens are, in the map's units (feet on a battle map),
+ *  as the rules count it: for two of one space the grid's steps (a square's
+ *  diagonal is a step), for a bigger one the gap between their edges in
+ *  whole spaces, and one. */
+export function feetBetween(grid: Grid, a: Dict, b: Dict): number {
+  const unit = Number(grid.distance) > 0 ? Number(grid.distance) : 5;
+  const sa = Number(a.size ?? 1);
+  const sb = Number(b.size ?? 1);
+  const pa = tokenPos(a);
+  const pb = tokenPos(b);
+  if (sa <= 1 && sb <= 1) return grid.steps(grid.cellAt(pa), grid.cellAt(pb)) * unit;
+  const edge = Math.max(0, Math.hypot(pa.x - pb.x, pa.y - pb.y) - (sa + sb) / 2);
+  return (Math.floor(edge + 0.01) + 1) * unit;
+}
+
 /** The intent as it goes, without what only the pick needed. */
 function sendable(payload: Dict): Dict {
   const out = clone(payload);
-  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead', 'friendly']) delete out[k];
+  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead', 'friendly', 'range', 'sight']) delete out[k];
   if (!out.ctx || typeof out.ctx !== 'object') out.ctx = {};
   return out;
 }
@@ -178,45 +211,117 @@ export function pickables(tokens: Dict[], payload: Dict, gm = false): Dict[] {
 }
 
 /** A creature a pick lists by name: its target, its name and map label,
- *  whether it is one of the party, and whether only the DM sees it. */
+ *  whether it is one of the party, whether only the DM sees it, and why it
+ *  can't be chosen ('' when it can: "can't see: a wall is in the way"). */
 export interface PickChoice {
   target: string;
   name: string;
   label: string;
   party: boolean;
   hidden: boolean;
+  why: string;
+}
+
+/** Where a place stands for the picker's eyes, from what the table worked
+ *  out of the fog: in sight; in the line of sight but too dark to see (the
+ *  fog's navy); or out of it (black: walls in the way). */
+export type Sight = 'seen' | 'dark' | 'walls';
+
+/** A player's sight test from the scene's snapshot: `visible` is what their
+ *  characters see, `los` (in the dark) their line of sight. undefined with no
+ *  fog: everything is in sight. */
+export function sightOf(scene: Dict): ((p: Vec) => Sight) | undefined {
+  if (!scene?.fog) return undefined;
+  const seen = polygonTest((scene.visible as number[][][]) ?? []);
+  const los = polygonTest((scene.los as number[][][]) ?? []);
+  return (p) => (seen(p) ? 'seen' : los(p) ? 'dark' : 'walls');
+}
+
+/** The words a pick says a creature can't be chosen for. */
+export const WHY_WALL = 'can’t see: a wall is in the way';
+export const WHY_DARK = 'too dark to see';
+export const WHY_DEAD = 'dead';
+export function whyRange(feet: number): string {
+  return `out of range (${feet} ft)`;
+}
+
+export interface PickOpts {
+  gm?: boolean;
+  /** in the picker's sight (the old test: in, or walls) */
+  sees?: (p: Vec) => boolean;
+  /** the fog's word for a place (sightOf) */
+  sight?: (p: Vec) => Sight;
+  /** the map's grid, for how far a creature is */
+  grid?: Grid;
+}
+
+/** The creatures a pick could be meant for at all: those on the map but the
+ *  picker's own token (unless the pick is for the party), the markers, the
+ *  things with no stat block, and the DM's hidden (for a player). The dead
+ *  are here: a list says so. */
+function candidates(tokens: Dict[], payload: Dict, gm: boolean): Dict[] {
+  const from = pickFrom(payload, tokens);
+  const self = friendlyPick(payload);
+  return tokens.filter((t) => {
+    const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
+    return (self || String(t.id) !== from) && (gm || !t.hidden) && !isThing(t) && !tags.includes('place') && !tags.includes('party');
+  });
+}
+
+/** Why a creature can't be the pick's, or '': dead (unless the pick brings
+ *  back the dead); a wall between it and the picker (the SRD's total cover:
+ *  "can't be targeted directly"); too dark to see, for a pick that needs its
+ *  creature seen; out of the pick's range. */
+export function whyNot(t: Dict, from: Dict | undefined, payload: Dict, opts: PickOpts = {}): string {
+  if (isDead(t) && !takesDead(payload)) return WHY_DEAD;
+  if (from && t === from) return '';
+  const look = opts.sight ?? (opts.sees ? (p: Vec) => (opts.sees!(p) ? 'seen' : 'walls') : undefined);
+  const s = look ? look(tokenPos(t)) : 'seen';
+  if (s === 'walls') return WHY_WALL;
+  if (s === 'dark' && pickNeedsSight(payload)) return WHY_DARK;
+  const range = pickRange(payload);
+  if (range > 0 && from && opts.grid) {
+    const feet = feetBetween(opts.grid, from, t);
+    if (feet > range + 0.01) return whyRange(feet);
+  }
+  return '';
 }
 
 /** The creatures a creature pick lists as buttons, to choose by name
  *  rather than by a tap on the map (a screen reader can't tap a canvas, and
  *  a playtest's agents, playing through the page's structure, fought line
- *  of sight far harder than people): the pickables in the picker's sight
- *  (`sees`: the rest of the party is on a player's map wherever they are,
- *  but a spell on "a creature that you can see" needs them in sight),
- *  nearest the picker first, the party after the rest (most picks are an
- *  attack's or a spell's at a foe) — or, for a pick for the party (Haste,
- *  Aid, a heal), the party first, its picker among them. */
-export function pickChoices(tokens: Dict[], payload: Dict, opts: { gm?: boolean; sees?: (p: Vec) => boolean } = {}): PickChoice[] {
+ *  of sight far harder than people): first those it may take, nearest the
+ *  picker first, the party after the rest (most picks are an attack's or a
+ *  spell's at a foe) — or, for a pick for the party (Haste, Aid, a heal),
+ *  the party first, its picker among them; then, in the same order, those
+ *  it can't, each with why (`sight`/`sees`: the rest of the party is on a
+ *  player's map wherever they are, but a spell on "a creature that you can
+ *  see" needs them in sight, and none goes through a wall; the dead; out of
+ *  range, with the map's `grid`). A playtest's Haste went looking for the
+ *  party's fighter, drawn on the map behind a wall, and the list said nothing. */
+export function pickChoices(tokens: Dict[], payload: Dict, opts: PickOpts = {}): PickChoice[] {
   if (String(payload.pick ?? '') !== 'token') return [];
   const from = tokens.find((t) => String(t.id) === pickFrom(payload, tokens));
   const o = from ? tokenPos(from) : null;
   const away = (t: Dict) => (o ? Math.hypot(tokenPos(t).x - o.x, tokenPos(t).y - o.y) : 0);
   const ours = (t: Dict) => (String(t.owner ?? '') !== '' ? 1 : 0);
   const first = friendlyPick(payload) ? -1 : 1;
-  return pickables(tokens, payload, opts.gm)
-    .filter((t) => t === from || !opts.sees || opts.sees(tokenPos(t)))
-    .map((t, i) => ({ t, i, d: away(t) }))
-    .sort((a, b) => first * (ours(a.t) - ours(b.t)) || a.d - b.d || a.i - b.i)
-    .map(({ t }) => {
+  return candidates(tokens, payload, !!opts.gm)
+    .map((t, i) => ({ t, i, d: away(t), why: whyNot(t, from, payload, opts) }))
+    .sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || first * (ours(a.t) - ours(b.t)) || a.d - b.d || a.i - b.i)
+    .map(({ t, why }) => {
       const name = String(t.name ?? '') || String(t.label ?? '') || 'a creature';
       const label = String(t.label ?? '');
-      return { target: `token:${t.id}`, name, label: label === name ? '' : label, party: String(t.owner ?? '') !== '', hidden: !!t.hidden };
+      return { target: `token:${t.id}`, name, label: label === name ? '' : label, party: String(t.owner ?? '') !== '', hidden: !!t.hidden, why };
     });
 }
 
 /** What a token pick says when there is nothing in sight to pick: a
  *  playtest's players were asked to tap a creature on a black map. */
 export const NOTHING_IN_SIGHT = 'Nothing in sight: walls or darkness block your view. Move, or ask the DM.';
+
+/** …and when there are creatures, but none it can take. */
+export const NONE_TO_CHOOSE = 'None of them can be chosen: why is beside each name. Move, or ask the DM.';
 
 /** What a tap on the dead says while a pick waits. */
 export const DEAD_WORDS = 'That one’s dead';
@@ -228,9 +333,14 @@ export function tappedTheDead(hit: Dict | null, payload: Dict): boolean {
 
 /** What the banner says while a pick is waiting; with the tokens on the
  *  map (a player's, and what their characters see of it), that there is
- *  nothing to pick when there isn't. */
-export function pickWords(payload: Dict, tokens?: Dict[], sees?: (p: Vec) => boolean): string {
-  if (tokens && String(payload.pick ?? '') === 'token' && pickChoices(tokens, payload, { sees }).length === 0) return NOTHING_IN_SIGHT;
+ *  nothing to pick when there isn't — nobody at all, or nobody it can take. */
+export function pickWords(payload: Dict, tokens?: Dict[], opts?: PickOpts | ((p: Vec) => boolean)): string {
+  if (tokens && String(payload.pick ?? '') === 'token') {
+    const o: PickOpts = typeof opts === 'function' ? { sees: opts } : (opts ?? {});
+    const list = pickChoices(tokens, payload, o);
+    if (list.length === 0) return NOTHING_IN_SIGHT;
+    if (!list.some((c) => !c.why)) return NONE_TO_CHOOSE;
+  }
   const many = pickCount(payload);
   const each = pickEach(payload);
   // (a playtest's player read "1 of up to 3" as tapping one goblin three times)

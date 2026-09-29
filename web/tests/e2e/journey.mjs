@@ -527,15 +527,22 @@ await step('Ben’s attack lists the creatures he sees, by name and map label', 
   await ben.getByRole('button', { name: 'Attack' }).first().click();
   const banner = ben.getByRole('group', { name: 'Choose the target' });
   await banner.waitFor({ timeout: 5000 });
-  const first = banner.locator('.choice').first();
-  await first.waitFor({ timeout: 5000 });
-  const said = await first.innerText();
+  await banner.locator('.choice').first().waitFor({ timeout: 5000 });
+  const said = await banner.locator('.choice').first().innerText();
   if (!/\(.+\)/.test(said)) throw new Error(`a choice without its map label: ${said}`);
+  // those his weapon can't reach are listed after the rest, not to be pressed, saying why
+  for (const off of await banner.locator('.choice.off').all()) {
+    const words = await off.innerText();
+    if (!(await off.isDisabled()) || !/ — (out of range \(\d+ ft\)|can’t see: a wall is in the way|too dark to see|dead)$/.test(words)) throw new Error(`one it can't take, without why: ${words}`);
+  }
   await banner.getByRole('button', { name: 'No target: just roll' }).waitFor({ timeout: 5000 });
-  const done = banner.getByRole('button', { name: 'Done' });
-  if (!(await done.isDisabled())) throw new Error('Done before anything is chosen');
-  await first.click();
-  if ((await first.getAttribute('aria-pressed')) !== 'true' || (await done.isDisabled())) throw new Error('choosing one did not choose it');
+  const first = banner.locator('.choice:not(.off)').first();
+  if (await first.count()) {
+    const done = banner.getByRole('button', { name: 'Done' });
+    if (!(await done.isDisabled())) throw new Error('Done before anything is chosen');
+    await first.click();
+    if ((await first.getAttribute('aria-pressed')) !== 'true' || (await done.isDisabled())) throw new Error('choosing one did not choose it');
+  } else if (!(await banner.getByText(/None of them can be chosen/).count())) throw new Error('nothing to choose, and nothing said');
   await shot(ben, 'ben_pick_by_name');
   await banner.getByRole('button', { name: 'Cancel' }).click();
   await banner.waitFor({ state: 'detached', timeout: 5000 });
@@ -562,12 +569,98 @@ await step('a spell for the party lists the party first, Ben’s own Brakka too'
   await first.waitFor({ timeout: 5000 });
   const said = await first.innerText();
   if (!/^Brakka/.test(said)) throw new Error(`the first choice is his own Brakka: ${said}`);
-  // (Wren, when he sees her, before any foe)
-  const all = await banner.locator('.choice').allInnerTexts();
+  // (Wren, when she may be chosen, before any foe that may)
+  const all = await banner.locator('.choice:not(.off)').allInnerTexts();
   const wren = all.findIndex((s) => /^Wren/.test(s));
   const foe = all.findIndex((s) => /Goblin|Warden/.test(s));
   if (wren >= 0 && foe >= 0 && foe < wren) throw new Error(`the party first, then the rest: ${all.join(' | ')}`);
   await shot(ben, 'ben_pick_friendly');
+  await banner.getByRole('button', { name: 'Cancel' }).click();
+  await banner.waitFor({ state: 'detached', timeout: 5000 });
+});
+
+// The DM drags a creature to a place, and on its turn the Table counts the
+// move: refused past what it has (through a wall, there's no way at all), a
+// second drag to the same place goes anyway.
+async function dmDrag(id, to) {
+  const pos = await dm.evaluate((tid) => (window.hexmap.game.scene.tokens ?? []).find((t) => t.id === tid)?.pos ?? null, id);
+  const at = await dm.evaluate(
+    ([tid, x, y]) => {
+      const g = window.hexmap.game;
+      const t = (g.scene.tokens ?? []).find((k) => k.id === tid);
+      const c = document.querySelector('canvas');
+      if (!t || !c?.screenOf) return null;
+      const from = c.screenOf(t.id);
+      const px = c.pxPerHex();
+      return { from, to: { x: from.x + (x - Number(t.pos[0])) * px, y: from.y + (y - Number(t.pos[1])) * px } };
+    },
+    [id, to[0], to[1]],
+  );
+  if (!pos || !at) throw new Error(`no token ${id} on the DM's map`);
+  const moved = () =>
+    dm
+      .waitForFunction(
+        ([tid, p]) => {
+          const t = (window.hexmap.game.scene.tokens ?? []).find((x) => x.id === tid);
+          return t && (t.pos[0] !== p[0] || t.pos[1] !== p[1]);
+        },
+        [id, pos],
+        { timeout: 2500 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+  for (let i = 0; i < 2; i++) {
+    await dm.mouse.move(at.from.x, at.from.y);
+    await dm.mouse.down();
+    await dm.mouse.move(at.from.x + 10, at.from.y, { steps: 3 });
+    await dm.mouse.move(at.to.x, at.to.y, { steps: 8 });
+    await dm.mouse.up();
+    if (await moved()) return;
+    // refused (its turn, its movement counted): said why, and how to go past it
+    await dm.getByText(/Drag it there again to move it anyway/).first().waitFor({ timeout: 3000 });
+    await dm.waitForTimeout(1700);
+  }
+  throw new Error(`the DM's second drag of ${id} didn't go either`);
+}
+
+// (the level-12 playtest's Haste: the party's fighter, drawn on the caster's map,
+// was behind a wall from her and not in the list, and nothing said why)
+await step('behind the chapel wall, Brakka’s Guidance lists Wren, not to be chosen, saying why', async () => {
+  const ids = await dm.evaluate(() => {
+    const toks = window.hexmap.game.scene.tokens ?? [];
+    return { brakka: toks.find((t) => t.name === 'Brakka')?.id ?? '', wren: toks.find((t) => t.name === 'Wren')?.id ?? '', fog: !!window.hexmap.game.scene.fog };
+  });
+  if (!ids.brakka || !ids.wren) throw new Error('no Brakka or Wren on the map');
+  if (!ids.fog) throw new Error('the chapel has no fog: no one is out of anyone’s sight');
+  // the DM takes Brakka out of the chapel, west of its wall (its door shut)
+  await dmDrag(ids.brakka, [2.5, 7.506]);
+  // Ben's screen has him outside (and Wren, inside, still on his map: the party always is)
+  await ben.waitForFunction(
+    ([bid, wid]) => {
+      const toks = window.hexmap.game.scene.tokens ?? [];
+      const b = toks.find((t) => t.id === bid);
+      return !!b && Math.hypot(Number(b.pos[0]) - 2.5, Number(b.pos[1]) - 7.506) < 0.6 && toks.some((t) => t.id === wid);
+    },
+    [ids.brakka, ids.wren],
+    { timeout: 5000 },
+  );
+  await ben.getByRole('tab', { name: /^Character/ }).click();
+  await ben.getByRole('tab', { name: 'Spells' }).click();
+  const row = ben.locator('.row').filter({ hasText: /Guidance \(cantrip/ }).first();
+  await row.waitFor({ timeout: 8000 });
+  await row.getByRole('button', { name: 'Cast', exact: true }).click();
+  const banner = ben.getByRole('group', { name: 'Choose the target' });
+  await banner.waitFor({ timeout: 5000 });
+  const wren = banner.locator('.choice.off').filter({ hasText: /^Wren/ });
+  await wren.waitFor({ timeout: 5000 });
+  const words = await wren.innerText();
+  if (!/^Wren( \(\w+\))? · party — can’t see: a wall is in the way$/.test(words.trim())) throw new Error(`Wren's row: ${words}`);
+  if (!(await wren.isDisabled())) throw new Error('Wren, behind the wall, can be chosen');
+  const texts = await banner.locator('.choice').allInnerTexts();
+  if (!/^Brakka/.test(texts[0] ?? '')) throw new Error(`those it may take first (Brakka): ${texts.join(' | ')}`);
+  await shot(ben, 'ben_pick_behind_wall');
   await banner.getByRole('button', { name: 'Cancel' }).click();
   await banner.waitFor({ state: 'detached', timeout: 5000 });
 });
@@ -677,29 +770,50 @@ await step('Ana taps Wren, then where she goes, and says yes', async () => {
     const at = c.screenOf(t.id);
     const px = c.pxPerHex();
     // two cells off, where no one stands
+    const to = [];
     for (const [dx, dy] of [[-2, 0], [0, -1.7], [0, 1.7], [2, 0]]) {
       const x = Number(t.pos[0]) + dx;
       const y = Number(t.pos[1]) + dy;
-      if (!toks.some((o) => Math.hypot(Number(o.pos[0]) - x, Number(o.pos[1]) - y) < 0.8)) return { id: t.id, name: t.name, pos: t.pos, at, to: { x: at.x + dx * px, y: at.y + dy * px } };
+      if (!toks.some((o) => Math.hypot(Number(o.pos[0]) - x, Number(o.pos[1]) - y) < 0.8)) to.push({ x: at.x + dx * px, y: at.y + dy * px });
     }
-    return null;
+    return to.length ? { id: t.id, name: t.name, pos: t.pos, at, to } : null;
   });
   if (!w) throw new Error('Ana has no token, or nowhere free beside it');
-  await ana.mouse.click(w.at.x, w.at.y);
-  await ana.getByText(`Move ${w.name}: tap where to go`).waitFor({ timeout: 5000 });
-  await ana.mouse.click(w.to.x, w.to.y);
-  // on a touch screen the move asks first
-  await ana.getByRole('dialog', { name: 'Confirm the move' }).waitFor({ timeout: 5000 });
-  await shot(ana, 'ana_confirm_move');
-  await ana.getByRole('button', { name: 'Move', exact: true }).click();
-  await ana.waitForFunction(
-    ([id, pos]) => {
-      const t = (window.hexmap.game.scene.tokens ?? []).find((x) => x.id === id);
-      return t && (t.pos[0] !== pos[0] || t.pos[1] !== pos[1]);
-    },
-    [w.id, w.pos],
-    { timeout: 5000 },
-  );
+  const moved = () =>
+    ana
+      .waitForFunction(
+        ([id, pos]) => {
+          const t = (window.hexmap.game.scene.tokens ?? []).find((x) => x.id === id);
+          return t && (t.pos[0] !== pos[0] || t.pos[1] !== pos[1]);
+        },
+        [w.id, w.pos],
+        { timeout: 4000 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+  let went = false;
+  const refusals = [];
+  for (const to of w.to) {
+    await ana.mouse.click(w.at.x, w.at.y);
+    await ana.getByText(`Move ${w.name}: tap where to go`).waitFor({ timeout: 5000 });
+    await ana.mouse.click(to.x, to.y);
+    // on a touch screen the move asks first
+    await ana.getByRole('dialog', { name: 'Confirm the move' }).waitFor({ timeout: 5000 });
+    if (!refusals.length) await shot(ana, 'ana_confirm_move');
+    await ana.getByRole('button', { name: 'Move', exact: true }).click();
+    if (await moved()) {
+      went = true;
+      break;
+    }
+    // (a place walls shut off, a pillar: the table says why, and she tries another)
+    refusals.push(await ana.evaluate(() => (window.hexmap.game.notices ?? []).map((n) => n.text).join(' | ')));
+  }
+  if (!went) throw new Error(`Wren didn't move: ${refusals.join(' / ')}`);
+  // what is left of her movement this turn, on her header, and under her name in the DM's fight bar
+  await ana.locator('.turn').filter({ hasText: /Your turn: Wren .* · Movement \d+ of \d+ ft/ }).waitFor({ timeout: 5000 });
+  await dm.locator('.fightbar').filter({ hasText: /Wren’s turn · Movement \d+ of \d+ ft/ }).waitFor({ timeout: 5000 });
   await shot(ana, 'ana_moved');
 });
 

@@ -299,7 +299,9 @@
     picked = [];
   }
 
-  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { gm: true }) : []);
+  // (the DM's list has every creature; those the pick can't take — the dead,
+  // one out of its range — say why)
+  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { gm: true, grid: map ? new Grid(map.grid ?? {}) : undefined }) : []);
 
   function chooseListed(target: string): void {
     if (!pick) return;

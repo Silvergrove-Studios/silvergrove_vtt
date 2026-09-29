@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
 import {
   DEAD_WORDS,
+  NONE_TO_CHOOSE,
   NOTHING_IN_SIGHT,
+  WHY_DARK,
+  WHY_DEAD,
+  WHY_WALL,
+  feetBetween,
   moveTo,
   moveWords,
   offersNoTarget,
@@ -10,10 +15,13 @@ import {
   pickChoices,
   pickCount,
   pickEach,
+  pickNeedsSight,
+  pickRange,
   pickTarget,
   pickWords,
   pickables,
   pickedWords,
+  sightOf,
   tappedTheDead,
   togglePicked,
   unpick,
@@ -164,11 +172,16 @@ describe('picking a target', () => {
     const boss = { id: 'gb', name: 'Goblin Boss', label: 'GB', actor: 'a_gb', pos: [3, 3], hidden: true };
     const attack = { kind: 'action', pick: 'token', label: 'Attack', ctx: { actor: 'wren' } };
     const toks = [wren, brakka, far, near, boss];
-    // Brakka is behind a wall: on Wren's map (the party always is), not in her sight
+    // Brakka is behind a wall: on Wren's map (the party always is), not in her
+    // sight: listed after those she may take, with why (the boss is the DM's hidden)
     const sees = (p: { x: number; y: number }) => p.x < 7;
     const list = pickChoices(toks, attack, { sees });
-    expect(list.map((c) => c.target)).toEqual(['token:g1', 'token:g2']);
-    expect(list[0]).toEqual({ target: 'token:g1', name: 'Goblin Warrior', label: 'GW1', party: false, hidden: false });
+    expect(list.map((c) => [c.target, c.why])).toEqual([
+      ['token:g1', ''],
+      ['token:g2', ''],
+      ['token:br', WHY_WALL],
+    ]);
+    expect(list[0]).toEqual({ target: 'token:g1', name: 'Goblin Warrior', label: 'GW1', party: false, hidden: false, why: '' });
     // in sight, a friend is listed and says so, after the rest however near; the DM's list has the hidden too
     const close = { ...brakka, pos: [1.5, 1] };
     expect(pickChoices([wren, close, far, near], attack).map((c) => [c.target, c.party])).toEqual([
@@ -177,8 +190,10 @@ describe('picking a target', () => {
       ['token:br', true],
     ]);
     expect(pickChoices(toks, attack, { gm: true }).map((c) => c.target)).toEqual(['token:g1', 'token:gb', 'token:g2', 'token:br']);
-    // no creature in sight but a friend behind a wall: nothing in sight (a playtest's cleric, outside the chapel)
-    expect(pickWords(attack, [wren, brakka], sees)).toBe(NOTHING_IN_SIGHT);
+    // no creature in sight but a friend behind a wall: none to choose, why beside
+    // him; nobody at all: nothing in sight (a playtest's cleric, outside the chapel)
+    expect(pickWords(attack, [wren, brakka], sees)).toBe(NONE_TO_CHOOSE);
+    expect(pickWords(attack, [wren], sees)).toBe(NOTHING_IN_SIGHT);
     expect(pickWords(attack, [wren, brakka])).toBe('Attack: tap a creature on the map');
     // a pick of a space or an area lists no creatures
     expect(pickChoices(toks, { pick: 'area', ctx: { actor: 'wren' } })).toEqual([]);
@@ -196,14 +211,95 @@ describe('picking a target', () => {
     const near = { id: 'g1', name: 'Goblin Warrior', label: 'GW1', actor: 'a_g1', pos: [2, 1] };
     const haste = { kind: 'action', pick: 'token', friendly: true, label: 'Cast', ctx: { actor: 'wren', spell: 'haste' } };
     expect(pickChoices([wren, brakka, near], haste).map((c) => c.target)).toEqual(['token:wr', 'token:br', 'token:g1']);
-    // out of the caster's sight (a wall between), a friend isn't one "that you can see"; the caster always is
+    // out of the caster's sight (a wall between), a friend isn't one "that you can
+    // see": listed last, saying so; the caster always may be
     const sees = (p: { x: number; y: number }) => p.x < 3;
-    expect(pickChoices([wren, brakka, near], haste, { sees }).map((c) => c.target)).toEqual(['token:wr', 'token:g1']);
+    expect(pickChoices([wren, brakka, near], haste, { sees }).map((c) => [c.target, c.why])).toEqual([
+      ['token:wr', ''],
+      ['token:g1', ''],
+      ['token:br', WHY_WALL],
+    ]);
     // an attack still lists the foes first, never its attacker
     const attack = { kind: 'action', pick: 'token', label: 'Attack', ctx: { actor: 'wren' } };
     expect(pickChoices([wren, brakka, near], attack).map((c) => c.target)).toEqual(['token:g1', 'token:br']);
     // and the flag doesn't go to the table
     expect(withTarget(haste, 'token:br', 's1')).toEqual({ kind: 'action', ctx: { actor: 'wren', spell: 'haste', target: 'token:br', scene: 's1' } });
+  });
+
+  // (the level-12 playtest's Haste: the party's fighter, drawn on the map, was
+  // behind a wall from the caster and not in the list, and nothing said why)
+  it('lists those it can’t take after those it can, each with why: a wall, too dark to see, out of range, dead', () => {
+    const sq = new Grid({ shape: 'square', columns: 30, rows: 30, distance: 5, units: 'ft' });
+    const at = (q: number, r: number) => [sq.center({ q, r }).x, sq.center({ q, r }).y];
+    const yuki = { id: 'yu', name: 'Yuki', label: 'YU', actor: 'yuki', owner: 'pl_a', pos: at(1, 1) };
+    const marcus = { id: 'mv', name: 'Marcus Vell', label: 'MV', actor: 'marcus', owner: 'pl_b', pos: at(4, 1) };
+    const priya = { id: 'pr', name: 'Priya', label: 'PR', actor: 'priya', owner: 'pl_c', pos: at(1, 3) };
+    const far = { id: 'sam', name: 'Sam', label: 'SA', actor: 'sam', owner: 'pl_d', pos: at(1, 29) };
+    const fallen = { id: 'g1', name: 'Goblin Warrior', label: 'GW1', actor: 'a_g1', pos: at(2, 1), tags: ['dead'] };
+    const toks = [yuki, marcus, priya, far, fallen];
+    // Marcus behind a wall (black), Priya in the dark (navy), the rest in sight
+    const sight = (p: { x: number; y: number }) => (p.x > 3 && p.y < 3 ? 'walls' : p.y > 3 && p.y < 5 ? 'dark' : 'seen') as 'seen' | 'dark' | 'walls';
+    const haste = { kind: 'action', pick: 'token', friendly: true, label: 'Cast', range: 30, sight: true, ctx: { actor: 'yuki', spell: 'haste' } };
+    const list = pickChoices(toks, haste, { sight, grid: sq });
+    // (the party first, the caster among them, nearest first; then those it can't take, as near)
+    expect(list.map((c) => [c.name, c.why])).toEqual([
+      ['Yuki', ''],
+      ['Priya', WHY_DARK],
+      ['Marcus Vell', WHY_WALL],
+      ['Sam', 'out of range (140 ft)'],
+      ['Goblin Warrior', WHY_DEAD],
+    ]);
+    expect(WHY_WALL).toBe('can’t see: a wall is in the way');
+    expect(WHY_DARK).toBe('too dark to see');
+    // one that may go at a creature unseen (an attack: at Disadvantage; a touch):
+    // the dark is no bar, a wall still is (total cover: "can't be targeted directly")
+    const touch = { ...haste, range: 5, sight: false };
+    expect(pickChoices(toks, touch, { sight, grid: sq }).map((c) => [c.name, c.why])).toEqual([
+      ['Yuki', ''],
+      ['Priya', 'out of range (10 ft)'],
+      ['Marcus Vell', WHY_WALL],
+      ['Sam', 'out of range (140 ft)'],
+      ['Goblin Warrior', WHY_DEAD],
+    ]);
+    // in reach, the dark is no bar to it
+    const beside = { ...priya, pos: at(1, 2) };
+    const dark = (p: { x: number; y: number }) => (p.y > 2 && p.y < 3 ? 'dark' : 'seen') as 'seen' | 'dark' | 'walls';
+    expect(pickChoices([yuki, beside], touch, { sight: dark, grid: sq }).map((c) => c.why)).toEqual(['', '']);
+    expect(pickChoices([yuki, beside], haste, { sight: dark, grid: sq }).map((c) => c.why)).toEqual(['', WHY_DARK]);
+    // a weapon's reach, range and long range: the farthest counts
+    expect(pickRange({ range: [5, 80, 320] })).toBe(320);
+    expect(pickRange({ range: [5, null, 0] })).toBe(5);
+    expect(pickRange({ range: 30 })).toBe(30);
+    expect(pickRange({})).toBe(0);
+    expect(pickNeedsSight({})).toBe(true);
+    expect(pickNeedsSight({ sight: false })).toBe(false);
+    // a pick that takes the dead (Revivify's) doesn't call them dead
+    const revivify = { ...touch, dead: true, range: 0 };
+    expect(pickChoices([yuki, fallen], revivify, { sight, grid: sq }).map((c) => c.why)).toEqual(['', '']);
+    // how far, as the rules count it: steps of a square (diagonals too), and a big one's edge
+    expect(feetBetween(sq, yuki, marcus)).toBe(15);
+    expect(feetBetween(sq, yuki, { pos: at(4, 4) })).toBe(15);
+    const ogre = { pos: [sq.center({ q: 6, r: 1 }).x + 0.5, sq.center({ q: 6, r: 1 }).y + 0.5], size: 2 };
+    expect(feetBetween(sq, yuki, ogre)).toBe(25);
+    // with none it may take, the words say to look beside each name
+    expect(pickWords(haste, [yuki, marcus], { sight, grid: sq })).toBe('Cast: tap a creature on the map');
+    expect(pickWords({ ...haste, friendly: false }, [yuki, marcus], { sight, grid: sq })).toBe(NONE_TO_CHOOSE);
+  });
+
+  // the fog as the table sent it: in sight; in the line of sight but dark (navy); out of it (black)
+  it('reads where a place stands for a player’s eyes from the scene’s fog', () => {
+    const square = (x: number, y: number, s = 2) => [
+      [x, y],
+      [x + s, y],
+      [x + s, y + s],
+      [x, y + s],
+    ];
+    const scene = { fog: true, visible: [square(0, 0)], los: [square(0, 0, 4)] };
+    const s = sightOf(scene)!;
+    expect([s({ x: 1, y: 1 }), s({ x: 3, y: 3 }), s({ x: 6, y: 6 })]).toEqual(['seen', 'dark', 'walls']);
+    expect(sightOf({ fog: false })).toBeUndefined();
+    // by day there is no line of sight sent: out of sight is walls
+    expect(sightOf({ fog: true, visible: [square(0, 0)], los: [] })!({ x: 3, y: 3 })).toBe('walls');
   });
 
   // (the owner: people play theatre of the mind with no tokens all the time, and still need to see the rolls)
