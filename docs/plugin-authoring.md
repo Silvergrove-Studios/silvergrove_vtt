@@ -676,9 +676,11 @@ A form's `choices` (`[{ id, label, intent? }]`) draw as a button each
 instead of one submit button: a button with an `intent` sends that (with
 the form's values at `$values`), one without answers the prompt with the
 values plus `choice = id`. `opts.actor` names the character a prompt is
-about, for the screens to say. A `deadline` of 0 (or less) means none;
-the Table doesn't count deadlines down yet, so a prompt waits for its
-answer however long that takes (or for the GM to answer it).
+about, for the screens to say. The Table counts a prompt's `deadline`
+down (seconds) and answers it with its default when it passes, so a
+question left unanswered doesn't wait over a player's screen for ever; a
+`deadline` of 0 (or less) waits for the answer however long that takes (or
+for the GM to answer it) — a player's roll is theirs to make.
 
 ### Typed numbers
 
