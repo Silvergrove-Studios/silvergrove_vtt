@@ -6,7 +6,7 @@
 // druid's list, one read as a card; her sheet's spells offering only what
 // a druid 1 may prepare. Then the DM plays rolled scores (a player rolls,
 // the DM sees it) and the standard array: a Thaumaturge acolyte cleric,
-// her skills said as her background's (the sixth table's read "and
+// her skills said as her background's (the level-12 table's read "and
 // species"), whose level 2 asks for the spell her prepared list grows by
 // (its cleric and paladin were never asked). Screenshots of each step.
 //
@@ -303,7 +303,7 @@ await step('the standard array: each number given once', async () => {
   await shot(ari, 'ari_array');
 });
 
-// (the sixth table: "From your background and species" on skills a dwarf's species never
+// (the level-12 table: "From your background and species" on skills a dwarf's species never
 // gave; a Thaumaturge acolyte cleric, whose Magic Initiate takes two more Cleric cantrips)
 await step('Ari the cleric: her skills said as her background’s, a Thaumaturge with Magic Initiate', async () => {
   for (const [a, v] of [['Strength', '8'], ['Wisdom', '15']]) await ari.getByRole('combobox', { name: a }).selectOption(v);
@@ -358,7 +358,7 @@ await step('levels are the DM’s: milestones in Rules settings, Give a level, R
   await shot(rolf, 'rolf_level_2');
 });
 
-// (the sixth table: "Whenever that number increases, choose additional spells from the
+// (the level-12 table: "Whenever that number increases, choose additional spells from the
 // Cleric spell list" — its cleric and paladin were never asked, and each Learned, then
 // Prepared, every spell by hand)
 await step('Ari’s level 2 asks for the spell her prepared list grows by; her Spells tab prepares from the list', async () => {

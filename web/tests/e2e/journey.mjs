@@ -541,7 +541,7 @@ await step('Ben’s attack lists the creatures he sees, by name and map label', 
   await banner.waitFor({ state: 'detached', timeout: 5000 });
 });
 
-// (the sixth playtest's Haste listed the Gargoyle, the Mage and Yuki, and not
+// (the level-12 playtest's Haste listed the Gargoyle, the Mage and Yuki, and not
 // Marcus: a spell for the party lists the party first, its caster among them)
 await step('a spell for the party lists the party first, Ben’s own Brakka too', async () => {
   // the DM gives Brakka Guidance on his card (any spell, any list: the DM's to give)

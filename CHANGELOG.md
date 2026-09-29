@@ -257,14 +257,14 @@ The team's notes on making a character in the third playtest
   step (it opened at its last, with the last level's answers). A refused
   one keeps them. `web/tests/e2e/levels.mjs` walks a player through three
   levels against a table.
-- **A choice with nothing left to offer holds nothing up** (the sixth
+- **A choice with nothing left to offer holds nothing up** (the level-12
   table's cleric knew all seven Cleric cantrips when her level 10 asked
   for another, and Next never came): a `choose` field needs no more picks
   than it has on offer — all there are when fewer are left, none when none
   is — and says so. The maker journey takes a cleric's level 2 through its
   prepared spells and a cantrip replaced; the levels journey reads what
   each level brings.
-- **What the sixth table's fights needed from the Table**: a light may go
+- **What the level-12 table's fights needed from the Table**: a light may go
   on an effect, shining from its creature's token and going out when the
   effect ends (a paladin's blessed blade, for ten minutes), and may name
   its `units` (a ruleset's feet, which the map's scale makes hexes, as it
@@ -275,7 +275,9 @@ The team's notes on making a character in the third playtest
   Inspiration was offered to add it). The Table counts a question's
   `deadline` down and answers it with its default when it passes (a
   "Divine Smite at yourself, go ahead?" waited seventeen minutes over a
-  player's sheet); a deadline of 0 still waits for the answer.
+  player's sheet); a deadline of 0 still waits for the answer. A pick
+  for a spell on friends lists the party first, the caster among them (a
+  wizard's Haste list led with a gargoyle and a mage).
 
 ## 2.3.1 — 2026-09-25
 

@@ -3,7 +3,7 @@
 // party three levels; Ben takes Brakka's on his phone — level 2 in one tap,
 // then each level's choices in the level's wizard: the Champion at 3, the
 // Ability Score Improvement and a weapon mastered at 4, each level's last
-// step saying what it brings (the sixth table's said "no new features of its
+// step saying what it brings (the level-12 table's said "no new features of its
 // own" at an Ability Score Improvement). The wizard starts over for each
 // level (it kept its answers after sending them, and the next level's opened
 // at its last step with the last level's answers: its feat step never
@@ -122,7 +122,7 @@ await step('level 4: the wizard starts over, at its first step, with nothing cho
   await wizard(ben).getByRole('checkbox', { name: /^Battleaxe/ }).click();
   await next(ben).click();
   expect((await stepTitle(ben)) === 'The new level', `then what it brings: ${await stepTitle(ben)}`);
-  // (the sixth table's summaries at an Ability Score Improvement said "no new features of its own")
+  // (the level-12 table's summaries at an Ability Score Improvement said "no new features of its own")
   await wizard(ben).getByText('Level 4 (Fighter 4) brings Ability Score Improvement (Strength +2).', { exact: false }).waitFor({ timeout: 5000 });
   await shot(ben, 'level_4_brings');
   await next(ben).click();
