@@ -272,16 +272,35 @@ export function picked(f: Dict, value: unknown): string[] {
   return Array.isArray(value) ? value.map(String) : [];
 }
 
+/** How many of the options can be chosen — those on offer, not had already —
+ * or null while the options aren't known. */
+export function offerable(f: Dict, options: Choice[] | null): number | null {
+  if (!options) return null;
+  const fixed = fixedIds(f);
+  const allowed = allowedIds(f);
+  return options.filter((o) => !fixed.includes(o.id) && (!allowed || allowed.includes(o.id))).length;
+}
+
+/** The least a choose field needs picked: its count, but never more than it can
+ * offer (a level asked a cleric for an eighth cantrip of the seven there are,
+ * and Next never came: what isn't there to choose can't be asked for). */
+export function neededPicks(f: Dict, options: Choice[] | null): number {
+  const [lo] = chooseBounds(f);
+  const n = offerable(f, options);
+  return n === null ? lo : Math.min(lo, n);
+}
+
 /** What is wrong with a choose value, given the options there are (null: not known yet). */
 export function chooseProblem(f: Dict, value: unknown, options: Choice[] | null = null): string {
-  const [lo, hi] = chooseBounds(f);
+  const [, hi] = chooseBounds(f);
+  const lo = neededPicks(f, options);
   const ids = picked(f, value);
   const fixed = fixedIds(f);
   const allowed = allowedIds(f);
   const known = options ? new Set(options.map((o) => o.id)) : null;
   if (ids.some((id) => fixed.includes(id))) return 'That one is yours already.';
   if (ids.some((id) => (allowed && !allowed.includes(id)) || (known && !known.has(id)))) return 'That choice is not on offer.';
-  if (f.single) return ids.length === 1 ? '' : `Choose ${String(f.what ?? 'one')}.`;
+  if (f.single) return ids.length === 1 || lo === 0 ? '' : `Choose ${String(f.what ?? 'one')}.`;
   const what = String(f.what ?? (lo === 1 && hi === 1 ? 'one' : ''));
   if (ids.length < lo) {
     const n = lo - ids.length;
