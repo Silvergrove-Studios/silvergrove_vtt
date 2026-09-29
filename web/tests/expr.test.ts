@@ -43,6 +43,16 @@ describe('Expr, as the host has it', () => {
     expect(ev('0 or 5')).toBe(0);
     expect(ev('@item.rank == 2 ? "◆ " : (@item.rank == 1 ? "● " : "○ ")', { item: { rank: 1 } })).toBe('● ');
   });
+  // a sheet's `effect_keys` (Views.sheet_data): a field shown only to whoever
+  // holds an effect, as srd5e's Bardic Inspiration and Stand up ask (a
+  // playtest's wizard, holding no die, was offered to add one)
+  it("asks a sheet's effect keys, and a host without them hides the field", () => {
+    const inspired = "'inspired' in (@effect_keys ?? [])";
+    expect(ev(inspired, { effect_keys: ['prone', 'inspired'] })).toBe(true);
+    expect(ev(inspired, { effect_keys: ['prone'] })).toBe(false);
+    expect(ev(inspired, { effects: [{ key: 'inspired' }] })).toBe(false);
+    expect(ev("'prone' in (@effect_keys ?? [])", { effect_keys: ['prone'] })).toBe(true);
+  });
   it('calls its functions', () => {
     expect(ev('min(3, 1, 2)')).toBe(1);
     expect(ev('max([4, 9])')).toBe(9);
