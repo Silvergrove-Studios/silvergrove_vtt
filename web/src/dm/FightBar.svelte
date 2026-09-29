@@ -68,7 +68,7 @@
   <div class="what">
     <strong>{fight.name ?? 'A fight'}</strong>
     {#if turns.running}
-      <span>Round {turns.round ?? 1}{up ? ` · ${up.name}’s turn` : ''}{#if ended}<span class="dim"> · {ended} ended their turn</span>{/if}</span>
+      <span>Round {turns.round ?? 1}{up ? ` · ${up.name}’s turn` : ''}{#if up?.note}<span class="dim">{` · ${up.note}`}</span>{/if}{#if ended}<span class="dim"> · {ended} ended their turn</span>{/if}</span>
     {:else}
       <span class="dim">Not started: roll initiative when everyone is ready.</span>
     {/if}

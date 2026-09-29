@@ -464,7 +464,7 @@ picks a strategy in the Turns panel; `hm.turns.start(scene, id)`,
 
 | call | |
 |---|---|
-| `hm.turns.current()` | the turns block: `strategy`, `running`, `order`, `turn`, `round`, `focus`, `counters`, `requests`, `history`, `scene` (the one the order is for) and `last` (the turn that ended: `{by, entry, round, turn, at}`) |
+| `hm.turns.current()` | the turns block: `strategy`, `running`, `order`, `turn`, `round`, `focus`, `counters`, `requests`, `history`, `scene` (the one the order is for), `last` (the turn that ended: `{by, entry, round, turn, at}`) and `data` (the strategy's own: `labels`, `groups`, and `notes` — token id → a line the screens show with that token's turn, its player's header and the DM's order: "Movement 15 of 30 ft"; a ruleset keeps it with `{ t = "turns.set", changes = { ["data/notes/<token>"] = "…" } }`) |
 | `hm.turns.next([by, expect])` | end the current turn and start the next. `by` says who ended it (a player's id, `"gm"`, or this plugin when not given): a player's end is noted in the log for everyone. `expect = {round, turn}` is the turn meant: when it has already ended, nothing changes and the call fails saying whose turn it is now |
 | `hm.turns.focus()` / `hm.turns.holder_actor()` | the focus holder ref / the actor behind it |
 | `hm.turns.set_focus(holder, by)` | move the focus (`"gm"`, `"token:id"`, `"actor:id"`); `focus_changed` may veto |

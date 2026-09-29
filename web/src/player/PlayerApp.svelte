@@ -497,7 +497,7 @@
     <header class="bar">
       <div class="where">
         <span class="table">{game.table}</span>
-        <span class="turn" class:mine={turn.mine}>{turn.text}</span>
+        <span class="turn" class:mine={turn.mine}>{turn.text}{#if turn.note}<span class="sr-only">{' · '}</span><span class="turnnote">{turn.note}</span>{/if}</span>
       </div>
       <div class="me">
         {#if game.status !== 'open'}<span class="chip warn">Reconnecting…</span>{/if}
@@ -929,6 +929,14 @@
   .turn.mine {
     color: var(--accent);
     font-weight: 650;
+  }
+  /* what is left of the turn (the ruleset's line: "Movement 15 of 30 ft"),
+     on a line of its own under whose turn it is */
+  .turnnote {
+    display: block;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .me {
     display: flex;

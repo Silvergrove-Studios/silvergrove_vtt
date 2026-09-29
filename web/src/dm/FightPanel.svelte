@@ -27,7 +27,7 @@
           <li>
             <button type="button" class="row" class:current={r.current} class:on={r.ids.includes(selected)} onclick={() => onselect(r.ids[0] ?? '')}>
               <span class="init">{r.label}</span>
-              <span class="name">{r.name}</span>
+              <span class="name">{r.name}{#if r.note}<span class="note">{r.note}</span>{/if}</span>
               {#if r.hidden}<span class="tag">hidden</span>{/if}
             </button>
           </li>
@@ -111,6 +111,14 @@
   }
   .name {
     flex: 1;
+  }
+  /* the ruleset's line for the turn now: "Movement 15 of 30 ft" */
+  .note {
+    display: block;
+    font-weight: 450;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
   }
   .tag {
     font-size: 0.75rem;
