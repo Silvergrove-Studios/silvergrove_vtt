@@ -365,7 +365,10 @@ again with a change or two), `log {limit}`, `spacer`, and:
   filled (`required_text` says so), a `scores` or `choose` field
   complete — and says what is missing; a field's `help` is a line under
   its label. The step and the answers are kept in the browser until the
-  wizard is done (a phone that drops the page comes back to them).
+  wizard is done (a phone that drops the page comes back to them); once
+  the Table takes what it sends they go, and it starts over at its first
+  step — a wizard that stands on a sheet for each level asks each level
+  afresh. A refused one keeps its answers, to put right.
 - `image {bind | src, height}` — pack art by ref (`pack:asset`).
 - `field {label, bind, kind, on_change, options, min, max}` — one value
   edited in place (`kind` is a form field type); a change sends
