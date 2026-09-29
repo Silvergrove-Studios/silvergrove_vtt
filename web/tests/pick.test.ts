@@ -188,6 +188,24 @@ describe('picking a target', () => {
     expect(pickedWords(attack, [], name)).toBe('');
   });
 
+  // (a playtest's Haste listed the Gargoyle, the Mage and Yuki, and not Marcus: a
+  // spell for the party lists the party first, its caster among them)
+  it('lists the party first, the caster too, for a spell that is for them', () => {
+    const wren = { id: 'wr', name: 'Wren', label: 'WR', actor: 'wren', owner: 'pl_a', pos: [1, 1] };
+    const brakka = { id: 'br', name: 'Brakka', label: 'BR', actor: 'brakka', owner: 'pl_b', pos: [4, 1] };
+    const near = { id: 'g1', name: 'Goblin Warrior', label: 'GW1', actor: 'a_g1', pos: [2, 1] };
+    const haste = { kind: 'action', pick: 'token', friendly: true, label: 'Cast', ctx: { actor: 'wren', spell: 'haste' } };
+    expect(pickChoices([wren, brakka, near], haste).map((c) => c.target)).toEqual(['token:wr', 'token:br', 'token:g1']);
+    // out of the caster's sight (a wall between), a friend isn't one "that you can see"; the caster always is
+    const sees = (p: { x: number; y: number }) => p.x < 3;
+    expect(pickChoices([wren, brakka, near], haste, { sees }).map((c) => c.target)).toEqual(['token:wr', 'token:g1']);
+    // an attack still lists the foes first, never its attacker
+    const attack = { kind: 'action', pick: 'token', label: 'Attack', ctx: { actor: 'wren' } };
+    expect(pickChoices([wren, brakka, near], attack).map((c) => c.target)).toEqual(['token:g1', 'token:br']);
+    // and the flag doesn't go to the table
+    expect(withTarget(haste, 'token:br', 's1')).toEqual({ kind: 'action', ctx: { actor: 'wren', spell: 'haste', target: 'token:br', scene: 's1' } });
+  });
+
   // (the owner: people play theatre of the mind with no tokens all the time, and still need to see the rolls)
   it('sends an intent with no target, to be rolled and nothing applied', () => {
     const cast = { kind: 'action', plugin: 'srd5e', action: 'cast', pick: 'token', picks: 3, each: 'dart', label: 'Cast', ctx: { actor: 'hero', spell: 'magic-missile' } };
