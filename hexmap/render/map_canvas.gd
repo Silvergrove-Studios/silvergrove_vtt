@@ -425,11 +425,12 @@ func _draw_lights(c: Node2D) -> void:
 		if not is_shown("lights", l) or not bool(l.get("on", true)):
 			continue
 		draw_light(c, l, 1.0)
-	# Lights tokens carry: a torch moves with its bearer.
+	# Lights tokens carry: a torch moves with its bearer; so does a light
+	# its creature's effects shed (Vision.carried_lights, in hexes)
 	if state != null and show_tokens:
+		var index := Vision.effect_lights(state)
 		for t in tokens_in_view():
-			var tl = t.get("light", null)
-			if tl is Dictionary and not (tl as Dictionary).is_empty():
+			for tl in Vision.carried_lights(state, t, map.grid, index):
 				var l: Dictionary = (tl as Dictionary).duplicate()
 				l["pos"] = t.get("pos", [0, 0])
 				if not l.has("shadows"):

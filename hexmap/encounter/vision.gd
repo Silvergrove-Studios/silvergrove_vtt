@@ -72,18 +72,71 @@ static func hexes_per(units: String, grid: HexGrid) -> float:
 
 
 ## The lights a scene's sight counts: the map's that are on and not hidden,
-## and those its tokens carry — but not a hidden token's (its torch would
-## give away the goblin the DM has not revealed). The same set the web
-## snapshot draws. [{id, pos, bright, dim, angle, direction, shadows}]
+## and those its tokens carry (Vision.carried_lights) — but not a hidden
+## token's (its torch would give away the goblin the DM has not revealed).
+## The same set the web snapshot draws. [{id, pos, bright, dim, angle,
+## direction, shadows}]
 static func lights(state: EncounterState, scene_id: String, lvl: Dictionary) -> Array:
 	var out := []
 	for l in lvl.get("lights", []):
 		if bool(l.get("on", true)) and not bool(l.get("hidden", false)):
 			out.append(_light("light:" + str(l.get("id", "")), l, l.get("pos", [0, 0])))
+	var m := state.map_for(scene_id)
+	var index := effect_lights(state)
 	for tk in state.tokens(scene_id):
-		var tl: Variant = tk.get("light")
-		if tl is Dictionary and not (tl as Dictionary).is_empty() and not bool(tk.get("hidden", false)):
-			out.append(_light("token:" + str(tk.get("id", "")), tl, tk.get("pos", [0, 0])))
+		if bool(tk.get("hidden", false)):
+			continue
+		for l in carried_lights(state, tk, m.grid if m != null else null, index):
+			out.append(_light("token:" + str(tk.get("id", "")), l, tk.get("pos", [0, 0])))
+	return out
+
+
+## The lights a token carries, in hex units on this grid: its own `light`,
+## and those of the effects on it and on its creature — a ruleset puts a
+## light on an effect when the light lasts as long as the effect does (the
+## SRD's Sacred Weapon: "The weapon also emits Bright Light in a 20-foot
+## radius and Dim Light 20 feet beyond that", for ten minutes). A light's
+## `bright` and `dim` (its outer radius) are in its `units` when it names
+## them — `{bright: 20, dim: 40, units: "ft"}`, the map's scale making them
+## hexes, as `vision.dark_radius` — else in hexes. `index` is
+## effect_lights(state), worked out once for many tokens.
+## [{bright, dim, color, intensity, angle, direction, shadows}]
+static func carried_lights(state: EncounterState, tk: Dictionary, grid: HexGrid, index: Dictionary = {}) -> Array:
+	var out := []
+	var own: Variant = tk.get("light")
+	if own is Dictionary and not (own as Dictionary).is_empty():
+		out.append(in_hexes(own, grid))
+	if index.is_empty() and not state.encounter.effects.is_empty():
+		index = effect_lights(state)
+	var refs := ["token:" + str(tk.get("id", ""))]
+	if str(tk.get("actor", "")) != "":
+		refs.append("actor:" + str(tk.actor))
+	for r in refs:
+		for l in index.get(r, []):
+			out.append(in_hexes(l, grid))
+	return out
+
+
+## The effects that carry a light, by what they are on: {ref: [light]}.
+static func effect_lights(state: EncounterState) -> Dictionary:
+	var out := {}
+	for id in state.encounter.effects:
+		var fx: Variant = state.encounter.effects[id]
+		if fx is Dictionary and fx.get("light") is Dictionary and not (fx.light as Dictionary).is_empty():
+			var on := str(fx.get("on", ""))
+			if not out.has(on):
+				out[on] = []
+			out[on].append(fx.light)
+	return out
+
+
+## A light's radii in hexes: from its `units` by the map's scale, or as given.
+static func in_hexes(l: Dictionary, grid: HexGrid) -> Dictionary:
+	var out: Dictionary = l.duplicate()
+	var k := hexes_per(str(l.get("units", "")), grid)
+	out.bright = float(l.get("bright", 0.0)) * k
+	out.dim = float(l.get("dim", 0.0)) * k
+	out.erase("units")
 	return out
 
 
