@@ -264,6 +264,18 @@ The team's notes on making a character in the third playtest
   is — and says so. The maker journey takes a cleric's level 2 through its
   prepared spells and a cantrip replaced; the levels journey reads what
   each level brings.
+- **What the sixth table's fights needed from the Table**: a light may go
+  on an effect, shining from its creature's token and going out when the
+  effect ends (a paladin's blessed blade, for ten minutes), and may name
+  its `units` (a ruleset's feet, which the map's scale makes hexes, as it
+  does for darkvision); the players' sight and fog, the rules' `light_at`
+  and `can_see`, the web screens and the Table's map count the same
+  lights. A sheet's data lists its effects' keys (`effect_keys`), so a
+  field can be for whoever holds an effect (a wizard holding no Bardic
+  Inspiration was offered to add it). The Table counts a question's
+  `deadline` down and answers it with its default when it passes (a
+  "Divine Smite at yourself, go ahead?" waited seventeen minutes over a
+  player's sheet); a deadline of 0 still waits for the answer.
 
 ## 2.3.1 — 2026-09-25
 

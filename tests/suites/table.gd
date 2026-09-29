@@ -960,6 +960,46 @@ func test_cells_no_creature_is_put_on() -> void:
 	check(not at.call(11, 7) and not at.call(16, 8), "the nave's floor is free")
 
 
+## A question left unanswered takes its default at its deadline: a playtest's
+## "Divine Smite at yourself, go ahead?" waited seventeen minutes over a
+## player's sheet and hid the save card that came after it. And a DM's drag
+## of a creature reaches the rules as a move, the DM's (after_move, where a
+## ruleset offers opportunity attacks).
+func test_the_tables_questions_run_out_and_drags_are_moves() -> void:
+	var app := App.new("user://test_prefs_table_deadline.json")
+	var win := TableWindow.new()
+	win.app = app
+	root.add_child(win)
+	win._open_path(_example("chapel_ambush.encounter"))
+	await tree.process_frame
+	var ctx := win.ctx
+	var answered := []
+	var id := ctx.kernel.pending.open_prompt({"to": "gm", "form": {"title": "Go ahead?"}, "opts": {"default": {"choice": "stop"}, "deadline": 30}}, "test",
+		func(a: Variant) -> void: answered.append(a))
+	check(id != "" and ctx.kernel.pending.prompts().has(id), "a question with a deadline of 30 seconds")
+	win._process(10.0)
+	check(answered.is_empty() and ctx.kernel.pending.prompts().has(id), "ten seconds on: still asked")
+	win._process(21.0)
+	check(answered.size() == 1 and answered[0].get("choice") == "stop" and not ctx.kernel.pending.prompts().has(id), "past its deadline: answered with its default, and gone: %s" % [answered])
+	var forever := ctx.kernel.pending.open_prompt({"to": "gm", "form": {"title": "Roll"}, "opts": {"default": {}, "deadline": 0}}, "test", func(_a: Variant) -> void: pass)
+	win._process(1.0e6)
+	check(ctx.kernel.pending.prompts().has(forever), "a deadline of 0 waits however long it takes")
+	ctx.kernel.pending.answer(forever, {}, "")
+	# the DM's drag: a move the rules hear, by the DM
+	var sid := ctx.scene_id
+	var tk: Dictionary = ctx.state.tokens(sid)[0]
+	var heard := []
+	ctx.kernel.hooks.on("after_move", func(p: Dictionary) -> Dictionary:
+		heard.append(str(p.by) + ":" + str(p.token))
+		return p, "test")
+	var to := Vision.token_pos(tk) + Vector2(1, 0)
+	check(win._apply_player_request({"t": "token.set", "scene": sid, "id": str(tk.id), "changes": {"pos": [to.x, to.y]}}, "") == "", "the DM drags a token")
+	check(heard == ["gm:" + str(tk.id)], "the rules hear the move, the DM's: %s" % [heard])
+	ctx.kernel.hooks.off("test")
+	win.queue_free()
+	await tree.process_frame
+
+
 ## A player's move reaches the rules as theirs (`by`: their id), so a ruleset
 ## can refuse a move a player may not make and the DM may (in a playtest a
 ## goblin and a player's character ended up on one cell); and no player is

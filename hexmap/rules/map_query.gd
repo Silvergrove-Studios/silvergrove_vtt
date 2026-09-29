@@ -322,9 +322,10 @@ func light_at(scene_id: String, p: Variant) -> Dictionary:
 	for l in lvl.get("lights", []):
 		if bool(l.get("on", true)) and not bool(l.get("hidden", false)):
 			lights.append({"id": "light:" + str(l.get("id", "")), "pos": Vector2(float(l.pos[0]), float(l.pos[1])), "bright": float(l.get("bright", 0)), "dim": float(l.get("dim", 0)), "shadows": bool(l.get("shadows", true))})
+	# what tokens carry: their own lights and their effects' (Vision.carried_lights)
+	var index := Vision.effect_lights(kernel.state)
 	for tk in kernel.state.tokens(scene_id):
-		var tl: Variant = tk.get("light")
-		if tl is Dictionary and not (tl as Dictionary).is_empty():
+		for tl in Vision.carried_lights(kernel.state, tk, grid(scene_id), index):
 			lights.append({"id": "token:" + str(tk.id), "pos": Vision.token_pos(tk), "bright": float(tl.get("bright", 0)), "dim": float(tl.get("dim", 0)), "shadows": bool(tl.get("shadows", true))})
 	for l in lights:
 		var radius := maxf(float(l.bright), float(l.dim))

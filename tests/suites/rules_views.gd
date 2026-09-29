@@ -46,6 +46,17 @@ func test_projection_audience() -> void:
 	var sd: Dictionary = ana.actors.a_ana.sheets[0].data
 	check(sd.me == "pl_1" and sd.actor.id == "a_ana" and sd.derived.evade.total == 10 and sd.resources.hp.marked == 1 and sd.derived.hand == ["dash"], "and its data: me, actor, derived, resources: %s" % [sd.keys()])
 	check(sd.party == [{"id": "a_ben", "name": "Ben's bard"}], "and the rest of the party, whom to hand things to (not the goblin): %s" % [sd.get("party")])
+	# the keys of its effects, for a view's `if` (a playtest's wizard, holding no
+	# Bardic Inspiration, was offered to add it: the field showed for any effect)
+	check(sd.effect_keys == [], "no effects: no keys")
+	check(k.commit([{"t": "effect.apply", "effect": {"id": "e_prone", "on": "actor:a_ana", "plugin": "sample.focus", "key": "prone", "label": "Prone", "stack": "none", "changes": [], "duration": {"kind": "until_cleared"}}},
+		{"t": "effect.apply", "effect": {"id": "e_mark", "on": "token:t_ana", "plugin": "sample.focus", "key": "marked", "label": "Marked", "stack": "none", "changes": [], "duration": {"kind": "until_cleared"}, "audience": "gm"}}], "Effects") == "", "two effects on Ana: one the DM's alone")
+	var sd2: Dictionary = Views.project(k, host, "pl_1", Views.ROLE_PLAYER).actors.a_ana.sheets[0].data
+	check(sd2.effect_keys == ["prone"], "her sheet's effect keys: those she may see: %s" % [sd2.effect_keys])
+	check(Expr.evaluate("'prone' in (@effect_keys ?? [])", sd2) == true and Expr.evaluate("'inspired' in (@effect_keys ?? [])", sd2) == false, "a view's `if` reads them")
+	var gsd: Dictionary = Views.project(k, host, "", Views.ROLE_GM).actors.a_ana.sheets[0].data
+	check(gsd.effect_keys.has("prone") and gsd.effect_keys.has("marked"), "the DM's, all of them: %s" % [gsd.effect_keys])
+	k.commit([{"t": "effect.remove", "id": "e_prone"}, {"t": "effect.remove", "id": "e_mark"}], "Gone")
 	check(ana.actors.has("a_ben") and not ana.actors.a_ben.mine and ana.actors.a_ben.sheets.is_empty() and ana.actors.a_ben.derived["sample.focus"].evade.total == 8, "another PC: public numbers, no sheet")
 	check(not ana.actors.has("a_gob"), "an NPC is not hers to see")
 	check(ana.actors.a_ana.tokens.size() == 1, "her token is listed")

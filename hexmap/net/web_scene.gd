@@ -135,9 +135,14 @@ static func lights(state: EncounterState, scene_id: String, lvl: Dictionary, tok
 	for l in lvl.get("lights", []):
 		if bool(l.get("on", true)) and not bool(l.get("hidden", false)):
 			all.append(l)
+	# what the tokens carry: their own lights and their effects' (Vision.carried_lights)
+	var m := state.map_for(scene_id)
+	var index := Vision.effect_lights(state)
 	for t in tokens:
-		var tl: Variant = state.token(scene_id, str(t.get("id", ""))).get("light", null)
-		if tl is Dictionary and not (tl as Dictionary).is_empty():
+		var tk := state.token(scene_id, str(t.get("id", "")))
+		if tk.is_empty():
+			continue
+		for tl in Vision.carried_lights(state, tk, m.grid if m != null else null, index):
 			var l: Dictionary = (tl as Dictionary).duplicate()
 			l.pos = t.get("pos", [0, 0])
 			all.append(l)

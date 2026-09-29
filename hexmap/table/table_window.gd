@@ -157,6 +157,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if host != null:
 		host.poll(delta)
+	# a question left unanswered takes its default at its deadline (a prompt's
+	# `deadline`, in seconds; 0 waits for ever): a playtest's "Divine Smite at
+	# yourself, go ahead?" waited seventeen minutes over a player's sheet, and hid
+	# the save card that came after it
+	if ctx != null and ctx.kernel != null:
+		ctx.kernel.pending.tick(delta)
 
 
 ## A campaign (or an encounter to import) from the command line or the

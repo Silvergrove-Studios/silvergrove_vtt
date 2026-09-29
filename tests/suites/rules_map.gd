@@ -161,6 +161,55 @@ func test_map_sight_and_light() -> void:
 	check(not mq.can_see(sid, "token:t_h", "token:t_none").sees, "unknown target")
 
 
+## Lights creatures carry, in a ruleset's feet and on its effects: a paladin's
+## Sacred Weapon ("Bright Light in a 20-foot radius and Dim Light 20 feet
+## beyond that") lights the goblin in the dark for a hero with no
+## darkvision, and goes out with the effect. (A playtest's Sun Blade lit
+## nothing: the creatures beside it stayed under the fog.)
+func test_carried_lights() -> void:
+	var parts := _chapel_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	var mq := k.map
+	var st := k.state
+	var door := {}
+	for w in st.level_for(sid).walls:
+		if w.get("door", "none") == "door":
+			door = w
+			break
+	k.commit([{"t": "scene.set", "id": sid, "changes": {"light": "dark"}}, {"t": "element.set", "scene": sid, "ref": "walls:" + str(door.id), "changes": {"state": "open"}},
+		{"t": "token.set", "scene": sid, "id": "t_g", "changes": {"hidden": false}}], "Night, the door open")
+	for l in st.level_for(sid).lights:
+		k.commit([{"t": "element.set", "scene": sid, "ref": LayerTree.ref("lights", str(l.id)), "changes": {"on": false}}], "Every light out")
+	check(mq.light_at(sid, "token:t_g").level == "dark", "the goblin, six hexes off, stands in the dark")
+	check(not mq.can_see(sid, "token:t_h", "token:t_g").sees, "the hero, with no darkvision, doesn't see it")
+	# a light on the hero's token in feet: 20 bright, 40 in all, is 4 and 8 five-foot hexes
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"light": {"bright": 20, "dim": 40, "units": "ft"}}}], "A light in feet")
+	check(mq.light_at(sid, "token:t_g").level == "dim", "six hexes off: in its dim light (feet made hexes)")
+	check(mq.can_see(sid, "token:t_h", "token:t_g").sees, "and seen")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"light": {"bright": 20, "dim": 40}}}], "A light in hexes")
+	check(mq.light_at(sid, "token:t_g").level == "bright", "with no units, hexes: bright")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"light": null}}], "Out")
+	check(mq.light_at(sid, "token:t_g").level == "dark", "out: dark again")
+	# the same light on an effect on the hero's creature: it lights its token, and ends with the effect
+	var fx := {"id": "e_sacred", "on": "actor:a_h", "plugin": "sample", "key": "sacred_weapon", "label": "Sacred Weapon", "stack": "none", "changes": [],
+		"duration": {"kind": "until_cleared"}, "light": {"bright": 20, "dim": 40, "units": "ft", "color": "#fff1c0"}}
+	check(k.commit([{"t": "effect.apply", "effect": fx}], "Sacred Weapon") == "", "an effect with a light")
+	var here := mq.light_at(sid, "token:t_g")
+	check(here.level == "dim" and here.sources.has("token:t_h"), "the goblin in its dim light, from the hero's token: %s" % [here])
+	check(mq.can_see(sid, "token:t_h", "token:t_g").sees, "seen by its light")
+	var sight := Vision.of(st, sid, [st.token(sid, "t_h")])
+	check(Vision.sees(sight.polygons, Vision.token_pos(st.token(sid, "t_g"))), "and in the hero's sight on the players' screens")
+	var drawn := WebScene.lights(st, sid, st.effective_level(sid), [WebScene.token_out(st, st.token(sid, "t_h"), false)])
+	check(drawn.size() == 1 and is_equal_approx(float(drawn[0].bright), 4.0) and is_equal_approx(float(drawn[0].dim), 8.0), "the web screens draw it, in hexes: %s" % [drawn.map(func(l: Dictionary) -> String: return "%s/%s" % [l.bright, l.dim])])
+	# a hidden creature's light gives nothing away
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"hidden": true}}], "Hidden")
+	check(mq.light_at(sid, "token:t_g").level == "dim", "light_at counts every light (the map's own question)")
+	check(Vision.lights(st, sid, st.effective_level(sid)).all(func(l: Dictionary) -> bool: return str(l.id) != "token:t_h"), "but sight doesn't count a hidden token's")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"hidden": false}}, {"t": "effect.remove", "id": "e_sacred"}], "It ends")
+	check(mq.light_at(sid, "token:t_g").level == "dark", "the effect over: dark again")
+
+
 func test_map_regions_cells_and_moves() -> void:
 	var parts := _chapel_kernel()
 	var k: RulesKernel = parts[0]

@@ -287,6 +287,8 @@ so register a new kind with `pcall(hm.ui.register, …)`). The kinds:
   actor that carries this plugin's data. Its data: `me` (player id),
   `role`, `actor {id, name, owner, kind, mine}`, `ext` and `derived`
   (this plugin's blocks), `resources` (name → record), `effects`,
+  `effect_keys` (the keys of those effects, for an `if`: `"'prone' in
+  (@effect_keys ?? [])"` — an Expr can't search a list of records),
   `tokens`, `turns`, `clock`, `state` (this plugin's encounter state),
   `party` (the other player characters and companions, `{id, name}`:
   whom to hand something to).
@@ -594,7 +596,7 @@ in Hexmap knows what "close" means.
 | `hm.map.within(scene, origin, r)` | token ids whose edge is within `r` of the origin |
 | `hm.map.template(scene, spec)` | `{cells, tokens, origin}` for `{shape="circle", at, radius}`, `{shape="cone", at, direction, length, angle}`, `{shape="line", at, direction, length, width}` or `{shape="band", at, band}`; `origin="edge"` starts cones and lines at the token's edge, `blocked_by_walls=true` drops what the origin cannot see |
 | `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by, walls, seen, of}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens; `blocked_by` lists the tokens in the way and `walls` how many rays a wall stopped, so cover from walls and from creatures can be priced apart |
-| `hm.map.light_at(scene, p)` | `{level="bright" \| "dim" \| "dark", sources, ambient}` — from the scene's own light (`ambient`: `daylight` is bright everywhere, `dim` dim), raised by the lights that reach the point |
+| `hm.map.light_at(scene, p)` | `{level="bright" \| "dim" \| "dark", sources, ambient}` — from the scene's own light (`ambient`: `daylight` is bright everywhere, `dim` dim), raised by the lights that reach the point: the map's, and those tokens carry (below) |
 | `hm.map.can_see(scene, viewer, target)` | the viewer sees (`vision.radius` above 0), sight clear, target lit — or within the viewer's darkvision (`vision.dark_radius` in its `units`; `dark_sight = true` in the answer) or the viewer's `vision.mode` is `"dark"`. No range: in light a line of sight is enough. A ruleset sets those with `token.set` (and the actor's `token.vision`, which a token placed later starts from) from the sheet's senses, in the sheet's own units: `{ dark_radius = 60, units = "ft" }` — the Table turns them into hexes by the map's scale, which a plugin cannot see |
 | `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys (six neighbours and a hex of hexes, or four and a square block) |
 | `hm.map.cell(scene, key)` | the cell's record (`revealed`, plain fields, `ext`) with the map's `terrain` for it |
@@ -613,6 +615,17 @@ What a ruleset may put on the map, as events for `hm.commit`:
 
 Regions with a `duration` expire with the same triggers as effects; a
 token entering or leaving one fires `region_entered` / `region_left`.
+
+**Lights creatures carry.** A token's `light` (`{bright, dim, color,
+angle, direction, shadows}`, `dim` the outer radius) moves with it, and so
+does the `light` of any effect on the token or on its actor — a light that
+lasts as long as an effect does (a blessed blade's for ten minutes) goes on
+the effect and ends with it. Either may name its `units`: `{ bright = 20,
+dim = 40, units = "ft" }` is turned into hexes by the map's scale, as
+`vision.dark_radius` is; without units the radii are hexes. The rules'
+questions (`light_at`, `can_see`) count every one; the fog and what a
+player's screen shows count all but a hidden token's (its torch would give
+away the creature the DM hasn't revealed).
 
 ### Rolling
 
@@ -667,9 +680,11 @@ A form's `choices` (`[{ id, label, intent? }]`) draw as a button each
 instead of one submit button: a button with an `intent` sends that (with
 the form's values at `$values`), one without answers the prompt with the
 values plus `choice = id`. `opts.actor` names the character a prompt is
-about, for the screens to say. A `deadline` of 0 (or less) means none;
-the Table doesn't count deadlines down yet, so a prompt waits for its
-answer however long that takes (or for the GM to answer it).
+about, for the screens to say. The Table counts a prompt's `deadline`
+down (seconds) and answers it with its default when it passes, so a
+question left unanswered doesn't wait over a player's screen for ever; a
+`deadline` of 0 (or less) waits for the answer however long that takes (or
+for the GM to answer it) — a player's roll is theirs to make.
 
 ### Typed numbers
 
