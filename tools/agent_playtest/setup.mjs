@@ -6,7 +6,14 @@
 // agent back after an interruption.
 //
 //   node tools/agent_playtest/setup.mjs --run <dir> --host <host.json>
-//       [--mode session|campaign] [--hours 3.5] [--in 3] [--cast cast.json] [--timelapse 120]
+//       [--mode session|campaign|oneshot] [--hours 3.5] [--in 3] [--cast cast.json] [--timelapse 120]
+//       [--docs <dir>] [--dm-docs <dir>]
+//
+// A mode may have briefs of its own (briefs/player-oneshot.md, dm-oneshot.md);
+// the others share briefs/player.md and dm.md, whose {{#mode}} sections say
+// what differs. --docs copies a folder into each player's own as srd/ (a
+// rulebook for rules lawyers: the ruleset's tools/srd_reference.py writes
+// one), --dm-docs the DM's.
 //
 // Each person's folder keeps its logs: log/agent.jsonl (everything the agent
 // said and did, as Claude streams it), log/tools.jsonl (each tool call and
@@ -18,7 +25,7 @@
 // sees its history and notes, which is what the playtest must not have).
 import { chromium } from '../../web/node_modules/playwright-core/index.mjs';
 import { spawn } from 'node:child_process';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,7 +37,7 @@ const arg = (k, d) => {
 const run = arg('--run') && resolve(arg('--run'));
 const hostFile = arg('--host') && resolve(arg('--host'));
 if (!run || !hostFile) {
-  console.error('usage: node tools/agent_playtest/setup.mjs --run <dir> --host <host.json> [--mode session|campaign] [--hours 3.5] [--in 3]');
+  console.error('usage: node tools/agent_playtest/setup.mjs --run <dir> --host <host.json> [--mode session|campaign|oneshot] [--hours 3.5] [--in 3] [--docs <dir>] [--dm-docs <dir>]');
   process.exit(2);
 }
 const mode = arg('--mode', 'campaign');
@@ -45,21 +52,24 @@ copyFileSync(castFile, join(run, 'cast.json'));
 const t0 = new Date(Date.now() + Number(arg('--in', '3')) * 60000);
 t0.setSeconds(0, 0);
 const at = (min) => new Date(t0.getTime() + min * 60000).toTimeString().slice(0, 5);
-const end = mode === 'campaign' ? Math.round(hours * 60) : 115;
+const end = mode === 'session' ? 115 : Math.round(hours * 60);
+// a one-shot at level 12: homework first, and building a character takes
+// its eleven levels; the reviews carry a rules log as well
+const oneshot = mode === 'oneshot';
 const times = {
-  t_research: at(10),
-  t_dm_research: at(8),
-  t_character: at(40),
-  t_story: at(45),
+  t_research: at(oneshot ? 15 : 10),
+  t_dm_research: at(oneshot ? 12 : 8),
+  t_character: at(oneshot ? 75 : 40),
+  t_story: at(oneshot ? 80 : 45),
   t_level: at(95),
-  t_wrap: at(mode === 'campaign' ? end - 5 : 112),
+  t_wrap: at(mode === 'session' ? 112 : end - 5),
   t_end: at(end),
-  t_review: at(end + 15),
+  t_review: at(end + (oneshot ? 25 : 15)),
 };
 
 function fill(template, values) {
   let s = template;
-  for (const m of ['session', 'campaign']) {
+  for (const m of ['session', 'campaign', 'oneshot']) {
     const re = new RegExp(`\\{\\{#${m}\\}\\}([\\s\\S]*?)\\{\\{/${m}\\}\\}`, 'g');
     s = s.replace(re, (_, inner) => (m === mode ? inner : ''));
   }
@@ -70,7 +80,13 @@ function fill(template, values) {
   return s.replace(/\n{3,}/g, '\n\n');
 }
 
-const people = [{ ...cast.dm, role: 'the DM', brief: 'dm.md', url: host.dm }, ...cast.players.map((p) => ({ ...p, role: 'a player', brief: 'player.md', url: host.player }))];
+// a mode's own brief where it has one
+const brief = (who) => (existsSync(join(here, 'briefs', `${who}-${mode}.md`)) ? `${who}-${mode}.md` : `${who}.md`);
+const docs = { dm: arg('--dm-docs') && resolve(arg('--dm-docs')), player: arg('--docs') && resolve(arg('--docs')) };
+const people = [
+  { ...cast.dm, role: 'the DM', brief: brief('dm'), url: host.dm, docs: docs.dm ?? docs.player },
+  ...cast.players.map((p) => ({ ...p, role: 'a player', brief: brief('player'), url: host.player, docs: docs.player })),
+];
 
 // pictures for each camera roll: emoji art on painted grounds
 const browser = await chromium.launch({ channel: process.env.HEXMAP_BROWSER ?? 'chrome', headless: true });
@@ -97,6 +113,7 @@ for (const p of people) {
   const dir = join(run, p.key);
   const values = { ...times, ...p, name: p.name };
   writeFileSync(join(dir, 'brief.md'), fill(readFileSync(join(here, 'briefs', p.brief), 'utf8'), values));
+  if (p.docs) cpSync(p.docs, join(dir, 'srd'), { recursive: true });
   writeFileSync(join(dir, 'resume.md'), fill(readFileSync(join(here, 'briefs', 'resume.md'), 'utf8'), values));
   writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { table: { command: 'node', args: [join(here, 'table-mcp.mjs'), String(p.port), dir] } } }, null, 2));
   mkdirSync(join(dir, 'log'), { recursive: true });

@@ -23,9 +23,13 @@ tools, can read and write only their own folder, and research D&D on the web.
   `cast2.json` is another table (a warlock, a paladin, a sorcerer, a rogue,
   and a DM who improvises fights): `setup.mjs --cast cast2.json`.
   `cast3.json` names no classes (the players choose), and its DM lets the
-  players lead, as the DM brief now asks of every DM.
+  players lead, as the DM brief now asks of every DM. `cast4.json` is a table
+  of rules lawyers for a `oneshot` at level 12: experienced players who do
+  their homework and check the site against the rules at every level.
 - `briefs/` — the DM's and the players' briefs (a `session` or a whole
-  `campaign`), and `resume.md` to bring an agent back after an interruption
+  `campaign`; a `oneshot` has briefs of its own, `dm-oneshot.md` and
+  `player-oneshot.md`: build a level-12 character, keep a rules log in
+  `rules.md`), and `resume.md` to bring an agent back after an interruption
   (its diary is its memory).
 - `setup.mjs` — makes each person's folder (brief, pictures, tools' config),
   starts the seats, prints the command that starts each agent.
@@ -66,6 +70,10 @@ python3 -u tools/agent_playtest/watch.py <run>
 # afterwards
 kill $(cat <run>/seats.pids); touch <run>/host.stop
 ```
+
+For a one-shot of rules lawyers, give them the rulebook they're limited to:
+`--mode oneshot --cast tools/agent_playtest/cast4.json --docs <rules> --dm-docs
+<rules with the creatures>` copies each folder into their own as `srd/`.
 
 `<run>` must be outside any repository. The allowed tools are the table's,
 reading and editing the agent's own folder, and web search for D&D; anything
