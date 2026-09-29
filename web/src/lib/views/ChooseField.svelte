@@ -4,7 +4,9 @@
   sub}) or a compendium collection's entries (the viewer's own audience),
   less those `allowed` leaves out; those `fixed` are had already (ticked,
   locked, not counted). A counter says how many are left to choose and
-  nothing past the limit can be picked. `single`: one of them (a string).
+  nothing past the limit can be picked; with fewer on offer than it asks,
+  it asks for all there are (none, and it says so). `single`: one of them
+  (a string).
 -->
 <script lang="ts">
   import { viewUi } from './context';
@@ -75,10 +77,20 @@
     return s.length > 180 ? s.slice(0, 177).replace(/\s\S*$/, '') + '…' : s;
   }
 
+  // what it needs picked: its count, or fewer when fewer are on offer (fieldcheck's
+  // neededPicks: a choice with nothing left to offer doesn't hold the wizard up)
+  const need = $derived(all === null ? bounds[0] : Math.min(bounds[0], offered.length));
+
   const counter = $derived.by(() => {
-    if (field.single) return ids.length ? '' : 'Choose one';
+    if (field.single) return ids.length || (all !== null && offered.length === 0) ? '' : 'Choose one';
     const [lo, hi] = bounds;
     if (lo === hi) {
+      if (lo === 0) return '';
+      if (need < lo) {
+        if (need === 0) return '';
+        const left = need - ids.length;
+        return left > 0 ? `Choose ${need}, all there are · ${left} left` : `${need} chosen, all there are ✓`;
+      }
       const n = lo - ids.length;
       return n > 0 ? `Choose ${lo} · ${n} left` : `${lo} chosen ✓`;
     }
@@ -106,7 +118,7 @@
   {#if all === null}
     <p class="dim">Loading the choices…</p>
   {:else if offered.length === 0}
-    <p class="dim">{field.empty ?? 'Nothing to choose here.'}</p>
+    <p class="dim">{field.empty ?? (bounds[0] > 0 ? 'None left to choose, so none is asked for.' : 'Nothing to choose here.')}</p>
   {:else}
     {#if field.search || offered.length > 12}
       <input type="search" placeholder="Find one…" bind:value={q} />

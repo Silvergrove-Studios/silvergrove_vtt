@@ -541,6 +541,37 @@ await step('Ben’s attack lists the creatures he sees, by name and map label', 
   await banner.waitFor({ state: 'detached', timeout: 5000 });
 });
 
+// (the sixth playtest's Haste listed the Gargoyle, the Mage and Yuki, and not
+// Marcus: a spell for the party lists the party first, its caster among them)
+await step('a spell for the party lists the party first, Ben’s own Brakka too', async () => {
+  // the DM gives Brakka Guidance on his card (any spell, any list: the DM's to give)
+  await dm.locator('.book').getByRole('button', { name: /^Brakka/ }).first().click();
+  await dm.getByRole('tab', { name: 'Spells' }).first().click();
+  const give = dm.locator('.picker').filter({ hasText: 'Give a spell (any list, any level)' });
+  await give.locator('input[type=search]').fill('guidance');
+  await give.getByRole('button', { name: 'Give Guidance' }).click({ timeout: 8000 });
+  await dm.getByRole('button', { name: 'Close the card' }).click().catch(() => {});
+  await ben.getByRole('tab', { name: /^Character/ }).click();
+  await ben.getByRole('tab', { name: 'Spells' }).click();
+  const row = ben.locator('.row').filter({ hasText: /Guidance \(cantrip/ }).first();
+  await row.waitFor({ timeout: 8000 });
+  await row.getByRole('button', { name: 'Cast', exact: true }).click();
+  const banner = ben.getByRole('group', { name: 'Choose the target' });
+  await banner.waitFor({ timeout: 5000 });
+  const first = banner.locator('.choice').first();
+  await first.waitFor({ timeout: 5000 });
+  const said = await first.innerText();
+  if (!/^Brakka/.test(said)) throw new Error(`the first choice is his own Brakka: ${said}`);
+  // (Wren, when he sees her, before any foe)
+  const all = await banner.locator('.choice').allInnerTexts();
+  const wren = all.findIndex((s) => /^Wren/.test(s));
+  const foe = all.findIndex((s) => /Goblin|Warden/.test(s));
+  if (wren >= 0 && foe >= 0 && foe < wren) throw new Error(`the party first, then the rest: ${all.join(' | ')}`);
+  await shot(ben, 'ben_pick_friendly');
+  await banner.getByRole('button', { name: 'Cancel' }).click();
+  await banner.waitFor({ state: 'detached', timeout: 5000 });
+});
+
 await step('the DM drags Wren beside a goblin', async () => {
   const where = await dm.evaluate(() => {
     const g = window.hexmap.game;

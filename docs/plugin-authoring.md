@@ -387,10 +387,14 @@ and `list`, a form or wizard field may be:
   name and text, `sub` an Expr over `@item` for the line under each).
   `allowed` limits what may be chosen, `fixed` is had already (shown
   ticked and locked, not counted), `count` how many to choose (the
-  counter counts down; nothing past it can be picked), `single` just
-  one. Its value: a list of ids, or one id with `single`. `detail`
-  names a collection whose card a "?" opens. Skills, spells, an
-  equipment package.
+  counter counts down; nothing past it can be picked; with fewer on
+  offer than it asks — `allowed`, less `fixed` — Next asks for all
+  there are, and for none when none is left: a level once asked a
+  cleric for an eighth cantrip of seven), `single` just one. `empty`
+  says why there is nothing to choose. Its value: a list of ids, or
+  one id with `single`. `detail` names a collection whose card a "?"
+  opens. Skills, spells, an equipment package. (The plugin checks the
+  value again: a client's leniency is no rule.)
 - `scores {stats, method, point_buy, array, rolled, manual, primary,
   suggest, who, bonus}` — numbers for named stats (`{id, name, text,
   uses}`), made by `method`: `point_buy` (`{budget, min, max, cost}`:

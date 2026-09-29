@@ -101,10 +101,17 @@ export function unpick(picked: string[], target: string): string[] {
   return i < 0 ? picked : [...picked.slice(0, i), ...picked.slice(i + 1)];
 }
 
+/** Whether a pick is for the party (a spell on a willing creature, a heal):
+ *  the ruleset says so on the intent (`friendly`). A playtest's Haste listed
+ *  the Gargoyle and the Mage before anyone it could go on. */
+export function friendlyPick(payload: Dict): boolean {
+  return payload.friendly === true;
+}
+
 /** The intent as it goes, without what only the pick needed. */
 function sendable(payload: Dict): Dict {
   const out = clone(payload);
-  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead']) delete out[k];
+  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead', 'friendly']) delete out[k];
   if (!out.ctx || typeof out.ctx !== 'object') out.ctx = {};
   return out;
 }
@@ -157,14 +164,16 @@ export function moveWords(token: Dict): string {
 }
 
 /** The creatures a token pick may take: those on the map but the picker's
- *  own token, the markers (a place, the party on a regional map), the dead
- *  (unless the pick brings them back) and the things the DM put down with
- *  no stat block. */
+ *  own token (unless the pick is for the party: Aid's three may be its
+ *  caster and two others), the markers (a place, the party on a regional
+ *  map), the dead (unless the pick brings them back) and the things the DM
+ *  put down with no stat block. */
 export function pickables(tokens: Dict[], payload: Dict, gm = false): Dict[] {
   const from = pickFrom(payload, tokens);
+  const self = friendlyPick(payload);
   return tokens.filter((t) => {
     const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
-    return String(t.id) !== from && takes(t, payload, gm) && !tags.includes('place') && !tags.includes('party');
+    return (self || String(t.id) !== from) && takes(t, payload, gm) && !tags.includes('place') && !tags.includes('party');
   });
 }
 
@@ -182,19 +191,22 @@ export interface PickChoice {
  *  rather than by a tap on the map (a screen reader can't tap a canvas, and
  *  a playtest's agents, playing through the page's structure, fought line
  *  of sight far harder than people): the pickables in the picker's sight
- *  (`sees`: the rest of the party is on a player's map wherever they are),
+ *  (`sees`: the rest of the party is on a player's map wherever they are,
+ *  but a spell on "a creature that you can see" needs them in sight),
  *  nearest the picker first, the party after the rest (most picks are an
- *  attack's or a spell's at a foe). */
+ *  attack's or a spell's at a foe) — or, for a pick for the party (Haste,
+ *  Aid, a heal), the party first, its picker among them. */
 export function pickChoices(tokens: Dict[], payload: Dict, opts: { gm?: boolean; sees?: (p: Vec) => boolean } = {}): PickChoice[] {
   if (String(payload.pick ?? '') !== 'token') return [];
   const from = tokens.find((t) => String(t.id) === pickFrom(payload, tokens));
   const o = from ? tokenPos(from) : null;
   const away = (t: Dict) => (o ? Math.hypot(tokenPos(t).x - o.x, tokenPos(t).y - o.y) : 0);
   const ours = (t: Dict) => (String(t.owner ?? '') !== '' ? 1 : 0);
+  const first = friendlyPick(payload) ? -1 : 1;
   return pickables(tokens, payload, opts.gm)
-    .filter((t) => !opts.sees || opts.sees(tokenPos(t)))
+    .filter((t) => t === from || !opts.sees || opts.sees(tokenPos(t)))
     .map((t, i) => ({ t, i, d: away(t) }))
-    .sort((a, b) => ours(a.t) - ours(b.t) || a.d - b.d || a.i - b.i)
+    .sort((a, b) => first * (ours(a.t) - ours(b.t)) || a.d - b.d || a.i - b.i)
     .map(({ t }) => {
       const name = String(t.name ?? '') || String(t.label ?? '') || 'a creature';
       const label = String(t.label ?? '');

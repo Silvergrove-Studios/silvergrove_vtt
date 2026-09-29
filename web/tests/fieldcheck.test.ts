@@ -6,6 +6,8 @@ import {
   chooseProblem,
   fieldProblem,
   finalScores,
+  neededPicks,
+  offerable,
   pointBuy,
   resolve,
   scoresProblem,
@@ -147,6 +149,26 @@ describe('choose', () => {
     expect(toggle(kit, 'a', 'b')).toBe('b');
     expect(chooseProblem(kit, '', null)).toBe('Choose one.');
     expect(chooseProblem(kit, 'b', null)).toBe('');
+  });
+  it('never asks for more than it can offer: none left, and it holds nothing up', () => {
+    // (a cleric's level 10 asked for an eighth cantrip of the seven there are, and Next never came)
+    const cantrips = { key: 'cantrips', type: 'choose', count: 1, fixed: ['guidance', 'light', 'mending'] };
+    const known = ['guidance', 'light', 'mending'].map((id) => ({ id, name: id }));
+    expect(neededPicks(cantrips, known)).toBe(0);
+    expect(chooseProblem(cantrips, [], known)).toBe('');
+    // fewer on offer than asked: all there are
+    const two = { key: 'cantrips', type: 'choose', count: 3, fixed: ['guidance'] };
+    const three = ['guidance', 'light', 'mending'].map((id) => ({ id, name: id }));
+    expect(neededPicks(two, three)).toBe(2);
+    expect(chooseProblem(two, ['light'], three)).toBe('Choose 1 more.');
+    expect(chooseProblem(two, ['light', 'mending'], three)).toBe('');
+    // what isn't allowed isn't on offer
+    expect(neededPicks({ ...skills, count: 2, allowed: ['arcana'] }, opts)).toBe(1);
+    // a single choice with nothing to choose from
+    expect(chooseProblem({ key: 'arcanum', type: 'choose', single: true, fixed: ['x'] }, '', [{ id: 'x', name: 'x' }])).toBe('');
+    // options not known yet: the count stands
+    expect(neededPicks(cantrips, null)).toBe(1);
+    expect(offerable(cantrips, null)).toBe(null);
   });
   it('a required text field must be filled in', () => {
     expect(fieldProblem({ key: 'name', label: 'Name', required: true }, '  ')).toMatch(/Name/);
