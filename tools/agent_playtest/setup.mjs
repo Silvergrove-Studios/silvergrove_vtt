@@ -121,7 +121,9 @@ for (const p of people) {
     const args = [join(here, 'seat.mjs'), '--port', String(p.port), '--url', p.url, '--size', p.size, '--ua', p.ua ?? 'mac', '--dir', dir, '--timelapse', arg('--timelapse', '120')];
     if (p.touch) args.push('--touch');
     const log = openSync(join(dir, 'seat.log'), 'w');
-    const child = spawn('node', args, { detached: true, stdio: ['ignore', log, log] });
+    // started in the person's own folder: a screenshot an agent saves with a
+    // relative path lands there, not in the repository (one did, run 5)
+    const child = spawn('node', args, { detached: true, stdio: ['ignore', log, log], cwd: dir });
     child.unref();
     appendFileSync(seats, `${child.pid}\n`);
   }
