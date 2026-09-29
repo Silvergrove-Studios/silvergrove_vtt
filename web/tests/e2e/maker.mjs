@@ -377,7 +377,18 @@ await step('Ari’s level 2 asks for the spell her prepared list grows by; her S
   await wiz.getByText('1 more prepared spell').waitFor({ timeout: 5000 });
   await wiz.locator('.nav button.accent').click();
   await ari.getByText('Dwarf Cleric 2').first().waitFor({ timeout: 10000 });
+  // "Whenever you gain a Cleric level, you can replace one of your cantrips": offered while the
+  // level is new
+  await ari.getByText('Cleric 2 lets you replace some things you chose before, if you like').waitFor({ timeout: 8000 });
+  const replace = ari.locator('.wizard').filter({ hasText: 'A Cleric cantrip to replace' });
+  await replace.getByRole('checkbox', { name: /^Light/ }).click();
+  await replace.getByText('In its place').waitFor({ timeout: 5000 });
+  await replace.getByRole('checkbox', { name: /^Mending/ }).click();
+  await shot(ari, 'ari_level_2_replace');
+  await replace.locator('.nav button.accent').click();
+  await ari.getByText('Cleric 2 lets you replace some things you chose before, if you like').waitFor({ state: 'detached', timeout: 8000 });
   await ari.getByRole('tab', { name: 'Spells' }).click();
+  await ari.getByText(/^● Mending/).first().waitFor({ timeout: 5000 });
   await ari.getByText(/prepared 5 \/ 5/).first().waitFor({ timeout: 5000 });
   expect((await ari.locator('.picker').filter({ hasText: 'Prepare a cleric spell' }).count()) === 1, 'Prepare a cleric spell: no Learn first');
   expect((await ari.locator('.picker').filter({ hasText: 'Learn a cleric spell' }).count()) === 0, 'and no Learn');
