@@ -43,6 +43,12 @@ the connection dropped and the page reloaded half way, skills, equipment,
 spells and a spell's card, then the DM's *Rules settings* switching to
 rolled scores and to the standard array.
 
+`tests/e2e/levels.mjs <host.json> <out>` (host with `--party`): the DM
+gives the party three levels and Ben takes Brakka's on his phone, level 2
+in one tap, then each level's choices in its wizard (the Champion at 3;
+the Ability Score Improvement and a weapon mastered at 4), the wizard
+starting over for each level.
+
 `tests/e2e/pictures.mjs <host.json> <out>` (host with `--party`): a
 player's token picture through the crop window, on her sheet, the DM's
 card and the fight's map; a picture in her journal shared with another

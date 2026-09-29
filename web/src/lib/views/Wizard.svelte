@@ -11,7 +11,9 @@
   and says what is missing.
   The step and the answers are kept in this browser until the wizard is
   done, so a phone that drops the page while in another app comes back to
-  where it was.
+  where it was; once the table takes what it sends, they go and it starts
+  over at its first step (wizardkeep.ts: a sheet's level-up wizard is there
+  again at once for the next level).
 -->
 <script lang="ts">
   import { untrack } from 'svelte';
@@ -19,29 +21,17 @@
   import { viewUi } from './context';
   import { fillIntent, putValue, shown, withOptions, type Dict } from './viewlib';
   import { fieldProblem, resolve, type Choice } from './fieldcheck';
+  import { browserStore, forgetKept, keepKept, keptKey, loadKept } from './wizardkeep';
   import { markdown } from '../markdown';
 
   let { node, ctx }: { node: Dict; ctx: Dict } = $props();
   const ui = viewUi();
-  const KEEP_MS = 24 * 60 * 60 * 1000;
 
   const steps = $derived((Array.isArray(node.steps) ? node.steps : []).filter((s: unknown) => s && typeof s === 'object') as Dict[]);
-  const storeKey = $derived(`hexmap.wizard/${String(ctx.me ?? '')}/${String(node.label ?? '')}/${steps.map((s) => String(s.title ?? '')).join('|')}`);
-
-  function load(key: string): { at: number; title: string; values: Dict } | null {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      const v = JSON.parse(raw) as { at: number; title?: string; values: Dict; t: number };
-      if (!v || typeof v !== 'object' || Date.now() - Number(v.t ?? 0) > KEEP_MS) return null;
-      return { at: Number(v.at) || 0, title: String(v.title ?? ''), values: v.values && typeof v.values === 'object' ? v.values : {} };
-    } catch {
-      return null;
-    }
-  }
+  const storeKey = $derived(keptKey(String(ctx.me ?? ''), String(node.label ?? ''), steps.map((s) => String(s.title ?? ''))));
 
   // (read once, as the wizard opens: where it was left)
-  const kept = untrack(() => load(storeKey));
+  const kept = untrack(() => loadKept(browserStore(), storeKey));
   // where it is, by the step's title: the steps shown change as the answers'
   // records arrive (a step after one that waits for them moved, after a reload,
   // to the step after it); the index where there's no title yet
@@ -88,12 +78,7 @@
 
   // keep the step and the answers
   $effect(() => {
-    const snap = { at: index, title: String(step.title ?? ''), values: $state.snapshot(values), t: Date.now() };
-    try {
-      localStorage.setItem(storeKey, JSON.stringify(snap));
-    } catch {
-      /* private mode, or full */
-    }
+    keepKept(browserStore(), storeKey, { at: index, title: String(step.title ?? ''), values: $state.snapshot(values) });
   });
 
   // the record behind each answer picked from a compendium or from records
@@ -139,15 +124,30 @@
     return out;
   }
 
-  function next(): void {
+  async function next(): Promise<void> {
     if (problem) return;
     if (!last) {
       goto(index + 1);
       return;
     }
     sending = true;
-    ui.intent(putValue(fillIntent(node.submit ?? {}, ctx), answers(), '$values'));
-    setTimeout(() => (sending = false), 3000);
+    const payload = putValue(fillIntent(node.submit ?? {}, ctx), answers(), '$values');
+    if (!ui.submit) {
+      ui.intent(payload);
+      setTimeout(() => (sending = false), 3000);
+      return;
+    }
+    // (refused: the answers stay, to put right; done: they go, and it starts over)
+    const r = await ui.submit(payload);
+    sending = false;
+    if (!r.ok) return;
+    forgetKept(browserStore(), storeKey);
+    values = {};
+    chosen = {};
+    options = {};
+    asked.clear();
+    at = 0;
+    atTitle = '';
   }
 </script>
 

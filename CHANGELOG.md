@@ -250,6 +250,13 @@ The team's notes on making a character in the third playtest
   fight, as tall as the DM drags it; a timed effect says its time left
   ("Concentrating: Detect Magic · 8 min left"), on the Table too; the
   Table's Party pane redraws when a ruleset's state changes.
+- **A wizard starts over once it's done** (for a level-12 one-shot, whose
+  players take eleven levels in a row): a web wizard forgets its answers
+  once the table has taken what it sent, and a sheet's level-up wizard,
+  there again at once for the next level, asks that level from its first
+  step (it opened at its last, with the last level's answers). A refused
+  one keeps them. `web/tests/e2e/levels.mjs` walks a player through three
+  levels against a table.
 
 ## 2.3.1 — 2026-09-25
 
