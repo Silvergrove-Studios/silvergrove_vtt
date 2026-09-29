@@ -54,10 +54,11 @@ or an export. Everything below holds for both.
     are being stepped. Only the owner of the token whose turn it is may
     move it. `system` names the turn system that built the order (`list`
     is the built-in "as the DM arranged it"); `data` is that system's own
-    state — rolled values, phases, and `labels` (token id → text shown in
-    the order) — stored and replicated as is, never interpreted by Hexmap.
-    A client without the system installed still shows the order and its
-    labels, because they are data.
+    state — rolled values, phases, `labels` (token id → text shown in
+    the order) and `notes` (token id → a line shown with that token's
+    turn: "Movement 15 of 30 ft") — stored and replicated as is, never
+    interpreted by Hexmap. A client without the system installed still
+    shows the order, its labels and notes, because they are data.
 
   Tokens not in the order simply have no turn.
 - `players`: who can join and what they own. `id` is stable across sessions;

@@ -166,6 +166,9 @@ function hm.map.region_remove(scene, id) return { t = "region.remove", scene = s
 function hm.map.region_set(scene, id, changes) return { t = "region.set", scene = scene, id = id, changes = changes } end
 function hm.map.move(scene, token, to) return call(host.map_move, scene, token, to) end   -- {events, entered, left, cells}
 function hm.map.cell(scene, key) return call(host.map_cell, scene, key) end
+-- the cheapest way from a to b round the walls: { ok, cells, steps, cost, length, diagonals, costly, why, through };
+-- opts { costs = { tag = n }, cell_costs = { ["q,r"] = n }, blocked = { "q,r" }, diagonals = "5-5-5", max = n }
+function hm.map.path(scene, a, b, opts) return call(host.map_path, scene, a, b, opts or {}) end
 function hm.map.cell_set(scene, key, changes) return { t = "cell.set", scene = scene, id = key, changes = changes } end
 function hm.map.cell_state(scene, key, changes) return { t = "ext.set", scope = "cell", scene = scene, id = key, plugin = hm.id, changes = changes } end
 function hm.map.neighbors(scene, cell) return call(host.map_cells, "neighbors", scene, cell, 0) end

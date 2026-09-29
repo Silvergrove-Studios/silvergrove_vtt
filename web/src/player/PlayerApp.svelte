@@ -24,9 +24,9 @@
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
-  import { DEAD_WORDS, moveTo, moveWords, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
+  import { DEAD_WORDS, moveTo, moveWords, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, sightOf, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
   import PickBanner from '../lib/map/PickBanner.svelte';
-  import { fogOf, fogWords, polygonTest } from '../lib/map/sight';
+  import { fogOf, fogWords } from '../lib/map/sight';
   import type { Cell } from '../lib/grid';
   import { movedOn, turnSummary } from '../lib/turns';
 
@@ -379,6 +379,13 @@
       notice(tappedTheDead(hit, pick) ? DEAD_WORDS : 'Nothing to pick there — try again, or Cancel', 'error');
       return;
     }
+    // one the list says it can't take: said, as the list says it (a wall in
+    // the way, too dark to see, out of range)
+    const barred = typeof target === 'string' ? choices.find((c) => c.target === target && c.why) : undefined;
+    if (barred) {
+      notice(`${barred.name}: ${barred.why}`, 'error');
+      return;
+    }
     if (pickCount(pick) > 1 && typeof target === 'string') {
       picked = togglePicked(picked, target, pickCount(pick), pickEach(pick) !== '');
       return;
@@ -421,9 +428,10 @@
   // --- a pick by name, or with no target ---
 
   // what the player's characters see: the rest of the party is on the map
-  // wherever they are, and is listed only when in sight
-  const sees = $derived(game.scene.fog ? polygonTest((game.scene.visible as number[][][]) ?? []) : undefined);
-  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { sees }) : []);
+  // wherever they are, and one out of their sight (behind a wall, too dark
+  // to see) is listed with why it can't be chosen, as is one out of range
+  const pickOpts = $derived({ sight: sightOf(game.scene), grid: map ? new Grid(map.grid ?? {}) : undefined });
+  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, pickOpts) : []);
 
   // a creature chosen from the banner's list: the one (again: not), one of
   // several, or another dart
@@ -497,7 +505,7 @@
     <header class="bar">
       <div class="where">
         <span class="table">{game.table}</span>
-        <span class="turn" class:mine={turn.mine}>{turn.text}</span>
+        <span class="turn" class:mine={turn.mine}>{turn.text}{#if turn.note}<span class="sr-only">{' · '}</span><span class="turnnote">{turn.note}</span>{/if}</span>
       </div>
       <div class="me">
         {#if game.status !== 'open'}<span class="chip warn">Reconnecting…</span>{/if}
@@ -525,7 +533,7 @@
           playerColors={playerColors()}
           {selected}
           activeToken={''}
-          picking={pick ? pickWords(pick, (game.scene.tokens as Dict[]) ?? [], sees) : moving ? moveWords(moving) : ''}
+          picking={pick ? pickWords(pick, (game.scene.tokens as Dict[]) ?? [], pickOpts) : moving ? moveWords(moving) : ''}
           banner={pick ? pickBanner : undefined}
           centerOn={followed}
           follow={followed}
@@ -538,7 +546,7 @@
         {#snippet pickBanner()}
           {#if pick}
             <PickBanner
-              words={pickWords(pick, (game.scene.tokens as Dict[]) ?? [], sees)}
+              words={pickWords(pick, (game.scene.tokens as Dict[]) ?? [], pickOpts)}
               {choices}
               {picked}
               many={pickCount(pick)}
@@ -929,6 +937,14 @@
   .turn.mine {
     color: var(--accent);
     font-weight: 650;
+  }
+  /* what is left of the turn (the ruleset's line: "Movement 15 of 30 ft"),
+     on a line of its own under whose turn it is */
+  .turnnote {
+    display: block;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .me {
     display: flex;

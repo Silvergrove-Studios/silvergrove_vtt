@@ -1,7 +1,7 @@
 // A fight as the DM's screen runs it: the prepared fight that is live, the
 // turn order as rows to show, and the ruleset's own "roll initiative".
 import type { Dict } from '../lib/game.svelte';
-import { currentTurnTokens, turnMembers } from '../lib/turns';
+import { currentTurnTokens, turnMembers, turnNote } from '../lib/turns';
 import { isDead } from '../lib/map/render';
 
 /** A name as the book and the map may both say it: "The Chapel Warden",
@@ -51,6 +51,8 @@ export interface OrderRow {
   label: string;
   current: boolean;
   hidden: boolean;
+  /** what the ruleset says of its turn ("Movement 15 of 30 ft"), or '' */
+  note: string;
 }
 
 export function orderRows(scene: Dict): OrderRow[] {
@@ -69,7 +71,8 @@ export function orderRows(scene: Dict): OrderRow[] {
     // a token that isn't on this scene has no row (a playtest's DM read "t_bffa8bc2's turn")
     if (!group && !toks.length) continue;
     const name = group ? String(turns.data?.groups?.[String(entry).slice(6)]?.label ?? labels[entry] ?? String(entry).slice(6)) : String(toks[0]?.name ?? '');
-    rows.push({ entry: String(entry), ids, name, label: String(labels[entry] ?? ''), current: ids.some((id) => up.has(id)), hidden: toks.length > 0 && toks.every((t) => t.hidden) });
+    const current = ids.some((id) => up.has(id));
+    rows.push({ entry: String(entry), ids, name, label: String(labels[entry] ?? ''), current, hidden: toks.length > 0 && toks.every((t) => t.hidden), note: current ? turnNote(turns, ids) : '' });
   }
   return rows;
 }

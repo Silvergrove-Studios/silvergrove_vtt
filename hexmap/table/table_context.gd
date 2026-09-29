@@ -85,6 +85,8 @@ func set_encounter(e: Encounter) -> void:
 	history.clear()
 	history.state = state
 	kernel = RulesKernel.new(state, history)
+	# the rules read the map's terrain through its art (rubble is "difficult")
+	kernel.map.art = art
 	commands = EncounterCommands.new(state, history)
 	commands.kernel = kernel
 	# the campaign the file names, unless one is already open here
@@ -242,6 +244,8 @@ func refresh_art() -> void:
 		scoped.reload()
 		scoped.uploads_dir = Uploads.dir_of(campaign)
 		art = scoped
+	if kernel != null:
+		kernel.map.art = art
 	art_changed.emit()
 
 

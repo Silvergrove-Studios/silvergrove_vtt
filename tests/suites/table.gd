@@ -1116,6 +1116,10 @@ func test_world_mode() -> void:
 	pf.close()
 	ctx.refresh_art()
 	check(ctx.art.picture("test_pics:village").name == "The village" and ctx.art.picture_texture("test_pics:village") != null and Array(ctx.art.picture_packs()) == ["test_pics"], "a pack's pictures: listed, drawn")
+	# the rules read the maps' terrain through the campaign's own art (the chapel's
+	# rubble is difficult ground, which a ruleset counts a creature's movement by)
+	check(ctx.kernel.map.art == ctx.art and Array(ctx.kernel.map.art.terrain("dungeons_and_castles:rubble").get("tags", [])) == ["difficult"],
+		"the rules have the campaign's art, and in it the rubble is tagged difficult")
 	# the Reference pane: the campaign's contents, by kind; places hold their people
 	var ref := win.reference
 	ref.refresh_list()

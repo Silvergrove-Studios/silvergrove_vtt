@@ -27,6 +27,18 @@ function owned(t: Dict, me: string): boolean {
   return !!me && String(t.owner ?? '') === me;
 }
 
+/** What the ruleset says of a turn for these tokens (`turns.data.notes`,
+ *  token id → a line: "Movement 15 of 30 ft"), the first there is, or ''. */
+export function turnNote(turns: Dict, ids: string[]): string {
+  const notes = turns.data?.notes;
+  if (!notes || typeof notes !== 'object' || Array.isArray(notes)) return '';
+  for (const id of ids) {
+    const n = notes[id];
+    if (typeof n === 'string' && n.trim()) return n;
+  }
+  return '';
+}
+
 /** Said to a player whose turn (`at`) the DM ended: "The DM moved on: it's
  *  Jin's turn." — or '' when it ended some other way. A playtest's player
  *  pressed End turn after the DM's Next, and ended the next one's too. */
@@ -42,8 +54,9 @@ export function movedOn(scene: Dict, at: { round: number; turn: number }): strin
   return up.length ? `The DM moved on: it's ${up.join(', ')}'s turn.` : 'The DM moved on.';
 }
 
-/** One line for a player's header, and whether it is their move. */
-export function turnSummary(scene: Dict, me: string): { text: string; mine: boolean } {
+/** One line for a player's header, whether it is their move, and on their
+ *  own turn what the ruleset says of it (`note`: their movement left). */
+export function turnSummary(scene: Dict, me: string): { text: string; mine: boolean; note?: string } {
   const turns: Dict = scene.turns ?? {};
   const tokens: Dict[] = (scene.tokens as Dict[]) ?? [];
   if (String(turns.strategy ?? 'ordered') === 'focus' && turns.running) {
@@ -67,7 +80,9 @@ export function turnSummary(scene: Dict, me: string): { text: string; mine: bool
         .filter((t): t is Dict => !!t);
       if (!up.length) return { text: `Round ${round}`, mine: false };
       const who = up.map((t) => String(t.name ?? '')).join(', ');
-      return up.some((t) => owned(t, me)) ? { text: `Your turn: ${who} (round ${round})`, mine: true } : { text: `${who}'s turn (round ${round})`, mine: false };
+      if (!up.some((t) => owned(t, me))) return { text: `${who}'s turn (round ${round})`, mine: false };
+      const note = turnNote(turns, up.filter((t) => owned(t, me)).map((t) => String(t.id)));
+      return note ? { text: `Your turn: ${who} (round ${round})`, mine: true, note } : { text: `Your turn: ${who} (round ${round})`, mine: true };
     }
   }
   return { text: '', mine: false };

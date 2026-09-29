@@ -389,6 +389,135 @@ func test_square_map_distances_templates_sight_and_moves() -> void:
 	await tree.process_frame
 
 
+## A move's way across the map, as a ruleset counts it (a creature's feet on
+## its turn): round the walls, through doors only when they are open, never
+## cutting a wall's corner on squares, rough ground dearer by the tags the
+## ruleset prices — the cells' regions' and their terrain's art's — and
+## single cells (another creature's space) dearer or closed. In the cellar:
+## the hero stands just inside the storeroom's north door.
+func test_paths_round_walls_and_rough_ground() -> void:
+	var parts := _cellar_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	var mq := k.map
+	var p := mq.path(sid, "token:t_h", "7,6")
+	check(p.ok and p.steps == 4 and is_equal_approx(p.cost, 4.0) and is_equal_approx(p.length, 4.0) and p.cells[0] == "7,2" and p.cells[-1] == "7,6", "four squares down the storeroom: %s" % [p])
+	check(mq.path(sid, "7,2", "7,2").ok and mq.path(sid, "7,2", "7,2").steps == 0, "going nowhere costs nothing")
+	# diagonals: every one a square (the 2024 grid), every second two (5-10-5), or √2
+	var d := mq.path(sid, "7,2", "10,5")
+	check(d.ok and d.steps == 3 and d.diagonals == 3 and is_equal_approx(d.cost, 3.0), "three diagonals, three squares: %s" % [d])
+	check(is_equal_approx(mq.path(sid, "7,2", "10,5", {"diagonals": "5-10-5"}).cost, 4.0), "5-10-5: 1 + 2 + 1")
+	check(is_equal_approx(mq.path(sid, "7,2", "10,5", {"diagonals": "euclid"}).cost, 3.0 * sqrt(2.0)), "as the crow flies: 3√2")
+	# the storeroom's door is shut: nothing outside can be reached, until it opens
+	var shut := mq.path(sid, "7,2", "7,0")
+	check(not shut.ok and shut.why == "walls", "the closed door: no way out (%s)" % [shut.why])
+	var door := {}
+	for w in k.state.level_for(sid).walls:
+		if str(w.get("door", "none")) == "door":
+			door = w
+	check(k.commit([{"t": "element.set", "scene": sid, "ref": "walls:" + str(door.id), "changes": {"state": "open"}}], "Open") == "", "the door opens")
+	var out := mq.path(sid, "7,2", "7,0")
+	check(out.ok and out.steps == 2, "through the open door: two squares north (%s)" % [out.cells])
+	# a diagonal can't cut the corner where the wall ends at the door's post
+	var corner := mq.path(sid, "6,2", "7,1")
+	check(corner.ok and corner.steps == 2 and corner.cells == ["6,2", "7,2", "7,1"], "round the door post, not across its corner: %s" % [corner.cells])
+	check(mq.path(sid, "7,2", "17,6").why == "walls", "the vault's secret door is shut: no way in")
+	# rough ground: the ruleset says what a tag costs; the dearest applies, not the sum
+	var row := []
+	for x in range(3, 13):
+		row.append(Vector2i(x, 4))
+	k.commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_rubble", row, ["difficult"])},
+		{"t": "region.add", "scene": sid, "region": MapQuery.region("r_mud", row, ["mud"])}], "Rough ground")
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6").cost, 4.0), "with no price for its tags, rough ground is plain ground")
+	var rough := mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2, "mud": 2}})
+	check(rough.ok and is_equal_approx(rough.cost, 5.0) and is_equal_approx(rough.length, 4.0) and rough.costly.size() == 1 and str(rough.costly[0]).ends_with(",4"),
+		"across the row of rubble and mud: 5 squares of movement for 4 of ground, one square dear (both tags, 2 not 4): %s" % [rough])
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 3}}).cost, 6.0), "a dearer price is the ruleset's to say")
+	# a single cell's price, and cells closed (a creature's space in a corridor)
+	check(is_equal_approx(mq.path(sid, "7,2", "7,3", {"cell_costs": {"7,3": 2}}).cost, 2.0), "a cell of its own price")
+	var round_it := mq.path(sid, "7,2", "7,6", {"blocked": ["7,3", "7,4", "7,5"]})
+	check(round_it.ok and round_it.steps == 4 and not round_it.cells.has("7,4"), "cells closed in the way: round them, no dearer on squares: %s" % [round_it.cells])
+	var walled_in := mq.path(sid, "7,2", "7,6", {"blocked": row.map(func(c: Vector2i) -> String: return HexMap.cell_key(c)) + ["2,4"]})
+	check(not walled_in.ok and walled_in.why == "blocked" and walled_in.through.size() == 1, "a row of them from wall to wall: blocked, and which is in the way: %s" % [walled_in.get("through")])
+	# too dear for what a ruleset is willing to look at
+	var far := mq.path(sid, "7,2", "7,10", {"max": 3})
+	check(not far.ok and far.why == "far" and far.cost > 3.0, "past the most it may cost: far (%s)" % [far.cost])
+	check(mq.path(sid, "7,2", "40,40").why == "off the map", "off the map")
+
+
+## Terrain tagged by its art (the Dungeons & Castles pack's rubble is
+## "difficult"): a cell's record says so, and a path pays for it, once the
+## kernel has the art the Table draws with — never without it.
+func test_paths_price_terrain_by_its_art() -> void:
+	var parts := _cellar_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	var mq := k.map
+	var lvl := k.state.level_for(sid)
+	for key in ["6,4", "7,4", "8,4"]:
+		lvl.terrain[key] = {"t": "dungeons_and_castles:rubble", "v": 0, "rot": 0, "z": 0}
+	check(mq.cell(sid, "7,4").terrain.get("tags", []) == [] and is_equal_approx(mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2}}).cost, 4.0), "with no art, the terrain has no tags and costs nothing more")
+	var art := PackLibrary.new()
+	art.reload()
+	mq.art = art
+	check(mq.cell(sid, "7,4").terrain.tags == ["difficult"] and mq.terrain_tags(sid, "7,4") == ["difficult"] and mq.terrain_tags(sid, "7,3") == [], "with the art: the rubble is difficult, the flagstones are nothing: %s" % [mq.cell(sid, "7,4").terrain])
+	var p := mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2}})
+	check(p.ok and is_equal_approx(p.cost, 4.0) and not p.cells.has("7,4"), "round three squares of rubble: no dearer on squares: %s" % [p.cells])
+	var into := mq.path(sid, "7,2", "7,4", {"costs": {"difficult": 2}})
+	check(into.ok and is_equal_approx(into.cost, 3.0) and into.costly == ["7,4"], "onto the rubble: 1 + 2 (%s)" % [into])
+	# on hexes too: a step onto the chapel's rubble
+	var m := _chapel()
+	var st := EncounterState.new(Encounter.create("Hexes"))
+	st.attach_map(m)
+	var hk := RulesKernel.new(st)
+	hk.map.art = art
+	var sc := Encounter.new_scene(m, "ground", "Ground", "ruined_chapel.hexmap")
+	hk.commit([{"t": "scene.add", "scene": sc}], "Setup")
+	var rubble := ""
+	for key in m.level(0).terrain:
+		if str(m.level(0).terrain[key].t) == "dungeons_and_castles:rubble":
+			rubble = str(key)
+			break
+	check(rubble != "", "the chapel has rubble")
+	var there := HexMap.key_cell(rubble)
+	var next_to: Vector2i = there
+	for nb in m.grid.neighbors(there):
+		var nk := HexMap.cell_key(nb)
+		if m.grid.in_bounds(nb) and not ["dungeons_and_castles:rubble"].has(str(m.level(0).terrain.get(nk, {}).get("t", ""))) and hk.map.path(str(sc.id), nb, there).ok:
+			next_to = nb
+			break
+	var step := hk.map.path(str(sc.id), next_to, there, {"costs": {"difficult": 2}})
+	check(step.ok and step.steps == 1 and is_equal_approx(step.cost, 2.0), "a hex step onto rubble costs two: %s" % [step])
+
+
+## A ruleset asks for a path from Lua (hm.map.path), its prices and closed
+## cells as tables, and gets it back as one.
+func test_paths_from_lua() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var parts := _cellar_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	k.commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_rubble", [Vector2i(7, 3)], ["difficult"])}], "Rubble")
+	var host := PluginHost.new(k)
+	var why := host.load_source({"id": "t.path", "version": "1", "api": 1, "name": "Paths", "capabilities": ["actions"]}, [["main.lua", """
+		local hm = hexmap
+		hm.actions.register("walk", { label = "Walk", target = "", run = function(ctx)
+			local p = hm.map.path(ctx.scene, "token:t_h", ctx.to, { costs = { difficult = 2 }, blocked = ctx.blocked or {}, max = ctx.max })
+			return { ok = p.ok, cost = p.cost, steps = p.steps, why = p.why, first = p.cells[1], through = p.through and #p.through or 0 }
+		end })
+	"""]])
+	check(why == "", "the plugin loads: %s" % why)
+	var pc := host.dispatch("t.path", "walk", {"scene": sid, "to": "7,5"})
+	check(pc.status == PluginHost.PluginCall.OK and pc.value.ok and is_equal_approx(float(pc.value.cost), 3.0) and int(pc.value.steps) == 3 and str(pc.value.first) == "7,2",
+		"round a square of rubble, three squares down: %s" % [pc.value if pc.status == PluginHost.PluginCall.OK else pc.error])
+	pc = host.dispatch("t.path", "walk", {"scene": sid, "to": "7,5", "blocked": ["6,3", "8,3"]})
+	check(pc.status == PluginHost.PluginCall.OK and is_equal_approx(float(pc.value.cost), 4.0), "with the squares either side closed, through the rubble: 1 + 2 + 1 (%s)" % [pc.value])
+	pc = host.dispatch("t.path", "walk", {"scene": sid, "to": "7,11", "max": 2})
+	check(pc.status == PluginHost.PluginCall.OK and not pc.value.ok and str(pc.value.why) == "far", "and says when it is too far to look")
+
+
 func test_map_events_over_the_wire_and_drawing() -> void:
 	var st := EncounterState.new(Encounter.load_file(example("chapel_ambush.encounter")))
 	st.resolve_maps()

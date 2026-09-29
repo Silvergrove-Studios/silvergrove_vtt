@@ -278,6 +278,22 @@ The team's notes on making a character in the third playtest
   player's sheet); a deadline of 0 still waits for the answer. A pick
   for a spell on friends lists the party first, the caster among them (a
   wizard's Haste list led with a gargoyle and a mage).
+- **Movement counted, and a pick that says why.** The rules can ask the
+  map for a move's way (`hm.map.path`): the cheapest, cell by cell, round
+  the walls that stop movement (doors as they are, no diagonal across a
+  wall's corner), rough ground dearer by the tags a ruleset prices — a
+  region's, or the terrain's own from its art (the packs' rubble is
+  "difficult"), for which the rules now have the Table's art — and cells a
+  ruleset closes or prices (another creature's space); a cell's record
+  carries its terrain's tags. A ruleset's line for a turn (`turns.data.
+  notes`: "Movement 15 of 30 ft") shows on the player's header on their
+  turn, and under the current creature in the DM's order and fight bar. A
+  pick's list names those it can't take after those it can, each with
+  why — "can't see: a wall is in the way", "too dark to see" (for a pick
+  that needs its creature seen), "out of range (150 ft)", "dead" — from the
+  fog the player's screen has and the `range` and `sight` a ruleset puts on
+  the pick; a tap on one of them on the map says the same (a playtest's
+  Haste found the party's fighter missing from its list, behind a wall).
 
 ## 2.3.1 — 2026-09-25
 
