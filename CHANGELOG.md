@@ -316,6 +316,25 @@ The team's notes on making a character in the third playtest
   sunlight at a point — for sight, the fog, the web screens, the Table's
   map and `light_at` alike. A light of dim light only (a creature outlined
   in faerie fire) has no bright middle.
+- **A question to answer now, and whom the table waits on.** A prompt a
+  ruleset marks `urgent` — a reaction: a shield spell as an attack's hit
+  lands, an opportunity attack as a creature leaves reach — comes up on the
+  player's screen at once, in front of anything else (a handout, another
+  card, a half-typed message), ignores taps in its first moment so one
+  already on its way isn't taken for an answer, and counts its seconds
+  down: every prompt a screen is sent says how many it has `left`. Its
+  buttons stand one under another, big enough to hit at once on a phone.
+  A prompt with `public` words is listed for everyone under `waiting`
+  ("Waiting on Ana: a reaction (Sela) · 23 s", a line over the map that
+  moves nothing under a tap), and the DM's has **Go on**: it answers for
+  the player with the card's default, marked `waved`, so the fight needn't
+  wait on someone who has stepped away. A player's pill for a card opens
+  the one in front: a reaction's, else the newest by when it opened (the
+  cards' ids are random, and an older question could come first).
+  `web_host.gd --wizard` gives Ana a wizard with a shield spell prepared,
+  and `--seed` starts the dice from a known place; `tests/e2e/
+  reactions.mjs` walks a goblin's hit on her, the spell cast from her phone
+  and the attack missing, and the DM going on without her answer.
 
 ## 2.3.1 — 2026-09-25
 
