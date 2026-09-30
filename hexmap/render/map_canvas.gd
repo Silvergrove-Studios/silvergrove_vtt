@@ -162,6 +162,8 @@ func _rebuild_state() -> void:
 		_eff_level = state.effective_level(scene_id)
 		_explored = state.explored(scene_id)
 		var eyes: Array = state.tokens_owned_by(scene_id, viewpoint) if not gm_view() else _player_tokens()
+		# (not a token whose sight isn't its player's: a familiar's, until they look through it)
+		eyes = eyes.filter(func(t: Dictionary) -> bool: return Vision.shares(t))
 		var v := Vision.of(state, scene_id, eyes)
 		_seen_polys = v.polygons
 		for c in v.cells:
@@ -443,7 +445,8 @@ func _draw_lights(c: Node2D) -> void:
 		# the darkness around them, in grey — seen, not lit.
 		if darkness > 0.0 and viewpoint != "":
 			for t in state.tokens_owned_by(scene_id, viewpoint):
-				draw_dark_sight(c, t)
+				if Vision.shares(t):
+					draw_dark_sight(c, t)
 
 
 ## The grey reach of a token's darkvision (`vision.dark_radius`, in its

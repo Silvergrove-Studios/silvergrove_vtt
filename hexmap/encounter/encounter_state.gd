@@ -573,10 +573,30 @@ func removals_with_effect(effect_id: String) -> Array:
 	return out
 
 
+## The actors that name an effect (`effect`): a creature a spell summoned,
+## which goes when its spell does — its concentration broken, its duration
+## over, dismissed (docs/plugin-authoring.md, "Creatures a spell makes").
+func actors_with_effect(effect_id: String) -> Array:
+	var out := []
+	if effect_id == "":
+		return out
+	var ids := encounter.actors.keys()
+	ids.sort()
+	for aid in ids:
+		if str(encounter.actors[aid].get("effect", "")) == effect_id:
+			out.append(str(aid))
+	return out
+
+
 ## A batch with what goes with the effects it removes (removals_with_effect)
 ## put in after each effect.remove — but not what the batch itself removes
-## (a ruleset tidying its things by hand), nor anything twice. The same
-## batch when nothing names those effects.
+## (a ruleset tidying its things by hand), nor anything twice. The actors
+## that name one of those effects (actors_with_effect) go at the end of the
+## batch with everything of theirs (Encounter.removal_events: the effects on
+## them, their resources, their tokens, their places in the turn order), and
+## so does what goes with the effects on them in turn: those linked to them
+## elsewhere, the things that name them, the creatures those summoned. The
+## same batch when nothing names those effects.
 func with_effect_removals(events: Array) -> Array:
 	var gone := {}
 	var any := false
@@ -586,19 +606,105 @@ func with_effect_removals(events: Array) -> Array:
 		match str(ev.get("t", "")):
 			"token.remove": gone["token:" + str(ev.get("id", ""))] = true
 			"region.remove": gone["region:%s/%s" % [str(ev.get("scene", "")), str(ev.get("id", ""))]] = true
-			"effect.remove": any = true
+			"actor.remove": gone["actor:" + str(ev.get("id", ""))] = true
+			"effect.remove":
+				gone["effect:" + str(ev.get("id", ""))] = true
+				any = true
 	if not any:
 		return events
 	var out := []
+	var removed := []
 	for ev in events:
 		out.append(ev)
 		if not (ev is Dictionary) or str(ev.get("t", "")) != "effect.remove":
 			continue
-		for rm in removals_with_effect(str(ev.get("id", ""))):
-			var key := ("token:" + str(rm.id)) if rm.t == "token.remove" else "region:%s/%s" % [str(rm.scene), str(rm.id)]
-			if not gone.has(key):
-				gone[key] = true
-				out.append(rm)
+		removed.append(str(ev.get("id", "")))
+		_things_with(str(ev.get("id", "")), gone, out)
+	# the creatures that name them, and what goes with those
+	var actors := []
+	var linked := []
+	var i := 0
+	while i < removed.size():
+		var fid: String = removed[i]
+		i += 1
+		for aid in actors_with_effect(fid):
+			if gone.has("actor:" + aid) or actors.has(aid):
+				continue
+			actors.append(aid)
+			for fx_id in _effects_of_actor(aid):
+				if not removed.has(fx_id):
+					removed.append(fx_id)
+				# (an effect elsewhere that lasts as long as one of its own: a
+				# spell of the creature's, on another)
+				for lid in _linked_to(fx_id):
+					if not removed.has(lid) and not gone.has("effect:" + lid):
+						removed.append(lid)
+						linked.append(lid)
+	if actors.is_empty():
+		return out
+	for lid in linked:
+		if not gone.has("effect:" + lid):
+			gone["effect:" + lid] = true
+			out.append({"t": "effect.remove", "id": lid})
+	for ev in encounter.removal_events(actors):
+		var t := str(ev.get("t", ""))
+		var key := ""
+		match t:
+			"effect.remove": key = "effect:" + str(ev.id)
+			"token.remove": key = "token:" + str(ev.id)
+			"actor.remove": key = "actor:" + str(ev.id)
+			# (a pool on a token of its that went already: a thing of the spell, taken off as one)
+			"resource.set":
+				if gone.has(str(ev.get("ref", ""))):
+					continue
+		if key != "":
+			if gone.has(key):
+				continue
+			gone[key] = true
+		out.append(ev)
+	# the things of the effects that went with them
+	for fid in removed:
+		_things_with(fid, gone, out)
+	return out
+
+
+## The tokens and regions that name an effect, put into `out` unless gone.
+func _things_with(effect_id: String, gone: Dictionary, out: Array) -> void:
+	for rm in removals_with_effect(effect_id):
+		var key := ("token:" + str(rm.id)) if rm.t == "token.remove" else "region:%s/%s" % [str(rm.scene), str(rm.id)]
+		if not gone.has(key):
+			gone[key] = true
+			out.append(rm)
+
+
+## The effects on an actor and on its tokens, by id.
+func _effects_of_actor(actor_id: String) -> Array:
+	var refs := {"actor:" + actor_id: true}
+	for sc in encounter.scenes:
+		for tk in sc.get("tokens", []):
+			if str(tk.get("actor", "")) == actor_id:
+				refs["token:" + str(tk.id)] = true
+	var out := []
+	var ids := encounter.effects.keys()
+	ids.sort()
+	for fid in ids:
+		if refs.has(str(encounter.effects[fid].get("on", ""))):
+			out.append(str(fid))
+	return out
+
+
+## The effects that last as long as this one (`duration.kind: "linked"`),
+## and those that last as long as them.
+func _linked_to(effect_id: String) -> Array:
+	var out := []
+	var queue := [effect_id]
+	while not queue.is_empty():
+		var id: String = queue.pop_front()
+		for fid in encounter.effects:
+			var d: Variant = encounter.effects[fid].get("duration", {})
+			if d is Dictionary and str(d.get("kind", "")) == "linked" and str(d.get("to", "")) == id and not out.has(str(fid)) and str(fid) != effect_id:
+				out.append(str(fid))
+				queue.append(str(fid))
 	return out
 
 

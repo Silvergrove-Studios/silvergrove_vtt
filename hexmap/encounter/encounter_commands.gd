@@ -112,11 +112,15 @@ func move_token(scene_id: String, id: String, to: Vector2, by := "gm") -> String
 	return why
 
 
-## Record as explored whatever these tokens see now (no-op without fog).
+## Record as explored whatever these tokens see now (no-op without fog):
+## not what a token sees that isn't its player's view (Vision.shares).
 func explore_from(scene_id: String, tokens: Array) -> void:
 	if not state.fog_enabled(scene_id):
 		return
-	var seen: Array = Vision.of(state, scene_id, tokens).cells
+	var eyes := tokens.filter(func(t: Dictionary) -> bool: return Vision.shares(t))
+	if eyes.is_empty():
+		return
+	var seen: Array = Vision.of(state, scene_id, eyes).cells
 	var fresh := state.unexplored(scene_id, seen)
 	if not fresh.is_empty():
 		run({"t": "fog.reveal", "scene": scene_id, "cells": fresh})

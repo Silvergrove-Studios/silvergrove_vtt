@@ -243,8 +243,9 @@ static func pick_target(st: EncounterState, sid: String, spec: Dictionary, p: Ve
 				var tk: Dictionary = toks[i]
 				if not gm and bool(tk.get("hidden", false)):
 					continue
-				# (a thing on the map is never a target: the creature under it is)
-				if Encounter.is_object(tk):
+				# (a thing on the map is never a target — the creature under it is —
+				# unless it has statistics: an Arcane Hand's AC and hit points)
+				if not Encounter.is_target(tk):
 					continue
 				if Vision.token_pos(tk).distance_to(p) <= float(tk.get("size", 1)) * 0.5:
 					return "token:" + str(tk.id)

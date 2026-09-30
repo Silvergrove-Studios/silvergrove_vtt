@@ -105,6 +105,7 @@ func _start(scene_id: String, strategy_id: String) -> String:
 		return kernel.commit(events, "Start turns", {"hook": "focus_changed"})
 	var entries := []
 	var labels := {}
+	var by_id := {}
 	for tk in kernel.state.tokens(scene_id):
 		# (a thing on the map takes no turn: its caster moves it on theirs)
 		if Encounter.is_object(tk):
@@ -112,6 +113,7 @@ func _start(scene_id: String, strategy_id: String) -> String:
 		var view := kernel.actor_view(str(tk.get("actor", "")))
 		var init: Variant = _initiative(spec, view, tk)
 		entries.append({"id": str(tk.id), "init": init, "name": str(tk.get("name", ""))})
+		by_id[str(tk.id)] = tk
 		if init != null:
 			labels[str(tk.id)] = _label(spec, view, init)
 	if spec.plugin != "":
@@ -139,10 +141,12 @@ func _start(scene_id: String, strategy_id: String) -> String:
 	for e in entries:
 		order.append(e.id)
 	# groups formed before a restart keep their slot, at the first member's place
-	var groups: Dictionary = turns().get("data", {}).get("groups", {}) if turns().get("data") is Dictionary else {}
+	var groups: Dictionary = JsonDoc.deep(turns().get("data", {}).get("groups", {})) if turns().get("data") is Dictionary else {}
 	order = _collapse_groups(order, groups)
 	for gid in groups:
 		labels["group:" + str(gid)] = str(groups[gid].get("label", gid))
+	# those that take their turns with another's, or right after it
+	order = place_followers(order, groups, labels, by_id)
 	base.order = order
 	base.turn = 0
 	base.round = 1
@@ -324,10 +328,17 @@ func reorder(order: Array) -> String:
 
 
 ## Put an entry at `index` (the end when -1), taking it out of wherever
-## it was. A token new to the order gets its counters.
+## it was. A token new to the order gets its counters. With no index, a
+## token that takes its turns with another's or right after it
+## (`turn_with`, `turn_after`: place_followers) goes there, its leader's
+## slot made a group when it shares it.
 func insert(entry: String, index := -1) -> String:
 	var order: Array = (turns().get("order", []) as Array).duplicate()
 	order.erase(entry)
+	if index < 0 and not entry.begins_with("group:"):
+		var tk := kernel.state.find_token(entry)
+		if str(tk.get("turn_with", "")) != "" or str(tk.get("turn_after", "")) != "":
+			return _insert_follower(entry, order)
 	if index < 0 or index > order.size():
 		index = order.size()
 	order.insert(index, entry)
@@ -340,6 +351,178 @@ func insert(entry: String, index := -1) -> String:
 		if not turns().get("counters", {}).has("token:" + str(id)) and not spec.budgets.is_empty():
 			changes["counters/token:" + str(id)] = spec.budgets.duplicate()
 	return kernel.commit([{"t": "turns.set", "changes": changes}], "Budgets") if not changes.is_empty() else ""
+
+
+## A follower put into the order where it follows (insert): the order and
+## its groups worked out again with it, its counters given, whoever is up
+## staying up (in its leader's slot made a group, when that was theirs).
+func _insert_follower(entry: String, order: Array) -> String:
+	var t := turns()
+	var data: Dictionary = JsonDoc.deep(t.get("data", {})) if t.get("data") is Dictionary else {}
+	var groups: Dictionary = data.get("groups", {}) if data.get("groups") is Dictionary else {}
+	var labels: Dictionary = data.get("labels", {}) if data.get("labels") is Dictionary else {}
+	var old: Array = t.get("order", [])
+	var turn := int(t.get("turn", 0))
+	var cur := str(old[turn]) if turn >= 0 and turn < old.size() else ""
+	var up: Array = EncounterState.turn_members(t, cur) if cur != "" else []
+	order.append(entry)
+	var by_id := {}
+	for tk in kernel.state.tokens(kernel.state.scene_of_token(entry)):
+		by_id[str(tk.id)] = tk
+	var placed := place_followers(order, groups, labels, by_id)
+	# whoever was up stays up: their entry, or the group their token is in now
+	var at := placed.find(cur) if cur != "" else -1
+	if at < 0 and not up.is_empty():
+		at = _slot_index(placed, groups, str(up[0]))
+	if at < 0:
+		at = clampi(turn, 0, maxi(0, placed.size() - 1))
+	var changes := {"order": placed, "turn": at, "data/groups": groups, "data/labels": labels}
+	var spec := current()
+	if not spec.budgets.is_empty():
+		for e in placed:
+			for id in _members_of(str(e), groups):
+				if not t.get("counters", {}).has("token:" + str(id)):
+					changes["counters/token:" + str(id)] = spec.budgets.duplicate()
+	return kernel.commit([{"t": "turns.set", "changes": changes}], "Order")
+
+
+## Those that take their turns with another's or right after it — a
+## creature a spell summoned that acts on its caster's turn or right after
+## it, a mount its rider controls. A token's `turn_with` names the token in
+## whose slot it acts: the two share it, a group ("with_<leader>") whose
+## members each get their own turn_start, budgets and expiries. Its
+## `turn_after` names the token after whose slot its own comes: those after
+## the same leader share one ("after_<leader>", a group when there are
+## several). Each takes its leader's label (its initiative). One whose
+## leader isn't in the order, or that follows its own follower, keeps its
+## own place. `groups` and `labels` are changed in place; `by_id` has the
+## scene's tokens by id. Returns the order.
+static func place_followers(order: Array, groups: Dictionary, labels: Dictionary, by_id: Dictionary) -> Array:
+	var out: Array = order.duplicate()
+	var present := {}
+	# (in the order they stand: those already placed keep theirs among themselves)
+	var standing := []
+	for e in out:
+		for id in _members_of(str(e), groups):
+			present[str(id)] = true
+			standing.append(str(id))
+	var follows := {}
+	for id in standing:
+		var tk: Dictionary = by_id.get(id, {})
+		var w := str(tk.get("turn_with", "")) if tk.get("turn_with") != null else ""
+		var a := str(tk.get("turn_after", "")) if tk.get("turn_after") != null else ""
+		var leader := w if w != "" else a
+		if leader == "" or leader == id or not present.has(leader):
+			continue
+		follows[id] = {"how": "with" if w != "" else "after", "leader": leader}
+	# (a loop — each following the other — leaves them where they stood)
+	for id in follows.keys():
+		var seen := {id: true}
+		var at: String = follows[id].leader
+		while follows.has(at):
+			if seen.has(at):
+				follows.erase(id)
+				break
+			seen[at] = true
+			at = follows[at].leader
+	if follows.is_empty():
+		return out
+	# out of wherever they stood
+	out = out.filter(func(e: Variant) -> bool: return not follows.has(str(e)))
+	var gids := groups.keys()
+	for gid in gids:
+		var members: Array = groups[gid].get("tokens", [])
+		var kept := members.filter(func(x: Variant) -> bool: return not follows.has(str(x)))
+		if kept.size() == members.size():
+			continue
+		if kept.is_empty():
+			groups.erase(gid)
+			labels.erase("group:" + str(gid))
+			out.erase("group:" + str(gid))
+		else:
+			groups[gid].tokens = kept
+	# each after its leader, leaders first (one may lead another)
+	var left: Array = standing.filter(func(id: String) -> bool: return follows.has(id))
+	var after_slot := {}
+	var touched := {}
+	var rounds := left.size() + 1
+	while not left.is_empty() and rounds > 0:
+		rounds -= 1
+		var later := []
+		for id in left:
+			var f: Dictionary = follows[id]
+			var leader := str(f.leader)
+			var at := _slot_index(out, groups, leader)
+			if at < 0:
+				later.append(id)
+				continue
+			if f.how == "with":
+				var entry := str(out[at])
+				if entry.begins_with("group:"):
+					(groups[entry.substr(6)].tokens as Array).append(id)
+					touched[entry.substr(6)] = leader
+				else:
+					var gid := "with_" + leader
+					groups[gid] = {"tokens": [leader, id], "label": ""}
+					out[at] = "group:" + gid
+					labels["group:" + gid] = str(labels.get(leader, ""))
+					touched[gid] = leader
+			else:
+				var gid := "after_" + leader
+				if after_slot.has(leader):
+					var e := str(after_slot[leader])
+					if e.begins_with("group:"):
+						(groups[e.substr(6)].tokens as Array).append(id)
+					else:
+						groups[gid] = {"tokens": [e, id], "label": ""}
+						out[out.find(e)] = "group:" + gid
+						labels.erase(e)
+						after_slot[leader] = "group:" + gid
+					touched[gid] = leader
+				else:
+					out.insert(at + 1, id)
+					labels[id] = str(labels.get(leader, ""))
+					after_slot[leader] = id
+		left = later
+	# those whose leader never came (it follows one that follows it): at the end
+	for id in left:
+		out.append(id)
+	# what each group made or grown here is called (its members' names), and
+	# its label its leader's initiative
+	for gid in touched:
+		if groups.has(gid):
+			groups[gid].label = _names_of(groups[gid].tokens, by_id)
+			labels["group:" + str(gid)] = str(labels.get(str(touched[gid]), ""))
+	return out
+
+
+## The tokens an order entry stands for.
+static func _members_of(entry: String, groups: Dictionary) -> Array:
+	if entry.begins_with("group:"):
+		var g: Variant = groups.get(entry.substr(6))
+		return (g.get("tokens", []) as Array) if g is Dictionary else []
+	return [entry]
+
+
+## Where a token's slot is in an order: its own entry, or its group's; -1.
+static func _slot_index(order: Array, groups: Dictionary, token_id: String) -> int:
+	for i in order.size():
+		if _members_of(str(order[i]), groups).has(token_id):
+			return i
+	return -1
+
+
+## A group's name from its members': "Wren and Owl", "Wolf 1, Wolf 2 and 2 more".
+static func _names_of(ids: Array, by_id: Dictionary) -> String:
+	var names := []
+	for id in ids:
+		var n := str(by_id.get(str(id), {}).get("name", ""))
+		names.append(n if n != "" else str(id))
+	if names.size() <= 2:
+		return " and ".join(PackedStringArray(names))
+	if names.size() == 3:
+		return "%s, %s and %s" % names
+	return "%s, %s and %d more" % [names[0], names[1], names.size() - 2]
 
 
 ## Take an entry out of the order: a token id or "group:<id>", or one
