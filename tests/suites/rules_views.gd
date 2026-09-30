@@ -332,8 +332,11 @@ func test_wire_views_intents_and_roles() -> void:
 	check(pc.value.boxes == 1 and Resources.get_record(st, "actor:a_ana", "sample.focus", "armour").marked == 1, "and it took effect: armour spent, one box")
 	check(pump.call(func() -> bool: return player.session.view.prompts.is_empty()), "the prompt is gone from her view")
 	# Ben cannot answer Ana's prompt; the table's Rules panel can wave one through
+	# (her armour box back first: with none left to mark, the damage asks nothing)
+	table.ctx.host.dispatch("sample.focus", "setup", {"actor": "a_ana", "armour": 1})
 	var pc2 := table.ctx.host.dispatch("sample.focus", "damage", {"target": "a_ana", "amount": 9})
 	table.ctx.kernel.pending.drive(pc2, "sample.focus")
+	check(pc2.status == PluginHost.PluginCall.PENDING, "the damage waits on Ana again: %s" % pc2.error)
 	if pc2.status == PluginHost.PluginCall.PENDING:
 		var pid := str(table.ctx.kernel.pending.prompts().keys()[0])
 		check(table.ctx.kernel.pending.answer(pid, {"spend": true}, ben_id).contains("for " + ana_id), "Ben may not answer Ana's prompt")
@@ -341,8 +344,12 @@ func test_wire_views_intents_and_roles() -> void:
 		await tree.process_frame
 		var dflt := _button(table.rules, "Default")
 		check(dflt != null, "the Rules panel lists the prompt with a Default button")
+		var closed := []
+		table.ctx.kernel.pending.closed.connect(func(kind: String, _id: String, a: Variant) -> void: closed.append([kind, a]))
 		dflt.pressed.emit()
 		check(pc2.status == PluginHost.PluginCall.OK, "the default answered it")
+		check(closed.size() == 1 and closed[0][0] == "prompts" and closed[0][1] is Dictionary and closed[0][1].get("waved") == true,
+			"as the DM going on without the answer: waved, as the web DM's Go on: %s" % [closed])
 	# a helped roll: Ana opens one through act with help; Ben's phone would contribute — here the table opens and Ana helps
 	var qid := table.ctx.kernel.pending.open_roll("1d20", {"actor": "a_ben", "kind": "action", "dc": 10}, "sample.focus", "Ben sneaks", "all", 30)
 	check(pump.call(func() -> bool: return player.session.view.rolls.size() == 1), "the open roll reaches Ana")

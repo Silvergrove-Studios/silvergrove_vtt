@@ -761,6 +761,50 @@ question left unanswered doesn't wait over a player's screen for ever; a
 `deadline` of 0 (or less) waits for the answer however long that takes (or
 for the GM to answer it) — a player's roll is theirs to make.
 
+**A question to answer now** — a reaction: Shield as an attack's hit lands,
+an opportunity attack as a creature leaves reach. Two options make a prompt
+one, and say what a host and its screens owe it:
+
+```lua
+local ans = hm.prompt(player, {
+    title = "The goblin hits you (Scimitar): 14 against your AC 12. Your reaction?", fields = {},
+    choices = { { id = "shield", label = "Shield (a level 1 slot): AC 17 against this 14: it misses" },
+                { id = "none", label = "No reaction" } } },
+  { default = { choice = "none", late = true }, deadline = 30, actor = "a_1",
+    urgent = true, public = "a reaction (Ilvara)" })
+```
+
+- `urgent = true`: it can't wait for the player to finish what they're
+  doing. A screen puts it in front of everything at once — a handout,
+  another card, a half-typed message — and ignores taps in its first moment
+  (0.6 s on the web screens), so a tap already on its way isn't taken for an
+  answer. It shows the seconds the card has left, counting down: every
+  prompt a viewer is sent carries `left` (the seconds the Table's count had
+  left when the view was sent; absent when nothing counts), and the screen
+  counts on from when that view arrived. A choice whose id is `none` is
+  drawn as the quiet one.
+- `public = "words"`: everyone is told the table waits on it. Each
+  viewer's projection lists such prompts under `waiting`: `{ id, to, who
+  (the player's name, or "the DM"), what (these words), urgent, deadline,
+  left }`; the question itself stays its player's. The DM's list carries
+  each one's `default` too, and the DM's screen offers **Go on**: it answers
+  the prompt for its player with that default and `waved = true` (an
+  `answer` intent; the GM may answer any prompt), so the fight needn't wait
+  on someone who has stepped away. The Table's Rules panel's **Default** does
+  the same for any prompt whose default is a table (a deadline's default
+  comes without `waved`). With `late` in the default, the plugin can tell a
+  player's own "no" from a deadline's or the DM's, and say which.
+  The words reach every screen: they shouldn't name what a player may not
+  know (say only "a reaction" for the DM's own creatures).
+
+An action that asks for a reaction waits on it with `hm.prompt`, one
+creature at a time (the trigger's damage waits on the Shield). A move's
+aftermath asks with `hm.prompt_open` instead, since the move stands whatever
+the answer: an opportunity attack's card can have the attacks as buttons,
+each an intent, and close when its turn ends. Where nothing may wait (a
+turn's hooks, `prompt_answered` itself) a plugin can't ask; it can tell the
+DM and the player what could have been taken.
+
 ### Typed numbers
 
 `hm.num{ {label="base", type="base", value=10}, {label="agility", type="ability", value=3} }`

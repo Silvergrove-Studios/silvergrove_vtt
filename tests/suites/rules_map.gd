@@ -519,6 +519,37 @@ func test_paths_price_terrain_by_its_art() -> void:
 	check(step.ok and step.steps == 1 and is_equal_approx(step.cost, 2.0), "a hex step onto rubble costs two: %s" % [step])
 
 
+## A move's aftermath that waits on a player's answer (a reaction asked as an
+## opportunity attack lands) has its time budget from when the answer came,
+## not from the move: a player who thought it over for ten seconds still has
+## the plugin's commits after it go through.
+func test_a_hook_waiting_on_an_answer_has_its_time_from_the_answer() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var parts := _cellar_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	var host := PluginHost.new(k)
+	var why := host.load_source({"id": "t.react", "version": "1", "api": 1, "name": "React", "capabilities": ["prompts", "log", "state"]}, [["main.lua", """
+		local hm = hexmap
+		hm.on("after_move", function(p)
+			local ans = hm.prompt("pl_1", { title = "React?", fields = {} }, { default = { react = false }, deadline = 30 })
+			if ans and ans.react then hm.commit({ t = "log.add", entry = { id = "n_reacted", kind = "note", text = "reacted after the answer" } }, "Reacted") end
+			return p
+		end)
+	"""]])
+	check(why == "", "the plugin loads: %s" % why)
+	host.call_ms_budget = 50
+	var g: HexGrid = k.state.map_for(sid).grid
+	check(k.move_token(sid, "t_h", g.cell_center(Vector2i(7, 3)), "pl_1") == "", "the hero moves")
+	check(k.pending.prompts().size() == 1, "and the move's aftermath waits on its player")
+	OS.delay_msec(150)
+	var pid := str(k.pending.prompts().keys()[0]) if k.pending.prompts().size() > 0 else ""
+	check(k.pending.answer(pid, {"react": true}, "pl_1") == "", "answered, later than the budget would run from the move")
+	check(k.state.encounter.log.any(func(e: Dictionary) -> bool: return str(e.get("text", "")) == "reacted after the answer"), "its commit after the answer went through")
+
+
 ## A ruleset asks for a path from Lua (hm.map.path), its prices and closed
 ## cells as tables, and gets it back as one.
 func test_paths_from_lua() -> void:

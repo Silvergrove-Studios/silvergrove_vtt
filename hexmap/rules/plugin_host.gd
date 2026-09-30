@@ -436,6 +436,9 @@ func _hook_result(p: Plugin, hook: String, c: LuaVm.Call) -> Variant:
 				_fail(p, "hook " + hook, "yielded without the 'prompts' capability")
 				return {"__error": "no 'prompts' capability"}
 			return HookBus.Wait.make(_as_dict(c.value), func(_payload: Dictionary, answer: Variant) -> Variant:
+				# its time from the answer, as a resumed action's: a player who took ten
+				# seconds over a reaction hasn't spent the hook's budget
+				_call_started_ms = Time.get_ticks_msec()
 				c.resume(answer)
 				return _hook_result(p, hook, c))
 		_:

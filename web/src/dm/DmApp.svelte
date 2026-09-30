@@ -18,6 +18,8 @@
   import RulesSettings from './RulesSettings.svelte';
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
+  import Waiting from '../common/Waiting.svelte';
+  import { frontPrompt } from '../lib/prompts';
   import { chatLog, comp, connect, dmOp, game, intent, join, notice, playerColors, request, submit, type Dict } from '../lib/game.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
@@ -157,7 +159,12 @@
   // what the rules ask the DM (a monster's opportunity attack): answered here, first come
   const prompts = $derived(((game.view.prompts as Dict[]) ?? []).map((p, i) => ({ p, i })).filter(({ p }) => p && String(p.to ?? 'gm') === 'gm'));
   let putOff = $state<string[]>([]);
-  const asking = $derived(prompts.find(({ p }) => !putOff.includes(String(p.id))));
+  // (a monster's reaction, when the campaign asks the DM, before any other: its time is short)
+  const asking = $derived.by(() => {
+    const open = prompts.filter(({ p }) => !putOff.includes(String(p.id)));
+    const front = frontPrompt(open.map(({ p }) => p));
+    return open.find(({ p }) => p === front);
+  });
 
   // a fight that starts brings its order beside the map; one that ends puts the party back
   $effect(() => {
@@ -566,6 +573,9 @@
             {onTokenDrop}
             onCancelPick={() => ((pick = null), (picked = []), (placing = null))}
           />
+          <!-- what the table waits on (a player's reaction), over the map's top edge:
+               the map never moves under a tap; the DM can go on without waiting -->
+          <div class="waitslot"><Waiting dm /></div>
           {#snippet pickBanner()}
             {#if pick}
               <PickBanner
@@ -672,7 +682,7 @@
     </Modal>
   {/if}
   {#if asking}
-    <Modal title="The rules ask you" onclose={() => (putOff = [...putOff, String(asking.p.id)])}>
+    <Modal title={asking.p.urgent ? 'A reaction' : 'The rules ask you'} onclose={() => (putOff = [...putOff, String(asking.p.id)])}>
       <View node={{ type: 'prompt', bind: `/prompts/${asking.i}` }} ctx={game.view} />
     </Modal>
   {/if}
@@ -950,6 +960,15 @@
     position: relative;
     flex: 1;
     min-height: 0;
+  }
+  .waitslot {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 11;
+    max-width: calc(100% - 24px);
+    pointer-events: none;
   }
   .guide {
     position: absolute;

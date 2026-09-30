@@ -1,0 +1,93 @@
+<!--
+  What the table waits on: a player's reaction (Shield against a hit, an
+  opportunity attack), said to everyone with the seconds it has left, so
+  nobody takes the pause for a stuck table. The DM's can go on without
+  waiting: the card is answered with its default (no reaction), and the
+  fight goes on. A screen's own card isn't in it: that card is in front.
+-->
+<script lang="ts">
+  import { game, submit, type Dict } from '../lib/game.svelte';
+  import { clock } from '../lib/clock.svelte';
+  import { secondsLeft, waitingOn, waitingText } from '../lib/prompts';
+
+  let { dm = false }: { dm?: boolean } = $props();
+  const list = $derived(waitingOn(game.view.waiting as Dict[], game.me, dm));
+  let going = $state<string[]>([]);
+  function goOn(w: Dict): void {
+    const id = String(w.id ?? '');
+    if (!id || going.includes(id)) return;
+    going = [...going, id];
+    const answer = { ...(w.default && typeof w.default === 'object' ? (w.default as Dict) : {}), waved: true };
+    void submit({ kind: 'answer', prompt: id, answer }).then(() => (going = going.filter((x) => x !== id)));
+  }
+</script>
+
+{#if list.length}
+  <div class="waitstrip" class:dm role="status" aria-label="What the table waits on">
+    {#each list as w (String(w.id))}
+      <div class="wait">
+        <span class="pulse" aria-hidden="true"></span>
+        <span class="words">{waitingText(w, game.me, secondsLeft(w, game.viewAt, clock.now))}</span>
+        {#if dm}
+          <button type="button" class="quiet" disabled={going.includes(String(w.id))} onclick={() => goOn(w)}
+            title="Answer for them with no reaction, and go on">Go on</button>
+        {/if}
+      </div>
+    {/each}
+  </div>
+{/if}
+
+<style>
+  .waitstrip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    pointer-events: none;
+  }
+  .wait {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--accent-soft);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    font-size: 0.9rem;
+  }
+  .dm .wait {
+    pointer-events: auto;
+  }
+  .words {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .pulse {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .wait button {
+    flex: none;
+    min-height: 28px;
+    padding: 2px 10px;
+  }
+  @keyframes pulse {
+    50% {
+      opacity: 0.3;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pulse {
+      animation: none;
+    }
+  }
+</style>
