@@ -76,6 +76,14 @@ export function isDead(t: Dict): boolean {
   return Array.isArray(t.tags) && (t.tags as unknown[]).includes('dead');
 }
 
+/** A thing on the map, not a creature (the host's tag "object"): a spell's
+ *  light, a floating hand, a torch set down. It shares a space with
+ *  anything, is never a pick's target, and is drawn as a thing — its own
+ *  size, glowing in its light — over a creature it shares a space with. */
+export function isObject(t: Dict): boolean {
+  return Array.isArray(t.tags) && (t.tags as unknown[]).includes('object');
+}
+
 export function pointInPolygon(p: Vec, poly: number[][]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -99,6 +107,17 @@ export const FAN_SIZE = 0.62;
  *  living share they lie. */
 export const DEAD_SIZE = 0.55;
 export const DEAD_APART = 0.3;
+/** How far off the middle of a cell a thing sits when a creature shares
+ *  the cell, and how wide it is drawn there (in cells: a Tiny light's own
+ *  size, a 5-foot sphere's shrunk to it). */
+export const OBJECT_APART = 0.36;
+export const OBJECT_SHARE = 0.5;
+
+/** Whether a token is drawn over the creatures (a thing a space wide or
+ *  less), or under them (a bigger thing: a Large hand of force). */
+function over(t: Dict): boolean {
+  return isObject(t) && Number(t.size ?? 1) <= 1;
+}
 
 /** Where each token is drawn: tokens of size 1 or less on the same cell fan
  *  out — two side by side, three or four round a circle — each smaller
@@ -106,8 +125,12 @@ export const DEAD_APART = 0.3;
  *  tap went to the one underneath). The dead are small, and on a cell with
  *  the living they lie off to its corners, the living where they would be
  *  without them (a playtest's cleric tapped a goblin's corpse for the
- *  Warden beside it). `skip` (a token being dragged) stays where it is. By
- *  token id; a token alone is drawn where it stands. */
+ *  Warden beside it). A thing — a spell's light, a floating hand — shares a
+ *  creature's space: the creature stays where it would be without it, and
+ *  the thing sits at the cell's upper corners, small, over it, so a tap on
+ *  either finds that one (the owner: a player's lights "should be able to be
+ *  on the same square as a player"). `skip` (a token being dragged) stays
+ *  where it is. By token id; a token alone is drawn where it stands. */
 export function layout(tokens: Dict[], grid: Grid, skip = ''): Map<string, Placed> {
   const out = new Map<string, Placed>();
   const cells = new Map<string, Dict[]>();
@@ -123,18 +146,28 @@ export function layout(tokens: Dict[], grid: Grid, skip = ''): Map<string, Place
     else cells.set(key, [t]);
   }
   for (const all of cells.values()) {
-    const living = all.filter((t) => !isDead(t));
-    const dead = all.filter(isDead);
-    fanOut(living, out, 1, FAN_SIZE);
-    if (!living.length) {
-      fanOut(dead, out, DEAD_SIZE, DEAD_SIZE);
+    const things = all.filter(isObject);
+    const creatures = all.filter((t) => !isObject(t));
+    if (!creatures.length) {
+      fanOut(things, out, 1, FAN_SIZE);
       continue;
     }
+    const living = creatures.filter((t) => !isDead(t));
+    const dead = creatures.filter(isDead);
+    const mid = middle(creatures);
+    fanOut(living, out, 1, FAN_SIZE);
+    if (!living.length) fanOut(dead, out, DEAD_SIZE, DEAD_SIZE);
     // beside the living: the cell's corners, the lower ones first
-    const mid = middle(all);
-    dead.forEach((t, i) => {
-      const a = [1, 3, -1, -3][i % 4] * (Math.PI / 4);
-      out.set(String(t.id), { pos: { x: mid.x + Math.cos(a) * DEAD_APART, y: mid.y + Math.sin(a) * DEAD_APART }, k: DEAD_SIZE });
+    else
+      dead.forEach((t, i) => {
+        const a = [1, 3, -1, -3][i % 4] * (Math.PI / 4);
+        out.set(String(t.id), { pos: { x: mid.x + Math.cos(a) * DEAD_APART, y: mid.y + Math.sin(a) * DEAD_APART }, k: DEAD_SIZE });
+      });
+    // a creature's space shared: the things at its upper corners (then the lower)
+    things.forEach((t, i) => {
+      const a = [-1, -3, 1, 3][i % 4] * (Math.PI / 4);
+      const k = Math.min(1, OBJECT_SHARE / Math.max(0.05, Number(t.size ?? 1)));
+      out.set(String(t.id), { pos: { x: mid.x + Math.cos(a) * OBJECT_APART, y: mid.y + Math.sin(a) * OBJECT_APART }, k });
     });
   }
   return out;
@@ -166,8 +199,17 @@ function fanOut(here: Dict[], out: Map<string, Placed>, k1: number, kn: number):
 /** The token under a point: within its own radius or `least` (a reach on
  *  screen, in map units: a small map's tokens are a few pixels across, and a
  *  playtest's DM panned the map trying to drag the party), the nearest first;
- *  where `placed` (layout) draws it. */
+ *  where `placed` (layout) draws it. A thing drawn over a creature is found
+ *  where it is drawn, the creature everywhere else; a big thing lies under
+ *  the creatures, and a tap finds it where no creature is. */
 export function tokenAt(tokens: Dict[], p: Vec, least = 0, placed?: Map<string, Placed>): Dict | null {
+  const top = nearestAt(tokens.filter(over), p, 0, placed);
+  if (top) return top;
+  const under = (t: Dict) => isObject(t) && !over(t);
+  return nearestAt(tokens.filter((t) => !under(t)), p, least, placed) ?? nearestAt(tokens.filter(under), p, least, placed);
+}
+
+function nearestAt(tokens: Dict[], p: Vec, least: number, placed?: Map<string, Placed>): Dict | null {
   let best: Dict | null = null;
   let bestD = Infinity;
   for (let i = tokens.length - 1; i >= 0; i--) {
@@ -413,8 +455,10 @@ export function drawFrame(f: Frame): void {
   // them (a playtest's "Fire of broken pews" covered two goblins and the Warden)
   const under = look.gm && look.fight === true;
   if (under) drawNotes(ctx, lvl, cam.scale, drawn.map((d) => ({ x: d.pos.x, y: d.pos.y, r: tokenRadius(d.t) * d.k })));
-  // the dead first: the living over them
-  for (const d of [...drawn.filter((d) => isDead(d.t)), ...drawn.filter((d) => !isDead(d.t))]) drawToken(ctx, d.t, d.pos, look, cam.scale, dpr, d.k);
+  // the dead first, then a big thing (a Large hand of force), the living over
+  // them, and the things a space wide or less over the living
+  const layer = (d: { t: Dict }) => (isDead(d.t) && !isObject(d.t) ? 0 : isObject(d.t) ? (over(d.t) ? 3 : 1) : 2);
+  for (const d of [...drawn].sort((a, b) => layer(a) - layer(b))) drawToken(ctx, d.t, d.pos, look, cam.scale, dpr, d.k);
   drawNameTags(ctx, tokens, look, cam.scale, placed);
   if (look.gm && !under) drawNotes(ctx, lvl, cam.scale);
   if (look.hoverCell && look.picking) {
@@ -498,7 +542,8 @@ function drawRegions(ctx: CanvasRenderingContext2D, grid: Grid, scene: Dict, gm:
     const color = String(r.color ?? '#ffb060');
     const alpha = Number(r.alpha ?? 0.22);
     const path = new Path2D();
-    const cells = ((r.cells as string[]) ?? []).filter((k) => typeof k === 'string');
+    // (an area carried along with a thing may reach past the map's edge: drawn on the map)
+    const cells = ((r.cells as string[]) ?? []).filter((k) => typeof k === 'string' && grid.inBounds(keyCell(k)));
     for (const key of cells) cellPath(path, grid, keyCell(key));
     ctx.fillStyle = hexA(color, alpha);
     ctx.fill(path);
@@ -589,6 +634,10 @@ function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number, toke
  *  the top, the party a white halo round their own colour (in a playtest a
  *  player's red ring read as a goblin's). */
 export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look: Look, scale: number, dpr = 1, k = 1): void {
+  if (isObject(t)) {
+    drawThing(ctx, t, pos, look, scale, k);
+    return;
+  }
   const r = tokenRadius(t) * k;
   const hidden = Boolean(t.hidden);
   // (the dead faded: what is still fighting stands out)
@@ -735,6 +784,75 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
     ctx.strokeStyle = 'rgba(255, 255, 77, 0.9)';
     ctx.stroke();
   }
+}
+
+/** A thing on the map (isObject): a diamond, not a creature's disc, in its
+ *  colour with its owner's ring round it; one that sheds light is that light's
+ *  colour, glowing (a spell's lights read as lights). A big one lies faint
+ *  under the creatures. */
+function drawThing(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look: Look, scale: number, k: number): void {
+  const r = tokenRadius(t) * k;
+  const light = t.light && typeof t.light === 'object' ? (t.light as Dict) : null;
+  const glow = light ? String(light.color ?? '#ffe7a3') : '';
+  const hidden = Boolean(t.hidden);
+  const ringW = Math.max(r * 0.12, 1.2 / scale);
+  const ring = t.owner ? (look.playerColors[String(t.owner)] ?? '#ffffff') : '#ffffff';
+  ctx.save();
+  ctx.globalAlpha = (hidden ? 0.5 : 1) * (over(t) ? 1 : 0.55);
+  if (glow) {
+    const g = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, r * 2.4);
+    g.addColorStop(0, hexA(glow, 0.9));
+    g.addColorStop(0.35, hexA(glow, 0.4));
+    g.addColorStop(1, hexA(glow, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, r * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const d = new Path2D();
+  d.moveTo(pos.x, pos.y - r);
+  d.lineTo(pos.x + r, pos.y);
+  d.lineTo(pos.x, pos.y + r);
+  d.lineTo(pos.x - r, pos.y);
+  d.closePath();
+  ctx.fillStyle = glow || String(t.color ?? '#9aa7b8');
+  ctx.fill(d);
+  ctx.lineWidth = ringW + 1.2 / scale;
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.stroke(d);
+  ctx.lineWidth = ringW;
+  ctx.strokeStyle = ring;
+  ctx.stroke(d);
+  const label = String(t.label ?? '');
+  if (label && r * scale >= 8) {
+    const fs = label.length <= 2 ? r * 0.8 : r * 0.55;
+    ctx.font = `700 ${fs}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = Math.max(fs * 0.14, 1.5 / scale);
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText(label, pos.x, pos.y + fs * 0.05);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(label, pos.x, pos.y + fs * 0.05);
+  }
+  ctx.restore();
+  const halo = (grow: number, color: string, dash: boolean) => {
+    ctx.save();
+    if (dash) ctx.setLineDash([ringW * 1.6, ringW * 1.6]);
+    ctx.lineWidth = ringW;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y - r - grow);
+    ctx.lineTo(pos.x + r + grow, pos.y);
+    ctx.lineTo(pos.x, pos.y + r + grow);
+    ctx.lineTo(pos.x - r - grow, pos.y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  };
+  // (the DM's reminder that players cannot see it; and chosen)
+  if (hidden && look.gm) halo(ringW * 1.6, 'rgba(255,255,255,0.7)', true);
+  if (look.selected && look.selected === t.id) halo(ringW * 3.2, 'rgba(255, 255, 77, 0.9)', false);
 }
 
 /** The names under the places on a regional map and under the party, so the

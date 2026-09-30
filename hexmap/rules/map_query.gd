@@ -131,14 +131,18 @@ func band_of(plugin: String, edge: float) -> String:
 	return str(table[table.size() - 1].name) if not table.is_empty() else ""
 
 
-## Tokens (other than the origin token) within an edge distance.
-func within(scene_id: String, origin: Variant, r: float, include_hidden := true) -> Array:
+## Tokens (other than the origin token) within an edge distance: creatures,
+## not objects (Encounter.is_object: a thing is never a target) unless
+## `objects` says so.
+func within(scene_id: String, origin: Variant, r: float, include_hidden := true, objects := false) -> Array:
 	var out := []
 	var self_id := (origin as String).substr(6) if origin is String and (origin as String).begins_with("token:") else ""
 	for tk in kernel.state.tokens(scene_id):
 		if str(tk.id) == self_id:
 			continue
 		if not include_hidden and bool(tk.get("hidden", false)):
+			continue
+		if not objects and Encounter.is_object(tk):
 			continue
 		if distance(scene_id, origin, "token:" + str(tk.id)).edge <= r + 1e-6:
 			out.append(str(tk.id))
@@ -155,6 +159,8 @@ func within(scene_id: String, origin: Variant, r: float, include_hidden := true)
 ##   origin: "center" (default) | "edge" — cones and lines start at the
 ##           token's edge in the given direction
 ##   blocked_by_walls: true — cells the origin cannot see are left out
+##   objects: true — objects in it are among its tokens too (a thing is
+##           never a target, so by default they are not)
 ## Result: {cells: ["q,r"], tokens: [ids], origin: [x, y]}.
 func template(scene_id: String, spec: Dictionary) -> Dictionary:
 	var g := grid(scene_id)
@@ -200,8 +206,11 @@ func template(scene_id: String, spec: Dictionary) -> Dictionary:
 			cells.append(HexMap.cell_key(c))
 	var tokens := []
 	var self_id := (at as String).substr(6) if at is String and (at as String).begins_with("token:") else ""
+	var objects := bool(spec.get("objects", false))
 	for tk in kernel.state.tokens(scene_id):
 		if str(tk.id) == self_id and not bool(spec.get("include_self", false)):
+			continue
+		if not objects and Encounter.is_object(tk):
 			continue
 		if cells.has(HexMap.cell_key(g.world_to_axial(Vision.token_pos(tk)))):
 			tokens.append(str(tk.id))
@@ -234,6 +243,9 @@ static func pick_target(st: EncounterState, sid: String, spec: Dictionary, p: Ve
 				var tk: Dictionary = toks[i]
 				if not gm and bool(tk.get("hidden", false)):
 					continue
+				# (a thing on the map is never a target: the creature under it is)
+				if Encounter.is_object(tk):
+					continue
 				if Vision.token_pos(tk).distance_to(p) <= float(tk.get("size", 1)) * 0.5:
 					return "token:" + str(tk.id)
 			return null
@@ -263,7 +275,8 @@ static func pick_target(st: EncounterState, sid: String, spec: Dictionary, p: Ve
 
 ## Sight from a to b: rays from a's centre to b's centre and the corners
 ## of b's cell against walls (doors as they are) and, optionally, other
-## tokens' cells. {clear, cover: none | partial | total, blocked_by: [ids
+## tokens' cells — creatures', never objects' (a spell's light gives no
+## cover). {clear, cover: none | partial | total, blocked_by: [ids
 ## of the tokens in the way], walls: how many of the rays a wall stopped,
 ## seen, of} — so a ruleset can price cover from walls and from creatures
 ## differently with one call.
@@ -282,7 +295,7 @@ func line_of_sight(scene_id: String, a: Variant, b: Variant, tokens_block := tru
 	var idb := (b as String).substr(6) if b is String and (b as String).begins_with("token:") else ""
 	if tokens_block:
 		for tk in kernel.state.tokens(scene_id):
-			if str(tk.id) == ida or str(tk.id) == idb:
+			if str(tk.id) == ida or str(tk.id) == idb or Encounter.is_object(tk):
 				continue
 			blockers.append({"id": str(tk.id), "pos": Vision.token_pos(tk), "r": float(tk.get("size", 1)) * 0.45})
 	var seen := 0
@@ -473,8 +486,10 @@ func expire_all_regions(trigger: Dictionary) -> Array:
 # ------------------------------------------------------------------ moves --
 
 ## Events moving a token (and whatever is attached to it, by the same
-## step) and what that means: {events, entered: [region ids], left: [...],
-## from, to}. Nothing is applied.
+## step: tokens `attached_to` it, a torch carried, and regions `attached_to`
+## it or to them, the area around a sphere) and what that means: {events,
+## entered: [region ids], left: [...], from, to}. A region that moves with
+## the token is neither entered nor left by it. Nothing is applied.
 func move(scene_id: String, id: String, to: Vector2) -> Dictionary:
 	var tk := token(scene_id, id)
 	if tk.is_empty():
@@ -482,16 +497,31 @@ func move(scene_id: String, id: String, to: Vector2) -> Dictionary:
 	var from := Vision.token_pos(tk)
 	var delta := to - from
 	var events := [{"t": "token.set", "scene": scene_id, "id": id, "changes": {"pos": [to.x, to.y]}}]
+	# where each thing that moves ends: {token id: [old pos, new pos, size]}
+	var moving := {id: [from, to, float(tk.get("size", 1))]}
 	for other in kernel.state.tokens(scene_id):
 		if str(other.get("attached_to", "")) == id:
 			var p := Vision.token_pos(other) + delta
 			events.append({"t": "token.set", "scene": scene_id, "id": str(other.id), "changes": {"pos": [p.x, p.y]}})
+			moving[str(other.id)] = [Vision.token_pos(other), p, float(other.get("size", 1))]
+	var carried := {}
+	var regions: Dictionary = scene(scene_id).get("regions", {})
+	var rids := regions.keys()
+	rids.sort()
+	for rid in rids:
+		var on := str(regions[rid].get("attached_to", ""))
+		if on != "" and moving.has(on):
+			carried[str(rid)] = true
+			var m: Array = moving[on]
+			events.append({"t": "region.set", "scene": scene_id, "id": str(rid), "changes": {"cells": attached_cells(scene_id, regions[rid], m[0], m[1], m[2])}})
 	var before := {}
 	for r in regions_at(scene_id, from):
-		before[str(r.id)] = true
+		if not carried.has(str(r.id)):
+			before[str(r.id)] = true
 	var after := {}
 	for r in regions_at(scene_id, to):
-		after[str(r.id)] = true
+		if not carried.has(str(r.id)):
+			after[str(r.id)] = true
 	var entered := []
 	var left := []
 	for rid in after:
@@ -503,6 +533,30 @@ func move(scene_id: String, id: String, to: Vector2) -> Dictionary:
 	entered.sort()
 	left.sort()
 	return {"events": events, "entered": entered, "left": left, "from": [from.x, from.y], "to": [to.x, to.y], "cells": grid(scene_id).steps(cell_of(scene_id, from), cell_of(scene_id, to))}
+
+
+## The cells a region attached to a token covers once the token has gone
+## from `was` to `now` (hex units; `size` the token's): its `area` — a
+## template spec with no `at`, `{shape = "circle", radius = 3}` — laid
+## round the token where it now stands, as a template round the token would
+## be; or, with none, its cells as they were, moved as many cells as the
+## token moved.
+func attached_cells(scene_id: String, region: Dictionary, was: Vector2, now: Vector2, size: float) -> Array:
+	var area: Variant = region.get("area")
+	if area is Dictionary and not (area as Dictionary).is_empty():
+		var spec: Dictionary = (area as Dictionary).duplicate(true)
+		spec.at = {"x": now.x, "y": now.y, "size": size}
+		return template(scene_id, spec).get("cells", [])
+	var g := grid(scene_id)
+	var cells: Array = region.get("cells", [])
+	if g == null:
+		return cells.duplicate()
+	var step := g.world_to_axial(now) - g.world_to_axial(was)
+	var out := []
+	for k in cells:
+		if HexMap.is_cell_key(str(k)):
+			out.append(HexMap.cell_key(HexMap.key_cell(str(k)) + step))
+	return out
 
 
 # ------------------------------------------------------------------ cells --

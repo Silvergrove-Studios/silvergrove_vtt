@@ -34,10 +34,18 @@ func _init(p_state: EncounterState = null) -> void:
 ## Validate, apply and record an event as one undo step (or as part of
 ## the open group). Returns "" or why it was refused. `reason` is data
 ## about the cause ({by: plugin, hook, roll}); `audience` is who may see
-## the entry ("all", "gm", "owner:<player>"…).
+## the entry ("all", "gm", "owner:<player>"…). An effect removed takes the
+## tokens and regions that name it with it, in the same step
+## (EncounterState.with_effect_removals).
 func record(ev: Dictionary, label := "", reason: Dictionary = {}, audience := AUDIENCE_ALL) -> String:
 	if state == null:
 		return "no state"
+	if str(ev.get("t", "")) == "effect.remove" and not state.removals_with_effect(str(ev.get("id", ""))).is_empty():
+		return record_all([ev], label, reason, audience)
+	return _record(ev, label, reason, audience)
+
+
+func _record(ev: Dictionary, label: String, reason: Dictionary, audience: String) -> String:
 	var why := state.validate(ev)
 	if why != "":
 		return why
@@ -74,12 +82,16 @@ func record(ev: Dictionary, label := "", reason: Dictionary = {}, audience := AU
 
 ## Several events as one undo step. Every event is validated against the
 ## state *as it will be* when its turn comes, so a bad third event leaves
-## the first two undone. Returns "" or the reason.
+## the first two undone. Returns "" or the reason. What goes with an effect
+## the batch removes goes in the same step (record).
 func record_all(events: Array, label: String, reason: Dictionary = {}, audience := AUDIENCE_ALL) -> String:
+	if state == null:
+		return "no state"
+	var all := state.with_effect_removals(events)
 	begin_group()
 	var n := 0
-	for ev in events:
-		var why := record(ev, label, reason, audience)
+	for ev in all:
+		var why := _record(ev, label, reason, audience)
 		if why != "":
 			# roll back what this group applied so far
 			for i in n:

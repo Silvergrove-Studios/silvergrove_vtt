@@ -316,6 +316,33 @@ The team's notes on making a character in the third playtest
   sunlight at a point — for sight, the fog, the web screens, the Table's
   map and `light_at` alike. A light of dim light only (a creature outlined
   in faerie fire) has no bright middle.
+- **Things on the map that their caster moves.** A token tagged `object`
+  is a thing, not a creature: a spell's lights, a floating hand, a sphere
+  of fire, a torch set down. It shares a space with anything — a player's
+  light goes onto her own character's square, and a creature onto a
+  thing's (the web screens no longer say "That space is taken" for one) —
+  is never a target (not in a pick, a pick's list, an area's creatures or a
+  reach, unless a ruleset asks with `objects = true`), gives no cover and
+  takes no turn. It sees nothing unless given vision; one that is (a
+  spell's eye) shows its player what it sees, as their own token does. Its
+  owner moves it as they move their character — tap it, tap where, or drag
+  it — whenever one of their creatures may move, and the DM like any
+  token; the rules hear the move as a creature's (`token_moved`,
+  `after_move`), with no actor. It is drawn as a thing: a diamond of its own
+  size, glowing in its light's colour, over a creature whose space it
+  shares (at the space's upper corner, so a tap finds either on a phone).
+  The DM's screen can take one off the map. A token with `audience:
+  "owner"` is seen only by its owner and the DM (a thing invisible to all
+  but its caster).
+- **What goes with an effect.** A token or a region that names an effect
+  (`effect`) goes when the effect goes — ended, expired, its concentration
+  broken, cleared by hand — in the same step, and comes back with it on an
+  undo.
+- **Areas that move with a token.** A region `attached_to` a token moves
+  with it (and with a token attached to that one: a torch carried): its
+  `area`, a template spec, laid round the token where it stands, or its
+  cells moved as far as the token moved. The mover neither enters nor
+  leaves its own area.
 
 ## 2.3.1 — 2026-09-25
 

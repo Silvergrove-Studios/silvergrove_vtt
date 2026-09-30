@@ -4,7 +4,7 @@
 // is then sent, with ctx.target and ctx.scene filled in; or, with no target
 // at all, sent to be rolled and nothing applied (theatre of the mind).
 import { Grid, cellKey, type Vec } from '../grid';
-import { isDead, tokenPos } from './render';
+import { isDead, isObject, tokenPos } from './render';
 import { polygonTest } from './sight';
 import type { Dict } from '../game.svelte';
 import { clone } from '../views/viewlib';
@@ -28,9 +28,11 @@ export function isThing(t: Dict): boolean {
 }
 
 /** Whether a token pick may take this token: not the dead (unless the pick
- *  brings them back), not a thing with no stat block, not one hidden from a player. */
+ *  brings them back), not a thing with no stat block, not an object (a
+ *  spell's light, a floating hand: never a target), not one hidden from a
+ *  player. */
 function takes(t: Dict, payload: Dict, gm: boolean): boolean {
-  return (gm || !t.hidden) && !isThing(t) && (takesDead(payload) || !isDead(t));
+  return (gm || !t.hidden) && !isThing(t) && !isObject(t) && (takesDead(payload) || !isDead(t));
 }
 
 /** What a tap at `p` picks. `hit` is the token the map says was tapped: the
@@ -196,11 +198,30 @@ export function moveWords(token: Dict): string {
   return `Move ${String(token.name ?? 'your token')}: tap where to go`;
 }
 
+/** Whether a token in the way stops one armed to move from going to its
+ *  space: only a creature stops a creature. A thing (a spell's light, a
+ *  floating hand) goes onto anyone's space, its owner's own character's
+ *  too, and a creature onto a thing's (the owner: lights "should be able to
+ *  be on the same square as a player"). */
+export function blocksMove(mover: Dict, there: Dict): boolean {
+  if (isObject(mover) || isObject(there)) return false;
+  return !!(there.actor || there.owner);
+}
+
+/** The token a player's map keeps in view: their character's (not a thing
+ *  of theirs, a spell's light they sent off), else the party's marker on a
+ *  regional map. */
+export function followedToken(tokens: Dict[], me: string): string {
+  const mine = tokens.filter((t) => me !== '' && String(t.owner ?? '') === me);
+  const t = mine.find((x) => !isObject(x)) ?? mine[0] ?? tokens.find((x) => Array.isArray(x.tags) && x.tags.includes('party'));
+  return String(t?.id ?? '');
+}
+
 /** The creatures a token pick may take: those on the map but the picker's
  *  own token (unless the pick is for the party: Aid's three may be its
  *  caster and two others), the markers (a place, the party on a regional
- *  map), the dead (unless the pick brings them back) and the things the DM
- *  put down with no stat block. */
+ *  map), the dead (unless the pick brings them back), the things the DM
+ *  put down with no stat block and the objects (a spell's lights). */
 export function pickables(tokens: Dict[], payload: Dict, gm = false): Dict[] {
   const from = pickFrom(payload, tokens);
   const self = friendlyPick(payload);
@@ -264,7 +285,7 @@ function candidates(tokens: Dict[], payload: Dict, gm: boolean): Dict[] {
   const self = friendlyPick(payload);
   return tokens.filter((t) => {
     const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
-    return (self || String(t.id) !== from) && (gm || !t.hidden) && !isThing(t) && !tags.includes('place') && !tags.includes('party');
+    return (self || String(t.id) !== from) && (gm || !t.hidden) && !isThing(t) && !isObject(t) && !tags.includes('place') && !tags.includes('party');
   });
 }
 

@@ -229,8 +229,9 @@ func op(intent: Dictionary) -> String:
 			var tk := ctx.state.token(sid, str(intent.get("id", "")))
 			if tk.is_empty():
 				return "no such token"
-			if not (tk.get("tags", []) as Array).has("thing"):
-				return "only a token put down by hand comes off the map this way"
+			# (a thing put down by hand, or a spell's: one of a caster's lights)
+			if not (tk.get("tags", []) as Array).has("thing") and not Encounter.is_object(tk):
+				return "only a token put down by hand, or a thing on the map, comes off the map this way"
 			return ctx.commands.run({"t": "token.remove", "scene": sid, "id": str(tk.id)}, "Take off " + str(tk.get("name", "a token")))
 		"share":
 			return Sharing.share(ctx, str(intent.get("ref", "")), str(intent.get("title", "")), str(intent.get("text", "")), str(intent.get("image", "")), str(intent.get("audience", "all")))

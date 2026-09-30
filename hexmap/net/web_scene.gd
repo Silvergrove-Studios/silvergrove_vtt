@@ -39,7 +39,7 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	var tokens := []
 	for tk in state.tokens(scene_id):
 		if not gm:
-			if bool(tk.get("hidden", false)):
+			if bool(tk.get("hidden", false)) or _owners_only(state, tk, player_id):
 				continue
 			if fog and not _owns(state, tk, player_id) and not _party(state, tk) and not Vision.sees(sight.polygons, Vision.token_pos(tk)):
 				continue
@@ -87,7 +87,7 @@ static func unseen(state: EncounterState, scene_id: String, player_id: String) -
 			continue
 		var id := str(tk.get("id", ""))
 		var at := Vision.token_pos(tk)
-		if bool(tk.get("hidden", false)):
+		if bool(tk.get("hidden", false)) or _owners_only(state, tk, player_id):
 			out[id] = "hidden"
 		elif not fog or Vision.sees(sight.polygons, at):
 			continue
@@ -110,12 +110,15 @@ static func _eyes(state: EncounterState, scene_id: String, player_id: String, gm
 	return out
 
 
-## A token as a web client draws it; the DM also learns whether it is hidden.
+## A token as a web client draws it; the DM also learns whether it is
+## hidden. An object also brings its own light, which it is drawn glowing in.
 static func token_out(state: EncounterState, tk: Dictionary, gm: bool) -> Dictionary:
 	var out := {}
 	for k in ["id", "name", "pos", "size", "color", "label", "art", "owner", "actor", "rot", "tags", "elevation"]:
 		if tk.has(k) and tk[k] != null:
 			out[k] = JsonDoc.deep(tk[k])
+	if Encounter.is_object(tk) and tk.get("light") is Dictionary and not (tk.light as Dictionary).is_empty():
+		out.light = JsonDoc.deep(tk.light)
 	if gm:
 		out.hidden = bool(tk.get("hidden", false))
 	# a token of a player's character belongs to that player too
@@ -172,8 +175,19 @@ static func _owns(state: EncounterState, tk: Dictionary, player_id: String) -> b
 	return str(tk.get("actor", "")) != "" and str(state.encounter.actor(str(tk.actor)).get("owner", "")) == player_id
 
 
-## A token of the party: a player's, or a player's character's.
+## A token only its owner (and the DM) may see — `audience: "owner"`: a
+## thing invisible to all but its caster (an unseen servant, a phantom
+## hound) — that this player doesn't own.
+static func _owners_only(state: EncounterState, tk: Dictionary, player_id: String) -> bool:
+	return str(tk.get("audience", "all")) == "owner" and not _owns(state, tk, player_id)
+
+
+## A token of the party: a player's, or a player's character's. Not a
+## thing a player put on the map (a spell's light): the other players see
+## that only in their sight.
 static func _party(state: EncounterState, tk: Dictionary) -> bool:
+	if Encounter.is_object(tk):
+		return false
 	if str(tk.get("owner", "") if tk.get("owner", null) != null else "") != "":
 		return true
 	return str(tk.get("actor", "")) != "" and str(state.encounter.actor(str(tk.actor)).get("owner", "")) != ""

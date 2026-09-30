@@ -106,6 +106,9 @@ func _start(scene_id: String, strategy_id: String) -> String:
 	var entries := []
 	var labels := {}
 	for tk in kernel.state.tokens(scene_id):
+		# (a thing on the map takes no turn: its caster moves it on theirs)
+		if Encounter.is_object(tk):
+			continue
 		var view := kernel.actor_view(str(tk.get("actor", "")))
 		var init: Variant = _initiative(spec, view, tk)
 		entries.append({"id": str(tk.id), "init": init, "name": str(tk.get("name", ""))})

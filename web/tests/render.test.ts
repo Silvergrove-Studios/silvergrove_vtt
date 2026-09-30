@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
-import { DEAD_APART, DEAD_SIZE, FAN_SIZE, isDead, layout, tokenAt, underDiscs } from '../src/lib/map/render';
+import { DEAD_APART, DEAD_SIZE, FAN_SIZE, OBJECT_APART, isDead, isObject, layout, tokenAt, underDiscs } from '../src/lib/map/render';
 
 describe('the map, as it is drawn', () => {
   const grid = new Grid({ columns: 10, rows: 8 });
@@ -32,6 +32,41 @@ describe('the map, as it is drawn', () => {
     expect(layout([lone], grid).get('l')).toEqual({ pos: { x: 1.2, y: 1.1 }, k: DEAD_SIZE });
     // a large one dead: small too
     expect(layout([{ id: 'o', pos: [5, 5], size: 2, tags: ['dead'] }], grid).get('o')!.k).toBe(DEAD_SIZE);
+  });
+
+  // (the owner: her dancing lights "should be able to be on the same square as a player")
+  it('draws a thing on a creature\'s space at its upper corner, small, over it: a tap finds either', () => {
+    const wren = { id: 'w', pos: [c.x, c.y], owner: 'pl_1', actor: 'a_w' };
+    const light = { id: 'l1', pos: [c.x, c.y], owner: 'pl_1', size: 0.5, tags: ['object'], light: { dim: 10, color: '#ffe7a3' } };
+    expect(isObject(light) && !isObject(wren)).toBe(true);
+    const placed = layout([wren, light], grid);
+    // the creature whole, where it stands: not fanned out as for another creature
+    expect(placed.get('w')).toEqual({ pos: c, k: 1 });
+    const l = placed.get('l1')!;
+    expect(Math.hypot(l.pos.x - c.x, l.pos.y - c.y)).toBeCloseTo(OBJECT_APART);
+    expect(l.pos.y).toBeLessThan(c.y); // the upper corner first
+    expect(l.k).toBe(1); // a Tiny light at its own size
+    // a tap on the light finds the light, even with a finger's reach; on the creature, the creature
+    expect(tokenAt([wren, light], l.pos, 0.3, placed)?.id).toBe('l1');
+    expect(tokenAt([light, wren], c, 0.3, placed)?.id).toBe('w');
+    // a sphere five feet across shares a space drawn as small as a light
+    const sphere = { id: 's', pos: [c.x, c.y], size: 1, tags: ['object'] };
+    expect(layout([wren, sphere], grid).get('s')!.k).toBeCloseTo(0.5);
+    // four lights on one creature: each at a corner of its own
+    const four = [wren, ...[1, 2, 3, 4].map((i) => ({ ...light, id: `l${i}` }))];
+    const p4 = layout(four, grid);
+    const at = [1, 2, 3, 4].map((i) => p4.get(`l${i}`)!.pos);
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) expect(Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y)).toBeGreaterThan(0.46);
+    for (let i = 1; i <= 4; i++) expect(tokenAt(four, p4.get(`l${i}`)!.pos, 0.3, p4)?.id).toBe(`l${i}`);
+    expect(tokenAt(four, c, 0.3, p4)?.id).toBe('w');
+    // lights alone on a space fan out as creatures do; one alone stays where it is
+    const two = layout([light, { ...light, id: 'l2' }], grid);
+    expect(two.get('l1')!.k).toBe(FAN_SIZE);
+    expect(layout([light], grid).get('l1')).toEqual({ pos: c, k: 1 });
+    // a big thing (a Large hand) lies under the creatures: a tap on the creature finds it, elsewhere the hand
+    const hand = { id: 'h', pos: [c.x + 0.4, c.y], size: 2, tags: ['object'] };
+    expect(tokenAt([hand, wren], c, 0.3, layout([hand, wren], grid))?.id).toBe('w');
+    expect(tokenAt([hand, wren], { x: c.x + 1.1, y: c.y }, 0.3, layout([hand, wren], grid))?.id).toBe('h');
   });
 
   // (a playtest's "Fire of broken pews" covered two goblins and the Warden)
