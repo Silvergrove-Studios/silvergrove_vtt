@@ -294,6 +294,22 @@ The team's notes on making a character in the third playtest
   fog the player's screen has and the `range` and `sight` a ruleset puts on
   the pick; a tap on one of them on the map says the same (a playtest's
   Haste found the party's fighter missing from its list, behind a wall).
+- **A move's way that fits the creature, and ground that costs more or
+  less.** `hm.map.path` takes the mover's `size`: its whole space goes the
+  way (a Large creature's 2 by 2 on squares, three hexes on hexes; 3 by 3
+  or seven hexes for 3), none of it through a wall or off the map, so a
+  door one square wide is too narrow for an ogre and a doorway of two is
+  not; its token stands on one cell of the space, each step taking the
+  space along or leaving it and stepping within it. Not there: "narrow" (a
+  way only for something smaller) or "no room" (the space can't be there).
+  `extra` adds a tag's price on top of the dearest (swimming a cell more,
+  so difficult water is 2 + 1), `free` waives the ground's price for kinds
+  a ruleset names (boots that ignore ice), matched by a cell's tags or its
+  terrain's own name ("rubble"); each step's cost and length come back,
+  and `space` where it ends. `hm.map.space(scene, at, size)` says the cells
+  a creature that size covers at a place, and whether it fits there. The
+  rules' `can_see` no longer counts a creature beside one with no
+  darkvision as seen in the dark.
 
 ## 2.3.1 — 2026-09-25
 
