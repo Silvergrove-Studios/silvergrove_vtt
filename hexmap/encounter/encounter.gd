@@ -94,6 +94,9 @@ static func new_token(p_name: String, pos: Vector2, extra := {}) -> Dictionary:
 			t.erase(k)
 		else:
 			t[k] = extra[k]
+	# (an object sees nothing unless it is given vision)
+	if is_object(t) and not extra.has("vision"):
+		t["vision"] = {"radius": 0}
 	return t
 
 
@@ -482,7 +485,10 @@ static func fill_actor(a: Dictionary) -> void:
 
 
 ## Give a hand-written or partial token every field it is expected to have.
+## An object sees nothing unless it was given vision (an Arcane Eye is).
 static func fill_token(t: Dictionary) -> void:
+	if is_object(t) and not (t.get("vision") is Dictionary):
+		t["vision"] = {"radius": 0}
 	var defaults := new_token(str(t.get("name", "Token")), Vector2.ZERO)
 	for k in defaults:
 		if not t.has(k):
@@ -490,6 +496,20 @@ static func fill_token(t: Dictionary) -> void:
 	for k in ["owner", "light"]:
 		if t.has(k) and t[k] == null:
 			t.erase(k)
+
+
+## Whether a token is a thing on the map, not a creature: tagged "object"
+## (a spell's light, a floating hand, a torch set down). It shares a space
+## with anything, is never a target, gives no cover, takes no turn and sees
+## nothing unless given vision; its owner moves it as they move their
+## character. docs/plugin-authoring.md, "Objects on the map".
+static func is_object(t: Dictionary) -> bool:
+	var tags: Variant = t.get("tags")
+	return tags is Array and (tags as Array).has(OBJECT_TAG)
+
+
+## The tag that makes a token an object (is_object).
+const OBJECT_TAG := "object"
 
 
 func save(p_path: String = "") -> Error:

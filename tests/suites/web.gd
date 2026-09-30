@@ -649,6 +649,43 @@ func test_a_refused_move_says_why() -> void:
 	host.stop()
 
 
+## A player moves a thing of hers (a spell's light) as she moves her
+## character: onto her own character's space, and away again; on her turn
+## in a fight, and not on another's. (The owner: her dancing lights "should
+## be able to be on the same square as a player".)
+func test_a_player_moves_her_things() -> void:
+	var st := _chapel_state()
+	var host := HostSession.new(st, PackLibrary.new())
+	host.add_player = func(ev: Dictionary) -> String:
+		st.apply(ev)
+		return ""
+	check(host.start(0, false, 0) == OK, "hosting")
+	var ana := WebClient.new(host.port)
+	_pump(host, [ana], func() -> bool: return ana.open())
+	ana.send({"t": "hello", "version": Protocol.VERSION, "name": "phone", "web": true})
+	ana.send({"t": "join", "role": "player", "name": "Ana"})
+	check(_pump(host, [ana], func() -> bool: return not ana.last("joined").is_empty()), "Ana joins from her phone")
+	var sid := st.encounter.active_scene_id
+	var fighter := Vision.token_pos(st.token(sid, "t_bdb237f2"))
+	st.apply({"t": "token.add", "scene": sid, "token": Encounter.new_token("Light 1", fighter + Vector2(2, 0), {"id": "t_light", "owner": "pl_fe0170c1", "size": 0.5, "tags": ["object"]})})
+	var move := func(id: String, to: Vector2) -> String:
+		var before := ana.count("refused")
+		ana.send({"t": "request", "ev": {"t": "token.set", "scene": sid, "id": id, "changes": {"pos": [to.x, to.y]}}})
+		if _pump(host, [ana], func() -> bool: return ana.count("refused") > before, 600):
+			return str(ana.last("refused").get("why", ""))
+		return ""
+	# her turn: her light onto her fighter's space, and off again
+	st.apply({"t": "turns.set", "changes": {"running": true, "turn": 0}})
+	check(move.call("t_light", fighter) == "" and Vision.token_pos(st.token(sid, "t_light")) == fighter, "on her turn her light goes onto her fighter's space")
+	check(Vision.token_pos(st.token(sid, "t_bdb237f2")) == fighter, "(her fighter still there)")
+	var away := fighter + Vector2(0, -2)
+	check(move.call("t_light", away) == "" and Vision.token_pos(st.token(sid, "t_light")) == away, "and away again")
+	# Ben's turn: not hers to move
+	st.apply({"t": "turns.set", "changes": {"turn": 1}})
+	check(move.call("t_light", fighter) == "It's not your turn: Ben's ranger's turn", "on Ben's turn, not: told whose it is")
+	host.stop()
+
+
 ## An action sent with no target at all goes to the ruleset as it is (the
 ## owner: people play theatre of the mind with no tokens all the time, and
 ## still need to see the rolls: the ruleset rolls and applies nothing); the

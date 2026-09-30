@@ -138,7 +138,7 @@ Hooks in API 1:
 | `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock; `session_start` also fires when a session starts from a campaign, with campaign state already in |
 | `time_advanced` | `{from, to, minutes, day, events}` | minutes are absolute since day 1 |
 | `track_done` | `{track, roll, events}` | a progress track completed |
-| `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost); synchronous |
+| `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost); synchronous. An object's move (below) comes with `actor = ""` |
 | `region_entered`, `region_left` | `{scene, token, actor, region, record, events}` | after a move, once per region crossed |
 | `after_move` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | once a move is done and its prep has fired. The one move hook that **may prompt** (an opportunity attack offered to the other side's owner): the move stands whatever happens, a veto changes nothing, and `events` land as their own step once the last handler is through |
 | `prompt_answered` | `{prompt, answer, by, timed_out, plugin, context, events}` | a prompt opened with `hm.prompt_open` was answered (or timed out: the default, `timed_out = true`); `plugin` is whose prompt it was, `context` what it was opened with |
@@ -593,9 +593,9 @@ in Hexmap knows what "close" means.
 |---|---|
 | `hm.map.distance(scene, a, b)` | `{units, edge, cells, diagonals, band}` — centre to centre, edge to edge, cell steps (hex steps, or Chebyshev on squares with `diagonals` saying how many of them were diagonal, so a ruleset can charge 5-10-5 or whatever it likes), and this ruleset's band |
 | `hm.map.band(scene, a, b)` | just the band name |
-| `hm.map.within(scene, origin, r)` | token ids whose edge is within `r` of the origin |
-| `hm.map.template(scene, spec)` | `{cells, tokens, origin}` for `{shape="circle", at, radius}`, `{shape="cone", at, direction, length, angle}`, `{shape="line", at, direction, length, width}` or `{shape="band", at, band}`; `origin="edge"` starts cones and lines at the token's edge, `blocked_by_walls=true` drops what the origin cannot see |
-| `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by, walls, seen, of}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens; `blocked_by` lists the tokens in the way and `walls` how many rays a wall stopped, so cover from walls and from creatures can be priced apart |
+| `hm.map.within(scene, origin, r)` | token ids whose edge is within `r` of the origin (creatures: objects are never among them) |
+| `hm.map.template(scene, spec)` | `{cells, tokens, origin}` for `{shape="circle", at, radius}`, `{shape="cone", at, direction, length, angle}`, `{shape="line", at, direction, length, width}` or `{shape="band", at, band}`; `origin="edge"` starts cones and lines at the token's edge, `blocked_by_walls=true` drops what the origin cannot see; `tokens` are the creatures in it, and objects too with `objects=true` |
+| `hm.map.los(scene, a, b [, tokens_block])` | `{clear, cover="none" \| "partial" \| "total", blocked_by, walls, seen, of}` — rays to the target's centre and corners against walls (doors as they stand) and, by default, other tokens (creatures: an object gives no cover); `blocked_by` lists the tokens in the way and `walls` how many rays a wall stopped, so cover from walls and from creatures can be priced apart |
 | `hm.map.light_at(scene, p)` | `{level="bright" \| "dim" \| "dark", sources, ambient}` — from the scene's own light (`ambient`: `daylight` is bright everywhere, `dim` dim), raised by the lights that reach the point: the map's, those tokens carry, and those effects put at places (below) |
 | `hm.map.can_see(scene, viewer, target)` | the viewer sees (`vision.radius` above 0), sight clear, target lit — or within the viewer's darkvision (`vision.dark_radius` in its `units`; `dark_sight = true` in the answer) or the viewer's `vision.mode` is `"dark"`. No range: in light a line of sight is enough. A ruleset sets those with `token.set` (and the actor's `token.vision`, which a token placed later starts from) from the sheet's senses, in the sheet's own units: `{ dark_radius = 60, units = "ft" }` — the Table turns them into hexes by the map's scale, which a plugin cannot see |
 | `hm.map.neighbors(scene, cell)`, `hm.map.cells_within(scene, cell, r)`, `hm.map.cells_between(scene, a, b)` | cell keys (six neighbours and a hex of hexes, or four and a square block) |
@@ -604,13 +604,13 @@ in Hexmap knows what "close" means.
 | `hm.map.path(scene, a, b [, opts])` | the cheapest way from `a` to `b` cell by cell (six neighbours, or eight on squares), round the walls that stop movement (doors as they are; a diagonal never cuts a wall's corner): `{ok, cells, steps, cost, step_costs, step_lengths, length, diagonals, costly, space, why, through}`. Each cell entered costs 1, or what the ruleset says: `costs = {tag = n}` by the cell's tags — its regions' and its terrain's — the dearest that applies, and on top of it `extra = {tag = n}`, what each of its tags adds (swimming a cell more: `{water = 1}`, so difficult water is 2 + 1); `free = {tag, …}` ground of those kinds pays none of `costs` (boots that ignore ice: `{"ice"}`); these three read the cell's tags and its terrain's own name (the art's id without its pack: `"rubble"`); `cell_costs = {["q,r"] = n}`; `blocked = {"q,r", …}` can't be entered; `diagonals = "5-5-5" \| "5-10-5" \| "euclid"`; `size` the mover's space in cells across, as its token's `size` (a square of 2 by 2 for 2, three hexes on a hex grid; 3 by 3 or seven hexes for 3): the whole space goes the way — on the map, none of it blocked, no wall through it or crossed — its token on one of its cells: each step of the token takes the space along, or leaves it where it is and steps within it (a step into several cells at once costs the dearest of them; `space` is where it ends); `max` a cost to stop looking at. `length` is the same way at 1 a cell; `step_costs` what each step cost, `step_lengths` each at 1 a cell. Not `ok`: `why` is `"walls"`, `"narrow"` (a way only for something smaller), `"no room"` (the space can't be there), `"blocked"` (only through blocked cells: `through` lists those on the shortest), `"far"`, `"off the map"` or `"no map"`. A ruleset counting a creature's movement asks it in `token_moved` (from `p.from` to `p.to`) |
 | `hm.map.space(scene, at [, size, opts])` | `{cells, fits, why}` — the cells a creature `size` cells across (by default the token's own, when `at` is one) covers standing at `at`: its token's cell is one of them, the first way it fits (on the map, no wall through it, none of `opts.blocked`); `fits = false`, `why = "no room"` when none does |
 | `hm.map.token(scene, id)` / `hm.map.tokens(scene)` | a token (a bare id or `token:<id>`) / all of them |
-| `hm.map.move(scene, token, to)` | `{events, entered, left, from, to, cells}` — nothing applied; the Table's own moves go through the kernel and the `token_moved` hooks |
+| `hm.map.move(scene, token, to)` | `{events, entered, left, from, to, cells}` — nothing applied; the events move what is attached to the token too (tokens, and regions: below); the Table's own moves go through the kernel and the `token_moved` hooks |
 
 What a ruleset may put on the map, as events for `hm.commit`:
 
 | helper | event |
 |---|---|
-| `hm.map.region(id, cells, tags [, extra])` | a region record (`label`, `color`, `audience`, `duration` as for effects) — then `hm.map.region_add(scene, region)`, `hm.map.region_set(scene, id, changes)`, `hm.map.region_remove(scene, id)` |
+| `hm.map.region(id, cells, tags [, extra])` | a region record (`label`, `color`, `audience`, `duration` as for effects; `attached_to`, `area` and `effect`: below) — then `hm.map.region_add(scene, region)`, `hm.map.region_set(scene, id, changes)`, `hm.map.region_remove(scene, id)` |
 | `hm.map.cell_set(scene, key, changes)` | plain fields on a cell (`revealed`, a note…) |
 | `hm.map.cell_state(scene, key, changes)` | this ruleset's `ext` on a cell (a trap, a marker); Players receive it only once the cell is `revealed` |
 | `hm.map.highlight(scene, cells [, color, label])` | show a template on the table; `hm.map.highlight(scene, nil)` clears it |
@@ -633,6 +633,74 @@ instead, wherever its creature goes, and goes out with the effect: a rod
 planted in the ground, a spell's sunlight at a point (`{ bright = 60, dim =
 120, units = "ft", at = { x, y }, scene = scene }`). `light_at` names it
 `effect:<id>` among its `sources`.
+
+### Objects on the map
+
+A spell that puts a thing on the map — lights its caster moves about, a
+floating hand, a sphere of fire, the beam of a moonlit spell, a torch set
+down — puts a token tagged `object`. It is a thing, not a creature:
+
+- **It shares a space with anything.** Its owner may move it onto a
+  creature's space (their own character's), and a creature onto its space;
+  the web screens never say "That space is taken" for one. Only creatures
+  stop creatures (a ruleset's own rule for where a creature may end its
+  move sees that an object has no actor).
+- **It is never a target.** Picks on the map pass over it to the creature
+  under it; a pick's list leaves it out; `check_target` refuses it as a
+  token target ("… is a thing, not a creature"), though an area may start
+  at one; `hm.map.template`'s `tokens` and `hm.map.within` leave it out
+  (`objects = true` on a template brings them in); `hm.map.los` counts no
+  cover from it; it takes no turn (the order leaves it out).
+- **It sees nothing unless given vision.** A token tagged `object` with no
+  `vision` gets `{ radius = 0 }`. Give one `vision` (an eye with darkvision:
+  `{ radius = 1, dark_radius = 30, units = "ft" }`) and its player sees
+  through it as through their own token, their fog explored by its moves.
+- **Only its owner may see it**, with `audience = "owner"` (a thing
+  invisible to all but its caster: an unseen servant, a phantom hound):
+  the other players' screens never get it; the DM's does.
+- **It is drawn as a thing**: a diamond of its own `size` (under 1 for
+  something Tiny: 0.5), in its `color` — or, when it has a `light`, that
+  light's colour, glowing — with its owner's ring. Over a creature whose
+  space it shares it sits at the space's upper corner, small, so a tap on a
+  phone finds either; one bigger than a space lies faint under the
+  creatures. Its own `light` shines as any token's does. One tagged
+  `likeness` too (a double of its caster, an image of them) is drawn as
+  the creature it copies — its picture, its ring — though it is no more a
+  target than any thing.
+- **It moves as a character does.** Its owner (`owner`, a player id) moves
+  it the way they move their character — tap it, then where; or drag it —
+  whenever one of their creatures may move (in a fight, on their turn); the
+  DM moves it like any token and can take it off the map. `token_moved`
+  and `after_move` fire for it as for a creature, with `actor = ""`: the
+  ruleset says who may move it, when (a Bonus Action, once a turn), how far
+  and where, and what the move does, vetoing with the reason.
+- **It goes with its effect.** A token or a region that names an effect id
+  (`effect = "e_…"`) is removed when that effect is — ended, expired, its
+  concentration broken (an effect `linked` to it), cleared by hand — in the
+  same step, and an undo brings them back together. A ruleset that removes
+  some of them itself in the same batch is not refused.
+- **A region can move with a token.** A region `attached_to` a token id
+  moves with it, and with a token attached to that one (a torch carried by
+  a creature's token, its light's area with it): its `area` — a template
+  spec without `at`, `{ shape = "circle", radius = 1 }` — is laid round the
+  token where it now stands, as `hm.map.template` would lay it round the
+  token (`size = 0` in it lays it round the token's middle, as round a
+  point: a cylinder centred where a beam is); with no `area` its cells move
+  as many cells as the token did. The
+  mover never enters or leaves an area attached to it (`region_entered`
+  and `region_left` don't fire for it); `hm.map.move`'s events carry the
+  area along too.
+
+```lua
+-- a light of Wren's, linked to her spell's effect; the area under a beam
+hm.commit({
+  { t = "token.add", scene = scene, token = { id = "t_dl_1", name = "Light 1", label = "L1", pos = { x, y },
+      size = 0.5, tags = { "object" }, owner = player, effect = fx_id, color = "#fff1c0",
+      light = { bright = 0, dim = 10, units = "ft", color = "#fff1c0" } } },
+  hm.map.region_add(scene, hm.map.region("rg_beam", cells, { "moonbeam" },
+      { attached_to = "t_beam", area = { shape = "circle", radius = 1 }, effect = fx_id })),
+}, "Dancing Lights")
+```
 
 ### Rolling
 

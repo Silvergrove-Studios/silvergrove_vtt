@@ -56,5 +56,12 @@ player's token picture through the crop window, on her sheet, the DM's
 card and the fight's map; a picture in her journal shared with another
 player; a picture in the DM's notes.
 
+`tests/e2e/things.mjs <host.json> <out>` (host with `--party`): things
+a caster moves. The DM gives Wren Dancing Lights; in the chapel fight, on
+her turn, Ana casts it at a space on her phone, and her sheet says how the
+four lights move; she taps one light and then Wren, and it goes onto
+Wren's own square; another goes to a space away from her; one sent off
+alone is refused, saying why.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).

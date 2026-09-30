@@ -496,10 +496,12 @@ const AREA_SHAPES := ["circle", "cone", "line"]
 
 
 ## Whether `target` is an acceptable pick for an action that declared
-## `kind` on `scene_id`: a token on the scene (and, for a player, one they
-## can see: not hidden), a cell in bounds, or an area whose origin is one
-## of those. "" when it is, else why not.
-static func check_target(state: EncounterState, scene_id: String, kind: String, target: Variant, gm: bool) -> String:
+## `kind` on `scene_id`: a creature's token on the scene (and, for a player,
+## one they can see: not hidden; never an object, a thing on the map), a
+## cell in bounds, or an area whose origin is one of those (or an object:
+## something its caster moves may be where an area starts). "" when it is,
+## else why not.
+static func check_target(state: EncounterState, scene_id: String, kind: String, target: Variant, gm: bool, origin := false) -> String:
 	match kind:
 		"token":
 			if not (target is String) or not (target as String).begins_with("token:"):
@@ -509,6 +511,8 @@ static func check_target(state: EncounterState, scene_id: String, kind: String, 
 				return "no such token on this scene"
 			if not gm and bool(tk.get("hidden", false)):
 				return "you cannot see that"
+			if not origin and Encounter.is_object(tk):
+				return "%s is a thing, not a creature: choose the creature" % str(tk.get("name", "that"))
 		"cell":
 			if not (target is String) or not HexMap.is_cell_key(str(target)):
 				return "this action wants a cell as its target"
@@ -519,7 +523,7 @@ static func check_target(state: EncounterState, scene_id: String, kind: String, 
 			if not (target is Dictionary):
 				return "this action wants an area as its target"
 			var at: Variant = (target as Dictionary).get("at", "")
-			var why := check_target(state, scene_id, "token" if (at is String and (at as String).begins_with("token:")) else "cell", at, gm)
+			var why := check_target(state, scene_id, "token" if (at is String and (at as String).begins_with("token:")) else "cell", at, gm, true)
 			if why != "":
 				return why
 			if not (target.get("direction", 0) is float or target.get("direction", 0) is int):
@@ -597,8 +601,9 @@ static func plain_error(why: String) -> String:
 # --------------------------------------------------------------- tests --
 
 ## Run the plugin's own `hm.test`s on a scratch encounter, one fresh state
-## per test. Returns {count, fails, failures: [{test, message}], names}.
-func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Dictionary:
+## per test (only those whose names contain `filter`, when one is given).
+## Returns {count, fails, failures: [{test, message}], names}.
+func run_tests(id: String, say: Callable = func(_l: String) -> void: pass, filter := "") -> Dictionary:
 	var out := {"count": 0, "fails": 0, "failures": [], "names": []}
 	var p: Plugin = plugins.get(id)
 	if p == null:
@@ -619,6 +624,8 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 	var shared: Compendium = null
 	for i in list.size():
 		var name := str(list[i])
+		if filter != "" and not name.containsn(filter):
+			continue
 		say.call("  · " + name)
 		var scratch := EncounterState.new(Encounter.create("plugin test"))
 		scratch.encounter.doc.rng = {"seed": 7, "index": 0}

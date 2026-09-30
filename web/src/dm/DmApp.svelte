@@ -28,6 +28,7 @@
   import { fightToken, liveFight } from './fight';
   import { currentTurnTokens } from '../lib/turns';
   import { ghostsOf } from '../lib/map/sight';
+  import { isObject } from '../lib/map/render';
   import { WALL_COLORS, WALL_KEY } from '../lib/map/walls';
 
   const token = new URLSearchParams(location.hash.slice(1)).get('t') ?? '';
@@ -347,8 +348,15 @@
     placing = null;
   }
 
-  // a thing the DM put down, chosen: shown or hidden, or taken off
-  const thing = $derived(((game.scene.tokens as Dict[]) ?? []).find((t) => String(t.id) === selected && Array.isArray(t.tags) && t.tags.includes('thing')));
+  // a thing the DM put down, or a thing on the map (a spell's light), chosen:
+  // shown or hidden, or taken off
+  const thing = $derived(((game.scene.tokens as Dict[]) ?? []).find((t) => String(t.id) === selected && Array.isArray(t.tags) && (t.tags.includes('thing') || isObject(t))));
+  // what a thing on the map is, and whose
+  function thingWords(t: Dict): string {
+    if (!isObject(t)) return 'no stat block';
+    const who = game.players.find((p) => String(p.id) === String(t.owner ?? ''));
+    return who ? `${String(who.name)}’s, moved by them` : 'a thing on the map';
+  }
 
   // in a fight, a creature of it opened from the book is its stat block
   // beside the map (a playtest's DM, the Warden risen, clicked its name in
@@ -578,7 +586,7 @@
           {/snippet}
           {#if thing && !pick && !placing}
             <div class="thingbar" role="group" aria-label={String(thing.name ?? 'A token')}>
-              <span><strong>{thing.name}</strong> <span class="dim">· no stat block{thing.hidden ? ' · hidden from the players' : ''}</span></span>
+              <span><strong>{thing.name}</strong> <span class="dim">· {thingWords(thing)}{thing.hidden ? ' · hidden from the players' : ''}</span></span>
               <button type="button" class="quiet" onclick={() => dmOp('token', { scene: String(game.scene.id ?? ''), id: thing.id, hidden: !thing.hidden })}>{thing.hidden ? 'Show the players' : 'Hide it'}</button>
               <button type="button" class="quiet" onclick={() => { dmOp('remove_token', { scene: String(game.scene.id ?? ''), id: thing.id }); selected = ''; }}>Take it off the map</button>
             </div>

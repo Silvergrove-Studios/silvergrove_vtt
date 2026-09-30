@@ -24,7 +24,7 @@
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
   import { Grid } from '../lib/grid';
-  import { DEAD_WORDS, moveTo, moveWords, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, sightOf, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
+  import { DEAD_WORDS, blocksMove, followedToken, moveTo, moveWords, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, sightOf, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
   import PickBanner from '../lib/map/PickBanner.svelte';
   import { fogOf, fogWords } from '../lib/map/sight';
   import type { Cell } from '../lib/grid';
@@ -156,9 +156,9 @@
   const map = $derived(game.maps[String(game.scene.map ?? '')] ?? null);
   const turn = $derived(turnSummary(game.scene, game.me));
   const mine = $derived(myActors());
-  const myTokens = $derived(((game.scene.tokens as Dict[]) ?? []).filter((t) => String(t.owner ?? '') === game.me));
-  // what the map keeps in view: my token, or on the region the party's marker
-  const followed = $derived(String(myTokens[0]?.id ?? ((game.scene.tokens as Dict[]) ?? []).find((t) => Array.isArray(t.tags) && t.tags.includes('party'))?.id ?? ''));
+  // what the map keeps in view: my character's token (not a light of mine sent
+  // off down a corridor), or on the region the party's marker
+  const followed = $derived(followedToken((game.scene.tokens as Dict[]) ?? [], game.me));
   const prompts = $derived(((game.view.prompts as Dict[]) ?? []).filter((p) => p && typeof p === 'object'));
   const promptIndex = $derived(prompts.findIndex((p) => String(p.id) === asked));
   // what of the chat is new to me: the lines after the last one read, which
@@ -305,9 +305,11 @@
       return;
     }
     if (moving) {
-      // the armed token again: put down; a creature is never acted on
+      // the armed token again: put down; a creature is never acted on, and
+      // only a creature stops a creature (a light of mine goes onto my own
+      // character's space, my character onto a light's)
       if (String(t.id) === String(moving.id)) stopMoving();
-      else if (t.actor || t.owner) notice('That space is taken', 'error');
+      else if (blocksMove(moving, t)) notice('That space is taken', 'error');
       else if (t.pos) moveHere({ x: Number(t.pos[0]), y: Number(t.pos[1]) });
       return;
     }

@@ -58,6 +58,7 @@ func _run(dir: String) -> int:
 		entries += host.kernel.comp.count(str(coll))
 	print("-- %s (%s) loaded in %d ms, %d compendium entries" % [id, dir, load_ms, entries])
 	t0 = Time.get_ticks_msec()
-	var r := host.run_tests(id, func(line: String) -> void: print(line))
+	# (HEXMAP_TEST_FILTER: only the tests whose names contain it, while working on some)
+	var r := host.run_tests(id, func(line: String) -> void: print(line), OS.get_environment("HEXMAP_TEST_FILTER"))
 	print("%d checks, %d failed, %d ms" % [r.count, r.fails, Time.get_ticks_msec() - t0])
 	return int(r.fails)

@@ -551,6 +551,57 @@ func _overlay_index(actor_id: String, overlay_id: String) -> int:
 	return -1
 
 
+## What goes with an effect when it goes — ended, expired, its
+## concentration broken, cleared: the tokens and regions that name it
+## (`effect`), on any scene, as removal events. A spell's lights, a
+## floating hand, the area under a beam: docs/plugin-authoring.md,
+## "Objects on the map".
+func removals_with_effect(effect_id: String) -> Array:
+	var out := []
+	if effect_id == "":
+		return out
+	for sc in encounter.scenes:
+		for tk in sc.get("tokens", []):
+			if str(tk.get("effect", "")) == effect_id:
+				out.append({"t": "token.remove", "scene": str(sc.id), "id": str(tk.id)})
+		var regions: Dictionary = sc.get("regions", {})
+		var ids := regions.keys()
+		ids.sort()
+		for rid in ids:
+			if str(regions[rid].get("effect", "")) == effect_id:
+				out.append({"t": "region.remove", "scene": str(sc.id), "id": str(rid)})
+	return out
+
+
+## A batch with what goes with the effects it removes (removals_with_effect)
+## put in after each effect.remove — but not what the batch itself removes
+## (a ruleset tidying its things by hand), nor anything twice. The same
+## batch when nothing names those effects.
+func with_effect_removals(events: Array) -> Array:
+	var gone := {}
+	var any := false
+	for ev in events:
+		if not (ev is Dictionary):
+			continue
+		match str(ev.get("t", "")):
+			"token.remove": gone["token:" + str(ev.get("id", ""))] = true
+			"region.remove": gone["region:%s/%s" % [str(ev.get("scene", "")), str(ev.get("id", ""))]] = true
+			"effect.remove": any = true
+	if not any:
+		return events
+	var out := []
+	for ev in events:
+		out.append(ev)
+		if not (ev is Dictionary) or str(ev.get("t", "")) != "effect.remove":
+			continue
+		for rm in removals_with_effect(str(ev.get("id", ""))):
+			var key := ("token:" + str(rm.id)) if rm.t == "token.remove" else "region:%s/%s" % [str(rm.scene), str(rm.id)]
+			if not gone.has(key):
+				gone[key] = true
+				out.append(rm)
+	return out
+
+
 ## Log entries are looked up by id on every log.add (uniqueness) and
 ## log.remove; the log grows all session, so search from the end (what
 ## is removed is almost always recent) and keep a set of ids for the
@@ -650,7 +701,9 @@ func refusal(ev: Dictionary, player_id: String) -> String:
 
 ## Whether a player may move a token right now, by the turn mode:
 ## free — any token they can see; dm — one of theirs the DM has enabled;
-## ordered — one of theirs whose turn it is.
+## ordered — one of theirs whose turn it is. An object of theirs (a
+## spell's light, a floating hand) moves when one of their creatures may:
+## on their turn, as their character does; the ruleset says what it costs.
 func may_move(tk: Dictionary, player_id: String) -> bool:
 	if player_id == "":
 		return true
@@ -661,14 +714,28 @@ func may_move(tk: Dictionary, player_id: String) -> bool:
 		"free":
 			return true
 		"dm":
-			return _owns(tk, player_id) and (turns.get("active", []) as Array).has(str(tk.id))
+			var active: Array = turns.get("active", [])
+			return _owns(tk, player_id) and (active.has(str(tk.id)) or (Encounter.is_object(tk) and _any_owned(active, player_id)))
 		"ordered":
-			return _owns(tk, player_id) and current_turn_tokens().has(str(tk.id))
+			var up := current_turn_tokens()
+			return _owns(tk, player_id) and (up.has(str(tk.id)) or (Encounter.is_object(tk) and _any_owned(up, player_id)))
 	return false
 
 
 static func _owns(tk: Dictionary, player_id: String) -> bool:
 	return tk.get("owner", null) != null and str(tk.owner) == player_id
+
+
+## Whether any of these token ids is a creature of the player's: its token
+## theirs, or its character.
+func _any_owned(ids: Array, player_id: String) -> bool:
+	for id in ids:
+		var t := find_token(str(id))
+		if t.is_empty() or Encounter.is_object(t):
+			continue
+		if _owns(t, player_id) or (str(t.get("actor", "")) != "" and str(encounter.actor(str(t.actor)).get("owner", "")) == player_id):
+			return true
+	return false
 
 
 ## The token whose turn it is in ordered mode, or "". In the focus shape

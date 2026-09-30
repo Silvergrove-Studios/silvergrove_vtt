@@ -126,7 +126,11 @@ A scene is one map level with its overlay, tokens and fog.
   and `color` (what the canvas draws), `audience` (`all` | `gm`),
   `plugin` (who owns it) and an optional `duration` with the same kinds
   as an effect's: the kernel removes the region when its trigger fires.
-  Anything else in the record is the plugin's.
+  `attached_to` (a token id) makes it move with that token — its `area`
+  (a template spec with no `at`) laid round the token where it stands, or
+  its cells moved as far as the token moved; `effect` (an effect id)
+  makes it go when that effect goes (docs/plugin-authoring.md, "Objects
+  on the map"). Anything else in the record is the plugin's.
 - `cells` (version 2): per-cell state that is not the map's — the map
   stays read-only. A record exists only while it has something in it:
   `revealed` (whether players may know the rest), any plain fields a
@@ -194,7 +198,15 @@ A scene is one map level with its overlay, tokens and fog.
   absent; writers leave the key out, because in an event `null` means
   "remove" (see Events) and a stored null could not be restored exactly.
 - `tags`: free-form strings the DM puts on a token ("prone", "marked").
-  Displayed, never interpreted.
+  Displayed, never interpreted — but for `object`: a thing on the map,
+  not a creature (a spell's light, a floating hand), which shares a space
+  with anything, is never a target, gives no cover, takes no turn and
+  sees nothing unless given `vision` (docs/plugin-authoring.md, "Objects
+  on the map").
+- `attached_to`: a token id this one moves with (a torch carried).
+- `audience`: `"owner"` for a token only its owner and the DM see (a
+  thing invisible to all but its caster); absent, everyone may.
+- `effect`: an effect id; the token goes when that effect goes.
 
 ## Events
 

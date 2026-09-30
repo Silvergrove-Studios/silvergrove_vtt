@@ -7,7 +7,9 @@ import {
   WHY_DARK,
   WHY_DEAD,
   WHY_WALL,
+  blocksMove,
   feetBetween,
+  followedToken,
   moveTo,
   moveWords,
   offersNoTarget,
@@ -98,6 +100,43 @@ describe('picking a target', () => {
     // on squares, a diagonal is a step
     const squares = new Grid({ shape: 'square', columns: 10, rows: 8 });
     expect(moveTo(squares, { pos: [0.5, 0.5] }, { x: 3.5, y: 2.5 })).toEqual({ pos: [3.5, 2.5], spaces: 3 });
+  });
+
+  // (the owner: her dancing lights "should be able to be on the same square as a player")
+  it('moves a thing onto anyone\'s space, and a creature onto a thing\'s: only a creature stops a creature', () => {
+    const wren = { id: 'w', name: 'Wren', pos: [1, 1], owner: 'pl_1', actor: 'a_w' };
+    const light = { id: 'l', name: 'Light 1', pos: [2, 1], owner: 'pl_1', tags: ['object'] };
+    const gob = { id: 'g', pos: [3, 1], actor: 'a_g' };
+    expect(blocksMove(light, wren)).toBe(false);
+    expect(blocksMove(light, gob)).toBe(false);
+    expect(blocksMove(wren, light)).toBe(false);
+    expect(blocksMove(wren, gob)).toBe(true);
+    expect(blocksMove(gob, wren)).toBe(true);
+    // a thing the DM put down with no stat block, and a marker, stop nobody
+    expect(blocksMove(wren, { id: 'cart', pos: [4, 1], tags: ['thing'] })).toBe(false);
+    // the map keeps her character in view, not a light she sent off
+    expect(followedToken([light, wren, gob], 'pl_1')).toBe('w');
+    expect(followedToken([light, gob], 'pl_1')).toBe('l');
+    expect(followedToken([gob, { id: 'star', pos: [0, 0], tags: ['party'] }], 'pl_1')).toBe('star');
+    expect(followedToken([light], '')).toBe('');
+  });
+
+  it('never picks a thing on the map: the creature under it, or nothing', () => {
+    const c = grid.center({ q: 6, r: 4 });
+    const gob = { id: 'g', name: 'Goblin', pos: [c.x, c.y], actor: 'a_g' };
+    const sphere = { id: 's', name: 'Flaming Sphere', pos: [c.x, c.y], size: 1, owner: 'pl_1', tags: ['object'] };
+    const stack = [gob, sphere];
+    const placed = layout(stack, grid);
+    const hit = tokenAt(stack, placed.get('s')!.pos, 0, placed);
+    expect(hit?.id).toBe('s');
+    // a tap on the sphere over the goblin picks the goblin
+    expect(pickTarget(grid, stack, { pick: 'token' }, placed.get('s')!.pos, false, hit)).toBe('token:g');
+    // a sphere alone picks nothing
+    expect(pickTarget(grid, [sphere], { pick: 'token' }, c, false, sphere)).toBeNull();
+    // nor is it listed to choose by name
+    const choices = pickChoices(stack, { pick: 'token', ctx: {} });
+    expect(choices.map((x) => x.target)).toEqual(['token:g']);
+    expect(pickables(stack, { pick: 'token', ctx: {} }, true).map((t) => t.id)).toEqual(['g']);
   });
 
   it('never picks a hidden creature for a player, whatever was hit', () => {
