@@ -169,11 +169,16 @@ func close(id: String, by := "") -> String:
 
 
 ## Answer with the prompt's default (a deadline passed, or the GM waved it on).
-func answer_default(id: String) -> String:
+## `waved`: the GM went on without the answer; a default that is a
+## dictionary says so with `waved = true`, as the web DM's Go on does.
+func answer_default(id: String, waved := false) -> String:
 	var rec: Dictionary = prompts().get(id, {})
 	if rec.is_empty():
 		return "no prompt '%s'" % id
-	return answer(id, JsonDoc.deep(rec.get("default", {})), "")
+	var a: Variant = JsonDoc.deep(rec.get("default", {}))
+	if waved and a is Dictionary:
+		a.waved = true
+	return answer(id, a, "")
 
 
 ## The seconds a prompt has left before its deadline answers it, or -1 when

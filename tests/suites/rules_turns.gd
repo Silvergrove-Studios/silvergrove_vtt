@@ -484,6 +484,14 @@ func test_urgent_prompts_and_what_the_table_waits_on() -> void:
 	var dm_q := k.pending.open_prompt({"to": "gm", "form": {"title": "Parry?"}, "opts": {"default": {"choice": "none"}, "deadline": 30, "public": "a reaction"}}, "srd5e", func(_a: Variant) -> void: pass)
 	var shown: Array = Views.project(k, null, "pl_1", Views.ROLE_PLAYER).waiting
 	check(shown.size() == 1 and shown[0].get("who") == "the DM" and shown[0].get("id") == dm_q, "waiting on the DM: %s" % [shown])
+	# the default given by the DM going on (the Rules panel's Default) is waved; a deadline's isn't
+	var got := []
+	var again := {"to": "pl_1", "form": {"title": "Again?"}, "opts": {"default": {"choice": "none", "late": true}, "deadline": 5, "urgent": true, "public": "a reaction (Ilvara)"}}
+	var q2 := k.pending.open_prompt(again, "srd5e", func(a: Variant) -> void: got.append(a))
+	check(k.pending.answer_default(q2, true) == "" and got.size() == 1 and got[0].get("waved") == true and got[0].get("choice") == "none", "the DM's default is waved: %s" % [got])
+	k.pending.open_prompt(again, "srd5e", func(a: Variant) -> void: got.append(a))
+	k.pending.tick(6.0)
+	check(got.size() == 2 and not got[1].has("waved") and got[1].get("late") == true, "a deadline's isn't: %s" % [got])
 
 
 # ------------------------------------------------------------------ table --

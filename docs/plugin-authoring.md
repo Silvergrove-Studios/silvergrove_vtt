@@ -722,18 +722,20 @@ local ans = hm.prompt(player, {
   each one's `default` too, and the DM's screen offers **Go on**: it answers
   the prompt for its player with that default and `waved = true` (an
   `answer` intent; the GM may answer any prompt), so the fight needn't wait
-  on someone who has stepped away. With `late` in the default, the plugin
-  can tell a player's own "no" from a deadline's or the DM's, and say which.
+  on someone who has stepped away. The Table's Rules panel's **Default** does
+  the same for any prompt whose default is a table (a deadline's default
+  comes without `waved`). With `late` in the default, the plugin can tell a
+  player's own "no" from a deadline's or the DM's, and say which.
   The words reach every screen: they shouldn't name what a player may not
-  know (srd5e says only "a reaction" for the DM's own creatures).
+  know (say only "a reaction" for the DM's own creatures).
 
 An action that asks for a reaction waits on it with `hm.prompt`, one
 creature at a time (the trigger's damage waits on the Shield). A move's
 aftermath asks with `hm.prompt_open` instead, since the move stands whatever
-the answer: srd5e's opportunity attack card has the attacks as buttons, each
-an intent, and closes when its turn ends. Where nothing may wait (a turn's
-hooks, `prompt_answered` itself) a plugin can't ask; srd5e tells the DM and
-the player what could have been taken.
+the answer: an opportunity attack's card can have the attacks as buttons,
+each an intent, and close when its turn ends. Where nothing may wait (a
+turn's hooks, `prompt_answered` itself) a plugin can't ask; it can tell the
+DM and the player what could have been taken.
 
 ### Typed numbers
 

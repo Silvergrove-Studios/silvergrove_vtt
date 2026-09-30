@@ -212,8 +212,8 @@ func refresh() -> void:
 		head.add_child(who)
 		var dflt := Button.new()
 		dflt.text = "Default"
-		dflt.tooltip_text = "Answer with the default, as the deadline would"
-		dflt.pressed.connect(func() -> void: ctx.say(ctx.kernel.pending.answer_default(str(id))))
+		dflt.tooltip_text = "Go on without the answer: the default, as the deadline would give"
+		dflt.pressed.connect(func() -> void: ctx.say(ctx.kernel.pending.answer_default(str(id), true)))
 		head.add_child(dflt)
 		row.add_child(head)
 		var r := ViewRenderer.new()

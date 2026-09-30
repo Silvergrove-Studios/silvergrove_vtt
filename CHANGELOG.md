@@ -328,7 +328,8 @@ The team's notes on making a character in the third playtest
   ("Waiting on Ana: a reaction (Sela) · 23 s", a line over the map that
   moves nothing under a tap), and the DM's has **Go on**: it answers for
   the player with the card's default, marked `waved`, so the fight needn't
-  wait on someone who has stepped away. A player's pill for a card opens
+  wait on someone who has stepped away; the Table's Rules panel's Default
+  marks its answer so too. A player's pill for a card opens
   the one in front: a reaction's, else the newest by when it opened (the
   cards' ids are random, and an older question could come first).
   `web_host.gd --wizard` gives Ana a wizard with a shield spell prepared,
