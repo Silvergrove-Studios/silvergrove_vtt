@@ -524,6 +524,193 @@ func test_paths_from_lua() -> void:
 	check(pc.status == PluginHost.PluginCall.OK and is_equal_approx(float(pc.value.cost), 4.0), "with the squares either side closed, through the rubble: 1 + 2 + 1 (%s)" % [pc.value])
 	pc = host.dispatch("t.path", "walk", {"scene": sid, "to": "7,11", "max": 2})
 	check(pc.status == PluginHost.PluginCall.OK and not pc.value.ok and str(pc.value.why) == "far", "and says when it is too far to look")
+	# a big creature's way and space, and what swimming adds, from Lua too
+	why = host.load_source({"id": "t.space", "version": "1", "api": 1, "name": "Spaces", "capabilities": ["actions"]}, [["main.lua", """
+		local hm = hexmap
+		hm.actions.register("big", { label = "Big", target = "", run = function(ctx)
+			local p = hm.map.path(ctx.scene, ctx.from, ctx.to, { size = 2, extra = { water = 1 } })
+			local s = hm.map.space(ctx.scene, ctx.to, 2, { blocked = ctx.blocked or {} })
+			local c = 0
+			for _, x in ipairs(p.step_costs or {}) do c = c + x end
+			return { ok = p.ok, why = p.why, cost = p.cost, summed = c, space = #(p.space or {}), fits = s.fits, cells = #s.cells }
+		end })
+	"""]])
+	check(why == "", "the second plugin loads: %s" % why)
+	k.commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_pool", [Vector2i(5, 6), Vector2i(6, 6)], ["water"])}], "A pool")
+	pc = host.dispatch("t.space", "big", {"scene": sid, "from": "5,3", "to": "5,8"})
+	check(pc.status == PluginHost.PluginCall.OK and pc.value.ok and int(pc.value.space) == 4 and bool(pc.value.fits) and int(pc.value.cells) == 4
+		and is_equal_approx(float(pc.value.cost), float(pc.value.summed)), "a Large creature's way down the storeroom, its space where it ends, each step's cost: %s" % [pc.value if pc.status == PluginHost.PluginCall.OK else pc.error])
+	pc = host.dispatch("t.space", "big", {"scene": sid, "from": "7,4", "to": "7,0"})
+	check(pc.status == PluginHost.PluginCall.OK and not pc.value.ok and str(pc.value.why) == "walls", "the door shut: no way out (%s)" % [pc.value])
+	pc = host.dispatch("t.space", "big", {"scene": sid, "from": "5,3", "to": "5,8", "blocked": {"5,8": true, "6,8": true, "4,8": true}})
+	check(pc.status == PluginHost.PluginCall.OK and not bool(pc.value.fits), "no room for it where others stand: %s" % [pc.value])
+
+
+## A map on grid `g` with a wall across it along the edges between row `row`
+## and the next (a straight line on squares, the zigzag of hex edges on
+## hexes), open below the cells in `gaps`: [kernel, scene id].
+func _gap_kernel(g: HexGrid, row: int, gaps: Array) -> Array:
+	var m := HexMap.create("Gaps", g)
+	var lvl := m.level(0)
+	_wall_below(lvl, g, row, gaps)
+	var st := EncounterState.new(Encounter.create("Gaps"))
+	st.attach_map(m)
+	var k := RulesKernel.new(st)
+	var sc := Encounter.new_scene(m, str(lvl.id), "Gaps", "")
+	k.commit([{"t": "scene.add", "scene": sc}], "Setup")
+	return [k, str(sc.id)]
+
+
+## Walls on a level along the edges between row `row` and the next, but below
+## the cells in `gaps`.
+func _wall_below(lvl: Dictionary, g: HexGrid, row: int, gaps: Array) -> void:
+	var solid := {"move": true, "sight": true, "light": true, "sound": true}
+	for col in g.columns:
+		var c := g.offset_to_axial(col, row)
+		if gaps.has(c):
+			continue
+		var below: Array = [c + Vector2i(0, 1)] if g.is_square() else [c + Vector2i(0, 1), c + Vector2i(-1, 1)]
+		for b in below:
+			var shared := []
+			for p in g.cell_corners(c):
+				for q in g.cell_corners(b):
+					if p.distance_to(q) < 1e-4:
+						shared.append([p.x, p.y])
+			if shared.size() == 2:
+				lvl.walls.append({"id": "w_%d_%d" % [row, lvl.walls.size()], "points": shared, "blocks": solid, "door": "none", "state": "closed"})
+
+
+## A creature's space, as the SRD 5.2's Creature Size and Space has it on a
+## square grid ("Large 10 by 10 feet, 4 squares (2 by 2)"), and its hex
+## equivalent; a big creature's way needs room for all of it: through a gap
+## two cells wide, not one; its token on either cell of the gap; nowhere its
+## space won't fit ("no room"); round others' spaces, or blocked by them.
+func test_paths_fit_a_big_creature() -> void:
+	var sq := HexGrid.square(12, 10)
+	var hx := HexGrid.new(HexGrid.Orient.POINTY, HexGrid.Offset.ODD, 12, 10)
+	check(MapQuery.footprint(sq, 1).size() == 1 and MapQuery.footprint(sq, 0.5).size() == 1 and MapQuery.footprint(sq, 2).size() == 4
+		and MapQuery.footprint(sq, 3).size() == 9 and MapQuery.footprint(sq, 4).size() == 16, "on squares: 1, 2 by 2, 3 by 3, 4 by 4")
+	check(MapQuery.footprint(hx, 2).size() == 3 and MapQuery.footprint(hx, 3).size() == 7 and MapQuery.footprint(hx, 4).size() == 12
+		and MapQuery.footprint(hx, 5).size() == 19, "on hexes: 3, 7, 12 and 19 hexes")
+	for tri in [MapQuery.footprint(hx, 2)]:
+		check(HexGrid.axial_distance(tri[0], tri[1]) == 1 and HexGrid.axial_distance(tri[0], tri[2]) == 1 and HexGrid.axial_distance(tri[1], tri[2]) == 1,
+			"a Large creature's three hexes each beside the others: %s" % [tri])
+	# squares: one square open in the wall
+	var one := _gap_kernel(sq, 4, [Vector2i(5, 4)])
+	var mq: MapQuery = one[0].map
+	var sid: String = one[1]
+	var small := mq.path(sid, "5,1", "5,8")
+	check(small.ok and small.steps == 7 and small.space == ["5,8"], "one square across goes through the gap: %s" % [small])
+	var big := mq.path(sid, "5,1", "5,8", {"size": 2})
+	check(not big.ok and big.why == "narrow", "a Large creature can't: too narrow for it (%s)" % [big.why])
+	check(not mq.path(sid, "5,1", "5,8", {"size": 3}).ok, "nor a Huge one")
+	# two squares open: a Large creature goes through, a Huge one doesn't
+	var two := _gap_kernel(sq, 4, [Vector2i(5, 4), Vector2i(6, 4)])
+	mq = two[0].map
+	sid = two[1]
+	var through := mq.path(sid, "5,1", "5,8", {"size": 2})
+	check(through.ok and through.steps == 7 and is_equal_approx(through.cost, 7.0) and through.space.size() == 4 and through.space.has("5,8"),
+		"a Large creature through two squares open: 7 squares, its space at the end: %s" % [through])
+	var summed := 0.0
+	for c in through.step_costs:
+		summed += float(c)
+	check(through.step_costs.size() == 7 and is_equal_approx(summed, through.cost), "each step's cost: %s" % [through.step_costs])
+	var diag := mq.path(sid, "2,1", "4,3", {"diagonals": "5-10-5"})
+	check(diag.step_lengths == [1.0, 2.0] and diag.step_costs == [1.0, 2.0], "each step at 1 a cell (5-10-5's second diagonal 2): %s" % [diag.step_lengths])
+	check(mq.path(sid, "6,1", "6,8", {"size": 2}).ok and mq.path(sid, "5,1", "6,8", {"size": 2}).ok, "its token on either square of the gap: its space spreads the way there is room")
+	check(mq.path(sid, "5,1", "5,8", {"size": 3}).why == "narrow", "a Huge one (3 by 3) doesn't fit")
+	var sp := mq.space(sid, "5,4", 2)
+	check(sp.fits and sp.cells.size() == 4 and sp.cells.has("5,4") and sp.cells.has("6,5"), "standing in the gap, its space straddles the wall's line: %s" % [sp])
+	check(mq.space(sid, "3,4", 2).fits and not mq.space(sid, "3,4", 2).cells.has("3,5"), "beside the wall, its space is on the wall's near side: %s" % [mq.space(sid, "3,4", 2)])
+	# others in the way: their squares closed
+	var shut := mq.path(sid, "5,1", "5,8", {"size": 2, "blocked": ["6,4"]})
+	check(not shut.ok and shut.why == "blocked" and shut.through == ["6,4"], "one standing in the gap: blocked, and by which square: %s" % [shut.get("through")])
+	check(mq.path(sid, "5,1", "5,8", {"blocked": ["6,4"]}).ok, "a creature of one square passes beside it")
+	# rough ground (two columns of it): a step of the space pays the dearest of the cells it enters
+	var strip := []
+	for y in range(0, 4):
+		strip.append(Vector2i(8, y))
+		strip.append(Vector2i(9, y))
+	two[0].commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_rough", strip, ["difficult"])}], "Rubble")
+	var onto := mq.path(sid, "6,2", "8,2", {"size": 2, "costs": {"difficult": 2}})
+	check(onto.ok and is_equal_approx(onto.cost, 3.0) and onto.costly.size() == 1, "two squares on into the rubble: its first column entered once, at 2 (%s)" % [onto])
+	var inside := mq.path(sid, "8,2", "9,2", {"size": 2, "costs": {"difficult": 2}})
+	check(inside.ok and is_equal_approx(inside.cost, 1.0), "standing in it, a token's step within its space enters nothing: 1 (%s)" % [inside])
+	check(is_equal_approx(mq.path(sid, "7,2", "8,2", {"costs": {"difficult": 2}}).cost, 2.0) and is_equal_approx(mq.path(sid, "6,2", "7,2", {"size": 2, "costs": {"difficult": 2}}).cost, 1.0),
+		"one square across pays for the square it enters; the space short of the rubble pays nothing more")
+	# a corridor two squares wide (rows 4 and 5): a Large token nudged from one row to
+	# the other is one step, its space staying where it fits
+	var cor := _gap_kernel(sq, 3, [])
+	_wall_below((cor[0] as RulesKernel).state.level_for(cor[1]), sq, 5, [])
+	var cq: MapQuery = cor[0].map
+	var nudge := cq.path(cor[1], "3,4", "4,5", {"size": 2})
+	check(nudge.ok and nudge.steps == 1 and is_equal_approx(nudge.cost, 1.0), "a Large token nudged across a corridor two wide: one step (%s)" % [nudge])
+	check(cq.path(cor[1], "3,4", "3,5", {"size": 2}).ok and is_equal_approx(cq.path(cor[1], "3,4", "9,5", {"size": 2}).cost, 6.0), "straight across it, and along it")
+	check(cq.path(cor[1], "3,4", "3,5", {"size": 3}).why == "no room", "a Huge one: no room in it")
+	# hexes: the same, the zigzag of hex edges
+	var h1 := _gap_kernel(hx, 4, [hx.offset_to_axial(5, 4)])
+	var hq: MapQuery = h1[0].map
+	var hs: String = h1[1]
+	var from := HexMap.cell_key(hx.offset_to_axial(5, 1))
+	var to := HexMap.cell_key(hx.offset_to_axial(5, 8))
+	check(hq.path(hs, from, to).ok, "on hexes one creature of a hex goes through a hex's gap")
+	check(hq.path(hs, from, to, {"size": 2}).why == "narrow", "a Large one (three hexes) can't: %s" % [hq.path(hs, from, to, {"size": 2}).why])
+	var h2 := _gap_kernel(hx, 4, [hx.offset_to_axial(5, 4), hx.offset_to_axial(6, 4)])
+	hq = h2[0].map
+	hs = h2[1]
+	var hp := hq.path(hs, from, to, {"size": 2})
+	check(hp.ok and hp.space.size() == 3, "through two hexes open it goes: %s" % [hp])
+	check(hq.path(hs, from, to, {"size": 3}).why == "narrow", "a Huge one (seven hexes) doesn't")
+	# the cellar: the storeroom's door is one square, and between the storeroom and the
+	# vault a corridor one square wide
+	var parts := _cellar_kernel()
+	var k: RulesKernel = parts[0]
+	var cs: String = parts[1]
+	for w in k.state.level_for(cs).walls:
+		if str(w.get("door", "none")) == "door":
+			k.commit([{"t": "element.set", "scene": cs, "ref": "walls:" + str(w.id), "changes": {"state": "open"}}], "Open")
+	check(k.map.path(cs, "7,4", "7,0").ok and k.map.path(cs, "7,4", "7,0", {"size": 2}).why == "narrow", "out through the door: a Medium creature, not a Large one")
+	check(k.map.path(cs, "7,4", "13,6", {"size": 2}).why == "no room" and not k.map.space(cs, "13,6", 2).fits, "no room in the corridor for a Large one")
+	check(k.map.space(cs, "token:t_h").cells == ["7,2"], "a token's own space, by its size: %s" % [k.map.space(cs, "token:t_h")])
+
+
+## What a cell's kinds add or waive: `extra` on top of the dearest of `costs`
+## (swimming, a foot more for each: difficult water 2 + 1), `free` ground of a
+## kind at no more than 1 (boots that ignore ice), by a region's tags or the
+## terrain's own name (the art's rubble: "rubble").
+func test_paths_add_and_waive_by_kind() -> void:
+	var parts := _cellar_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	var mq := k.map
+	var row := []
+	for x in range(3, 13):
+		row.append(Vector2i(x, 4))
+	k.commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_pool", row, ["water"])}], "A pool")
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6", {"extra": {"water": 1}}).cost, 5.0), "across a row of water: a square more")
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6").cost, 4.0), "priced by nothing, it costs nothing more")
+	k.commit([{"t": "region.set", "scene": sid, "id": "r_pool", "changes": {"tags": ["water", "difficult"]}}], "Rough water")
+	var rough := mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2}, "extra": {"water": 1}})
+	check(is_equal_approx(rough.cost, 6.0) and rough.step_costs.has(3.0), "difficult water: 2, and a square more to swim it (%s)" % [rough.step_costs])
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2}, "extra": {"water": 1}, "free": ["water"]}).cost, 5.0),
+		"its kind waived: the swim's square more, not the difficult ground's")
+	k.commit([{"t": "region.set", "scene": sid, "id": "r_pool", "changes": {"tags": ["ice", "difficult"]}}], "Ice")
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2}, "free": ["ice"]}).cost, 4.0), "ice waived: plain ground")
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2}, "free": ["snow"]}).cost, 5.0), "snow waived is not ice")
+	var spaces := {}
+	for c in row:
+		spaces[HexMap.cell_key(c)] = 2
+	check(is_equal_approx(mq.path(sid, "7,2", "7,6", {"costs": {"difficult": 2}, "free": ["ice"], "cell_costs": spaces}).cost, 5.0), "a cell's own price (a creature's space) still stands")
+	# the art's rubble, by its name
+	k.commit([{"t": "region.remove", "scene": sid, "id": "r_pool"}], "Dry")
+	var lvl := k.state.level_for(sid)
+	for key in ["6,4", "7,4", "8,4"]:
+		lvl.terrain[key] = {"t": "dungeons_and_castles:rubble", "v": 0, "rot": 0, "z": 0}
+	var art := PackLibrary.new()
+	art.reload()
+	mq.art = art
+	check(is_equal_approx(mq.path(sid, "7,2", "7,4", {"costs": {"difficult": 2}}).cost, 3.0), "onto the rubble: 1 + 2")
+	check(is_equal_approx(mq.path(sid, "7,2", "7,4", {"costs": {"difficult": 2}, "free": ["rubble"]}).cost, 2.0), "rubble waived by the terrain's own name: 1 + 1")
 
 
 func test_map_events_over_the_wire_and_drawing() -> void:

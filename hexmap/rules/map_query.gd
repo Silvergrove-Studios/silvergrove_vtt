@@ -16,7 +16,10 @@ extends RefCounted
 ##   move events               a token and what is attached to it, with the
 ##                             regions entered and left
 ##   path(from, to)            the cheapest way there, round the walls, what
-##                             its cells cost by their tags (rough ground)
+##                             its cells cost by their tags (rough ground),
+##                             wide enough for the mover's space
+##   space(at, size)           the cells a creature that size covers there,
+##                             and whether it fits
 ##   cells                     neighbours, rings, lines; per-cell plugin state
 ##
 ## A ref is "token:<id>", a cell is Vector2i or "q,r", a point is Vector2.
@@ -572,20 +575,44 @@ func _terrain_tags(ref: String, cache: Dictionary) -> Array:
 ## neighbours, a square's eight), round the walls that stop movement (doors
 ## as they are now; on squares a diagonal never cuts a wall's corner). Each
 ## cell entered costs 1 — or, the dearest that applies, what a ruleset says
-## it costs (so two kinds of rough ground are no worse than one):
+## it costs (so two kinds of rough ground are no worse than one) — and on
+## top of that what its tags add:
 ##   costs      {tag: n}    by the cell's tags: its regions' and its
 ##                          terrain's (the art's: rubble is "difficult")
+##   extra      {tag: n}    added to that, each tag's (a creature swimming
+##                          pays a cell more for each: {water = 1}; in
+##                          difficult water, 2 + 1)
+##   free       [tag, …]    ground of these kinds costs none of `costs`
+##                          (boots that ignore ice: ["ice"]); `extra` and
+##                          `cell_costs` still apply
+##   (`costs`, `extra` and `free` read a cell's tags — its regions' and its
+##   terrain's art's — and its terrain's own name, the art's id without
+##   its pack: "rubble")
 ##   cell_costs {"q,r": n}  single cells (another creature's space)
 ##   blocked    ["q,r"]     cells that can't be entered or passed
 ##   diagonals  on squares, "5-5-5" (every step 1: the default), "5-10-5"
 ##              (every second diagonal 2) or "euclid" (a diagonal √2)
+##   size       the mover's space, cells across (its token's `size`: 2 is a
+##              square of four, three hexes on a hex grid — `footprint`).
+##              The whole space goes the way: every cell of it on the map,
+##              none blocked, no wall through it, and no wall crossed as it
+##              moves. Its token stands on one cell of it (the cells of the
+##              way are the token's), on which the room there says; each step
+##              of the token takes the space with it, or leaves the space
+##              where it is and steps within it (a Large token nudged across a
+##              corridor two cells wide).
 ##   max        a cost past which it stops looking
 ## Returns {ok, cells: ["q,r", …] from the start to the end, steps, cost,
-## length (the same way with no cell dearer than 1), diagonals, costly: [the
-## cells entered for more than 1], why}. Not ok, `why` says: "walls" (no way
-## round them), "blocked" (the only ways go through blocked cells: `through`
-## lists those on the shortest), "far" (dearer than `max`: `cost` is at least
-## that), "off the map", "no map".
+## step_costs: [each step's], step_lengths: [each at 1 a cell], length (the
+## same way with no cell dearer than 1), diagonals, costly: [the cells
+## entered for more than 1], space: [the cells its space covers at the end],
+## why}. Entering several cells at once (a big space's step), the dearest of
+## them is the step's. Not ok, `why`
+## says: "walls" (no way round them), "narrow" (only a smaller creature has
+## a way), "no room" (the space can't be there: a wall through it, or the
+## map's edge), "blocked" (the only ways go through blocked cells: `through`
+## lists those on the shortest), "far" (dearer than `max`: `cost` is at
+## least that), "off the map", "no map".
 func path(scene_id: String, from: Variant, to: Variant, opts: Dictionary = {}) -> Dictionary:
 	var g := grid(scene_id)
 	if g == null:
@@ -594,39 +621,175 @@ func path(scene_id: String, from: Variant, to: Variant, opts: Dictionary = {}) -
 	var goal := cell_of(scene_id, to)
 	if not g.in_bounds(goal) or not g.in_bounds(start):
 		return _no_path("off the map")
-	var blocked := {}
-	for k in (opts.get("blocked") as Array if opts.get("blocked") is Array else []):
-		blocked[str(k)] = true
+	var blocked := _key_set(opts.get("blocked"))
 	var found := _search(scene_id, g, start, goal, opts, blocked)
-	if not bool(found.ok) and str(found.why) == "walls" and not blocked.is_empty():
+	var why := str(found.why)
+	if not bool(found.ok) and (why == "walls" or why == "no room") and not blocked.is_empty():
 		# through the cells that are blocked there would be a way: they are in it
 		var free := opts.duplicate()
 		free.erase("max")
 		var through := _search(scene_id, g, start, goal, free, {})
 		if bool(through.ok):
 			found.why = "blocked"
-			found.through = (through.cells as Array).filter(func(k: Variant) -> bool: return blocked.has(str(k)))
+			found.through = (through.swept as Array).filter(func(k: Variant) -> bool: return blocked.has(str(k)))
+	if not bool(found.ok) and str(found.why) == "walls" and footprint(g, _size_of(opts)).size() > 1:
+		# something smaller would find a way: this one is too big for it
+		var small := opts.duplicate()
+		small.erase("max")
+		small.size = 1
+		if bool(_search(scene_id, g, start, goal, small, {}).ok):
+			found.why = "narrow"
+	found.erase("swept")
 	return found
 
 
 static func _no_path(why: String) -> Dictionary:
-	return {"ok": false, "why": why, "cells": [], "steps": 0, "cost": 0.0, "length": 0.0, "diagonals": 0, "costly": []}
+	return {"ok": false, "why": why, "cells": [], "steps": 0, "cost": 0.0, "step_costs": [], "step_lengths": [], "length": 0.0, "diagonals": 0, "costly": [], "space": [], "swept": []}
 
 
-## A* over the cells (a state is a cell and, under 5-10-5, whether the next
-## diagonal is the dear one). The heuristic is the grid's own step count,
-## never more than what is left, so the first time the goal comes off the
-## heap its way is the cheapest.
+## A list of cell keys, or a set of them ({"q,r": true}), as a set.
+static func _key_set(v: Variant) -> Dictionary:
+	var out := {}
+	if v is Array:
+		for k in v:
+			out[str(k)] = true
+	elif v is Dictionary:
+		for k in v:
+			out[str(k)] = true
+	return out
+
+
+## A path's `size` option: the mover's cells across (1 when not said).
+static func _size_of(opts: Dictionary) -> float:
+	var s: Variant = opts.get("size", 1)
+	return float(s) if (s is float or s is int) else 1.0
+
+
+## The cells a creature `size` cells across covers, as offsets from its
+## space's first cell: one for a size of a cell or less; on squares an n by
+## n block (four cells for 2, nine for 3, sixteen for 4); on hexes the hexes
+## whose centres lie within n/2 of the space's middle — a hex's centre for
+## an odd n, the corner three hexes share for an even one: 3 hexes for 2, 7
+## for 3, 12 for 4, 19 for 5.
+static func footprint(g: HexGrid, size: float) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var n := maxi(1, roundi(size))
+	if n == 1 or g == null:
+		out.append(Vector2i.ZERO)
+		return out
+	if g.is_square():
+		for y in n:
+			for x in n:
+				out.append(Vector2i(x, y))
+		return out
+	var c0 := g.cell_center(Vector2i.ZERO)
+	var mid := c0 if n % 2 == 1 else (c0 + g.cell_center(Vector2i(1, 0)) + g.cell_center(Vector2i(0, 1))) / 3.0
+	for d in g.spiral(Vector2i.ZERO, n):
+		if g.cell_center(d).distance_to(mid) <= n * 0.5 + 1e-6:
+			out.append(d)
+	return out
+
+
+## The pairs of a footprint's cells that share an edge (a wall between two of
+## them runs through the space).
+static func _footprint_pairs(g: HexGrid, fp: Array[Vector2i]) -> Array:
+	var out := []
+	for i in fp.size():
+		for j in range(i + 1, fp.size()):
+			var d: Vector2i = fp[j] - fp[i]
+			var side := (absi(d.x) + absi(d.y) == 1) if g.is_square() else HexGrid.axial_distance(fp[i], fp[j]) == 1
+			if side:
+				out.append([fp[i], fp[j]])
+	return out
+
+
+## Whether a space whose first cell is `first` can be there: all of it on
+## the map, none of it blocked, no wall through it.
+static func _space_fits(g: HexGrid, first: Vector2i, fp: Array[Vector2i], pairs: Array, blocked: Dictionary, walls: Dictionary) -> bool:
+	for f in fp:
+		var c: Vector2i = first + f
+		if not g.in_bounds(c) or blocked.has(HexMap.cell_key(c)):
+			return false
+	for pr in pairs:
+		if _walled(walls, g.cell_center(first + pr[0]), g.cell_center(first + pr[1])):
+			return false
+	return true
+
+
+## _space_fits, remembered in `cache` by the space's first cell.
+static func _fits_at(cache: Dictionary, g: HexGrid, first: Vector2i, fp: Array[Vector2i], pairs: Array, blocked: Dictionary, walls: Dictionary) -> bool:
+	if not cache.has(first):
+		cache[first] = _space_fits(g, first, fp, pairs, blocked, walls)
+	return cache[first]
+
+
+## Whether a space whose first cell is `first` can step by `d`: no cell of it
+## crosses a wall (nor, on a diagonal, cuts a wall's corner). Remembered in
+## `cache` by the place and the step.
+static func _moves_at(cache: Dictionary, g: HexGrid, first: Vector2i, d: Vector2i, fp: Array[Vector2i], walls: Dictionary) -> bool:
+	var mk := Vector4i(first.x, first.y, d.x, d.y)
+	if not cache.has(mk):
+		var ok := true
+		for f in fp:
+			var a: Vector2i = first + f
+			if _walled(walls, g.cell_center(a), g.cell_center(a + d)):
+				ok = false
+				break
+		cache[mk] = ok
+	return cache[mk]
+
+
+## Where a creature `size` cells across standing at `at` would be: {cells
+## (its space), fits, why}. Its token's cell is one of the space's, the room
+## there says which (the first way it fits: walls, the map's edge and
+## `opts.blocked` cells kept out); fitting none of them, the space as it would
+## be (why "no room"). `size` defaults to the token's when `at` is one.
+func space(scene_id: String, at: Variant, size: Variant = null, opts: Dictionary = {}) -> Dictionary:
+	var g := grid(scene_id)
+	if g == null:
+		return {"cells": [], "fits": false, "why": "no map"}
+	var c := cell_of(scene_id, at)
+	if not g.in_bounds(c):
+		return {"cells": [], "fits": false, "why": "off the map"}
+	var n := float(size) if (size is float or size is int) else maxf(1.0, size_of(scene_id, at))
+	var fp := footprint(g, n)
+	var pairs := _footprint_pairs(g, fp)
+	var blocked := _key_set(opts.get("blocked"))
+	var walls := _wall_buckets(Lighting.blocking_segments(kernel.state.effective_level(scene_id), {}, "move"))
+	for f in fp:
+		if _space_fits(g, c - f, fp, pairs, blocked, walls):
+			return {"cells": _space_keys(c - f, fp), "fits": true, "why": ""}
+	return {"cells": _space_keys(c - fp[0], fp), "fits": false, "why": "no room"}
+
+
+static func _space_keys(first: Vector2i, fp: Array[Vector2i]) -> Array:
+	var out := []
+	for f in fp:
+		out.append(HexMap.cell_key(first + f))
+	return out
+
+
+## A* over the cells. A state is the cell the mover's token stands on, which
+## of its space's cells that is (one choice for a single cell), and under
+## 5-10-5 whether the next diagonal is the dear one. The heuristic is the
+## grid's own step count, never more than what is left (every step moves
+## the token a cell), so the first time the goal comes off the heap its way
+## is the cheapest. Where a space fits and how it may move are worked out
+## once for each place (many states share a space).
 func _search(scene_id: String, g: HexGrid, start: Vector2i, goal: Vector2i, opts: Dictionary, blocked: Dictionary) -> Dictionary:
 	var lvl := kernel.state.effective_level(scene_id)
 	var walls := _wall_buckets(Lighting.blocking_segments(lvl, {}, "move"))
 	var costs: Dictionary = opts.get("costs", {}) if opts.get("costs") is Dictionary else {}
+	var extra: Dictionary = opts.get("extra", {}) if opts.get("extra") is Dictionary else {}
+	var free := _key_set(opts.get("free"))
 	var cell_costs: Dictionary = opts.get("cell_costs", {}) if opts.get("cell_costs") is Dictionary else {}
 	var rule := str(opts.get("diagonals", "5-5-5"))
 	var max_cost := float(opts.get("max")) if (opts.get("max") is float or opts.get("max") is int) else INF
+	var fp := footprint(g, _size_of(opts))
+	var pairs := _footprint_pairs(g, fp)
 	# the tags on each cell: its regions', then its terrain's
 	var tags_of := {}
-	if not costs.is_empty():
+	if not costs.is_empty() or not extra.is_empty():
 		var regions: Dictionary = scene(scene_id).get("regions", {})
 		for rid in regions:
 			for k in regions[rid].get("cells", []):
@@ -638,17 +801,88 @@ func _search(scene_id: String, g: HexGrid, start: Vector2i, goal: Vector2i, opts
 	var tag_cache := {}
 	var mults := {}
 	var square := g.is_square()
-	var s0 := Vector3i(start.x, start.y, 0)
-	var best := {s0: 0.0}
+	var dirs := g.neighbors(Vector2i.ZERO, square)
+	# each step's cells newly entered, as offsets from the space's first cell
+	var entering := {}
+	for d in dirs:
+		var list: Array[Vector2i] = []
+		for f in fp:
+			if not fp.has(f + d):
+				list.append(f + d)
+		entering[d] = list
+	var fits := {}
+	var moves := {}
+	# going nowhere: already there
+	if start == goal:
+		var first0: Vector2i = start - fp[0]
+		for f in fp:
+			if _fits_at(fits, g, start - f, fp, pairs, blocked, walls):
+				first0 = start - f
+				break
+		return {"ok": true, "why": "", "cells": [HexMap.cell_key(start)], "steps": 0, "cost": 0.0, "step_costs": [], "step_lengths": [], "length": 0.0, "diagonals": 0,
+			"costly": [], "space": _space_keys(first0, fp), "swept": _space_keys(first0, fp)}
+	# the goal: the ways its space fits there
+	var goal_ok := {}
+	for oi in fp.size():
+		if _fits_at(fits, g, goal - fp[oi], fp, pairs, blocked, walls):
+			goal_ok[oi] = true
+	if goal_ok.is_empty():
+		return _no_path("no room")
+	# from the start: the ways its space fits where it stands (a creature is in
+	# one of them), or, fitting none (put somewhere tight), each
+	var starts := []
+	for oi in fp.size():
+		if _fits_at(fits, g, start - fp[oi], fp, pairs, blocked, walls):
+			starts.append(oi)
+	if starts.is_empty():
+		starts = range(fp.size())
+	# a space of several cells: first, can it get there at all? One look over the
+	# places the space can be (its token's cell in it aside), before a search that
+	# would look everywhere to say no.
+	if fp.size() > 1:
+		var goals := {}
+		for oi in goal_ok:
+			goals[goal - fp[oi]] = true
+		var seen := {}
+		var queue: Array[Vector2i] = []
+		for oi in starts:
+			if not seen.has(start - fp[oi]):
+				seen[start - fp[oi]] = true
+				queue.append(start - fp[oi])
+		var reachable := false
+		var head := 0
+		while head < queue.size():
+			var cur: Vector2i = queue[head]
+			head += 1
+			if goals.has(cur):
+				reachable = true
+				break
+			for d in dirs:
+				var nx: Vector2i = cur + d
+				if seen.has(nx) or not _fits_at(fits, g, nx, fp, pairs, blocked, walls) or not _moves_at(moves, g, cur, d, fp, walls):
+					continue
+				seen[nx] = true
+				queue.append(nx)
+		if not reachable:
+			return _no_path("walls")
+	var best := {}
 	var prev := {}
 	var closed := {}
 	var heap: Array = []
 	var seq := 0
-	_heap_push(heap, [float(g.steps(start, goal)), seq, s0])
+	for oi in starts:
+		var s0 := Vector4i(start.x, start.y, 0, oi)
+		best[s0] = 0.0
+		_heap_push(heap, [float(g.steps(start, goal)), seq, s0])
+		seq += 1
+	# which cell of the space an offset is (a token stepping within its space)
+	var index_of := {}
+	for oi in fp.size():
+		index_of[fp[oi]] = oi
 	var reached: Variant = null
 	while not heap.is_empty():
 		var top: Array = _heap_pop(heap)
-		var st: Vector3i = top[2]
+		var st: Vector4i = top[2]
 		if closed.has(st):
 			continue
 		closed[st] = true
@@ -657,73 +891,115 @@ func _search(scene_id: String, g: HexGrid, start: Vector2i, goal: Vector2i, opts
 			far.cost = float(top[0])
 			return far
 		var c := Vector2i(st.x, st.y)
-		if c == goal:
+		if c == goal and goal_ok.has(st.w):
 			reached = st
 			break
-		var pc := g.cell_center(c)
+		var first: Vector2i = c - fp[st.w]
 		var here: float = best[st]
-		for n in g.neighbors(c, square):
+		for d in dirs:
+			var n: Vector2i = c + d
 			if not g.in_bounds(n):
-				continue
-			var nk := HexMap.cell_key(n)
-			if blocked.has(nk) or _walled(walls, pc, g.cell_center(n)):
 				continue
 			var base := 1.0
 			var parity := st.z
-			if square and n.x != c.x and n.y != c.y:
+			if square and d.x != 0 and d.y != 0:
 				match rule:
 					"euclid":
 						base = sqrt(2.0)
 					"5-10-5":
 						base = 2.0 if parity == 1 else 1.0
 						parity = 1 - parity
-			if not mults.has(nk):
-				mults[nk] = _cell_mult(nk, costs, cell_costs, tags_of, terrain, tag_cache)
-			var ns := Vector3i(n.x, n.y, parity)
-			var cost := here + base * float(mults[nk])
-			if cost < float(best.get(ns, INF)) - 1e-9:
-				best[ns] = cost
-				prev[ns] = [st, base]
-				seq += 1
-				_heap_push(heap, [cost + float(g.steps(n, goal)), seq, ns])
+			# a step two ways: the space goes with the token, paying for the cells it
+			# enters; or, a space of several cells, it stays where it fits and the token
+			# steps within it (a Large token nudged across a corridor two cells wide)
+			for way in 2:
+				var nw := st.w
+				var mult := 1.0
+				if way == 0:
+					if not _fits_at(fits, g, first + d, fp, pairs, blocked, walls) or not _moves_at(moves, g, first, d, fp, walls):
+						continue
+					for e in entering[d]:
+						var ek := HexMap.cell_key(first + e)
+						if not mults.has(ek):
+							mults[ek] = _cell_mult(ek, costs, extra, free, cell_costs, tags_of, terrain, tag_cache)
+						mult = maxf(mult, float(mults[ek]))
+				else:
+					var within: Variant = index_of.get(fp[st.w] + d)
+					if within == null or not _fits_at(fits, g, first, fp, pairs, blocked, walls):
+						continue
+					nw = int(within)
+				var ns := Vector4i(n.x, n.y, parity, nw)
+				var cost := here + base * mult
+				if cost < float(best.get(ns, INF)) - 1e-9:
+					best[ns] = cost
+					prev[ns] = [st, base, mult]
+					seq += 1
+					_heap_push(heap, [cost + float(g.steps(n, goal)), seq, ns])
 	if reached == null:
 		return _no_path("walls")
 	# back from the goal: the cells, and what each step was
 	var cells := []
+	var step_costs := []
+	var step_lengths := []
 	var length := 0.0
 	var diagonals := 0
 	var costly := []
-	var at: Vector3i = reached
+	var spaces := []
+	var at: Vector4i = reached
 	while prev.has(at):
 		var key := HexMap.cell_key(Vector2i(at.x, at.y))
 		cells.push_front(key)
+		spaces.push_front(Vector2i(at.x, at.y) - fp[at.w])
 		var step: Array = prev[at]
-		var from_st: Vector3i = step[0]
+		var from_st: Vector4i = step[0]
 		length += float(step[1])
+		step_costs.push_front(float(step[1]) * float(step[2]))
+		step_lengths.push_front(float(step[1]))
 		if square and from_st.x != at.x and from_st.y != at.y:
 			diagonals += 1
-		if float(mults.get(key, 1.0)) > 1.0:
+		if float(step[2]) > 1.0:
 			costly.push_front(key)
 		at = from_st
 	cells.push_front(HexMap.cell_key(start))
-	return {"ok": true, "why": "", "cells": cells, "steps": cells.size() - 1, "cost": float(best[reached]), "length": length, "diagonals": diagonals, "costly": costly}
+	spaces.push_front(start - fp[at.w])
+	# every cell the space covered on the way, in order
+	var swept := []
+	var seen := {}
+	for first in spaces:
+		for k in _space_keys(first, fp):
+			if not seen.has(k):
+				seen[k] = true
+				swept.append(k)
+	return {"ok": true, "why": "", "cells": cells, "steps": cells.size() - 1, "cost": float(best[reached]), "step_costs": step_costs, "step_lengths": step_lengths, "length": length,
+		"diagonals": diagonals, "costly": costly, "space": _space_keys(spaces[-1], fp), "swept": swept}
 
 
 ## What entering a cell costs: 1, or the dearest of what its tags and the
-## cell itself are said to cost.
-func _cell_mult(key: String, costs: Dictionary, cell_costs: Dictionary, tags_of: Dictionary, terrain: Dictionary, cache: Dictionary) -> float:
+## cell itself are said to cost (its ground's none, when it is of a kind
+## `free` names); and on top of that what its tags add.
+func _cell_mult(key: String, costs: Dictionary, extra: Dictionary, free: Dictionary, cell_costs: Dictionary, tags_of: Dictionary, terrain: Dictionary, cache: Dictionary) -> float:
 	var m := 1.0
-	if not costs.is_empty():
+	var more := 0.0
+	if not costs.is_empty() or not extra.is_empty():
 		var tags: Array = tags_of.get(key, [])
 		var t: Variant = terrain.get(key)
 		if t is Dictionary:
-			tags = tags + _terrain_tags(str(t.get("t", "")), cache)
+			var ref := str(t.get("t", ""))
+			tags = tags + _terrain_tags(ref, cache) + [ref.get_slice(":", ref.get_slice_count(":") - 1)]
+		var waived := false
 		for tg in tags:
-			if costs.has(tg):
+			if free.has(str(tg)):
+				waived = true
+		var added := {}
+		for tg in tags:
+			if costs.has(tg) and not waived:
 				m = maxf(m, float(costs[tg]))
+			if extra.has(tg) and not added.has(tg):
+				added[tg] = true
+				more += float(extra[tg])
 	if cell_costs.has(key):
 		m = maxf(m, float(cell_costs[key]))
-	return m
+	return m + more
 
 
 ## Wall segments by the unit squares their boxes cover, so a step between
