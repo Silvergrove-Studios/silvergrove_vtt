@@ -334,7 +334,11 @@ The team's notes on making a character in the third playtest
   `web_host.gd --wizard` gives Ana a wizard with a shield spell prepared,
   and `--seed` starts the dice from a known place; `tests/e2e/
   reactions.mjs` walks a goblin's hit on her, the spell cast from her phone
-  and the attack missing, and the DM going on without her answer.
+  and the attack missing, and the DM going on without her answer. A move's
+  aftermath that waits on an answer (a reaction asked as an opportunity
+  attack lands) has its time budget from the answer, as a paused action
+  has: counted from the move, a player's ten seconds' thought had its
+  commits cut off.
 
 ## 2.3.1 — 2026-09-25
 
