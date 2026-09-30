@@ -7,10 +7,15 @@ extends RefCounted
 ## memory, on the Table.
 ##
 ## A prompt: { id, to: player id | "gm", form, default, deadline (s; 0 or
-##             less: none), by (plugin), title, opened (seq), context, actor }
+##             less: none), by (plugin), title, opened (seq), context, actor,
+##             urgent, public }
 ##   `actor` (opts.actor) names the character a prompt is about, for the
 ##   screens to say ("for Ada Vex"); a form's `choices` ([{id, label,
 ##   intent?}]) draw as a button each (docs/plugin-authoring.md).
+##   `urgent` (opts.urgent): a question to answer now, a reaction's; the
+##   screens put it in front of anything else. `public` (opts.public): what
+##   everyone is told the table waits on ("a reaction (Ilvara)"), listed in
+##   every viewer's projection under `waiting` (Views.project).
 ##   A prompt opened without anything waiting on it (`hm.prompt_open`)
 ##   carries `context.hook = true`: its answer fires the `prompt_answered`
 ##   hook instead of resuming a continuation. A group of prompts opened
@@ -59,6 +64,14 @@ func open_prompt(request: Dictionary, by: String, continuation: Callable, contex
 		"opened": kernel.log.seq, "context": context}
 	if str(opts.get("actor", "")) != "":
 		rec.actor = str(opts.actor)
+	# a question to answer now (a reaction): the screens show it at once, over
+	# whatever else is up, with the time it has left
+	if bool(opts.get("urgent", false)):
+		rec.urgent = true
+	# what everyone is told the table waits on ("a reaction (Ilvara)"): every
+	# viewer's projection lists it under `waiting`, the DM's with a way to go on
+	if str(opts.get("public", "")).strip_edges() != "":
+		rec.public = str(opts.public).strip_edges().left(120)
 	if rec.to == "":
 		rec.to = "gm"
 	var why := kernel.commit([{"t": "pending.open", "kind": "prompts", "record": rec}], "Prompt", {"by": by}, "owner:" + rec.to if rec.to != "gm" else "gm")
@@ -161,6 +174,14 @@ func answer_default(id: String) -> String:
 	if rec.is_empty():
 		return "no prompt '%s'" % id
 	return answer(id, JsonDoc.deep(rec.get("default", {})), "")
+
+
+## The seconds a prompt has left before its deadline answers it, or -1 when
+## nothing counts (a deadline of 0: it waits for its answer).
+func left(id: String) -> float:
+	if not _deadlines.has(id):
+		return -1.0
+	return maxf(0.0, float(_deadlines[id]))
 
 
 ## Count down deadlines; answer with the default when one runs out.

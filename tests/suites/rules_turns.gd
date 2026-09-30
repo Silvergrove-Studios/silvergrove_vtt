@@ -446,6 +446,46 @@ func test_unattended_prompts_wait_and_close() -> void:
 		check(k.pending.answer(waiting, {"spend": false}, "pl_2") == "" and pc.status == PluginHost.PluginCall.OK, "it's answered instead")
 
 
+## A reaction's card: a question to answer now (`urgent`), which everyone is
+## told the table waits on (`public`), with the seconds it has left; the DM
+## sees whose it is and can go on without waiting (its default, waved).
+func test_urgent_prompts_and_what_the_table_waits_on() -> void:
+	var st := _state()
+	var k := RulesKernel.new(st)
+	k.commit([{"t": "player.add", "player": {"id": "pl_1", "name": "Ana", "color": "#fff"}},
+		{"t": "player.add", "player": {"id": "pl_2", "name": "Ben", "color": "#fff"}}], "Players")
+	var answered := []
+	var id := k.pending.open_prompt({"to": "pl_1", "form": {"title": "The goblin hits you. Your reaction?", "choices": [{"id": "shield", "label": "Shield"}, {"id": "none", "label": "No reaction"}]},
+		"opts": {"default": {"choice": "none", "late": true}, "deadline": 30, "actor": "a_h", "urgent": true, "public": "a reaction (Ilvara)"}}, "srd5e",
+		func(a: Variant) -> void: answered.append(a))
+	var rec: Dictionary = k.pending.prompts().get(id, {})
+	check(rec.get("urgent") == true and rec.get("public") == "a reaction (Ilvara)", "the record keeps urgent and its public words: %s" % [rec])
+	check(is_equal_approx(k.pending.left(id), 30.0), "30 seconds left")
+	k.pending.tick(10.0)
+	check(is_equal_approx(k.pending.left(id), 20.0), "20 after ten")
+	var quiet := k.pending.open_prompt({"to": "pl_2", "form": {"title": "Roll"}, "opts": {"default": {}, "deadline": 0}}, "srd5e", func(_a: Variant) -> void: pass)
+	check(k.pending.left(quiet) < 0.0, "a card with no deadline counts nothing")
+	# Ana's own view: her card, its seconds; everyone's: what the table waits on
+	var ana := Views.project(k, null, "pl_1", Views.ROLE_PLAYER)
+	check(ana.prompts.size() == 1 and is_equal_approx(float(ana.prompts[0].get("left", -1)), 20.0) and ana.prompts[0].get("urgent") == true, "her card, with 20 seconds left: %s" % [ana.prompts])
+	var ben := Views.project(k, null, "pl_2", Views.ROLE_PLAYER)
+	check(ben.waiting.size() == 1, "Ben is told the table waits (his own roll card says nothing: not public): %s" % [ben.waiting])
+	var w: Dictionary = ben.waiting[0] if ben.waiting.size() > 0 else {}
+	check(w.get("who") == "Ana" and w.get("what") == "a reaction (Ilvara)" and w.get("to") == "pl_1" and is_equal_approx(float(w.get("left", -1)), 20.0), "on whom, for what, how long: %s" % [w])
+	check(not w.has("default") and not ben.prompts.any(func(p: Dictionary) -> bool: return str(p.get("id", "")) == id), "not her question, nor its answer")
+	var gm := Views.project(k, null, "", Views.ROLE_GM)
+	check(gm.waiting.size() == 1 and gm.waiting[0].get("default", {}).get("choice") == "none", "the DM's has the default, to go on with")
+	# the DM goes on without waiting: the default, waved
+	var go: Dictionary = gm.waiting[0].default.duplicate()
+	go.waved = true
+	check(k.pending.answer(id, go, "") == "" and answered.size() == 1 and answered[0].get("waved") == true, "answered for her")
+	check(Views.project(k, null, "pl_2", Views.ROLE_PLAYER).waiting.is_empty(), "nothing waits now")
+	# a prompt with no public words isn't listed; a DM's question says so
+	var dm_q := k.pending.open_prompt({"to": "gm", "form": {"title": "Parry?"}, "opts": {"default": {"choice": "none"}, "deadline": 30, "public": "a reaction"}}, "srd5e", func(_a: Variant) -> void: pass)
+	var shown: Array = Views.project(k, null, "pl_1", Views.ROLE_PLAYER).waiting
+	check(shown.size() == 1 and shown[0].get("who") == "the DM" and shown[0].get("id") == dm_q, "waiting on the DM: %s" % [shown])
+
+
 # ------------------------------------------------------------------ table --
 
 func test_table_turn_panel_both_shapes() -> void:

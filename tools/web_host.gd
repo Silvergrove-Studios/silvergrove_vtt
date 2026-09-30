@@ -9,6 +9,8 @@ extends SceneTree
 ##   godot --headless --path . -s tools/web_host.gd -- <package> [--seconds N]
 ##       [--web-port P] [--ws-port P] [--info out.json] [--stop stop-file]
 ##       [--party]   two players, Ana and Ben, with a character each
+##       [--wizard]  with --party: Ana's a wizard, Sela, Shield prepared (the reactions journey)
+##       [--seed N]  the dice from a known start (a journey that needs a roll to fall a certain way)
 ##       [--work dir] where its campaign lives (default user://web_host, or
 ##                    user://web_host-<web port> on another port); emptied first
 ##       [--log file] every message from a screen, every refusal, every change
@@ -104,11 +106,25 @@ func _run() -> void:
 		if c is AcceptDialog:
 			c.hide()
 	var ctx := win.ctx
+	# the dice from a known start: a journey that needs a roll to fall a certain way
+	# (a hit that Shield turns into a miss) gets it every time
+	if _arg(args, "--seed") != "":
+		ctx.state.encounter.doc.rng = {"seed": int(_arg(args, "--seed")), "index": 0}
 	if args.has("--party") and ctx.host != null and ctx.host.plugins.has("srd5e"):
 		ctx.commands.run({"t": "player.add", "player": {"id": "pl_ana", "name": "Ana", "color": "#4f9cf6"}}, "Ana joins")
 		ctx.commands.run({"t": "player.add", "player": {"id": "pl_ben", "name": "Ben", "color": "#e0a040"}}, "Ben joins")
-		ctx.host.dispatch("srd5e", "create_character", {"name": "Wren", "species": "halfling", "background": "criminal", "class": "rogue", "owner": "pl_ana",
-			"abilities": {"str": 8, "dex": 15, "con": 14, "int": 10, "wis": 12, "cha": 13}, "gm": true})
+		if args.has("--wizard"):
+			# Ana's character a wizard instead, Shield prepared (the reactions journey)
+			var made := ctx.host.dispatch("srd5e", "create_character", {"name": "Sela", "species": "elf", "background": "sage", "class": "wizard", "owner": "pl_ana",
+				"abilities": {"str": 8, "dex": 14, "con": 14, "int": 15, "wis": 12, "cha": 10}, "gm": true})
+			var sela := str(made.value.get("actor", "")) if made.value is Dictionary else ""
+			for sp in ["fire-bolt", "light", "mage-hand", "shield", "magic-missile", "sleep", "feather-fall", "detect-magic", "mage-armor"]:
+				ctx.host.dispatch("srd5e", "learn_spell", {"actor": sela, "spell": sp, "gm": true})
+			for sp in ["shield", "magic-missile", "sleep", "feather-fall"]:
+				ctx.host.dispatch("srd5e", "prepare_spell", {"actor": sela, "spell": sp, "prepared": true, "gm": true})
+		else:
+			ctx.host.dispatch("srd5e", "create_character", {"name": "Wren", "species": "halfling", "background": "criminal", "class": "rogue", "owner": "pl_ana",
+				"abilities": {"str": 8, "dex": 15, "con": 14, "int": 10, "wis": 12, "cha": 13}, "gm": true})
 		ctx.host.dispatch("srd5e", "create_character", {"name": "Brakka", "species": "dwarf", "background": "soldier", "class": "fighter", "owner": "pl_ben",
 			"abilities": {"str": 15, "dex": 12, "con": 14, "int": 8, "wis": 13, "cha": 10}, "gm": true})
 	win.host_port = int(_arg(args, "--ws-port", str(Protocol.DEFAULT_PORT)))

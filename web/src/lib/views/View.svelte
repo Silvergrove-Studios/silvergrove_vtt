@@ -20,6 +20,9 @@
   import { breakdown, fillIntent, num, putValue, shown, signedOf, textOf, timeLeft, valueOf, withOptions, type Dict, clone } from './viewlib';
   import { Expr, truthy } from '../expr';
   import { resolve } from './fieldcheck';
+  import { game } from '../game.svelte';
+  import { clock } from '../clock.svelte';
+  import { secondsLeft } from '../prompts';
 
   let { node, ctx, depth = 0 }: { node: any; ctx: Dict; depth?: number } = $props();
   const ui = viewUi();
@@ -103,13 +106,31 @@
       // "Answer": a roll the DM asked for is the player's own click
       choices: Array.isArray(form.choices) ? form.choices.filter((c: unknown) => c && typeof c === 'object') : null,
       prompt: String(rec.id ?? ''),
+      // a reaction's card: put in front at once, its seconds counted down
+      urgent: rec.urgent === true,
     };
   }
+
+  // when this card came up: a reaction's comes up at once, over whatever was
+  // being tapped, so a tap on its way in the first moment isn't taken for an
+  // answer (a playtest's taps landed on cards that came up under them)
+  let cardId = '';
+  let cardAt = 0;
+  const SETTLE_MS = 600;
+  $effect.pre(() => {
+    if (type !== 'prompt' || !n) return;
+    const id = String((valueOf(n, ctx) as Dict | null)?.id ?? '');
+    if (id !== cardId) {
+      cardId = id;
+      cardAt = performance.now();
+    }
+  });
 
   // one tap per card: the choice goes, and the buttons wait for the card to close
   let chose = $state('');
   function choose(f: Dict, c: Dict): void {
     if (chose === f.prompt) return;
+    if (f.urgent && performance.now() - cardAt < SETTLE_MS) return;
     chose = String(f.prompt);
     const values = $state.snapshot(formValues);
     if (c.intent && typeof c.intent === 'object') ui.intent(putValue(fillIntent(c.intent, ctx), values, '$values'));
@@ -335,13 +356,22 @@
     {@const rec = type === 'prompt' ? valueOf(n, ctx) : null}
     {#if type === 'form' || (rec && typeof rec === 'object')}
       {@const f = type === 'prompt' ? prompted(rec) : n}
-      <div class="form-box" class:prompt={type === 'prompt'}>
-        {#if f.label}<h4>{f.label}</h4>{/if}
+      {@const secs = type === 'prompt' ? secondsLeft(rec, game.viewAt, clock.now) : null}
+      <div class="form-box" class:prompt={type === 'prompt'} class:urgent={f.urgent}>
+        {#if f.label || secs !== null}
+          <div class="formhead">
+            {#if f.label}<h4>{f.label}</h4>{/if}
+            <!-- (the time it has to be answered in: then it's the card's default) -->
+            {#if secs !== null}<span class="secs" class:low={secs <= 10} role="timer" aria-label={`${secs} seconds left`}>{secs} s</span>{/if}
+          </div>
+        {/if}
         <Form fields={formFields(f)} bind:values={formValues} />
         {#if f.choices && f.choices.length > 0}
-          <div class="actions">
+          <!-- a reaction's buttons one under another, big enough to hit at once on a phone;
+               its "none" is the quiet one -->
+          <div class="actions" class:stack={f.urgent}>
             {#each f.choices as c (String(c.id ?? c.label))}
-              <button type="button" class="accent" disabled={chose === f.prompt} onclick={() => choose(f, c)}>{c.label ?? c.id}</button>
+              <button type="button" class={f.urgent && String(c.id) === 'none' ? 'quiet' : 'accent'} disabled={chose === f.prompt} onclick={() => choose(f, c)}>{c.label ?? c.id}</button>
             {/each}
           </div>
         {:else}
@@ -661,6 +691,38 @@
     border-radius: 12px;
     border: 1px solid var(--accent-soft);
     background: var(--accent-bg);
+  }
+  .formhead {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .formhead h4 {
+    flex: 1;
+    margin: 0;
+  }
+  .secs {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .secs.low {
+    color: var(--danger);
+  }
+  /* a reaction's card: now or never */
+  .form-box.prompt.urgent {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+  }
+  .actions.stack {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .actions.stack button {
+    min-height: 48px;
+    text-align: left;
+    white-space: normal;
   }
   .submit {
     display: flex;

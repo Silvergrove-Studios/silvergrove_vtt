@@ -35,6 +35,8 @@ export const game = $state({
   players: [] as Dict[],
   online: [] as string[],
   view: {} as Dict,
+  /** When the view came (performance.now()): a card's seconds `left` count from it. */
+  viewAt: 0,
   scene: {} as Dict,
   scenes: [] as Dict[],
   // the DM seeing as a player: that player's snapshot of the scene, and who
@@ -185,6 +187,7 @@ function handle(m: Msg): void {
       break;
     case 'view':
       game.view = (m.view as Dict) ?? {};
+      game.viewAt = performance.now();
       // who was typing and has sent it: no longer typing
       for (const [from, t] of Object.entries(game.typing)) if (newestLineOf(from) !== t.after) stopTyping(from);
       break;

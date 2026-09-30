@@ -46,7 +46,7 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 	var st := kernel.state
 	var e := st.encounter
 	var out := {"player": player_id, "role": role, "seq": kernel.log.seq, "turns": JsonDoc.deep(e.turns), "clock": JsonDoc.deep(e.clock),
-		"actors": {}, "status": [], "tracks": [], "prompts": [], "rolls": [], "log": [], "actions": {}, "plugins": [], "cards": {}}
+		"actors": {}, "status": [], "tracks": [], "prompts": [], "waiting": [], "rolls": [], "log": [], "actions": {}, "plugins": [], "cards": {}}
 	var plugin_ids := []
 	if host != null:
 		plugin_ids = host.plugins.keys()
@@ -101,8 +101,25 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 	pids.sort()
 	for pr in pids:
 		var rec: Dictionary = e.pending.prompts[pr]
+		# the seconds its deadline has left as this is sent (the screens count
+		# down from it); none while nothing counts
+		var left := kernel.pending.left(str(pr)) if kernel.pending != null else -1.0
 		if role == ROLE_GM or (role == ROLE_PLAYER and str(rec.get("to", "")) == player_id):
-			out.prompts.append(JsonDoc.deep(rec))
+			var mine: Dictionary = JsonDoc.deep(rec)
+			if left >= 0.0:
+				mine.left = left
+			out.prompts.append(mine)
+		# what the table waits on, for everyone: a reaction's card ("a reaction
+		# (Ilvara)"), whose it is, and its time; the question itself stays theirs
+		if str(rec.get("public", "")) != "":
+			var to := str(rec.get("to", "gm"))
+			var w := {"id": str(pr), "to": to, "who": "the DM" if to == "gm" else str(e.player(to).get("name", "a player")),
+				"what": str(rec.public), "urgent": bool(rec.get("urgent", false)), "deadline": float(rec.get("deadline", 0))}
+			if left >= 0.0:
+				w.left = left
+			if role == ROLE_GM:
+				w.default = JsonDoc.deep(rec.get("default", {}))
+			out.waiting.append(w)
 	var rids: Array = e.pending.rolls.keys()
 	rids.sort()
 	for rr in rids:

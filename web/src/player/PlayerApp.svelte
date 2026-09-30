@@ -19,7 +19,8 @@
   import { chatLog, comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
   import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { freshRolls } from '../lib/rolls';
-  import { handoutPill, pillText } from '../lib/prompts';
+  import { frontPrompt, handoutPill, pillText } from '../lib/prompts';
+  import Waiting from '../common/Waiting.svelte';
   import LogLine from '../lib/views/LogLine.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
@@ -161,6 +162,9 @@
   const followed = $derived(String(myTokens[0]?.id ?? ((game.scene.tokens as Dict[]) ?? []).find((t) => Array.isArray(t.tags) && t.tags.includes('party'))?.id ?? ''));
   const prompts = $derived(((game.view.prompts as Dict[]) ?? []).filter((p) => p && typeof p === 'object'));
   const promptIndex = $derived(prompts.findIndex((p) => String(p.id) === asked));
+  // a reaction's card (Shield against a hit, an opportunity attack): it has seconds,
+  // not minutes, so it comes up at once, in front of anything else
+  const urgentAsked = $derived(promptIndex >= 0 && prompts[promptIndex]?.urgent === true);
   // what of the chat is new to me: the lines after the last one read, which
   // this browser keeps (a reload counted the whole log as new: a playtest's
   // badge said 279)
@@ -198,7 +202,10 @@
       if (!seenPrompts.has(id)) {
         seenPrompts.add(id);
         promptAt = performance.now();
-        if (untrack(() => !showing && !busyHere())) asked = id;
+        // (a reaction's comes up however busy the screen is: over a handout, a card of
+        // the DM's, a half-typed message; its first moment's taps are ignored: View)
+        if (p.urgent === true) asked = id;
+        else if (untrack(() => !showing && !busyHere() && !(prompts.find((q) => String(q.id) === asked)?.urgent === true))) asked = id;
       }
     }
   });
@@ -636,7 +643,7 @@
     </button>
   {:else if prompts.length && promptIndex < 0 && !showing}
     <!-- (the newest first: a playtest's player was sent to an old question left open, not the live one) -->
-    <button type="button" class="accent waiting" onclick={() => (asked = String(prompts[prompts.length - 1].id ?? ''))}>
+    <button type="button" class="accent waiting" onclick={() => (asked = String(frontPrompt(prompts)?.id ?? ''))}>
       {pillText(prompts, myNames)}
     </button>
   {/if}
@@ -647,7 +654,7 @@
   {/if}
   {#if showing}
     <Handout handout={showing} onclose={() => (showing = null)} />
-  {:else if promptIndex >= 0}
+  {:else if promptIndex >= 0 && !urgentAsked}
     <Modal title="The DM asks" onclose={() => (asked = '')}>
       <View node={{ type: 'prompt', bind: `/prompts/${promptIndex}` }} ctx={game.view} />
     </Modal>
@@ -664,10 +671,31 @@
       {/snippet}
     </Modal>
   {/if}
+  <!-- what the table waits on (another player's reaction, the DM's): a line, not a card -->
+  <div class="waitslot" class:wide><Waiting /></div>
+  <!-- a reaction's card, last of all: in front of a handout, the look-up, any other card -->
+  {#if urgentAsked}
+    <Modal title="Your reaction" onclose={() => (asked = '')}>
+      <View node={{ type: 'prompt', bind: `/prompts/${promptIndex}` }} ctx={game.view} />
+    </Modal>
+  {/if}
 {/if}
 <svelte:window onpointerdown={closeMenu} onkeydown={(e) => e.key === 'Escape' && (menuOpen = false)} />
 
 <style>
+  /* above the phone's tabs, clear of the map's own controls; nothing to tap */
+  .waitslot {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    z-index: 38;
+    max-width: calc(100% - 24px);
+    pointer-events: none;
+  }
+  .waitslot.wide {
+    bottom: 16px;
+  }
   .rolled {
     position: fixed;
     left: 50%;

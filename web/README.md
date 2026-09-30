@@ -56,5 +56,13 @@ player's token picture through the crop window, on her sheet, the DM's
 card and the fight's map; a picture in her journal shared with another
 player; a picture in the DM's notes.
 
+`tests/e2e/reactions.mjs <host.json> <out>` (host with `--party --wizard
+--seed 12`: Ana plays Sela, a wizard with Shield prepared, and the dice
+start from a known place): the chapel fight; a goblin's hit on Sela puts
+a Shield card on Ana's phone at once, its seconds counting down, while
+Ben's screen and the DM's say whom the fight waits on; she casts it, the
+attack misses, and her level 1 slot and her reaction are spent; the next
+round the DM goes on without waiting for her answer.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).
