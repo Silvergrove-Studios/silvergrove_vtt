@@ -200,9 +200,15 @@ A scene is one map level with its overlay, tokens and fog.
 - `tags`: free-form strings the DM puts on a token ("prone", "marked").
   Displayed, never interpreted — but for `object`: a thing on the map,
   not a creature (a spell's light, a floating hand), which shares a space
-  with anything, is never a target, gives no cover, takes no turn and
-  sees nothing unless given `vision` (docs/plugin-authoring.md, "Objects
-  on the map").
+  with anything, is never a target (unless it has an `actor`: a thing
+  with hit points), gives no cover, takes no turn and sees nothing unless
+  given `vision` (docs/plugin-authoring.md, "Objects on the map").
+- `vision.shared`: `false` for a token whose sight is its own — it sees
+  for the rules, but isn't its player's view, fog or exploring until the
+  flag goes (a familiar's senses, looked through only when the rules say).
+- `turn_with` / `turn_after`: a token id; this token acts in that one's
+  slot of the turn order (a group), or in a slot of its own right after it
+  (docs/plugin-authoring.md, "Creatures a spell makes").
 - `attached_to`: a token id this one moves with (a torch carried).
 - `audience`: `"owner"` for a token only its owner and the DM see (a
   thing invisible to all but its caster); absent, everyone may.
@@ -296,7 +302,9 @@ below puts rules in the map or numbers on tokens; it puts them in
   resources sit on: `token:<id>`, `actor:<id>` or `encounter`.
 - **actors**: records by id (`docs/campaign-format.md` has the shape:
   `kind`, `name`, `owner`, `token` defaults, `ext.<plugin>` source data,
-  `derived.<plugin>` written by the kernel, `overlays`, `audience`).
+  `derived.<plugin>` written by the kernel, `overlays`, `audience`; and
+  `effect`, an effect id: a creature a spell made, which leaves with
+  everything of its own when that effect goes).
   `derived` is never set by an event: the kernel recomputes it after any
   event that touches the actor, and a replay recomputes it too.
 - **effects**: records keyed by id, on a ref. `value` is optional and

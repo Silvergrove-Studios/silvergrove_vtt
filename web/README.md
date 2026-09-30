@@ -63,6 +63,15 @@ four lights move; she taps one light and then Wren, and it goes onto
 Wren's own square; another goes to a space away from her; one sent off
 alone is refused, saying why.
 
+`tests/e2e/summons.mjs <host.json> <out>` (host with `--party --wizard
+--seed 12`): a creature a spell makes. The DM gives Sela Find Familiar;
+in the chapel fight, on her turn, Ana casts it on her phone, choosing an
+owl (fey) as it's cast; the owl comes up beside Sela with a tab of its
+own on her Character pane (its stat block: whose familiar it is), and a
+slot of its own in the order; on its turn Ana moves it on the map and
+ends its turn from its tab; a goblin's arrow drops it to 0 and it's gone
+from the map, the order and her tabs.
+
 `tests/e2e/reactions.mjs <host.json> <out>` (host with `--party --wizard
 --seed 12`: Ana plays Sela, a wizard with Shield prepared, and the dice
 start from a known place): the chapel fight; a goblin's hit on Sela puts

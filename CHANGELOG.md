@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Creatures a spell makes are creatures.** A ruleset can give a spell's
+  familiar, steed, animated dead or conjured beast an actor and a token of
+  its caster's player's: a target, a tab of its own in the player's
+  Character pane (the player's characters first), moved by its player. The
+  host now: removes an actor that names an effect when that effect goes, in
+  the same step, with everything of its own (its tokens, the effects on it,
+  its pools, its place in the order); keeps a token's sight its own while
+  `vision.shared` is `false` (not its player's view or fog until the rules
+  share it); counts an object token that has an actor as a target (a thing
+  with hit points); and seats a token with `turn_with` in another token's
+  slot of the order, or with `turn_after` in a slot of its own right after
+  it. A journey in a real browser (`web/tests/e2e/summons.mjs`): a
+  familiar cast on a phone, its own tab and turn, moved on the map, and
+  gone when an arrow drops it to 0.
+
 - **Playtests by agents** (`tools/agent_playtest/`): a table of AI agents
   — a DM who knows only D&D and players with personalities, each in a
   browser sized like their device (a phone, a tablet, a laptop), talking

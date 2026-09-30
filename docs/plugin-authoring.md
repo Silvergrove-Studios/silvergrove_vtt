@@ -645,12 +645,19 @@ down — puts a token tagged `object`. It is a thing, not a creature:
   the web screens never say "That space is taken" for one. Only creatures
   stop creatures (a ruleset's own rule for where a creature may end its
   move sees that an object has no actor).
-- **It is never a target.** Picks on the map pass over it to the creature
-  under it; a pick's list leaves it out; `check_target` refuses it as a
-  token target ("… is a thing, not a creature"), though an area may start
-  at one; `hm.map.template`'s `tokens` and `hm.map.within` leave it out
-  (`objects = true` on a template brings them in); `hm.map.los` counts no
-  cover from it; it takes no turn (the order leaves it out).
+- **It is never a target** — unless it has an `actor` (below). Picks on
+  the map pass over it to the creature under it; a pick's list leaves it
+  out; `check_target` refuses it as a token target ("… is a thing, not a
+  creature"), though an area may start at one; `hm.map.template`'s
+  `tokens` and `hm.map.within` leave it out (`objects = true` on a
+  template brings them in); `hm.map.los` counts no cover from it; it takes
+  no turn (the order leaves it out).
+- **A thing with statistics is a target.** An object token that has an
+  `actor` (a floating hand with hit points, a servant, an image that any
+  damage ends) is picked, listed and accepted by `check_target` like a
+  creature (`Encounter.is_target`), so it can be attacked and damaged; it
+  still shares its space, gives no cover, takes no turn and stays out of an
+  area's `tokens` unless `objects = true`.
 - **It sees nothing unless given vision.** A token tagged `object` with no
   `vision` gets `{ radius = 0 }`. Give one `vision` (an eye with darkvision:
   `{ radius = 1, dark_radius = 30, units = "ft" }`) and its player sees
@@ -700,6 +707,46 @@ hm.commit({
   hm.map.region_add(scene, hm.map.region("rg_beam", cells, { "moonbeam" },
       { attached_to = "t_beam", area = { shape = "circle", radius = 1 }, effect = fx_id })),
 }, "Dancing Lights")
+```
+
+### Creatures a spell makes
+
+A spell that makes a creature — a familiar, a steed, animated undead, a
+conjured beast — adds an actor (its stat block) and a token for it, owned by
+its caster's player, so it is a creature like any other: a target, a sheet
+of its own in its player's Character tab, moved by its player. The host
+gives such a creature four things:
+
+- **It goes with its spell.** An actor that names an effect id
+  (`effect = "e_…"` on the actor) leaves the table when that effect goes —
+  the spell ended, expired, dismissed, its concentration broken (an effect
+  `linked` to that) — in the same step, with everything of its own: its
+  tokens, the effects on it (and those elsewhere linked to them), its
+  pools, its place in the order, and what its own effects put on the map or
+  made. An undo brings it all back together. One that outlasts its spell
+  (undead that only stop obeying) names none.
+- **Its senses are its own until shared.** A token with `vision.shared =
+  false` sees for the rules (`hm.map.can_see`, what it may target) but is
+  not its player's view: their fog, their exploring and the party's sight
+  leave it out until the flag is cleared (`Vision.shares`). A familiar's
+  player looks through its eyes only when the rules say (a Bonus Action,
+  until the start of their next turn).
+- **Its turns as its words say.** A token with `turn_with = "<token id>"`
+  acts in that token's slot (a group of the two: "Wren and Steed"); one
+  with `turn_after = "<token id>"` has a slot of its own right after it.
+  The order's start and `hm.turns.insert(entry)` with no index put them
+  there (`TurnRunner.place_followers`); any other creature a spell makes
+  in a fight is inserted where its own roll puts it.
+- **Things with hit points are creatures enough.** An object token with
+  an `actor` (above) is a target that takes damage, while it still moves as
+  a thing and takes no turn.
+
+```lua
+-- an owl for Wren's player, gone with the spell's effect; its sight hers only when shared
+hm.commit({ { t = "actor.add", actor = { id = "a_owl", kind = "companion", name = "Owl", owner = player,
+    effect = fx_id, ext = { [ID] = block } } } }, "Find Familiar")
+hm.commit({ { t = "token.add", scene = scene, token = { id = "t_owl", actor = "a_owl", name = "Owl", owner = player,
+    pos = { x, y }, size = 0.5, vision = { radius = 6, dark_radius = 120, units = "ft", shared = false } } } }, "Find Familiar")
 ```
 
 ### Rolling

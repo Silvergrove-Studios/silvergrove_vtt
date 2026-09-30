@@ -8,7 +8,9 @@
   import TokenPicture from '../common/TokenPicture.svelte';
   import { game, myActors, playerColors, type Dict } from '../lib/game.svelte';
 
-  const mine = $derived(myActors());
+  // their characters first, then the creatures they run (a familiar, a steed a
+  // spell made): a tab each, the character's in front until another is chosen
+  const mine = $derived([...myActors()].sort((a, b) => (a.kind === 'pc' ? 0 : 1) - (b.kind === 'pc' ? 0 : 1)));
   let chosen = $state('');
   const actor = $derived(mine.find((a) => a.id === chosen) ?? mine[0]);
   const status = $derived(((game.view.status as Dict[]) ?? []).filter((s) => s && typeof s === 'object'));
