@@ -436,6 +436,9 @@ func _draw_lights(c: Node2D) -> void:
 				if not l.has("shadows"):
 					l["shadows"] = true
 				draw_light(c, l, 1.0)
+		# and lights effects have put at places (Vision.placed_lights)
+		for l in Vision.placed_lights(state, scene_id, map.grid, index):
+			draw_light(c, l, 1.0)
 		# Sight in the dark: a player's own tokens with a dark radius lift
 		# the darkness around them, in grey — seen, not lit.
 		if darkness > 0.0 and viewpoint != "":

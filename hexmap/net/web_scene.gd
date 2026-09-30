@@ -146,6 +146,8 @@ static func lights(state: EncounterState, scene_id: String, lvl: Dictionary, tok
 			var l: Dictionary = (tl as Dictionary).duplicate()
 			l.pos = t.get("pos", [0, 0])
 			all.append(l)
+	# and what effects have put at places on it (Vision.placed_lights)
+	all.append_array(Vision.placed_lights(state, scene_id, m.grid if m != null else null, index))
 	for l in all:
 		var bright := float(l.get("bright", 0.0))
 		var dim := float(l.get("dim", 0.0))

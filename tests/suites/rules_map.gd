@@ -216,6 +216,27 @@ func test_carried_lights() -> void:
 	check(Vision.lights(st, sid, st.effective_level(sid)).all(func(l: Dictionary) -> bool: return str(l.id) != "token:t_h"), "but sight doesn't count a hidden token's")
 	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"hidden": false}}, {"t": "effect.remove", "id": "e_sacred"}], "It ends")
 	check(mq.light_at(sid, "token:t_g").level == "dark", "the effect over: dark again")
+	# a light an effect puts at a place (a rod planted in the ground): it lights
+	# that place, stays when its creature moves, and goes out with the effect
+	var g_pos := Vision.token_pos(st.token(sid, "t_g"))
+	var planted := {"id": "e_rod", "on": "actor:a_h", "plugin": "sample", "key": "rod", "label": "A rod planted", "stack": "none", "changes": [],
+		"duration": {"kind": "until_cleared"}, "light": {"bright": 60, "dim": 120, "units": "ft", "at": [g_pos.x, g_pos.y], "scene": sid}}
+	check(k.commit([{"t": "effect.apply", "effect": planted}], "A rod planted") == "", "an effect with a light at a place")
+	here = mq.light_at(sid, "token:t_g")
+	check(here.level == "bright" and here.sources.has("effect:e_rod") and not here.sources.has("token:t_h"), "the goblin in its bright light, from the place, not the hero's token: %s" % [here])
+	check(mq.can_see(sid, "token:t_h", "token:t_g").sees, "seen by it")
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"pos": [g_pos.x - 3.0, g_pos.y]}}], "The hero steps off")
+	check(mq.light_at(sid, "token:t_g").sources.has("effect:e_rod"), "the light stays where it was put")
+	check(Vision.lights(st, sid, st.effective_level(sid)).any(func(l: Dictionary) -> bool: return str(l.id) == "effect:e_rod"), "sight counts it")
+	drawn = WebScene.lights(st, sid, st.effective_level(sid), [WebScene.token_out(st, st.token(sid, "t_h"), false)])
+	check(drawn.size() == 1 and is_equal_approx(float(drawn[0].bright), 12.0) and is_equal_approx(float(drawn[0].pos[0]), g_pos.x), "the web screens draw it there, in hexes: %s" % [drawn.map(func(l: Dictionary) -> String: return "%s at %s" % [l.bright, l.pos])])
+	check(Vision.carried_lights(st, st.token(sid, "t_h"), mq.grid(sid)).is_empty(), "and the hero carries none")
+	k.commit([{"t": "effect.remove", "id": "e_rod"}], "Pulled up")
+	check(mq.light_at(sid, "token:t_g").level == "dark", "pulled up: dark again")
+	# a light of dim light only (an outline of faerie fire) lights its creature dimly, not brightly
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_g", "changes": {"light": {"bright": 0, "dim": 10, "units": "ft"}}}], "Outlined")
+	check(mq.light_at(sid, "token:t_g").level == "dim", "dim where it stands: %s" % [mq.light_at(sid, "token:t_g")])
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_g", "changes": {"light": null}}], "Out")
 
 
 func test_map_regions_cells_and_moves() -> void:

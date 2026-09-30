@@ -72,10 +72,11 @@ static func hexes_per(units: String, grid: HexGrid) -> float:
 
 
 ## The lights a scene's sight counts: the map's that are on and not hidden,
-## and those its tokens carry (Vision.carried_lights) — but not a hidden
-## token's (its torch would give away the goblin the DM has not revealed).
-## The same set the web snapshot draws. [{id, pos, bright, dim, angle,
-## direction, shadows}]
+## those its tokens carry (Vision.carried_lights) — but not a hidden
+## token's (its torch would give away the goblin the DM has not revealed) —
+## and those effects put at places on it (Vision.placed_lights). The same
+## set the web snapshot draws. [{id, pos, bright, dim, angle, direction,
+## shadows}]
 static func lights(state: EncounterState, scene_id: String, lvl: Dictionary) -> Array:
 	var out := []
 	for l in lvl.get("lights", []):
@@ -88,6 +89,8 @@ static func lights(state: EncounterState, scene_id: String, lvl: Dictionary) -> 
 			continue
 		for l in carried_lights(state, tk, m.grid if m != null else null, index):
 			out.append(_light("token:" + str(tk.get("id", "")), l, tk.get("pos", [0, 0])))
+	for l in placed_lights(state, scene_id, m.grid if m != null else null, index):
+		out.append(_light("effect:" + str(l.effect), l, l.pos))
 	return out
 
 
@@ -117,16 +120,42 @@ static func carried_lights(state: EncounterState, tk: Dictionary, grid: HexGrid,
 	return out
 
 
-## The effects that carry a light, by what they are on: {ref: [light]}.
+## The effects that carry a light, by what they are on: {ref: [light]}. A
+## light that names a place — `at` (a point, as a token's `pos`) on its
+## `scene` — stands there instead, whoever its effect is on, under
+## "at:<scene>" (Vision.placed_lights): a light left where it was put, as a
+## rod planted in the ground or a spell's sunlight at a point.
 static func effect_lights(state: EncounterState) -> Dictionary:
 	var out := {}
 	for id in state.encounter.effects:
 		var fx: Variant = state.encounter.effects[id]
 		if fx is Dictionary and fx.get("light") is Dictionary and not (fx.light as Dictionary).is_empty():
-			var on := str(fx.get("on", ""))
-			if not out.has(on):
-				out[on] = []
-			out[on].append(fx.light)
+			var l: Dictionary = fx.light
+			var key := str(fx.get("on", ""))
+			var at: Variant = l.get("at")
+			if at is Array and (at as Array).size() >= 2 and str(l.get("scene", "")) != "":
+				key = "at:" + str(l.scene)
+				l = l.duplicate()
+				l["effect"] = str(id)
+			if not out.has(key):
+				out[key] = []
+			out[key].append(l)
+	return out
+
+
+## The lights effects have put at places on a scene (effect_lights), in hex
+## units on its grid, each with its `pos` (the light's `at`) and whose
+## effect it is (`effect`). [{pos, effect, bright, dim, color, …}]
+static func placed_lights(state: EncounterState, scene_id: String, grid: HexGrid, index: Dictionary = {}) -> Array:
+	if index.is_empty() and not state.encounter.effects.is_empty():
+		index = effect_lights(state)
+	var out := []
+	for l in index.get("at:" + scene_id, []):
+		var h := in_hexes(l, grid)
+		h["pos"] = [float(l.at[0]), float(l.at[1])]
+		h.erase("at")
+		h.erase("scene")
+		out.append(h)
 	return out
 
 

@@ -336,13 +336,17 @@ func light_at(scene_id: String, p: Variant) -> Dictionary:
 	for tk in kernel.state.tokens(scene_id):
 		for tl in Vision.carried_lights(kernel.state, tk, grid(scene_id), index):
 			lights.append({"id": "token:" + str(tk.id), "pos": Vision.token_pos(tk), "bright": float(tl.get("bright", 0)), "dim": float(tl.get("dim", 0)), "shadows": bool(tl.get("shadows", true))})
+	# and those effects have put at places on it (Vision.placed_lights)
+	for pl in Vision.placed_lights(kernel.state, scene_id, grid(scene_id), index):
+		lights.append({"id": "effect:" + str(pl.effect), "pos": Vector2(float(pl.pos[0]), float(pl.pos[1])), "bright": float(pl.get("bright", 0)), "dim": float(pl.get("dim", 0)), "shadows": bool(pl.get("shadows", true))})
 	for l in lights:
 		var radius := maxf(float(l.bright), float(l.dim))
 		var lit := Lighting.is_lit(l.pos, radius, pt, segs if l.shadows else [])
 		if not lit:
 			continue
 		sources.append(l.id)
-		if pt.distance_to(l.pos) <= float(l.bright):
+		# (a light of dim light only — a creature Faerie Fire outlines — has no bright middle)
+		if float(l.bright) > 0.0 and pt.distance_to(l.pos) <= float(l.bright):
 			best = "bright"
 		elif best != "bright":
 			best = "dim"

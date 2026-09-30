@@ -310,6 +310,12 @@ The team's notes on making a character in the third playtest
   a creature that size covers at a place, and whether it fits there. The
   rules' `can_see` no longer counts a creature beside one with no
   darkvision as seen in the dark.
+- **A light left at a place.** An effect's light may name a place (`at`,
+  a point, on its `scene`): it stands there, wherever its creature goes,
+  and goes out with the effect — a rod planted in the ground, a spell's
+  sunlight at a point — for sight, the fog, the web screens, the Table's
+  map and `light_at` alike. A light of dim light only (a creature outlined
+  in faerie fire) has no bright middle.
 
 ## 2.3.1 — 2026-09-25
 
