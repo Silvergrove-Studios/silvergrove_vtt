@@ -57,6 +57,17 @@ static func eyes(tk: Dictionary, grid: HexGrid) -> Dictionary:
 	return {"sees": float(v.get("radius", 0)) > 0.0, "dark": maxf(0.0, float(v.get("dark_radius", 0))) * k, "mode": str(v.get("mode", "normal")), "per": k}
 
 
+## Whether what a token sees is its owner's view: their screen and their
+## fog, what the party explores, the DM's preview of the players' sight.
+## Every token's is, but one whose `vision.shared` is false: that token
+## sees for the rules (`can_see`: a familiar's own senses) and not for its
+## player, until a ruleset turns it on (a caster looking through the
+## familiar's eyes, as a Bonus Action, until their next turn).
+static func shares(tk: Dictionary) -> bool:
+	var v: Variant = tk.get("vision")
+	return not (v is Dictionary and (v as Dictionary).get("shared", true) == false)
+
+
 ## Hexes in one of `units` on a grid: 1 for none, or for a unit that can't
 ## be turned into the map's.
 static func hexes_per(units: String, grid: HexGrid) -> float:

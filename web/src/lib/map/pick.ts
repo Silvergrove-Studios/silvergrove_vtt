@@ -29,10 +29,11 @@ export function isThing(t: Dict): boolean {
 
 /** Whether a token pick may take this token: not the dead (unless the pick
  *  brings them back), not a thing with no stat block, not an object (a
- *  spell's light, a floating hand: never a target), not one hidden from a
- *  player. */
+ *  spell's light: never a target) unless it has statistics of its own (an
+ *  Arcane Hand's AC and hit points, an Unseen Servant's one: the host's
+ *  Encounter.is_target), not one hidden from a player. */
 function takes(t: Dict, payload: Dict, gm: boolean): boolean {
-  return (gm || !t.hidden) && !isThing(t) && !isObject(t) && (takesDead(payload) || !isDead(t));
+  return (gm || !t.hidden) && !isThing(t) && (!isObject(t) || !!t.actor) && (takesDead(payload) || !isDead(t));
 }
 
 /** What a tap at `p` picks. `hit` is the token the map says was tapped: the
@@ -285,7 +286,7 @@ function candidates(tokens: Dict[], payload: Dict, gm: boolean): Dict[] {
   const self = friendlyPick(payload);
   return tokens.filter((t) => {
     const tags: string[] = Array.isArray(t.tags) ? t.tags : [];
-    return (self || String(t.id) !== from) && (gm || !t.hidden) && !isThing(t) && !isObject(t) && !tags.includes('place') && !tags.includes('party');
+    return (self || String(t.id) !== from) && (gm || !t.hidden) && !isThing(t) && (!isObject(t) || !!t.actor) && !tags.includes('place') && !tags.includes('party');
   });
 }
 

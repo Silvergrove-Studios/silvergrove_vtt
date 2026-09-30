@@ -101,10 +101,14 @@ static func unseen(state: EncounterState, scene_id: String, player_id: String) -
 
 
 ## The tokens a viewer sees through: a player's own (and their
-## characters'), or for the DM every player's, as a preview.
+## characters'), or for the DM every player's, as a preview. Not one whose
+## sight isn't shared (Vision.shares: a familiar's, until its caster looks
+## through its eyes).
 static func _eyes(state: EncounterState, scene_id: String, player_id: String, gm: bool) -> Array:
 	var out := []
 	for tk in state.tokens(scene_id):
+		if not Vision.shares(tk):
+			continue
 		if (gm and tk.get("owner", null) != null) or (not gm and _owns(state, tk, player_id)):
 			out.append(tk)
 	return out

@@ -512,6 +512,15 @@ static func is_object(t: Dictionary) -> bool:
 const OBJECT_TAG := "object"
 
 
+## Whether a token may be a pick's target: a creature's, or a thing with
+## statistics — an object that has an actor (the Arcane Hand's AC and hit
+## points, an Unseen Servant's one). A thing with none (a spell's light)
+## never is. Either way an object shares its space, gives no cover, takes
+## no turn and is left out of an area's creatures.
+static func is_target(t: Dictionary) -> bool:
+	return not is_object(t) or str(t.get("actor", "")) != ""
+
+
 func save(p_path: String = "") -> Error:
 	if p_path != "":
 		path = p_path

@@ -139,6 +139,18 @@ describe('picking a target', () => {
     expect(pickables(stack, { pick: 'token', ctx: {} }, true).map((t) => t.id)).toEqual(['g']);
   });
 
+  // (the owner: "things with hit points ... need to become full tokens with accessible stat blocks")
+  it('picks a thing with statistics of its own: an Arcane Hand, an Unseen Servant', () => {
+    const c = grid.center({ q: 6, r: 4 });
+    const hand = { id: 'h', name: 'Arcane Hand', pos: [c.x, c.y], size: 2, owner: 'pl_1', actor: 'a_hand', tags: ['object'] };
+    const light = { id: 'l', name: 'Light 1', pos: [c.x + 2, c.y], owner: 'pl_1', tags: ['object'] };
+    expect(pickTarget(grid, [hand, light], { pick: 'token' }, c, false, hand)).toBe('token:h');
+    expect(pickables([hand, light], { pick: 'token', ctx: {} }, true).map((t) => t.id)).toEqual(['h']);
+    expect(pickChoices([hand, light], { pick: 'token', ctx: {} }).map((x) => x.target)).toEqual(['token:h']);
+    // it still shares a space with anyone, as a thing does
+    expect(blocksMove(hand, { id: 'w', pos: [c.x, c.y], actor: 'a_w' })).toBe(false);
+  });
+
   it('never picks a hidden creature for a player, whatever was hit', () => {
     const g = { id: 'g', pos: tokens[1].pos, hidden: true };
     expect(pickTarget(grid, tokens, { pick: 'token' }, { x: g.pos[0], y: g.pos[1] }, false, g)).toBeNull();
