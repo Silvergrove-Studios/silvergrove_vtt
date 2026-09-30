@@ -812,8 +812,11 @@ await step('Ana taps Wren, then where she goes, and says yes', async () => {
   }
   if (!went) throw new Error(`Wren didn't move: ${refusals.join(' / ')}`);
   // what is left of her movement this turn, on her header, and under her name in the DM's fight bar
-  await ana.locator('.turn').filter({ hasText: /Your turn: Wren .* · Movement \d+ of \d+ ft/ }).waitFor({ timeout: 5000 });
-  await dm.locator('.fightbar').filter({ hasText: /Wren’s turn · Movement \d+ of \d+ ft/ }).waitFor({ timeout: 5000 });
+  // (leaving the goblins' reach draws their opportunity attacks: if the dice put her down on
+  // the way, the line says she can't move, "Can't move: Dying (Speed 0)")
+  const line = "(Movement \\d+ of \\d+ ft|Can't move: \\w+)";
+  await ana.locator('.turn').filter({ hasText: new RegExp(`Your turn: Wren .* · ${line}`) }).waitFor({ timeout: 5000 });
+  await dm.locator('.fightbar').filter({ hasText: new RegExp(`Wren’s turn · ${line}`) }).waitFor({ timeout: 5000 });
   await shot(ana, 'ana_moved');
 });
 
