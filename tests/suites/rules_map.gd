@@ -140,6 +140,14 @@ func test_map_sight_and_light() -> void:
 	check(not mq.can_see(sid, "token:t_h", "token:t_g").sees, "20 feet of darkvision do not reach it")
 	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 1, "dark_radius": 30, "units": "ft"}}}], "Darkvision 30 ft")
 	check(mq.can_see(sid, "token:t_h", "token:t_g").sees, "30 feet do")
+	# with none, nothing in the dark is seen, not even a goblin beside it (its edge is 0 too)
+	var beside := Vision.token_pos(st.token(sid, "t_h")) + Vector2(1, 0)
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 1}}},
+		{"t": "token.set", "scene": sid, "id": "t_g", "changes": {"pos": [beside.x, beside.y]}}], "Side by side in the dark")
+	var touching := mq.can_see(sid, "token:t_h", "token:t_g")
+	check(mq.light_at(sid, "token:t_g").level == "dark" and not touching.sees and touching.why == "dark", "no darkvision, a goblin beside it in the dark: not seen (%s)" % [touching])
+	k.commit([{"t": "token.set", "scene": sid, "id": "t_h", "changes": {"vision": {"radius": 1, "dark_radius": 5, "units": "ft"}}}], "Darkvision 5 ft")
+	check(mq.can_see(sid, "token:t_h", "token:t_g").sees, "five feet of darkvision see it")
 	# and the canvas lifts the darkness around a player's darkvision
 	var canvas := MapCanvas.new()
 	canvas.packs = PackLibrary.new()

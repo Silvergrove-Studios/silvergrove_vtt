@@ -366,7 +366,8 @@ func can_see(scene_id: String, viewer: String, target: String) -> Dictionary:
 		return {"sees": false, "why": "no line of sight", "distance": d, "cover": los.cover}
 	var light := light_at(scene_id, "token:" + str(t.id))
 	if light.level == "dark" and str(eyes.mode) != "dark":
-		if d.edge <= float(eyes.dark):
+		# (no darkvision sees nothing in the dark, not even one beside it: its edge is 0 too)
+		if float(eyes.dark) > 0.0 and d.edge <= float(eyes.dark):
 			return {"sees": true, "distance": d, "cover": los.cover, "light": light, "dark_sight": true}
 		return {"sees": false, "why": "dark", "distance": d, "light": light}
 	return {"sees": true, "distance": d, "cover": los.cover, "light": light}
