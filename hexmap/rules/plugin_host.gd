@@ -601,8 +601,9 @@ static func plain_error(why: String) -> String:
 # --------------------------------------------------------------- tests --
 
 ## Run the plugin's own `hm.test`s on a scratch encounter, one fresh state
-## per test. Returns {count, fails, failures: [{test, message}], names}.
-func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Dictionary:
+## per test (only those whose names contain `filter`, when one is given).
+## Returns {count, fails, failures: [{test, message}], names}.
+func run_tests(id: String, say: Callable = func(_l: String) -> void: pass, filter := "") -> Dictionary:
 	var out := {"count": 0, "fails": 0, "failures": [], "names": []}
 	var p: Plugin = plugins.get(id)
 	if p == null:
@@ -623,6 +624,8 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass) -> Di
 	var shared: Compendium = null
 	for i in list.size():
 		var name := str(list[i])
+		if filter != "" and not name.containsn(filter):
+			continue
 		say.call("  · " + name)
 		var scratch := EncounterState.new(Encounter.create("plugin test"))
 		scratch.encounter.doc.rng = {"seed": 7, "index": 0}

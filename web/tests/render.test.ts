@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
-import { DEAD_APART, DEAD_SIZE, FAN_SIZE, OBJECT_APART, isDead, isObject, layout, tokenAt, underDiscs } from '../src/lib/map/render';
+import { DEAD_APART, DEAD_SIZE, FAN_SIZE, OBJECT_APART, drawnAsThing, isDead, isObject, layout, tokenAt, underDiscs } from '../src/lib/map/render';
 
 describe('the map, as it is drawn', () => {
   const grid = new Grid({ columns: 10, rows: 8 });
@@ -63,6 +63,12 @@ describe('the map, as it is drawn', () => {
     const two = layout([light, { ...light, id: 'l2' }], grid);
     expect(two.get('l1')!.k).toBe(FAN_SIZE);
     expect(layout([light], grid).get('l1')).toEqual({ pos: c, k: 1 });
+    // a likeness of its caster (Mislead's double) is drawn as the creature it copies: fanned out with her, not at a corner
+    const double = { id: 'd', pos: [c.x, c.y], owner: 'pl_1', size: 1, tags: ['object', 'likeness'] };
+    expect(isObject(double) && !drawnAsThing(double) && drawnAsThing(light)).toBe(true);
+    const pair = layout([wren, double], grid);
+    expect(pair.get('w')!.k).toBe(FAN_SIZE);
+    expect(pair.get('d')!.k).toBe(FAN_SIZE);
     // a big thing (a Large hand) lies under the creatures: a tap on the creature finds it, elsewhere the hand
     const hand = { id: 'h', pos: [c.x + 0.4, c.y], size: 2, tags: ['object'] };
     expect(tokenAt([hand, wren], c, 0.3, layout([hand, wren], grid))?.id).toBe('w');

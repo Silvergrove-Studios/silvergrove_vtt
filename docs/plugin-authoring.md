@@ -663,7 +663,10 @@ down — puts a token tagged `object`. It is a thing, not a creature:
   light's colour, glowing — with its owner's ring. Over a creature whose
   space it shares it sits at the space's upper corner, small, so a tap on a
   phone finds either; one bigger than a space lies faint under the
-  creatures. Its own `light` shines as any token's does.
+  creatures. Its own `light` shines as any token's does. One tagged
+  `likeness` too (a double of its caster, an image of them) is drawn as
+  the creature it copies — its picture, its ring — though it is no more a
+  target than any thing.
 - **It moves as a character does.** Its owner (`owner`, a player id) moves
   it the way they move their character — tap it, then where; or drag it —
   whenever one of their creatures may move (in a fight, on their turn); the
@@ -681,7 +684,9 @@ down — puts a token tagged `object`. It is a thing, not a creature:
   a creature's token, its light's area with it): its `area` — a template
   spec without `at`, `{ shape = "circle", radius = 1 }` — is laid round the
   token where it now stands, as `hm.map.template` would lay it round the
-  token; with no `area` its cells move as many cells as the token did. The
+  token (`size = 0` in it lays it round the token's middle, as round a
+  point: a cylinder centred where a beam is); with no `area` its cells move
+  as many cells as the token did. The
   mover never enters or leaves an area attached to it (`region_entered`
   and `region_left` don't fire for it); `hm.map.move`'s events carry the
   area along too.

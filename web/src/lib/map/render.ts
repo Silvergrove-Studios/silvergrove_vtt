@@ -84,6 +84,14 @@ export function isObject(t: Dict): boolean {
   return Array.isArray(t.tags) && (t.tags as unknown[]).includes('object');
 }
 
+/** Whether a token is drawn as a thing: an object, but not one that looks
+ *  like its caster (a "likeness": Mislead's double, Project Image's copy),
+ *  which is drawn as the creature it copies — though it is no more a
+ *  target than any thing. */
+export function drawnAsThing(t: Dict): boolean {
+  return isObject(t) && !(Array.isArray(t.tags) && (t.tags as unknown[]).includes('likeness'));
+}
+
 export function pointInPolygon(p: Vec, poly: number[][]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -116,7 +124,7 @@ export const OBJECT_SHARE = 0.5;
 /** Whether a token is drawn over the creatures (a thing a space wide or
  *  less), or under them (a bigger thing: a Large hand of force). */
 function over(t: Dict): boolean {
-  return isObject(t) && Number(t.size ?? 1) <= 1;
+  return drawnAsThing(t) && Number(t.size ?? 1) <= 1;
 }
 
 /** Where each token is drawn: tokens of size 1 or less on the same cell fan
@@ -146,8 +154,8 @@ export function layout(tokens: Dict[], grid: Grid, skip = ''): Map<string, Place
     else cells.set(key, [t]);
   }
   for (const all of cells.values()) {
-    const things = all.filter(isObject);
-    const creatures = all.filter((t) => !isObject(t));
+    const things = all.filter(drawnAsThing);
+    const creatures = all.filter((t) => !drawnAsThing(t));
     if (!creatures.length) {
       fanOut(things, out, 1, FAN_SIZE);
       continue;
@@ -205,7 +213,7 @@ function fanOut(here: Dict[], out: Map<string, Placed>, k1: number, kn: number):
 export function tokenAt(tokens: Dict[], p: Vec, least = 0, placed?: Map<string, Placed>): Dict | null {
   const top = nearestAt(tokens.filter(over), p, 0, placed);
   if (top) return top;
-  const under = (t: Dict) => isObject(t) && !over(t);
+  const under = (t: Dict) => drawnAsThing(t) && !over(t);
   return nearestAt(tokens.filter((t) => !under(t)), p, least, placed) ?? nearestAt(tokens.filter(under), p, least, placed);
 }
 
@@ -457,7 +465,7 @@ export function drawFrame(f: Frame): void {
   if (under) drawNotes(ctx, lvl, cam.scale, drawn.map((d) => ({ x: d.pos.x, y: d.pos.y, r: tokenRadius(d.t) * d.k })));
   // the dead first, then a big thing (a Large hand of force), the living over
   // them, and the things a space wide or less over the living
-  const layer = (d: { t: Dict }) => (isDead(d.t) && !isObject(d.t) ? 0 : isObject(d.t) ? (over(d.t) ? 3 : 1) : 2);
+  const layer = (d: { t: Dict }) => (isDead(d.t) && !drawnAsThing(d.t) ? 0 : drawnAsThing(d.t) ? (over(d.t) ? 3 : 1) : 2);
   for (const d of [...drawn].sort((a, b) => layer(a) - layer(b))) drawToken(ctx, d.t, d.pos, look, cam.scale, dpr, d.k);
   drawNameTags(ctx, tokens, look, cam.scale, placed);
   if (look.gm && !under) drawNotes(ctx, lvl, cam.scale);
@@ -634,7 +642,7 @@ function drawNotes(ctx: CanvasRenderingContext2D, lvl: Dict, scale: number, toke
  *  the top, the party a white halo round their own colour (in a playtest a
  *  player's red ring read as a goblin's). */
 export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look: Look, scale: number, dpr = 1, k = 1): void {
-  if (isObject(t)) {
+  if (drawnAsThing(t)) {
     drawThing(ctx, t, pos, look, scale, k);
     return;
   }

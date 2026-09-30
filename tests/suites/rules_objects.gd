@@ -228,6 +228,16 @@ func test_regions_attached_to_tokens_move_with_them() -> void:
 	k.log.undo()
 	check(st.encounter.scene(sid).regions.r_mark.cells == under and Vision.token_pos(st.token(sid, "t_h")) == cell.call(3, 7), "undone: back where they were")
 	k.hooks.off("test")
+	# an area laid round a token's middle (size 0), as round a point
+	k.commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_point", [], ["point"], {"attached_to": "t_h", "area": {"shape": "circle", "radius": 1, "size": 0}})}], "Round the middle")
+	check(k.move_token(sid, "t_h", cell.call(4, 7), "pl_1") == "", "the hero steps east")
+	var mid: Array = st.encounter.scene(sid).regions.r_point.cells.duplicate()
+	mid.sort()
+	var round_point: Array = mq.template(sid, {"shape": "circle", "at": cell.call(4, 7), "radius": 1}).cells
+	round_point.sort()
+	check(mid == round_point and mid.size() == 7, "its area (size 0) round his middle, as round a point: %d cells" % mid.size())
+	k.log.undo()
+	k.log.undo()
 	# a region on a thing: a beam's area moves with the beam; a torch carried takes its light's area along
 	check(k.commit([{"t": "token.add", "scene": sid, "token": _light("t_beam", cell.call(8, 3), {"size": 1, "owner": "pl_1"})},
 		{"t": "region.add", "scene": sid, "region": MapQuery.region("r_beam", mq.template(sid, {"shape": "circle", "at": "token:t_beam", "radius": 1, "include_self": true}).cells, ["moonlight"], {"attached_to": "t_beam", "area": {"shape": "circle", "radius": 1}})},

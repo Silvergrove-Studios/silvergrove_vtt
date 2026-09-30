@@ -539,13 +539,14 @@ func move(scene_id: String, id: String, to: Vector2) -> Dictionary:
 ## from `was` to `now` (hex units; `size` the token's): its `area` — a
 ## template spec with no `at`, `{shape = "circle", radius = 3}` — laid
 ## round the token where it now stands, as a template round the token would
-## be; or, with none, its cells as they were, moved as many cells as the
-## token moved.
+## be (its `size`, when the area names one, instead of the token's: 0 lays
+## a circle round the token's middle, as round a point); or, with none, its
+## cells as they were, moved as many cells as the token moved.
 func attached_cells(scene_id: String, region: Dictionary, was: Vector2, now: Vector2, size: float) -> Array:
 	var area: Variant = region.get("area")
 	if area is Dictionary and not (area as Dictionary).is_empty():
 		var spec: Dictionary = (area as Dictionary).duplicate(true)
-		spec.at = {"x": now.x, "y": now.y, "size": size}
+		spec.at = {"x": now.x, "y": now.y, "size": float(spec.get("size", size))}
 		return template(scene_id, spec).get("cells", [])
 	var g := grid(scene_id)
 	var cells: Array = region.get("cells", [])

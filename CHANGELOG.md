@@ -331,18 +331,21 @@ The team's notes on making a character in the third playtest
   `after_move`), with no actor. It is drawn as a thing: a diamond of its own
   size, glowing in its light's colour, over a creature whose space it
   shares (at the space's upper corner, so a tap finds either on a phone).
-  The DM's screen can take one off the map. A token with `audience:
-  "owner"` is seen only by its owner and the DM (a thing invisible to all
-  but its caster).
+  One tagged `likeness` too (a double of its caster) is drawn as the
+  creature it copies. The DM's screen can take one off the map. A token
+  with `audience: "owner"` is seen only by its owner and the DM (a thing
+  invisible to all but its caster).
 - **What goes with an effect.** A token or a region that names an effect
   (`effect`) goes when the effect goes — ended, expired, its concentration
   broken, cleared by hand — in the same step, and comes back with it on an
   undo.
 - **Areas that move with a token.** A region `attached_to` a token moves
   with it (and with a token attached to that one: a torch carried): its
-  `area`, a template spec, laid round the token where it stands, or its
-  cells moved as far as the token moved. The mover neither enters nor
-  leaves its own area.
+  `area`, a template spec, laid round the token where it stands (round its
+  middle with `size = 0`), or its cells moved as far as the token moved.
+  The mover neither enters nor leaves its own area.
+- **A plugin's own tests a few at a time**: `tools/plugin_test.gd` runs
+  only the tests whose names contain `HEXMAP_TEST_FILTER`, when it is set.
 
 ## 2.3.1 — 2026-09-25
 
