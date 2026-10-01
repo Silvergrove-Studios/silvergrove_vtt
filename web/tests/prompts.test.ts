@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardHeading, frontPrompt, pillText, secondsLeft, waitingOn, waitingText } from '../src/lib/prompts';
+import { buttonAnswer, cardHeading, frontPrompt, pillText, secondsLeft, waitingOn, waitingText } from '../src/lib/prompts';
 
 describe('frontPrompt', () => {
   it("a reaction's card first, then the newest by when it opened (ids are random)", () => {
@@ -33,6 +33,19 @@ describe("a card's heading", () => {
     // a spell's choice as it's cast: the rules', not the DM's
     const orb = { id: 'p3', form: { heading: 'Your choice', title: 'Chromatic Orb: the type of orb you create', choices: [{ id: 'fire' }, { id: 'cancel' }] } };
     expect(pillText([orb])).toBe('Your choice: Chromatic Orb: the type of orb you create ›');
+  });
+});
+
+describe("a card's button answer", () => {
+  it("is its fields' values and the button's id, not its default's other keys", () => {
+    // a reaction's card: its default (what it answers when nobody does) says `late`
+    expect(buttonAnswer([], { choice: 'none', late: true }, 'none')).toEqual({ choice: 'none' });
+    expect(buttonAnswer([], { choice: 'none', late: true }, 'shield')).toEqual({ choice: 'shield' });
+    // a hit's card with several choices: a field each, and its button
+    const fields = [{ key: 'cme', type: 'choose' }, { key: 'divine_strike', type: 'choose' }];
+    expect(buttonAnswer(fields, { choice: 'none', late: true, cme: 'cold', divine_strike: 'radiant' }, 'roll')).toEqual({ cme: 'cold', divine_strike: 'radiant', choice: 'roll' });
+    // a field left as it was is still sent (Lay on Hands' amount, its default 0)
+    expect(buttonAnswer([{ key: 'amount', type: 'int' }], { amount: 0 }, 'heal')).toEqual({ amount: 0, choice: 'heal' });
   });
 });
 

@@ -22,7 +22,7 @@
   import { resolve } from './fieldcheck';
   import { game } from '../game.svelte';
   import { clock } from '../clock.svelte';
-  import { secondsLeft } from '../prompts';
+  import { buttonAnswer, secondsLeft } from '../prompts';
 
   let { node, ctx, depth = 0 }: { node: any; ctx: Dict; depth?: number } = $props();
   const ui = viewUi();
@@ -134,7 +134,7 @@
     chose = String(f.prompt);
     const values = $state.snapshot(formValues);
     if (c.intent && typeof c.intent === 'object') ui.intent(putValue(fillIntent(c.intent, ctx), values, '$values'));
-    else ui.intent({ kind: 'answer', prompt: f.prompt, answer: { ...values, choice: String(c.id ?? '') } });
+    else ui.intent({ kind: 'answer', prompt: f.prompt, answer: buttonAnswer(formFields(f), values, String(c.id ?? '')) });
   }
 
   function formFields(f: Dict): Dict[] {

@@ -808,9 +808,11 @@ way: a card each, and each roll made when its Player taps).
 A form's `choices` (`[{ id, label, intent? }]`) draw as a button each
 instead of one submit button: a button with an `intent` sends that (with
 the form's values at `$values`), one without answers the prompt with the
-values plus `choice = id`. The values start from the prompt's `default`,
-so whatever else the default holds comes with the answer (a `late = true`
-in it comes with every button pressed): read `choice` first. A form's
+values plus `choice = id` — its fields' values only, on the desktop and the
+web alike: the rest of the prompt's `default` is what it answers when nobody
+does, so a `late = true` there comes only with a deadline's answer or the
+DM's Go on (the web once sent it with every button pressed: a player's "No
+reaction" was said as "No answer in time"). A form's
 `heading` is what the screens call the card, on its window and its pill
 ("Your hit", "Your choice": srd5e's); without one, an urgent card is "Your
 reaction" ("A reaction" on the DM's screen) and another "The DM asks" ("The

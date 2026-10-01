@@ -52,6 +52,21 @@ export function cardHeading(p: Dict | null | undefined, dm = false): string {
   return dm ? 'The rules ask you' : 'The DM asks';
 }
 
+/** What a card's button answers: its fields' values and the button's id as
+    `choice`, as the host's own card answers (view_renderer.gd: a form's values
+    are its fields'). The card's default is what it answers when nobody does;
+    its other keys aren't the player's to send (a reaction's `late` went with
+    every answer: a "No reaction" pressed was said as "No answer in time"). */
+export function buttonAnswer(fields: Dict[], values: Dict, choice: string): Dict {
+  const out: Dict = {};
+  for (const f of fields ?? []) {
+    const key = f && typeof f === 'object' ? String(f.key ?? '') : '';
+    if (key !== '' && values && key in values) out[key] = values[key];
+  }
+  out.choice = choice;
+  return out;
+}
+
 /** The pill's words for the prompts waiting on me, the one in front first.
     `names` gives my characters' names by id, said only when I have several. */
 export function pillText(prompts: Dict[], names: Record<string, string> = {}): string {
