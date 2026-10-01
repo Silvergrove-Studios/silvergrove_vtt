@@ -72,6 +72,17 @@ slot of its own in the order; on its turn Ana moves it on the map and
 ends its turn from its tab; a goblin's arrow drops it to 0 and it's gone
 from the map, the order and her tabs.
 
+`tests/e2e/choices.mjs <host.json> <out>` (host with `--party --wizard
+--seed 5`): what the rules make the player's choice is asked, never taken
+for her. The DM gives Sela Chromatic Orb; in the chapel fight Ana casts it
+at a goblin on her phone, and before anything is spent a card asks the
+type of orb (a button each, Cancel spends nothing); she picks Fire, and the
+cast's line and its rolls say Fire. Then the DM gives Sela a Javelin of
+Lightning; her throw hits, and a card is in front on her phone at once
+(Piercing or Lightning, its seconds counting) while the DM's screen says
+the table waits on her; the DM answers it for her (Answer, beside Go on)
+and the damage roll says Lightning.
+
 `tests/e2e/reactions.mjs <host.json> <out>` (host with `--party --wizard
 --seed 12`: Ana plays Sela, a wizard with Shield prepared, and the dice
 start from a known place): the chapel fight; a goblin's hit on Sela puts
