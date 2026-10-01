@@ -19,7 +19,7 @@
   import { chatLog, comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
   import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { freshRolls } from '../lib/rolls';
-  import { frontPrompt, handoutPill, pillText } from '../lib/prompts';
+  import { cardHeading, frontPrompt, handoutPill, pillText } from '../lib/prompts';
   import Waiting from '../common/Waiting.svelte';
   import LogLine from '../lib/views/LogLine.svelte';
   import { provideViewUi } from '../lib/views/context';
@@ -657,7 +657,7 @@
   {#if showing}
     <Handout handout={showing} onclose={() => (showing = null)} />
   {:else if promptIndex >= 0 && !urgentAsked}
-    <Modal title="The DM asks" onclose={() => (asked = '')}>
+    <Modal title={cardHeading(prompts[promptIndex])} onclose={() => (asked = '')}>
       <View node={{ type: 'prompt', bind: `/prompts/${promptIndex}` }} ctx={game.view} />
     </Modal>
   {/if}
@@ -677,7 +677,7 @@
   <div class="waitslot" class:wide><Waiting /></div>
   <!-- a reaction's card, last of all: in front of a handout, the look-up, any other card -->
   {#if urgentAsked}
-    <Modal title="Your reaction" onclose={() => (asked = '')}>
+    <Modal title={cardHeading(prompts[promptIndex])} onclose={() => (asked = '')}>
       <View node={{ type: 'prompt', bind: `/prompts/${promptIndex}` }} ctx={game.view} />
     </Modal>
   {/if}

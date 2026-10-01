@@ -41,6 +41,32 @@ export function frontPrompt(prompts: Dict[]): Dict | null {
   return best;
 }
 
+/** What an urgent card is, at the head of its window and its pill: its form's
+    own `heading` ("Your hit": a hit's choice of damage type, asked as it
+    lands), else a reaction's ("Your reaction"; the DM's, "A reaction"). */
+export function cardHeading(p: Dict | null | undefined, dm = false): string {
+  const form = (p?.form && typeof p.form === 'object' ? p.form : {}) as Dict;
+  const own = String(form.heading ?? '').trim();
+  if (own) return own;
+  if (p?.urgent === true) return dm ? 'A reaction' : 'Your reaction';
+  return dm ? 'The rules ask you' : 'The DM asks';
+}
+
+/** What a card's button answers: its fields' values and the button's id as
+    `choice`, as the host's own card answers (view_renderer.gd: a form's values
+    are its fields'). The card's default is what it answers when nobody does;
+    its other keys aren't the player's to send (a reaction's `late` went with
+    every answer: a "No reaction" pressed was said as "No answer in time"). */
+export function buttonAnswer(fields: Dict[], values: Dict, choice: string): Dict {
+  const out: Dict = {};
+  for (const f of fields ?? []) {
+    const key = f && typeof f === 'object' ? String(f.key ?? '') : '';
+    if (key !== '' && values && key in values) out[key] = values[key];
+  }
+  out.choice = choice;
+  return out;
+}
+
 /** The pill's words for the prompts waiting on me, the one in front first.
     `names` gives my characters' names by id, said only when I have several. */
 export function pillText(prompts: Dict[], names: Record<string, string> = {}): string {
@@ -51,7 +77,9 @@ export function pillText(prompts: Dict[], names: Record<string, string> = {}): s
   const title = String(form.title ?? p.title ?? '').trim();
   const who = Object.keys(names).length > 1 && p.actor && names[String(p.actor)] ? ` (${names[String(p.actor)]})` : '';
   const more = list.length > 1 ? ` (+${list.length - 1} more)` : '';
-  if (p.urgent === true) return `Your reaction${who}: ${title.replace(/\s*Your reaction\?$/, '').replace(/[.:]$/, '')}${more} ›`;
+  if (p.urgent === true) return `${cardHeading(p)}${who}: ${title.replace(/\s*Your reaction\?$/, '').replace(/[.:]$/, '')}${more} ›`;
+  // (a card of the rules' own, not the DM's: a spell's choice as it's cast)
+  if (String(form.heading ?? '').trim() !== '' && title !== '') return `${cardHeading(p)}${who}: ${title}${more} ›`;
   if (title === '') return `The DM is waiting for your answer${more} ›`;
   const roll = Array.isArray(form.choices) && form.choices.length > 0;
   return `${roll ? 'The DM asks you to roll' : 'The DM asks'}${who}: ${title}${more} ›`;

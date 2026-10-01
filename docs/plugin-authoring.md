@@ -410,6 +410,13 @@ and `list`, a form or wizard field may be:
 
 A client that does not know a field type shows a line of text for it.
 
+An `enum` with no value shows none chosen on the web screens ("Choose…",
+unless one of its options is itself the empty value), not its first option
+as if picked; on the desktop form, mark it `required = true` for the same
+(else the desktop selects the first, as it always has). For a choice the
+rules leave to the player and nothing may take for them (srd5e: a summoned
+dragon's breath), check the answer has one.
+
 A form or wizard field may take its choices from the compendium instead
 of a fixed list: `{key = "class", label = "Class", type = "enum",
 collection = "classes", query = {filter = {subclass_of = ""}}, limit =
@@ -801,7 +808,15 @@ way: a card each, and each roll made when its Player taps).
 A form's `choices` (`[{ id, label, intent? }]`) draw as a button each
 instead of one submit button: a button with an `intent` sends that (with
 the form's values at `$values`), one without answers the prompt with the
-values plus `choice = id`. `opts.actor` names the character a prompt is
+values plus `choice = id` — its fields' values only, on the desktop and the
+web alike: the rest of the prompt's `default` is what it answers when nobody
+does, so a `late = true` there comes only with a deadline's answer or the
+DM's Go on (the web once sent it with every button pressed: a player's "No
+reaction" was said as "No answer in time"). A form's
+`heading` is what the screens call the card, on its window and its pill
+("Your hit", "Your choice": srd5e's); without one, an urgent card is "Your
+reaction" ("A reaction" on the DM's screen) and another "The DM asks" ("The
+rules ask you"). `opts.actor` names the character a prompt is
 about, for the screens to say. The Table counts a prompt's `deadline`
 down (seconds) and answers it with its default when it passes, so a
 question left unanswered doesn't wait over a player's screen for ever; a
@@ -837,7 +852,9 @@ local ans = hm.prompt(player, {
   each one's `default` too, and the DM's screen offers **Go on**: it answers
   the prompt for its player with that default and `waved = true` (an
   `answer` intent; the GM may answer any prompt), so the fight needn't wait
-  on someone who has stepped away. The Table's Rules panel's **Default** does
+  on someone who has stepped away; and **Answer**, which opens the player's
+  own card on the DM's screen to answer for them with a choice (a card whose
+  default chooses nothing, a hit's damage type, needs it). The Table's Rules panel's **Default** does
   the same for any prompt whose default is a table (a deadline's default
   comes without `waved`). With `late` in the default, the plugin can tell a
   player's own "no" from a deadline's or the DM's, and say which.

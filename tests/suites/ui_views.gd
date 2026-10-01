@@ -447,6 +447,18 @@ func test_choose_and_scores_fields() -> void:
 	check(pf.get_values().kit == "B", "and takes the id picked")
 	pf.queue_free()
 	await tree.process_frame
+	# an enum marked `required` with no value: none chosen, its first not taken for the player
+	# (a summoned dragon's breath); a plain one still shows its first, as ever
+	var pf2 := PropertyForm.new()
+	root.add_child(pf2)
+	var breath := {"key": "breath", "label": "Its Breath Weapon's damage", "type": "enum", "required": true, "options": [{"id": "acid", "name": "Acid"}, {"id": "fire", "name": "Fire"}]}
+	var plain := {"key": "edge", "label": "Edge", "type": "enum", "options": [{"id": "normal", "name": "Normal"}, {"id": "advantage", "name": "Advantage"}]}
+	pf2.build([breath, plain], {})
+	check(pf2.get_values().breath == "" and pf2.get_values().edge == "normal", "required: nothing taken (%s); plain: its first (%s)" % [pf2.get_values().breath, pf2.get_values().edge])
+	(pf2.control("breath") as OptionButton).select(1)
+	check(pf2.get_values().breath == "fire", "and what is picked")
+	pf2.queue_free()
+	await tree.process_frame
 
 
 ## A wizard's steps and fields see the answers so far: a step whose `if`

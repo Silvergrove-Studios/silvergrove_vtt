@@ -147,9 +147,11 @@ func set_values(values: Dictionary) -> void:
 				for n in (item.get("options", []) as Array).size():
 					if _option_value(item, n) == str(v):
 						i = n
-				# (a field whose choices are still on their way has none yet)
+				# (a field whose choices are still on their way has none yet; one marked
+				# `required` with no value yet shows none chosen: its first isn't taken
+				# for the player — a summoned dragon's breath, a steed's creature type)
 				if ob.item_count > 0:
-					ob.select(maxi(i, 0))
+					ob.select(-1 if (i < 0 and bool(item.get("required", false))) else maxi(i, 0))
 			"color":
 				(ctl as ColorPickerButton).color = Color(str(v)) if v != null else Color.WHITE
 			"text":
