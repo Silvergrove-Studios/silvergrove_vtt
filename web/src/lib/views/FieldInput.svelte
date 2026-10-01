@@ -74,7 +74,11 @@
   {#if (field.options ?? []).length === 0}
     <select {id} aria-label={named} disabled><option>{field.loading ? 'Loading…' : 'Nothing to choose'}</option></select>
   {:else}
+    <!-- (with no value yet, "Choose…": the first option isn't shown as if chosen — a
+         choice with no default, a summoned dragon's breath, is the player's to make;
+         unless an option is itself the empty value, "Normal") -->
     <select {id} aria-label={named} value={String(value ?? '')} onchange={(e) => { value = (e.currentTarget as HTMLSelectElement).value; commit?.(value); }}>
+      {#if (value === undefined || value === null || value === '') && !(field.options ?? []).some((o: unknown) => optionValue(o) === '')}<option value="" disabled>Choose…</option>{/if}
       {#each field.options as o (optionValue(o))}
         <option value={optionValue(o)}>{optionLabel(o)}</option>
       {/each}

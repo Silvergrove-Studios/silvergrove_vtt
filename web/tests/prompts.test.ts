@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frontPrompt, pillText, secondsLeft, waitingOn, waitingText } from '../src/lib/prompts';
+import { cardHeading, frontPrompt, pillText, secondsLeft, waitingOn, waitingText } from '../src/lib/prompts';
 
 describe('frontPrompt', () => {
   it("a reaction's card first, then the newest by when it opened (ids are random)", () => {
@@ -18,6 +18,21 @@ describe('pillText for a reaction', () => {
     const card = { id: 'p1', urgent: true, form: { title: 'The Goblin 1 hits you (Scimitar): 14 against your AC 12. Your reaction?', choices: [{ id: 'shield' }, { id: 'none' }] } };
     expect(pillText([card])).toBe('Your reaction: The Goblin 1 hits you (Scimitar): 14 against your AC 12 ›');
     expect(pillText([{ id: 'p0', opened: 99, form: { title: 'Roll' } }, card])).toBe('Your reaction: The Goblin 1 hits you (Scimitar): 14 against your AC 12 (+1 more) ›');
+  });
+});
+
+describe("a card's heading", () => {
+  it("is the form's own (a hit's damage type, asked as it lands), else a reaction's or a question's", () => {
+    const hit = { id: 'p2', urgent: true, form: { heading: 'Your hit', title: "Your hit with Dagger on the Goblin (17 against AC 15): Conjure Minor Elementals' extra 2d8 — Acid · Cold · Fire · Lightning" } };
+    expect(cardHeading(hit)).toBe('Your hit');
+    expect(cardHeading({ urgent: true, form: { title: 'x' } })).toBe('Your reaction');
+    expect(cardHeading({ urgent: true, form: { title: 'x' } }, true)).toBe('A reaction');
+    expect(cardHeading({ form: { title: 'x' } }, true)).toBe('The rules ask you');
+    expect(cardHeading({ form: { title: 'x' } })).toBe('The DM asks');
+    expect(pillText([hit])).toBe("Your hit: Your hit with Dagger on the Goblin (17 against AC 15): Conjure Minor Elementals' extra 2d8 — Acid · Cold · Fire · Lightning ›");
+    // a spell's choice as it's cast: the rules', not the DM's
+    const orb = { id: 'p3', form: { heading: 'Your choice', title: 'Chromatic Orb: the type of orb you create', choices: [{ id: 'fire' }, { id: 'cancel' }] } };
+    expect(pillText([orb])).toBe('Your choice: Chromatic Orb: the type of orb you create ›');
   });
 });
 

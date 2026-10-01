@@ -19,7 +19,7 @@
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
   import Waiting from '../common/Waiting.svelte';
-  import { frontPrompt } from '../lib/prompts';
+  import { cardHeading, frontPrompt } from '../lib/prompts';
   import { chatLog, comp, connect, dmOp, game, intent, join, notice, playerColors, request, submit, type Dict } from '../lib/game.svelte';
   import { provideViewUi } from '../lib/views/context';
   import { pictureUrl } from '../lib/art';
@@ -165,6 +165,10 @@
     const front = frontPrompt(open.map(({ p }) => p));
     return open.find(({ p }) => p === front);
   });
+  // a player's card the DM answers for them (from what the table waits on: a hit's
+  // damage type the player hasn't chosen); it closes as the answer goes
+  let answering = $state<{ id: string; who: string } | null>(null);
+  const answeringIndex = $derived(answering ? ((game.view.prompts as Dict[]) ?? []).findIndex((p) => p && String(p.id) === answering?.id) : -1);
 
   // a fight that starts brings its order beside the map; one that ends puts the party back
   $effect(() => {
@@ -575,7 +579,7 @@
           />
           <!-- what the table waits on (a player's reaction), over the map's top edge:
                the map never moves under a tap; the DM can go on without waiting -->
-          <div class="waitslot"><Waiting dm /></div>
+          <div class="waitslot"><Waiting dm onanswer={(id, who) => (answering = { id, who })} /></div>
           {#snippet pickBanner()}
             {#if pick}
               <PickBanner
@@ -682,8 +686,12 @@
     </Modal>
   {/if}
   {#if asking}
-    <Modal title={asking.p.urgent ? 'A reaction' : 'The rules ask you'} onclose={() => (putOff = [...putOff, String(asking.p.id)])}>
+    <Modal title={cardHeading(asking.p, true)} onclose={() => (putOff = [...putOff, String(asking.p.id)])}>
       <View node={{ type: 'prompt', bind: `/prompts/${asking.i}` }} ctx={game.view} />
+    </Modal>
+  {:else if answeringIndex >= 0}
+    <Modal title={`For ${answering?.who || 'a player'}: ${cardHeading(((game.view.prompts as Dict[]) ?? [])[answeringIndex]).toLowerCase()}`} onclose={() => (answering = null)}>
+      <View node={{ type: 'prompt', bind: `/prompts/${answeringIndex}` }} ctx={game.view} />
     </Modal>
   {/if}
 {/if}
@@ -961,13 +969,16 @@
     flex: 1;
     min-height: 0;
   }
+  /* (the map's width to center in: at left 50% it had half of it, and its words
+     lost their seconds once Answer stood beside Go on) */
   .waitslot {
     position: absolute;
     top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 12px;
+    right: 12px;
+    display: flex;
+    justify-content: center;
     z-index: 11;
-    max-width: calc(100% - 24px);
     pointer-events: none;
   }
   .guide {

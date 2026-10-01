@@ -371,7 +371,8 @@
                its "none" is the quiet one -->
           <div class="actions" class:stack={f.urgent}>
             {#each f.choices as c (String(c.id ?? c.label))}
-              <button type="button" class={f.urgent && String(c.id) === 'none' ? 'quiet' : 'accent'} disabled={chose === f.prompt} onclick={() => choose(f, c)}>{c.label ?? c.id}</button>
+              <!-- (what takes nothing is the quiet one: a reaction's No reaction, a hit's Not this time, Cancel) -->
+              <button type="button" class={(f.urgent && (String(c.id) === 'none' || String(c.id) === 'skip')) || String(c.id) === 'cancel' ? 'quiet' : 'accent'} disabled={chose === f.prompt} onclick={() => choose(f, c)}>{c.label ?? c.id}</button>
             {/each}
           </div>
         {:else}

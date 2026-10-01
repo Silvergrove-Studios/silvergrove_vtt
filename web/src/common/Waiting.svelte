@@ -3,15 +3,19 @@
   opportunity attack), said to everyone with the seconds it has left, so
   nobody takes the pause for a stuck table. The DM's can go on without
   waiting: the card is answered with its default (no reaction), and the
-  fight goes on. A screen's own card isn't in it: that card is in front.
+  fight goes on; or answer it for them (`onanswer`: the DM's screen opens
+  the player's own card — a hit's choice of damage type, whose default
+  chooses nothing). A screen's own card isn't in it: that card is in front.
 -->
 <script lang="ts">
   import { game, submit, type Dict } from '../lib/game.svelte';
   import { clock } from '../lib/clock.svelte';
   import { secondsLeft, waitingOn, waitingText } from '../lib/prompts';
 
-  let { dm = false }: { dm?: boolean } = $props();
+  let { dm = false, onanswer }: { dm?: boolean; onanswer?: (id: string, who: string) => void } = $props();
   const list = $derived(waitingOn(game.view.waiting as Dict[], game.me, dm));
+  // the cards the DM's view has (all of them): one of these the DM can answer for its player
+  const open = $derived(new Set(((game.view.prompts as Dict[]) ?? []).filter((p) => p && typeof p === 'object').map((p) => String(p.id ?? ''))));
   let going = $state<string[]>([]);
   function goOn(w: Dict): void {
     const id = String(w.id ?? '');
@@ -29,8 +33,12 @@
         <span class="pulse" aria-hidden="true"></span>
         <span class="words">{waitingText(w, game.me, secondsLeft(w, game.viewAt, clock.now))}</span>
         {#if dm}
+          {#if onanswer && open.has(String(w.id))}
+            <button type="button" class="quiet" onclick={() => onanswer?.(String(w.id), String(w.who ?? ''))}
+              title="Their card, to answer for them">Answer</button>
+          {/if}
           <button type="button" class="quiet" disabled={going.includes(String(w.id))} onclick={() => goOn(w)}
-            title="Answer for them with no reaction, and go on">Go on</button>
+            title="Answer for them with the card's default (no reaction; a hit's extra damage left to you), and go on">Go on</button>
         {/if}
       </div>
     {/each}
