@@ -464,6 +464,13 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 			var ch: Variant = ev.get("changes")
 			if Knowledge.names_hidden(known) and (t == "token.add" or (ch is Dictionary and ((ch as Dictionary).has("hidden") or (ch as Dictionary).has("actor") or (ch as Dictionary).has("owner")))):
 				_docs_dirty = true
+		elif t == "turns.set" and Knowledge.rolls_hidden(known):
+			# the order as a player may see it: a creature's initiative left out
+			# where its rolls are the DM's (Knowledge)
+			var theirs := Protocol.event(Knowledge.player_turns_event(ev, state.encounter.doc, known))
+			for c in _clients:
+				if c.hello and not bool(c.web):
+					_send(c, Protocol.event(ev) if _is_gm(c) else theirs)
 		else:
 			_broadcast(Protocol.event(ev))
 		if t == "token.remove" and Knowledge.names_hidden(known):
