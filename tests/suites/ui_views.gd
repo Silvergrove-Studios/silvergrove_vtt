@@ -152,6 +152,29 @@ func test_the_log_draws_the_dms_buttons() -> void:
 	await tree.process_frame
 
 
+## A ruleset's words marked with what players may not know (Knowledge) reach a
+## pane of the Table's own as the DM reads them — a card's title, a log line —
+## and the data drawn from keeps its marks (a player's screen is sent its own).
+func test_marked_words_read_as_the_dm_reads_them() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var line := "%s hits Ana's fighter." % Knowledge.mark("name", "a_gob", "The Goblin", "A creature")
+	var data := {"log": [{"id": "n_1", "kind": "note", "text": line}],
+		"rec": {"id": "p_1", "to": "", "title": "Shield?", "form": {"title": "%s's Scimitar hits you. Shield?" % Knowledge.mark("name", "a_gob", "The Goblin", "A creature"), "fields": []}}}
+	r.render({"type": "column", "children": [{"type": "log", "bind": "/log"}, {"type": "prompt", "bind": "/rec"}]}, data)
+	await tree.process_frame
+	var shown := []
+	for cls in ["Label", "RichTextLabel"]:
+		for n in _all(r, cls):
+			shown.append(str(n.text))
+	var all := " | ".join(shown)
+	check(all.contains("The Goblin hits Ana's fighter.") and all.contains("The Goblin's Scimitar hits you. Shield?"), "the line and the card as the DM reads them: %s" % all)
+	check(not all.contains(Knowledge.ANCHOR) and not all.contains("a_gob"), "no mark shown")
+	check(str(data.log[0].text) == line, "the data drawn from keeps its marks")
+	r.queue_free()
+	await tree.process_frame
+
+
 func _all(root: Node, cls: String) -> Array:
 	var out := []
 	if root.get_class() == cls:

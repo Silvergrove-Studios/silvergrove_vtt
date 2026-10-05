@@ -268,7 +268,7 @@ func _refresh_journal() -> void:
 	var words := q.to_lower().split(" ", false)
 	var shown := 0
 	for en in entries:
-		var hay := ("%s %s %s" % [str(en.get("text", "")), str(en.get("title", "")), str(en.get("rule", ""))]).to_lower()
+		var hay := Knowledge.plain("%s %s %s" % [str(en.get("text", "")), str(en.get("title", "")), str(en.get("rule", ""))]).to_lower()
 		var ok := true
 		for w in words:
 			if not hay.contains(w):
@@ -286,7 +286,7 @@ func _refresh_journal() -> void:
 			text = str(en.title) + ": " + text
 		if str(en.get("rule", "")) != "":
 			text += "  — " + str(en.rule)
-		l.text = "%s: %s" % [head, text]
+		l.text = "%s: %s" % [head, Knowledge.plain(text)]
 		l.theme_type_variation = "DimLabel" if kind == "note" else ""
 		_journal.add_child(l)
 		shown += 1

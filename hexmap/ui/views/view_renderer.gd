@@ -79,7 +79,10 @@ func _init() -> void:
 ## Build (or rebuild) the controls for `p_schema` over `p_data`.
 func render(p_schema: Dictionary, p_data: Dictionary) -> void:
 	schema = p_schema
-	data = p_data
+	# a ruleset's words marked with what players may not know (Knowledge): a
+	# player's device was sent them put right for it, so what is still marked
+	# here is the Table's, read as the DM reads it (a copy: the data may be live)
+	data = Knowledge.render_value(JsonDoc.deep(p_data), func(_aspect: String, _aid: String) -> bool: return true, true) if _marked(p_data) else p_data
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
@@ -91,6 +94,21 @@ func render(p_schema: Dictionary, p_data: Dictionary) -> void:
 ## Re-render with new data (schemas rarely change; data does).
 func update(p_data: Dictionary) -> void:
 	render(schema, p_data)
+
+
+## Whether any words in `v` carry a mark of what players may know (Knowledge).
+static func _marked(v: Variant) -> bool:
+	if v is String:
+		return (v as String).contains(Knowledge.ANCHOR)
+	if v is Dictionary:
+		for x in (v as Dictionary).values():
+			if (x is String or x is Dictionary or x is Array) and _marked(x):
+				return true
+	elif v is Array:
+		for x in v:
+			if (x is String or x is Dictionary or x is Array) and _marked(x):
+				return true
+	return false
 
 
 # ------------------------------------------------------------------ values --

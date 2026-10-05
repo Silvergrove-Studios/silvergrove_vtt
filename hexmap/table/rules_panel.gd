@@ -275,7 +275,7 @@ func refresh() -> void:
 		var row := VBoxContainer.new()
 		var head := HBoxContainer.new()
 		var who := Label.new()
-		who.text = "%s — for %s" % [str(rec.get("title", "A question")), str(ctx.encounter().player(str(rec.get("to", ""))).get("name", rec.get("to", "?")))]
+		who.text = "%s — for %s" % [Knowledge.plain(str(rec.get("title", "A question"))), str(ctx.encounter().player(str(rec.get("to", ""))).get("name", rec.get("to", "?")))]
 		who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		head.add_child(who)
 		var dflt := Button.new()
