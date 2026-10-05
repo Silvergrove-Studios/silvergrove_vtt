@@ -163,9 +163,15 @@ of JSON message types between them, versioned. The Table is the authority:
 a request is applied only if `allowed()` and `validate()` pass, through
 the Table's own `EncounterCommands` (so the DM can undo a player's move
 and it explores fog like any other), and every applied event — the DM's
-or a player's — is broadcast to every client, which applies it to its own
-copy. Maps and pack files stream on demand into `user://packs`, so a phone
-with nothing installed draws the scene. `Discovery` multicasts (and
+or a player's — reaches a co-GM's client as it is, which applies it to its
+own copy. A player's (or a display's) client holds only what its screen
+shows, as a web screen's snapshot has it (`Protocol.player_document`): the
+scene the players see and of it the tokens they see, kept in step by
+`HostSession._sync_player` as creatures come into their sight and leave it,
+and the maps and pictures they may have. Maps and pack files stream on
+demand into `user://packs`, so a phone with nothing installed draws the
+scene. Every byte a player's device receives is filtered on the Table:
+the dice's key never leaves it, nor where a roll drew from. `Discovery` multicasts (and
 broadcasts, for phones that filter multicast) an announcement once a
 second; the Player lists what it hears, or takes a typed address. LAN
 only for now; a relay would sit between `NetSession` and `HostSession`

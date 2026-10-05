@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- **What players know, every byte of it.** What a player's device is sent
+  is what their screen shows, nothing more:
+  - **The dice** come from a secret key of the Table's (256 bits, each face a
+    keyed hash of its place): no screen is sent where a roll drew from, and
+    no number of rolls a player sees tells them another or the next. Before,
+    every roll carried the stream's seed to every player. A document saved
+    with a seed gets a key when it is opened; `--seed` runs stay repeatable.
+  - **The turn order** has no creature a player doesn't see in any part of
+    it (the order, groups, labels, notes, counters, the turn that ended); on
+    such a creature's turn nobody is up for them, and the header says "The
+    DM's turn".
+  - **A Godot player's client** holds the scene the players see and the
+    tokens they see (as a web screen's snapshot), kept in step as creatures
+    come into sight and leave it; before it has joined, only the players.
+  - **Maps** carry nothing the players aren't shown: no secret door (a
+    wall, a door once found), no lock, no hidden wall, prop or light, no
+    DM's note, only the scene's level; only the map of the scene they see is
+    served to them, its files by a key sent with it.
+  - **Pictures** reach a player only once shown to them, each at an address
+    only they were sent; a creature's token art, where its name is kept, by
+    one that names nothing, and without the tags that say its kind
+    (`hm.ui.knowledge`'s `name_tags`); a preview of its power loses its label.
+  - **Numbers on tokens** count only what that player sees. **The waiting
+    list** shows no hidden creature's reaction. **The players' recap** says
+    only what all of them may know. **The Lookup** leaves out the
+    collections a ruleset says are the DM's (`dm_collections`). **The DM's
+    templates** stay off a player's screen where they cover ground or a
+    creature the player doesn't see; a region round a hidden token too.
+  - **A client can't get round it**: a co-GM's code is ten letters and
+    digits and wrong tries wait; a player's seat is the device's that took it
+    until the DM frees it (the DM's player chips, the Players pane); a
+    target that isn't there and one a player can't see get the same answer.
+
 - **A creature's initiative kept with its rolls.** A ruleset that keeps its
   creatures' rolls from the players says so (`hm.ui.knowledge`'s `rolls`),
   and the turn order a player is sent leaves out their labels there (their
