@@ -6,9 +6,17 @@ extends VBoxContainer
 ## (answer for them, or wave them through with their defaults), and the
 ## GM views plugins registered. Everything is drawn from the GM's
 ## projection (Views.project with the GM audience) and every button goes
-## through the kernel, exactly as a Player's intent would.
+## through the kernel, exactly as a Player's intent would. At the top, how
+## this table runs: its level (and whether anything differs from it), with
+## Table settings a press away, and the walkthrough while it is not done.
 
 var ctx: TableContext
+## Set by the window: how the table runs, and the windows that change it.
+var table_settings: TableSettings
+var open_table_settings: Callable
+var open_walkthrough: Callable
+var _table_line: Label
+var _setup_button: Button
 var _plugins: Label
 ## Set by the window: opens a file dialog and calls back with a zip path.
 var pick_plugin_file: Callable
@@ -31,6 +39,33 @@ func _init(p_ctx: TableContext) -> void:
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 8)
 	scroll.add_child(box)
+	var th := Label.new()
+	th.text = "This table"
+	th.theme_type_variation = "HeaderLabel"
+	box.add_child(th)
+	_table_line = Label.new()
+	_table_line.name = "TableLevel"
+	_table_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_table_line)
+	var trow_t := HFlowContainer.new()
+	var ts := Button.new()
+	ts.name = "TableSettings"
+	ts.text = "Table settings…"
+	ts.tooltip_text = "How much the app does here, and every rules setting by the question it answers"
+	ts.pressed.connect(func() -> void:
+		if open_table_settings.is_valid():
+			open_table_settings.call())
+	trow_t.add_child(ts)
+	_setup_button = Button.new()
+	_setup_button.name = "SetUp"
+	_setup_button.text = "Set up this table…"
+	_setup_button.tooltip_text = "The walkthrough a new campaign starts with: where fights happen, how much the app does, the table's questions"
+	_setup_button.visible = false
+	_setup_button.pressed.connect(func() -> void:
+		if open_walkthrough.is_valid():
+			open_walkthrough.call())
+	trow_t.add_child(_setup_button)
+	box.add_child(trow_t)
 	_plugins = Label.new()
 	_plugins.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_plugins.theme_type_variation = "DimLabel"
@@ -93,7 +128,28 @@ func _init(p_ctx: TableContext) -> void:
 
 func bind() -> void:
 	ctx.encounter().changed.connect(func(_what: String, _s: String) -> void: refresh())
+	if not ctx.campaign_changed.is_connected(_refresh_table):
+		ctx.campaign_changed.connect(_refresh_table)
 	refresh()
+
+
+## How this table runs, in a line: its level, and whether it was changed.
+func _refresh_table() -> void:
+	if _table_line == null:
+		return
+	var reg := table_settings.registry() if table_settings != null else {}
+	if reg.is_empty():
+		_table_line.text = "No campaign open."
+		_setup_button.visible = false
+		return
+	var level_title := str(TableSettings.LEVEL_INFO[str(reg.level)].title)
+	var n := int(reg.get("differs", 0))
+	_table_line.text = "%s%s · fights %s" % [level_title,
+		(" (customized: %d setting%s differ%s)" % [n, "" if n == 1 else "s", "s" if n == 1 else ""]) if bool(reg.customized) else ("" if bool(reg.level_set) else " (a campaign from before levels)"),
+		str(TableSettings.SPACE_INFO[str(reg.space)].title).to_lower()]
+	if bool(reg.get("pending", false)):
+		_table_line.text = "Not set up yet: " + _table_line.text
+	_setup_button.visible = bool(reg.get("pending", false))
 
 
 ## Where installed rulesets live, as the OS names it.
@@ -134,6 +190,7 @@ func selected_token() -> String:
 func refresh() -> void:
 	if ctx.state == null or ctx.kernel == null:
 		return
+	_refresh_table()
 	_renderers.clear()
 	for c in _actions.get_children() + _prompts.get_children() + _gm.get_children():
 		c.get_parent().remove_child(c)

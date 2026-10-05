@@ -303,6 +303,15 @@ func set_plugin_setting(pid: String, key: String, value: Variant) -> void:
 	touch()
 
 
+## A plugin's setting taken out of the campaign: its default is in force again.
+func clear_plugin_setting(pid: String, key: String) -> void:
+	for p in plugins:
+		if p is Dictionary and str(p.get("id", "")) == pid and p.get("settings") is Dictionary and (p.settings as Dictionary).has(key):
+			p.settings.erase(key)
+			touch()
+			return
+
+
 func touch() -> void:
 	dirty = true
 	doc.meta.modified = JsonDoc.now()

@@ -11,6 +11,9 @@ extends SceneTree
 ##       [--party]   two players, Ana and Ben, with a character each
 ##       [--wizard]  with --party: Ana's a wizard, Sela, Shield prepared (the reactions journey)
 ##       [--seed N]  the dice from a known start (a journey that needs a roll to fall a certain way)
+##       [--walkthrough] the campaign as a DM starting it would have it: not yet
+##                    set up, so the DM's screen offers the walkthrough (without
+##                    it, a campaign from before table levels: Automated)
 ##       [--work dir] where its campaign lives (default user://web_host, or
 ##                    user://web_host-<web port> on another port); emptied first
 ##       [--log file] every message from a screen, every refusal, every change
@@ -101,7 +104,7 @@ func _run() -> void:
 	win.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(win)
 	var info := CampaignPackage.read(offered)
-	win._start_package(offered, info, str(info.get("name", "Web test")))
+	win._start_package(offered, info, str(info.get("name", "Web test")), args.has("--walkthrough"))
 	for c in win.get_children():
 		if c is AcceptDialog:
 			c.hide()

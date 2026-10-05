@@ -52,12 +52,15 @@ is `tests/plugins/sample.ordered`: read it first.
   `override` (last wins).
 - **settings**: a JSON schema and defaults; a campaign's `plugins`
   list overrides the defaults per plugin. Read them with
-  `hm.settings.get(key, default)`. The DM changes them in *Rules
-  settings* on the DM's screen (strings, booleans and numbers: a
-  property's `title` says what it is, an `enum`'s `enumNames` how each
-  choice reads); a change is kept in the campaign and the rules are
-  loaded again with it, so a view built from a setting shows the new
-  one.
+  `hm.settings.get(key, default)`. The DM changes them in *Table
+  settings* (the DM's screen, and the Table's File menu and Rules pane):
+  strings, booleans and numbers, a property's `title` saying what it is
+  and its `description` more, an `enum`'s `enumNames` how each choice
+  reads. A change is kept in the campaign (one step of the Table's
+  undo) and the rules are loaded again with it, so a view built from a
+  setting shows the new one. Each setting also says which of the
+  table's questions it answers and what each of the four levels makes
+  it: see [Table settings](#table-settings).
 - **depends** and **overrides** are how rulesets layer: a house-rules
   plugin depends on its base, runs after it (its hooks see what the
   base's did to the payload), and may declare that for some hooks the
@@ -894,10 +897,84 @@ are given to the action's prompts in order), `t.scene([map_path,
 tokens])` → a scene id over a real map (the examples' chapel by default)
 with `tokens = { { id=, actor=, x=, y= }, … }` placed by offset cell, for
 map tests, `t.improvise(benchmark, params, scene, "q,r")` → the actor id
-of a creature from one of this plugin's benchmarks placed on the scene.
+of a creature from one of this plugin's benchmarks placed on the scene,
+and `t.manifest`, the plugin's manifest as data (for a test of its own
+settings' metadata).
 Tests may not prompt themselves. A layered plugin's tests run with its
 dependencies loaded. The Hexmap self-test runs the shipped plugins' tests on every
 platform that has the runtime.
+
+## Table settings
+
+Tables want very different amounts of automation, and the DM decides how
+much the app does. The DM picks one of four **levels**, then answers the
+table's **questions**; a ruleset says, beside each setting's JSON schema,
+where the setting fits:
+
+```json
+"auto_apply_damage": {
+  "type": "boolean",
+  "title": "Apply damage to the target when an attack hits",
+  "x-question": "outcomes",
+  "x-levels": {"bookkeeping": false, "rolling": false, "assisted": true, "automated": true},
+  "x-notice": "everyone"
+},
+"players_roll_initiative": {
+  "type": "boolean",
+  "title": "Players roll their own initiative",
+  "x-question": "dice",
+  "x-levels": {"bookkeeping": true, "rolling": true, "assisted": false, "automated": false},
+  "x-notice": "players",
+  "x-next-fight": true
+},
+"rules": {"type": "string", "enum": ["2024", "2014"], "title": "Rules version", "x-question": "rules", "x-notice": "everyone"}
+```
+
+- **`x-question`** — which of the table's questions the setting answers:
+  `space` (where fights happen), `dice` (who rolls what, and when),
+  `outcomes` (what a roll does: lands by itself, waits for the DM, or is
+  the DM's to apply), `checks` (what the app checks and refuses),
+  `knowledge` (what the players' screens show them), `prompting` (what
+  the app asks, and how long it waits), `rules` (the rules options) or
+  `table` (the rest). Table settings shows the settings in sections by
+  question; a setting that names none is a rules option.
+- **`x-levels`** — the setting's value under each level:
+  - `bookkeeping`: the app is a shared sheet and tracker; players tick
+    their own slots, the DM types damage in;
+  - `rolling` (Rolling help): actions roll, nothing is applied;
+  - `assisted`: the app proposes outcomes and the DM approves them;
+  - `automated`: the app runs the rules.
+
+  Picking a level writes every setting's value for that level into the
+  campaign, as one undoable change; a level left out keeps the setting
+  as it is. The table is *Customized* once any setting differs from its
+  level's value, and each section can be reset to the level. Give
+  `automated` your defaults (a campaign from before levels runs as
+  Automated, and nothing changes for it), turn every automatic rule off
+  below `assisted`, and give the rules options (`rules`) no levels: they
+  are the DM's whatever the level. Each value must fit the setting's
+  schema; one that doesn't is ignored, and `plugintest` says so.
+- **`x-notice`** — who notices a change: `dm`, `players` or
+  `everyone`. The players' *How this table runs* lists the settings
+  they notice (`players`, `everyone`) with their values.
+- **`x-next-fight`** — `true` when a change waits for the next fight
+  (who rolls initiative): Table settings marks it.
+- The words are the schema's own: `title` and `description`, and an
+  `enum`'s `enumNames`.
+
+The table's own answers live in the campaign's `table` block
+(docs/campaign-format.md): its `level`, where fights happen (`space`:
+`maps`, `mind` or `per_fight`) and the `house_rules`. Plugins never read
+the level: they read their settings with `hm.settings.get`, as always,
+and a level is only ever a set of setting values. A new campaign (and one
+started from a package) opens with a walkthrough: where fights happen, a
+level (Assisted offered first), the questions, the rules options, a
+summary.
+
+`./run.sh plugintest` checks the metadata against the setting's schema
+(an unknown question, level or notice; a level value the schema refuses)
+and fails on what it finds. A test may read its plugin's manifest as data
+(`t.manifest`) to hold its own settings to a policy of its own.
 
 ## Conventions
 
