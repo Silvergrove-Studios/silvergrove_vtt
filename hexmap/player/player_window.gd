@@ -359,7 +359,7 @@ func _build_pick() -> Control:
 	var cogm := HBoxContainer.new()
 	_cogm_code = LineEdit.new()
 	_cogm_code.placeholder_text = "Co-GM code"
-	_cogm_code.max_length = 4
+	_cogm_code.max_length = 16
 	_cogm_code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cogm_code.text_submitted.connect(func(_t: String) -> void: _join_as_cogm())
 	cogm.add_child(_cogm_code)

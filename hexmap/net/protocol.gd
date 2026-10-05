@@ -236,16 +236,32 @@ static func player_scene(state: EncounterState, sc: Dictionary, player_id: Strin
 			out[k] = JsonDoc.deep(sc[k])
 	out.tokens = player_tokens(state, str(sc.get("id", "")), player_id, seen, known, art_of).values()
 	out.overrides = player_overrides(sc.get("overrides", {}), state.level_for(str(sc.get("id", ""))))
-	var regions := {}
-	for id in sc.get("regions", {}):
-		if str(sc.regions[id].get("audience", "all")) != "gm":
-			regions[id] = JsonDoc.deep(sc.regions[id])
-	out.regions = regions
+	out.regions = player_regions(sc, seen)
 	var cells := {}
 	for key in sc.get("cells", {}):
 		if bool(sc.cells[key].get("revealed", false)):
 			cells[key] = JsonDoc.deep(sc.cells[key])
 	out.cells = cells
+	return out
+
+
+## A scene's regions as a player's screen is sent them: none the DM keeps (a
+## GM audience), and none attached to a token their screen doesn't show (an
+## emanation round a creature the DM hides, or beyond their sight: its shape
+## would say where it is), whatever audience the rules gave it.
+static func player_regions(sc: Dictionary, seen: Dictionary) -> Dictionary:
+	var out := {}
+	for id in sc.get("regions", {}):
+		var r: Variant = sc.regions[id]
+		if not (r is Dictionary) or str(r.get("audience", "all")) == "gm":
+			continue
+		var on := str(r.get("attached_to", "")) if r.get("attached_to") != null else ""
+		if on != "" and not seen.has(on):
+			continue
+		var kept: Dictionary = JsonDoc.deep(r)
+		# (what the DM prepared to happen there is the DM's)
+		kept.erase("triggers")
+		out[id] = kept
 	return out
 
 

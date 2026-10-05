@@ -71,11 +71,34 @@ func join(p_player_id: String, p_role := "player", code := "") -> void:
 	role = p_role
 	if schemas_kept.size() > SCHEMAS_KEPT_MAX:
 		schemas_kept.clear()
-	# (the schemas this app holds: the table sends none of them again)
-	var msg := {"t": "join", "player": p_player_id, "role": p_role, "have": schemas_kept.keys()}
+	# (the schemas this app holds: the table sends none of them again; and which
+	# device it is: a player's seat is the device's that took it)
+	var msg := {"t": "join", "player": p_player_id, "role": p_role, "have": schemas_kept.keys(), "device": device_key()}
 	if code != "":
 		msg.code = code
 	_send(msg)
+
+
+## Where this device keeps its own secret (device_key).
+const DEVICE_FILE := "user://device.key"
+static var _device := ""
+
+
+## This device's own secret, made once and kept: a player's seat at a table
+## is the device's that took it, and only it joins as them again (until the
+## DM frees the seat).
+static func device_key() -> String:
+	if _device != "":
+		return _device
+	if FileAccess.file_exists(DEVICE_FILE):
+		_device = FileAccess.get_file_as_string(DEVICE_FILE).strip_edges()
+	if _device.length() != 32:
+		_device = Crypto.new().generate_random_bytes(16).hex_encode()
+		var f := FileAccess.open(DEVICE_FILE, FileAccess.WRITE)
+		if f != null:
+			f.store_string(_device)
+			f.close()
+	return _device
 
 
 func is_gm() -> bool:

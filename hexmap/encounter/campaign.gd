@@ -315,6 +315,15 @@ func clear_plugin_setting(pid: String, key: String) -> void:
 			return
 
 
+## The seats players' devices have taken at this campaign's table, live:
+## {player id: the device's secret, hashed} (HostSession: only that device
+## joins as them, until the DM frees the seat). Never in a package.
+func seats() -> Dictionary:
+	if not (doc.get("seats") is Dictionary):
+		doc.seats = {}
+	return doc.seats
+
+
 func touch() -> void:
 	dirty = true
 	doc.meta.modified = JsonDoc.now()

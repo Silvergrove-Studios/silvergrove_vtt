@@ -66,11 +66,8 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 			out.name_known = true
 		tokens.append(out)
 	var lvl := state.effective_level(scene_id)
-	var regions := {}
-	for id in sc.get("regions", {}):
-		var r: Dictionary = sc.regions[id]
-		if gm or str(r.get("audience", "all")) != "gm":
-			regions[id] = JsonDoc.deep(r)
+	# (a player's: none the DM keeps, none round a token their screen doesn't show)
+	var regions: Dictionary = JsonDoc.deep(sc.get("regions", {})) if gm else Protocol.player_regions(sc, seen)
 	var light := state.light_level(scene_id)
 	var out := {"id": str(sc.id), "name": str(sc.get("name", "")), "map": str(sc.get("map", "")), "level": str(sc.get("level", "")),
 		"active": e.active_scene_id == scene_id, "fog": fog, "light": light, "darkness": Vision.darkness(light, gm),

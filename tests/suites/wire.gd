@@ -276,6 +276,10 @@ func _seat(t: Dictionary, join: Dictionary, schemas: Dictionary = {}) -> WebSuit
 	if not schemas.is_empty():
 		join = join.duplicate()
 		join.have = schemas.keys()
+	# (a player's page on her phone, again: the same device, whose seat hers is)
+	if str(join.get("role", "")) == "player" and not join.has("device"):
+		join = join.duplicate()
+		join.device = "device-of-" + str(join.get("player", join.get("name", "")))
 	w.send(join)
 	t.web._pump(host, [w], func() -> bool: return not w.last("view").is_empty() and not w.last("scene").is_empty())
 	return w

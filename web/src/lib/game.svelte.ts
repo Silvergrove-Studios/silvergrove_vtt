@@ -40,6 +40,8 @@ export const game = $state({
   viewAt: 0,
   scene: {} as Dict,
   scenes: [] as Dict[],
+  /** The DM's: the players whose seat a device has taken (the DM may free one). */
+  seats: [] as string[],
   // the DM seeing as a player: that player's snapshot of the scene, and who
   preview: null as Dict | null,
   previewAs: '',
@@ -175,10 +177,35 @@ export async function connect(role: 'player' | 'dm'): Promise<boolean> {
   return true;
 }
 
+/** This browser's own secret: the seat it takes at a table is its, and only it
+ *  joins as that player again (until the DM frees the seat). Kept for good;
+ *  made once. */
+export function deviceKey(): string {
+  try {
+    const kept = localStorage.getItem('hexmap.device');
+    if (kept && /^[0-9a-f]{32}$/.test(kept)) return kept;
+  } catch {
+    /* private mode: this page's own, below */
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const made = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  try {
+    localStorage.setItem('hexmap.device', made);
+  } catch {
+    /* private mode */
+  }
+  return made;
+}
+
+let pageDevice = '';
+
 /** Join: a player by name (a new name is a new player) or by id; the DM with the token.
- * By id with a name too, a table that no longer has that id is joined by the name. */
+ * By id with a name too, a table that no longer has that id is joined by the name.
+ * A player's join says which device it is (deviceKey): their seat is its. */
 export function join(opts: { name?: string; player?: string; token?: string }): void {
-  joinMsg = game.role === 'dm' ? { t: 'join', role: 'dm', token: opts.token ?? '' } : { t: 'join', role: 'player', player: opts.player ?? '', name: opts.name ?? '' };
+  pageDevice ||= deviceKey();
+  joinMsg = game.role === 'dm' ? { t: 'join', role: 'dm', token: opts.token ?? '' } : { t: 'join', role: 'player', player: opts.player ?? '', name: opts.name ?? '', device: pageDevice };
   byName = opts.player && opts.name ? opts.name : '';
   game.joining = true;
   game.error = '';
@@ -250,6 +277,8 @@ function handle(m: Msg): void {
       game.online = (m.online as string[]) ?? [];
       game.clock = (m.clock as Dict) ?? {};
       if (m.scenes) game.scenes = m.scenes as Dict[];
+      // (the DM's: whose seats a device has taken)
+      if (m.seats) game.seats = (m.seats as string[]).map(String);
       game.preview = (m.preview as Dict) ?? null;
       game.previewAs = String(m.preview_as ?? '');
       game.previewWhy = (m.preview_why as Record<string, string>) ?? {};

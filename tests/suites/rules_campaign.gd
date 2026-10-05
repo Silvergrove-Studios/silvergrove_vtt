@@ -397,7 +397,7 @@ func test_cogm_role() -> void:
 	cmds.kernel = k
 	host.apply_request = func(ev: Dictionary, pid: String) -> String: return cmds.run(ev, "request by " + (pid if pid != "" else "co-GM"))
 	check(host.start(0, false) == OK, "hosting")
-	check(host.cogm_code.length() == 4, "a code for co-GMs: " + host.cogm_code)
+	check(host.cogm_code.length() == 11 and host.cogm_code[5] == "-", "a code for co-GMs, ten letters and digits: " + host.cogm_code)
 	var cpacks := PackLibrary.new()
 	cpacks.reload()
 	var c := NetSession.new("127.0.0.1", host.port, cpacks, "second screen")
@@ -409,7 +409,7 @@ func test_cogm_role() -> void:
 	check(c.state.encounter.scenes.is_empty() and c.state.maps.is_empty() and not c.state.encounter.players.is_empty(), "…with who the players are and nothing of the scene: no GM regions, no triggers, no map")
 	c.join("", "cogm", "0000" if host.cogm_code != "0000" else "0001")
 	check(_pump(host, [c], func() -> bool: return told.any(func(t: String) -> bool: return t.contains("code"))), "the wrong code is refused")
-	c.join("", "cogm", host.cogm_code)
+	c.join("", "cogm", host.cogm_code.replace("-", "").to_lower())
 	check(_pump(host, [c], func() -> bool: return c.joined and c.is_gm() and not c.view.is_empty()), "joined as co-GM with the code")
 	check(host.cogm_count() == 1 and host.connected_players().is_empty(), "the host counts a co-GM, not a player")
 	check(c.state.encounter.scene(sid).regions.has("r_gm") and c.state.encounter.scene(sid).triggers.size() == 1, "the co-GM holds the whole scene")

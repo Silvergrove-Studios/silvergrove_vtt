@@ -409,6 +409,130 @@ func test_a_godot_player_holds_what_her_screen_shows() -> void:
 	host.stop()
 
 
+## A region attached to a token (an emanation round its caster) reaches a
+## player only while their screen shows that token, whatever audience the
+## rules gave it — the DM hiding the caster takes it from them at once, on a
+## web screen and a Godot client; what a ruleset keeps of the campaign (its
+## `gm` part: the defences the players have learned) reaches no player's
+## device, by a campaign's state set or the encounter's.
+func test_regions_and_campaign_state_as_players_have_them() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	_fight(kernel, sid)
+	var g := st.map_for(sid).grid
+	var aura := MapQuery.region("r_aura", [g.offset_to_axial(3, 6), g.offset_to_axial(4, 6)], ["emanation"], {"audience": "all", "attached_to": "t_gob"})
+	check(kernel.commit([{"t": "region.add", "scene": sid, "region": aura}], "An aura") == "", "an aura round the goblin, for everyone")
+	var host := _host(st, kernel, plugins)
+	var ana := _web_player(host, ANA)
+	var ben := _godot(host, BEN, [ana])
+	_pump(host, [ana, ben], func() -> bool: return not ana.last("scene").is_empty())
+	var held_regions := func() -> Dictionary:
+		var doc := _held(ben)
+		return doc.scenes[0].get("regions", {}) if not (doc.get("scenes", []) as Array).is_empty() else {}
+	check((ana.last("scene").scene.regions as Dictionary).has("r_aura") and (held_regions.call() as Dictionary).has("r_aura"), "the goblin seen: its aura on her screen and in his client")
+	kernel.commit([{"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"hidden": true}}], "The DM hides it")
+	check(_pump(host, [ana, ben], func() -> bool: return not (ana.last("scene").scene.regions as Dictionary).has("r_aura") and not (held_regions.call() as Dictionary).has("r_aura")), "hidden: its aura gone from both, its audience still 'all'")
+	kernel.commit([{"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"hidden": false}}], "Shown")
+	check(_pump(host, [ana, ben], func() -> bool: return (ana.last("scene").scene.regions as Dictionary).has("r_aura") and (held_regions.call() as Dictionary).has("r_aura")), "shown again: back")
+	var n_a := ana.raw.size()
+	var n_b := ben.raw.size()
+	check(kernel.commit([{"t": "ext.set", "scope": "campaign", "plugin": "t.order", "changes": {"gm/learned/resist/fire": true, "seen": 1}},
+		{"t": "encounter.set", "changes": {"campaign": {"id": "c_1", "path": "", "ext": {"t.order": {"gm": {"learned": {"immune/poison": true}}}}}}},
+		{"t": "ext.set", "scope": "encounter", "plugin": "t.order", "changes": {"gm/initiative/a_gob": 17}}], "What the rules keep") == "", "the rules keep what the players have learned, and an initiative")
+	_pump(host, [ana, ben], func() -> bool: return false, 250)
+	var since := JSON.stringify(ana.raw.slice(n_a)) + JSON.stringify(ben.raw.slice(n_b))
+	check(not since.contains("learned") and not since.contains("initiative"), "nothing either was sent says it: %s" % since.left(200))
+	host.stop()
+
+
+# ------------------------------------------------- what a client can't do --
+
+## A screen that joins with `join` (a hello first).
+func _client(host: HostSession, join: Dictionary, others: Array = []) -> Web.WebClient:
+	var c := Web.WebClient.new(host.port)
+	_pump(host, others + [c], func() -> bool: return c.open())
+	c.send({"t": "hello", "version": Protocol.VERSION, "name": "screen", "web": true})
+	c.send(join)
+	_pump(host, others + [c], func() -> bool: return not c.last("joined").is_empty() or not c.last("error").is_empty())
+	return c
+
+
+## What a client can't get round: a co-GM's code is ten letters and digits,
+## new each hosting, and wrong tries from one place soon wait (a new
+## connection too); a player's seat is the device's that took it — another
+## device can't join as them, by id or by name, until the DM frees it; and a
+## target that isn't there and one a player's screen doesn't show (hidden, or
+## beyond their sight) are refused in the same words.
+func test_what_a_client_cannot_get_round() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, "t.aim", """
+local hm = hexmap
+hm.actions.register('aim', { label = 'Aim', target = 'token', run = function(ctx) return true end })
+""") == "", "a ruleset with an action that wants a token")
+	var f := _fight(kernel, sid)
+	var host := _host(st, kernel, plugins)
+	host.dm_token = "sesame"
+	host.dm_state_source = func() -> Dictionary: return {}
+	var code := host.cogm_code
+	check(RegEx.create_from_string("^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$").search(code) != null, "a co-GM's code: ten letters and digits no one misreads: %s" % code)
+	check(HostSession.new_cogm_code() != code, "new each time")
+	# wrong codes: two let by, the third makes the next wait — the right one too, a new connection too
+	var wrong := "AAAAA-AAAAA" if code != "AAAAA-AAAAA" else "BBBBB-BBBBB"
+	for i in 3:
+		var w := _client(host, {"t": "join", "role": "cogm", "code": wrong})
+		check(str(w.last("error").get("why", "")).contains("code shown on the table"), "a wrong code refused (%d)" % (i + 1))
+	var hurried := _client(host, {"t": "join", "role": "cogm", "code": code})
+	check(str(hurried.last("error").get("why", "")).begins_with("too many wrong codes"), "then even the right one waits: %s" % hurried.last("error").get("why", ""))
+	_pump(host, [], func() -> bool: return false, 1100)
+	var cogm := _client(host, {"t": "join", "role": "cogm", "code": code.to_lower().replace("-", " ")})
+	check(not cogm.last("joined").is_empty(), "the wait over, the right one (in any case, any spacing) joins")
+	# seats: Ana's phone takes hers; another device can't be her, by id or by name
+	var phone := _client(host, {"t": "join", "role": "player", "player": ANA, "device": "ana-phone"})
+	check(not phone.last("joined").is_empty() and host.seat_taken(ANA), "Ana's phone joins: her seat is its")
+	var other := _client(host, {"t": "join", "role": "player", "player": ANA, "device": "someone-else"})
+	check(str(other.last("error").get("why", "")).contains("seat is taken"), "another device as Ana: refused: %s" % other.last("error").get("why", ""))
+	var by_name := _client(host, {"t": "join", "role": "player", "name": "ana", "device": "someone-else"})
+	check(str(by_name.last("error").get("why", "")).contains("seat is taken"), "by her name: refused too")
+	var bare := _client(host, {"t": "join", "role": "player", "player": ANA})
+	check(not bare.last("error").is_empty(), "with no device at all: refused")
+	var again := _client(host, {"t": "join", "role": "player", "player": ANA, "device": "ana-phone"})
+	check(not again.last("joined").is_empty(), "her phone again (a reload): her")
+	var dm := _client(host, {"t": "join", "role": "dm", "token": "sesame"})
+	_pump(host, [dm], func() -> bool: return not dm.last("scene").is_empty())
+	check((dm.last("scene").get("seats", []) as Array).has(ANA), "the DM's screen says her seat is taken")
+	dm.send({"t": "intent", "req": "f1", "intent": {"kind": "dm", "op": "free_seat", "player": ANA}})
+	check(_pump(host, [dm], func() -> bool: return not dm.last("done").is_empty()) and not host.seat_taken(ANA), "the DM frees it")
+	var tablet := _client(host, {"t": "join", "role": "player", "player": ANA, "device": "ana-tablet"})
+	check(not tablet.last("joined").is_empty(), "her new tablet takes it")
+	var old := _client(host, {"t": "join", "role": "player", "player": ANA, "device": "ana-phone"})
+	check(str(old.last("error").get("why", "")).contains("seat is taken"), "and the old phone no longer can")
+	# targets: one not there, one hidden, one beyond her sight — the same words
+	var far := ""
+	for id in f.far:
+		if not WebScene.seen(st, sid, ANA).has(str(id)):
+			far = str(id)
+	var whys := []
+	for target in ["token:t_nothing", "token:t_lurk", "token:" + far]:
+		tablet.send({"t": "intent", "req": "a" + str(whys.size()), "intent": {"kind": "action", "plugin": "t.aim", "action": "aim", "ctx": {"actor": "a_fighter", "target": target}}})
+		var req := "a" + str(whys.size())
+		_pump(host, [tablet], func() -> bool: return str(tablet.last("refused").get("req", "")) == req or str(tablet.last("done").get("req", "")) == req)
+		whys.append(str(tablet.last("refused").get("why", "")) if str(tablet.last("refused").get("req", "")) == req else "(done)")
+	check(far != "" and whys[0] == "you cannot see that" and whys[1] == whys[0] and whys[2] == whys[0], "not there, hidden, beyond her sight: one answer: %s" % [whys])
+	check(PluginHost.check_target(st, sid, "token", "token:t_nothing", true) == "no such token on this scene", "the DM is told it isn't there")
+	host.stop()
+
+
 static func _tok_in(doc: Dictionary, id: String) -> Dictionary:
 	for sc in doc.get("scenes", []):
 		for tk in sc.get("tokens", []):
@@ -522,10 +646,18 @@ func test_pictures_names_and_lookups() -> void:
 	var dmp: Dictionary = _pack(dm.last("packs").packs, "t_pics").manifest
 	check((dmp.pictures as Array).size() == 2 and (dmp.tokens as Array).size() == 1 and (dmp.pictures as Array).all(func(p: Dictionary) -> bool: return str(p.get("url", "")).begins_with("/pic/")), "the DM's: every picture, each at its address")
 	# a preview of the boss's breath, the DM's: hers without its name or its power's
+	# (no fog now: the DM's marks lie on ground she knows)
+	kernel.commit([{"t": "fog.set", "scene": sid, "enabled": false}], "No fog")
 	check(host._put_mark("gm", {"id": "boss-breath", "kind": "preview", "scene": sid, "points": [[5.0, 7.4]], "shape": {"type": "cone", "size": 3.0}, "label": "Fire Breath, 15-ft cone", "actor": "a_boss", "token": "t_boss"}, true) == "", "the DM previews the boss's breath")
 	check(_pump(host, [ana, ben, godot, dm], func() -> bool: return ana.inbox.any(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "mark" and str(m.mark.id) == "boss-breath")), "it reaches her screen")
 	var mark: Dictionary = ana.inbox.filter(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "mark" and str(m.mark.id) == "boss-breath").back().mark
 	check(str(mark.get("name", "")) == "A creature" and not mark.has("label"), "a creature's, no label naming its power: %s" % [mark])
+	# a template of the DM's whose circle takes in the hidden lurker (its middle
+	# well away from it): not on her screen, by the area it covers
+	check(host._put_mark("gm", {"id": "dm-circle", "kind": "template", "scene": sid, "points": [[1.8, 6.0]], "shape": {"type": "circle", "size": 2.0}}, true) == "", "the DM lays a circle by the lurker")
+	check(host._put_mark("gm", {"id": "dm-clear", "kind": "template", "scene": sid, "points": [[9.0, 2.0]], "shape": {"type": "circle", "size": 1.0}}, true) == "", "and one on open ground")
+	check(_pump(host, [ana, ben, godot, dm], func() -> bool: return ana.inbox.any(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "mark" and str(m.mark.id) == "dm-clear")), "the open one reaches her")
+	check(not ana.inbox.any(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "mark" and str(m.mark.id) == "dm-circle"), "the one over the lurker never")
 	# the bestiary is the DM's: not searchable, not openable, from her screen
 	ana.send({"t": "need", "kind": "view"})
 	_pump(host, [ana, ben, godot, dm], func() -> bool: return false, 200)

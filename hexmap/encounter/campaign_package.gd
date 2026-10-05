@@ -244,6 +244,8 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 static func strip_play(doc: Dictionary) -> void:
 	doc.player_notes = []
 	doc.chat_log = []
+	# (the devices that took the author's players' seats: theirs)
+	doc.erase("seats")
 	var kept := []
 	for j in doc.get("journal", []):
 		if not (j is Dictionary):

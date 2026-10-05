@@ -15,6 +15,9 @@ var online: Dictionary = {}
 var cogm_code := ""
 var cogm_count := 0
 var _cogm: Label
+## (player id) -> "" or why not: frees a player's seat (HostSession.free_seat),
+## while hosting.
+var free_seat: Callable = Callable()
 
 
 func _init(p_ctx: TableContext) -> void:
@@ -51,7 +54,18 @@ func _init(p_ctx: TableContext) -> void:
 	remove.tooltip_text = "Remove the selected player (their tokens become the DM's)"
 	remove.theme_type_variation = "ToolButton"
 	remove.pressed.connect(_remove)
-	_actions = [remove]
+	# a player's seat is the device's that took it: freed, the next device to join takes it
+	var unseat := Button.new()
+	unseat.set_meta("icon", "lock-open")
+	unseat.tooltip_text = "Free the selected player's seat: only the device that took it joins as them now; freed, the next device to join as them takes it (a new phone)"
+	unseat.theme_type_variation = "ToolButton"
+	unseat.pressed.connect(func() -> void:
+		var sel := list.get_selected_items()
+		if sel.is_empty() or not free_seat.is_valid():
+			return
+		var why := str(free_seat.call(str(list.get_item_metadata(sel[0]))))
+		ctx.say(why if why != "" else "Seat freed: the next device to join as them takes it"))
+	_actions = [unseat, remove]
 	ctx.encounter_changed.connect(refresh)
 
 

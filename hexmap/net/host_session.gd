@@ -27,9 +27,21 @@ var plugins: PluginHost
 ## or why not. The Table hands in its commands so history sees it.
 var apply_request: Callable
 var port := 0
-## What a co-GM must give to join: shown on the Table, four digits, new
-## for every hosting. "" refuses co-GMs.
+## What a co-GM must give to join: shown on the Table, ten letters and digits
+## (new_cogm_code), new for every hosting; wrong ones from one place wait
+## longer each time (_cogm_try). "" refuses co-GMs.
 var cogm_code := ""
+const COGM_ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+## Wrong codes from one place let by before the waiting starts (a typo or two).
+const COGM_FREE_TRIES := 2
+var _cogm_tries: Dictionary = {}   # where from -> {n, until}
+## () -> Dictionary: the seats players' devices have taken, {player id: the
+## device's secret, hashed}, live (the campaign keeps them: a phone that
+## took a seat last session has it still), with `seats_changed` called after
+## a change. Without them, this hosting keeps its own.
+var seats_source: Callable = Callable()
+var seats_changed: Callable = Callable()
+var _own_seats: Dictionary = {}
 var announcer := Discovery.Announcer.new()
 ## What the campaign has shared before this session (its journal's
 ## handouts): each client's view carries the entries it may see, so a
@@ -87,6 +99,7 @@ var _mark_sent_ms: Dictionary = {}   # id -> when last sent
 var _mark_pending: Dictionary = {}   # id -> true: changed since, waiting its turn
 var _marks_recheck := false          # the scene changed: who sees which mark, again
 var _sight: Dictionary = {}          # "player|scene" -> what their characters see (cleared on change)
+var _mark_areas: Dictionary = {}     # mark id -> {sig, cells}: a template's cells (_mark_cells)
 ## How much of the sessions before a view carries (the newest).
 const CHAT_HISTORY_SENT := 400
 var _server := TCPServer.new()
@@ -135,7 +148,7 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 	port = _server.get_local_port()
 	_listening = true
 	_known_was = _known()
-	cogm_code = "%04d" % (randi() % 10000)
+	cogm_code = new_cogm_code()
 	state.applied.connect(_on_applied)
 	if marks.state != state:
 		marks.bind(state, kernel.map if kernel != null else null)
@@ -249,7 +262,8 @@ func _welcome(c: Dictionary) -> Dictionary:
 	for tk in (doc.scenes[0].tokens if not (doc.scenes as Array).is_empty() else []):
 		held[str(tk.id)] = tk
 	c["held"] = {"scene": sid, "tokens": held, "turns": JsonDoc.deep(doc.turns),
-		"overrides": JsonDoc.deep(doc.scenes[0].overrides) if not (doc.scenes as Array).is_empty() else {}}
+		"overrides": JsonDoc.deep(doc.scenes[0].overrides) if not (doc.scenes as Array).is_empty() else {},
+		"regions": JsonDoc.deep(doc.scenes[0].regions) if not (doc.scenes as Array).is_empty() else {}}
 	c["doc_due"] = false
 	return Protocol.player_welcome(doc)
 
@@ -337,6 +351,17 @@ func _sync_player(c: Dictionary) -> void:
 				changes[k] = null
 		_send(c, Protocol.event({"t": "element.set", "scene": sid, "ref": str(ref), "changes": changes}))
 	held.overrides = ovs
+	# its regions as it may see them (none the DM keeps, none round a token it
+	# doesn't see: Protocol.player_regions) — one changed sent whole again
+	var regs := Protocol.player_regions(state.encounter.scene(sid), _seen_by(c))
+	var had_r: Dictionary = held.get("regions", {})
+	for rid in had_r:
+		if not regs.has(rid) or not JsonDoc.same(had_r[rid], regs[rid]):
+			_send(c, Protocol.event({"t": "region.remove", "scene": sid, "id": str(rid)}))
+	for rid in regs:
+		if not had_r.has(rid) or not JsonDoc.same(had_r[rid], regs[rid]):
+			_send(c, Protocol.event({"t": "region.add", "scene": sid, "region": regs[rid]}))
+	held.regions = regs
 
 
 ## Is the client on this machine (the DM's own browser)?
@@ -638,7 +663,8 @@ func _player_events(c: Dictionary, ev: Dictionary, inv: Dictionary) -> Array:
 			return []
 		"fog.set", "fog.reveal", "fog.hide":
 			return [ev] if str(ev.get("scene", "")) == sid else []
-	if Protocol.AUDIENCE_EVENTS.has(t) and str(ev.get("scene", "")) == sid:
+	# (its regions kept in step as it may see them: _sync_player; its cells as shown)
+	if t in ["cell.set", "ext.set"] and str(ev.get("scene", "")) == sid:
 		return _audience_events(ev, inv)
 	return []
 
@@ -806,6 +832,8 @@ func _send_scene(c: Dictionary) -> void:
 		msg.scene.measure = kernel.map.measure_rule() if kernel != null else {"diagonals": "5-5-5"}
 	if _is_gm(c):
 		msg.scenes = e.scenes.map(func(s: Dictionary) -> Dictionary: return {"id": str(s.id), "name": str(s.get("name", "")), "map": str(s.get("map", "")), "active": str(s.id) == e.active_scene_id})
+		# whose seats a device has taken (the DM may free one)
+		msg.seats = e.players.map(func(p: Dictionary) -> String: return str(p.get("id", ""))).filter(func(pid: String) -> bool: return seat_taken(pid))
 		# seeing as a player: that player's snapshot of the scene, as their screen has it
 		var who := str(c.get("see_as", ""))
 		if who != "" and sid != "" and not e.player(who).is_empty():
@@ -878,9 +906,18 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if role == Views.ROLE_DM and (dm_token == "" or str(msg.get("token", "")) != dm_token or not is_local_address((c.peer as WebSocketPeer).get_connected_host())):
 				_send(c, Protocol.error("the DM's screen opens from the Table on this computer"))
 				return
-			if role == Views.ROLE_COGM and (cogm_code == "" or str(msg.get("code", "")) != cogm_code):
-				_send(c, Protocol.error("co-GMs join with the code shown on the table"))
-				return
+			if role == Views.ROLE_COGM:
+				var why_c := _cogm_try(c, str(msg.get("code", "")))
+				if why_c != "":
+					_send(c, Protocol.error(why_c))
+					return
+			# a player's seat is the device's that took it (the secret it keeps:
+			# `device`), until the DM frees it
+			if role == Views.ROLE_PLAYER:
+				var why_s := _take_seat(c, pid, str(msg.get("device", "")))
+				if why_s != "":
+					_send(c, Protocol.error(why_s))
+					return
 			if role != Views.ROLE_PLAYER:
 				pid = ""
 			if c.player != "":
@@ -1028,7 +1065,9 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			var unaimed := bool(ctx.get("no_target", false)) and (ctx.get("target") == null or str(ctx.get("target")) == "")
 			if kind in ["token", "cell", "area"] and not unaimed:
 				var sc := str(ctx.get("scene", state.encounter.active_scene_id))
-				var why_t := PluginHost.check_target(state, sc, kind, ctx.get("target"), gm)
+				# (a player's pick: one their screen shows, on the scene the players see)
+				var sees := func(tk: Dictionary) -> bool: return sc == state.encounter.active_scene_id and _seen_by(c).has(str(tk.get("id", "")))
+				var why_t := PluginHost.check_target(state, sc, kind, ctx.get("target"), gm, false, Callable() if gm else sees)
 				if why_t != "":
 					return why_t
 				ctx = ctx.duplicate()
@@ -1114,6 +1153,9 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				# (and their chat, which comes with the view)
 				_send_view(c)
 				return ""
+			if str(intent.get("op", "")) == "free_seat":
+				# a player's seat freed: the next device to join as them takes it
+				return free_seat(str(intent.get("player", "")))
 			if not dm_handler.is_valid():
 				return "no DM operations here"
 			var why_dm := str(dm_handler.call(intent))
@@ -1163,6 +1205,89 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				log.emit("%s brought %s" % [_player_name(pid), str(actor.name)])
 			return why
 	return "unknown intent '%s'" % str(intent.get("kind", ""))
+
+
+## Whether a co-GM's code is the table's, a few wrong ones from one place
+## let by and then each next try waited for longer (COGM_FREE_TRIES, then a
+## second, two, four… up to a minute): "" or why not.
+func _cogm_try(c: Dictionary, typed: String) -> String:
+	var from := (c.peer as WebSocketPeer).get_connected_host()
+	var now := Time.get_ticks_msec()
+	var t: Dictionary = _cogm_tries.get(from, {"n": 0, "until": 0})
+	if now < int(t.until):
+		return "too many wrong codes: try again in %d s" % ceili((int(t.until) - now) / 1000.0)
+	if cogm_code != "" and _plain_code(typed) == _plain_code(cogm_code):
+		_cogm_tries.erase(from)
+		return ""
+	t.n = int(t.n) + 1
+	if int(t.n) > COGM_FREE_TRIES:
+		t.until = now + mini(60000, 1000 << mini(6, int(t.n) - COGM_FREE_TRIES - 1))
+	_cogm_tries[from] = t
+	return "co-GMs join with the code shown on the table"
+
+
+## A code as typed, any case, with or without its dash and spaces.
+static func _plain_code(s: String) -> String:
+	return s.to_upper().replace("-", "").replace(" ", "").strip_edges()
+
+
+## A new code for co-GMs: ten letters and digits no one misreads (no I, O, 0,
+## 1), about fifty bits — "HK7QM-4XWPD" — new for every hosting.
+static func new_cogm_code() -> String:
+	var bytes := Crypto.new().generate_random_bytes(10)
+	var out := ""
+	for i in bytes.size():
+		if i == 5:
+			out += "-"
+		out += COGM_ALPHABET[int(bytes[i]) % COGM_ALPHABET.length()]
+	return out
+
+
+## A player's seat taken by a device (its secret, `device`; one the
+## connection makes when it sends none): the first device to join as a
+## player has their seat, and joins again as them; another is refused until
+## the DM frees the seat (free_seat). "" or why not.
+func _take_seat(c: Dictionary, pid: String, device: String) -> String:
+	if device.strip_edges() == "":
+		if str(c.get("own_device", "")) == "":
+			c["own_device"] = Crypto.new().generate_random_bytes(16).hex_encode()
+		device = str(c.own_device)
+	var seats := _seats()
+	var mine := device.left(200).sha256_text()
+	var held := str(seats.get(pid, ""))
+	if held == mine:
+		return ""
+	if held != "":
+		return "%s's seat is taken by another device: the DM can free it (the Players list)" % _player_name(pid)
+	seats[pid] = mine
+	if seats_changed.is_valid():
+		seats_changed.call()
+	return ""
+
+
+## The seats players' devices have taken, {player id: the device's secret,
+## hashed}: the campaign's (seats_source), else this hosting's own.
+func _seats() -> Dictionary:
+	var d: Variant = seats_source.call() if seats_source.is_valid() else null
+	return d if d is Dictionary else _own_seats
+
+
+## Whether a player's seat is taken by a device.
+func seat_taken(pid: String) -> bool:
+	return str(_seats().get(pid, "")) != ""
+
+
+## The DM frees a player's seat: the next device to join as them takes it
+## (a new phone, a borrowed one). "" or why not.
+func free_seat(pid: String) -> String:
+	if state.encounter.player(pid).is_empty():
+		return "no such player"
+	_seats().erase(pid)
+	if seats_changed.is_valid():
+		seats_changed.call()
+	_scenes_dirty = true
+	_dm_dirty = true
+	return ""
 
 
 ## A player found by name (as typed, any case), or added: {id} or {why}.
@@ -1369,6 +1494,7 @@ func _on_mark_changed(id: String) -> void:
 func _on_mark_removed(id: String, _m: Dictionary) -> void:
 	_mark_pending.erase(id)
 	_mark_sent_ms.erase(id)
+	_mark_areas.erase(id)
 	for c in _clients:
 		if c.get("marks_sent", {}).has(id):
 			(c.marks_sent as Dictionary).erase(id)
@@ -1478,7 +1604,10 @@ func _mark_for(c: Dictionary, m: Dictionary) -> Dictionary:
 	return out
 
 
-## Whether a DM's mark lies where a player's screen may show it (`sight`: _sight_of).
+## Whether a DM's mark lies where a player's screen may show it (`sight`:
+## _sight_of): its points, and — a template's, a preview's — every cell it
+## covers on ground they know, no creature they don't see within it (a
+## template laid over the hidden ambushers said where they waited).
 func _shown_to(sight: Dictionary, m: Dictionary) -> bool:
 	var sid := str(m.scene)
 	var map := state.map_for(sid)
@@ -1495,7 +1624,31 @@ func _shown_to(sight: Dictionary, m: Dictionary) -> bool:
 				continue
 			if Vision.token_pos(tk).distance_to(v) <= maxf(0.5, float(tk.get("size", 1)) * 0.5):
 				return false
+	if str(m.get("kind", "")) in ["template", "preview"] and m.get("shape") is Dictionary:
+		var cells := _mark_cells(m)
+		if bool(sight.fog):
+			for key in cells:
+				if not (sight.explored as Dictionary).has(key):
+					return false
+		for tk in state.tokens(sid):
+			if not (sight.seen as Dictionary).has(str(tk.id)) and cells.has(HexMap.cell_key(map.grid.world_to_axial(Vision.token_pos(tk)))):
+				return false
 	return true
+
+
+## The cells a template or a preview covers, {cell key: true}: worked out
+## again only when it moved, turned or changed (MapQuery.template).
+func _mark_cells(m: Dictionary) -> Dictionary:
+	var sig := JSON.stringify([m.get("points"), m.get("shape"), m.get("direction"), m.get("scene"), m.get("token", "")])
+	var hit: Dictionary = _mark_areas.get(str(m.id), {})
+	if str(hit.get("sig", "")) == sig:
+		return hit.cells
+	var cells := {}
+	if kernel != null:
+		for key in kernel.map.template(str(m.scene), Measure.template_spec(m)).get("cells", []):
+			cells[str(key)] = true
+	_mark_areas[str(m.id)] = {"sig": sig, "cells": cells}
+	return cells
 
 
 ## What a player's screen shows of a scene, worked out once until the table

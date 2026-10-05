@@ -560,16 +560,18 @@ const AREA_SHAPES := ["circle", "cone", "line"]
 ## one with statistics: Encounter.is_target), a cell in bounds, or an area
 ## whose origin is one of those (or an object: something its caster moves
 ## may be where an area starts). "" when it is, else why not.
-static func check_target(state: EncounterState, scene_id: String, kind: String, target: Variant, gm: bool, origin := false) -> String:
+static func check_target(state: EncounterState, scene_id: String, kind: String, target: Variant, gm: bool, origin := false, sees: Callable = Callable()) -> String:
 	match kind:
 		"token":
 			if not (target is String) or not (target as String).begins_with("token:"):
 				return "this action wants a token as its target"
 			var tk := state.token(scene_id, (target as String).substr(6))
+			# a player is told the same of one that isn't there and one their screen
+			# doesn't show (hidden, or beyond their sight: `sees`) — never which
+			if not gm and (tk.is_empty() or bool(tk.get("hidden", false)) or (sees.is_valid() and not bool(sees.call(tk)))):
+				return "you cannot see that"
 			if tk.is_empty():
 				return "no such token on this scene"
-			if not gm and bool(tk.get("hidden", false)):
-				return "you cannot see that"
 			if not origin and not Encounter.is_target(tk):
 				return "%s is a thing, not a creature: choose the creature" % str(tk.get("name", "that"))
 		"cell":
@@ -582,7 +584,7 @@ static func check_target(state: EncounterState, scene_id: String, kind: String, 
 			if not (target is Dictionary):
 				return "this action wants an area as its target"
 			var at: Variant = (target as Dictionary).get("at", "")
-			var why := check_target(state, scene_id, "token" if (at is String and (at as String).begins_with("token:")) else "cell", at, gm, true)
+			var why := check_target(state, scene_id, "token" if (at is String and (at as String).begins_with("token:")) else "cell", at, gm, true, sees)
 			if why != "":
 				return why
 			if not (target.get("direction", 0) is float or target.get("direction", 0) is int):
