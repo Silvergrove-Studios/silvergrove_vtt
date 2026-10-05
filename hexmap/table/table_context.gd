@@ -73,6 +73,13 @@ var fog_brush := 1
 ## The pick in flight: {kind: token | cell | area, area: {shape, …},
 ## from: token id | "", label, on_done: Callable(target)}; empty when none.
 var pick: Dictionary = {}
+## The table's shared marks — rulers, templates, spells' previews, pings —
+## the DM's from here and everyone's from the screens (the host relays
+## them). Never the encounter's: no event, no undo step, never saved.
+var marks := Marks.new()
+## The DM's marks from the Table seen by the DMs alone (the ruler's "Only me").
+var marks_private := false
+var _mark_seq := 0
 
 
 func set_encounter(e: Encounter) -> void:
@@ -87,6 +94,8 @@ func set_encounter(e: Encounter) -> void:
 	kernel = RulesKernel.new(state, history)
 	# the rules read the map's terrain through its art (rubble is "difficult")
 	kernel.map.art = art
+	# the marks follow this encounter (those of the one before go)
+	marks.bind(state, kernel.map)
 	commands = EncounterCommands.new(state, history)
 	commands.kernel = kernel
 	# the campaign the file names, unless one is already open here
@@ -485,6 +494,25 @@ func selected_element() -> Dictionary:
 
 func say(text: String) -> void:
 	status.emit(text)
+
+
+## A mark of the DM's from the Table, on the scene being looked at: its id
+## (new when `id` is ""), or "" with why said. `fields`: kind, points, shape…
+func put_mark(fields: Dictionary, id := "") -> String:
+	if id == "":
+		_mark_seq += 1
+		id = "table-%d-%04d" % [_mark_seq, randi() % 10000]
+	var m := fields.duplicate(true)
+	m.id = id
+	if not m.has("scene"):
+		m.scene = scene_id
+	if marks_private:
+		m.private = true
+	var why := marks.put("gm", m, {"name": "DM", "color": HostSession.DM_COLOR}, true)
+	if why != "":
+		say(why)
+		return ""
+	return id
 
 
 ## A token from the tool picks, named uniquely within the scene.

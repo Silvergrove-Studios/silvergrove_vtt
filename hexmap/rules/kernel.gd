@@ -81,6 +81,7 @@ func unregister_ruleset(id: String) -> void:
 	hooks.off(id)
 	turns.unregister(id)
 	map.band_tables.erase(id)
+	map.measure_rules.erase(id)
 	rederive_all()
 
 

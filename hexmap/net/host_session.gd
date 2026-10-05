@@ -68,6 +68,21 @@ const UPLOAD_GAP_MS := 1500
 ## The least time between one screen's "typing"s that are passed on (the
 ## web screens say it at most every three seconds).
 const TYPING_GAP_MS := 1000
+## The table's shared marks — rulers, templates, previews, pings (Marks):
+## the Table hands in its own before hosting; never the encounter's.
+var marks := Marks.new()
+## A mark changed is sent on at most this often (a ruler being dragged: the
+## screens send it ten times a second); what came between goes with the next.
+const MARK_GAP_MS := 66
+## One screen's marks are taken at most this often; one sent sooner waits
+## (the newest of each), so a screen can't flood the Table with rulers.
+const MARK_IN_GAP_MS := 40
+## The DM's marks' colour.
+const DM_COLOR := "#ffffff"
+var _mark_sent_ms: Dictionary = {}   # id -> when last sent
+var _mark_pending: Dictionary = {}   # id -> true: changed since, waiting its turn
+var _marks_recheck := false          # the scene changed: who sees which mark, again
+var _sight: Dictionary = {}          # "player|scene" -> what their characters see (cleared on change)
 ## How much of the sessions before a view carries (the newest).
 const CHAT_HISTORY_SENT := 400
 var _server := TCPServer.new()
@@ -102,6 +117,10 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 	_listening = true
 	cogm_code = "%04d" % (randi() % 10000)
 	state.applied.connect(_on_applied)
+	if marks.state != state:
+		marks.bind(state, kernel.map if kernel != null else null)
+	marks.changed.connect(_on_mark_changed)
+	marks.removed.connect(_on_mark_removed)
 	if web_port >= 0:
 		web = WebServer.new()
 		web.art_source = func(pack: String, file: String) -> PackedByteArray:
@@ -137,6 +156,9 @@ func stop() -> void:
 	announcer.stop()
 	if state.applied.is_connected(_on_applied):
 		state.applied.disconnect(_on_applied)
+	if marks.changed.is_connected(_on_mark_changed):
+		marks.changed.disconnect(_on_mark_changed)
+		marks.removed.disconnect(_on_mark_removed)
 	_listening = false
 	log.emit("Stopped hosting")
 
@@ -153,8 +175,14 @@ func set_state(p_state: EncounterState) -> void:
 	if _listening:
 		state.applied.connect(_on_applied)
 		announcer.name = state.encounter.name
+		# (the Table binds its own marks to the encounter it opens; a host on its own, its own)
+		if marks.state != state:
+			marks.bind(state, kernel.map if kernel != null else null)
+		_sight.clear()
 		for c in _clients:
 			_send(c, Protocol.welcome(state.encounter, _is_gm(c)))
+			if c.joined:
+				_send_marks(c)
 		_scenes_dirty = true
 		_dm_dirty = true
 
@@ -265,6 +293,11 @@ func poll(delta := 0.0) -> void:
 		if c.player != "":
 			log.emit("%s left" % _player_name(c.player))
 			client_left.emit(c.player)
+		# what they held, let go (a screen that went: the ruler they were dragging)
+		var owner := _mark_owner(c)
+		if owner != "" and not _clients.any(func(o: Dictionary) -> bool: return o.joined and _mark_owner(o) == owner):
+			marks.let_go(owner)
+	_poll_marks()
 	_flush_views()
 	# web clients get the scene whole, a few times a second at most
 	if _scenes_dirty and Time.get_ticks_msec() - _last_scene_ms >= 50:
@@ -307,6 +340,11 @@ static func _is_typing(msg: Dictionary) -> bool:
 	return str(msg.get("t", "")) == "intent" and msg.get("intent") is Dictionary and str(msg.intent.get("kind", "")) == "typing"
 
 
+## A mark still held by its owner (a ruler being dragged).
+static func _is_held_mark(msg: Dictionary) -> bool:
+	return str(msg.get("t", "")) == "mark" and msg.get("mark") is Dictionary and bool(msg.mark.get("live", false))
+
+
 ## A message as the trace keeps it: an upload's picture by its size.
 static func _traced_copy(msg: Dictionary) -> Dictionary:
 	var out := msg.duplicate(true)
@@ -330,6 +368,9 @@ func _broadcast(msg: Dictionary, gm_only := false) -> void:
 func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 	if not traced.get_connections().is_empty():
 		traced.emit({"dir": "event", "ev": ev})
+	# who sees what may have changed: the DM's marks are sent again where they now may be
+	_sight.clear()
+	_marks_recheck = true
 	var t := str(ev.get("t", ""))
 	if t == "checkpoint.restore":
 		# the whole document changed under everyone: start them over
@@ -488,6 +529,9 @@ func _send_scene(c: Dictionary) -> void:
 		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
 	if not (msg.scene as Dictionary).is_empty():
 		msg.scene.role = str(map_role.call(str(msg.scene.get("map", "")))) if map_role.is_valid() else ""
+		# how the table's rulers count (the rules' diagonal rule): a screen counts the
+		# straight distance itself as a ruler is dragged; the walk comes from here
+		msg.scene.measure = kernel.map.measure_rule() if kernel != null else {"diagonals": "5-5-5"}
 	if _is_gm(c):
 		msg.scenes = e.scenes.map(func(s: Dictionary) -> Dictionary: return {"id": str(s.id), "name": str(s.get("name", "")), "map": str(s.get("map", "")), "active": str(s.id) == e.active_scene_id})
 		# seeing as a player: that player's snapshot of the scene, as their screen has it
@@ -507,8 +551,9 @@ func _send_dm(c: Dictionary) -> void:
 
 func _handle(c: Dictionary, msg: Dictionary) -> void:
 	var t := str(msg.t)
-	# (someone typing, every few seconds, is no more the table's story than a ping)
-	if t != "ping" and not _is_typing(msg) and not traced.get_connections().is_empty():
+	# (someone typing, every few seconds, is no more the table's story than a ping;
+	# nor is a ruler being dragged, ten times a second: where it was let go is)
+	if t != "ping" and not _is_typing(msg) and not _is_held_mark(msg) and not traced.get_connections().is_empty():
 		traced.emit({"dir": "in", "player": str(c.get("player", "")), "gm": _is_gm(c), "msg": _traced_copy(msg)})
 	if not c.hello and t != "hello":
 		_send(c, Protocol.error("say hello first"))
@@ -568,6 +613,8 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			_send_view(c)
 			if bool(c.web):
 				_send_scene(c)
+			# the marks on the map now (a ruler someone is dragging, a pinned template)
+			_send_marks(c)
 			if role == Views.ROLE_DM:
 				_send_dm(c)
 			_scenes_dirty = true
@@ -633,6 +680,8 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 				_serve(c, msg)
 		"ping":
 			_send(c, {"t": "pong"})
+		"mark":
+			_mark(c, msg)
 
 
 func _apply_plain(ev: Dictionary) -> String:
@@ -711,6 +760,9 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			return _chat(c, intent)
 		"typing":
 			return _typing(c, intent)
+		# a sheet's Preview is the screen's own doing (a mark on the map, below)
+		"preview":
+			return "a preview is put on the map by the web screens"
 		# a free roll ("/roll 1d20+4 Stealth" in the chat): anyone's dice, the DM's in
 		# secret if asked (a playtest's DM had no dice of his own)
 		"roll":
@@ -875,6 +927,246 @@ func _gm_intent(intent: Dictionary) -> String:
 			var r := Bulk.run(kernel, Array(intent.get("targets", [])), intent.get("op_spec", {}) if intent.get("op_spec") is Dictionary else {}, str(intent.get("label", "")))
 			return r.why
 	return "unknown gm op '%s'" % str(intent.get("op", ""))
+
+
+# ------------------------------------------------------------------ marks --
+# The table's shared marks (Marks): {t: "mark", op: "set", mark} puts or
+# changes one of one's own; {op: "remove", id} takes one off (the DM: anyone's);
+# {op: "clear", whose} one's own ("" or one's id), or — the DM — one person's
+# or everyone's ("all"). Each screen hears {t: "marks", marks} on joining,
+# then {t: "mark", mark} for one put or changed and {t: "unmark", ids} for
+# those gone (or no longer for it), only what it may see: a player's marks
+# reach everyone on the scene the players see; the DM's not where they lie
+# over what a player can't see, and a private one only the DMs.
+
+## Whose a screen's marks are: "gm" for the DMs, a player's id, "" for none (a display).
+func _mark_owner(c: Dictionary) -> String:
+	if not bool(c.get("joined", false)):
+		return ""
+	if _is_gm(c):
+		return "gm"
+	return str(c.player) if c.role == Views.ROLE_PLAYER else ""
+
+
+func _mark(c: Dictionary, msg: Dictionary) -> void:
+	var owner := _mark_owner(c)
+	if owner == "":
+		_send(c, {"t": "refused", "why": "join as a player to put marks on the map"})
+		return
+	var gm := _is_gm(c)
+	var why := ""
+	match str(msg.get("op", "")):
+		"set":
+			var raw: Variant = msg.get("mark")
+			if not (raw is Dictionary):
+				why = "not a mark"
+			else:
+				# a screen's marks are taken at most every MARK_IN_GAP_MS: the newest of
+				# each waits for its turn (poll)
+				var now := Time.get_ticks_msec()
+				if now - int(c.get("mark_in_ms", -MARK_IN_GAP_MS)) < MARK_IN_GAP_MS:
+					if not c.has("mark_queue"):
+						c["mark_queue"] = {}
+					c.mark_queue[str(raw.get("id", ""))] = raw
+					return
+				c["mark_in_ms"] = now
+				why = _put_mark(owner, raw, gm)
+		"remove":
+			var id := str(msg.get("id", ""))
+			if c.has("mark_queue"):
+				(c.mark_queue as Dictionary).erase(id)
+			why = marks.remove(owner, id, gm)
+		"clear":
+			var whose := str(msg.get("whose", ""))
+			if whose != "" and whose != owner and not gm:
+				why = "only the DM clears someone else's marks"
+			else:
+				if c.has("mark_queue"):
+					(c.mark_queue as Dictionary).clear()
+				marks.clear(owner, whose, gm)
+		_:
+			why = "unknown mark op '%s'" % str(msg.get("op", ""))
+	if why != "":
+		_send(c, {"t": "refused", "why": why})
+
+
+## A mark from `owner`, with who they are (their name and colour) and, for a
+## creature's preview, the creature's name: "" or why not.
+func _put_mark(owner: String, raw: Dictionary, gm: bool) -> String:
+	var extra := {"name": "DM", "color": DM_COLOR}
+	if owner != "gm":
+		var p := state.encounter.player(owner)
+		extra = {"name": _mark_name(owner), "color": str(p.get("color", "#ffffff"))}
+	# a preview says whose it is: a caster's own (the DM's creature, a player's character)
+	var aid := str(raw.get("actor", "")) if raw.get("actor") is String else ""
+	if str(raw.get("kind", "")) == "preview" and aid != "":
+		var a := state.encounter.actor(aid)
+		if not a.is_empty() and (gm or str(a.get("owner", "")) == owner):
+			extra._as = str(a.get("name", ""))
+	return marks.put(owner, raw, extra, gm)
+
+
+## What a player's marks are labelled: their character's name when they have
+## one character ("Wren: 25 ft"), else their own.
+func _mark_name(pid: String) -> String:
+	var mine := []
+	for aid in state.encounter.actors:
+		var a: Dictionary = state.encounter.actors[aid]
+		if str(a.get("owner", "")) == pid and str(a.get("kind", "pc")) == "pc":
+			mine.append(str(a.get("name", "")))
+	return mine[0] if mine.size() == 1 and str(mine[0]) != "" else _player_name(pid)
+
+
+## Every mark this screen may see, at once (it joined, or the encounter changed).
+func _send_marks(c: Dictionary) -> void:
+	var list := []
+	var sent := {}
+	for id in marks.marks:
+		var out := _mark_for(c, marks.marks[id])
+		if not out.is_empty():
+			list.append(out)
+			sent[str(id)] = true
+	c["marks_sent"] = sent
+	_send(c, {"t": "marks", "marks": list})
+
+
+func _on_mark_changed(id: String) -> void:
+	if Time.get_ticks_msec() - int(_mark_sent_ms.get(id, -MARK_GAP_MS)) < MARK_GAP_MS:
+		_mark_pending[id] = true
+		return
+	_relay_mark(id)
+
+
+func _on_mark_removed(id: String, _m: Dictionary) -> void:
+	_mark_pending.erase(id)
+	_mark_sent_ms.erase(id)
+	for c in _clients:
+		if c.get("marks_sent", {}).has(id):
+			(c.marks_sent as Dictionary).erase(id)
+			_send(c, {"t": "unmark", "ids": [id]})
+
+
+## A mark to every screen that may see it, and gone from one that no longer may.
+func _relay_mark(id: String, only_changes := false) -> void:
+	var m: Dictionary = marks.marks.get(id, {})
+	if m.is_empty():
+		return
+	if not only_changes:
+		_mark_sent_ms[id] = Time.get_ticks_msec()
+		_mark_pending.erase(id)
+	for c in _clients:
+		if not c.joined:
+			continue
+		if not c.has("marks_sent"):
+			c["marks_sent"] = {}
+		var had: bool = (c.marks_sent as Dictionary).has(id)
+		var out := _mark_for(c, m)
+		if not out.is_empty():
+			if only_changes and had:
+				continue
+			c.marks_sent[id] = true
+			_send(c, {"t": "mark", "mark": out})
+		elif had:
+			(c.marks_sent as Dictionary).erase(id)
+			_send(c, {"t": "unmark", "ids": [id]})
+
+
+## The marks' time passes, what waited its turn goes, what screens held back
+## is taken, and after a change on the map who sees which mark is checked.
+func _poll_marks() -> void:
+	for c in _clients:
+		if c.has("mark_queue") and not (c.mark_queue as Dictionary).is_empty() and Time.get_ticks_msec() - int(c.get("mark_in_ms", 0)) >= MARK_IN_GAP_MS:
+			var queued: Dictionary = c.mark_queue
+			c["mark_queue"] = {}
+			c["mark_in_ms"] = Time.get_ticks_msec()
+			var owner := _mark_owner(c)
+			for raw in queued.values():
+				var why := _put_mark(owner, raw, _is_gm(c)) if owner != "" else ""
+				if why != "":
+					_send(c, {"t": "refused", "why": why})
+	marks.tick()
+	var now := Time.get_ticks_msec()
+	for id in _mark_pending.keys():
+		if now - int(_mark_sent_ms.get(id, 0)) >= MARK_GAP_MS:
+			_relay_mark(str(id))
+	if _marks_recheck:
+		_marks_recheck = false
+		for id in marks.marks.keys():
+			_relay_mark(str(id), true)
+
+
+## A mark as one screen may see it, or {} when it may not: the DMs see every
+## one; anyone else none that is private, none off the scene the players see,
+## and none of the DM's that lies over what they can't see (unexplored
+## ground under fog, a creature they don't see, or starts at one) — and of the
+## DM's ruler only the straight distance, unless its walk is all ground they
+## know. A creature's preview says whose it is only to a screen that sees it.
+func _mark_for(c: Dictionary, m: Dictionary) -> Dictionary:
+	var out := Marks.wire(m)
+	var as_name := str(m.get("_as", ""))
+	if _is_gm(c):
+		if as_name != "":
+			out.name = as_name
+		return out
+	if bool(m.get("private", false)) or str(m.scene) != state.encounter.active_scene_id:
+		return {}
+	var pid := str(c.player) if c.role == Views.ROLE_PLAYER else ""
+	if str(m.owner) != "gm":
+		if as_name != "":
+			out.name = as_name
+		return out
+	var sight := _sight_of(pid, str(m.scene))
+	if not _shown_to(sight, m):
+		return {}
+	if as_name != "" and str(m.get("token", "")) != "" and (sight.seen as Dictionary).has(str(m.token)):
+		out.name = as_name
+	var me: Variant = out.get("measure")
+	if me is Dictionary and (me.has("walk") or me.has("no_way")):
+		var known := not bool(sight.fog)
+		if not known:
+			known = (m.get("_walk_cells", []) as Array).all(func(k: Variant) -> bool: return (sight.explored as Dictionary).has(str(k)))
+		if not known or me.has("no_way"):
+			me.erase("walk")
+			me.erase("no_way")
+			me.words = Measure.words(me)
+	return out
+
+
+## Whether a DM's mark lies where a player's screen may show it (`sight`: _sight_of).
+func _shown_to(sight: Dictionary, m: Dictionary) -> bool:
+	var sid := str(m.scene)
+	var map := state.map_for(sid)
+	if map == null:
+		return false
+	if str(m.get("token", "")) != "" and not (sight.seen as Dictionary).has(str(m.token)):
+		return false
+	for p in m.get("points", []):
+		var v := Vector2(float(p[0]), float(p[1]))
+		if bool(sight.fog) and not (sight.explored as Dictionary).has(HexMap.cell_key(map.grid.world_to_axial(v))):
+			return false
+		for tk in state.tokens(sid):
+			if (sight.seen as Dictionary).has(str(tk.id)):
+				continue
+			if Vision.token_pos(tk).distance_to(v) <= maxf(0.5, float(tk.get("size", 1)) * 0.5):
+				return false
+	return true
+
+
+## What a player's screen shows of a scene, worked out once until the table
+## changes: {fog, explored (cells), seen (token ids)}. "" is a display's: no eyes.
+func _sight_of(pid: String, sid: String) -> Dictionary:
+	var key := pid + "|" + sid
+	if _sight.has(key):
+		return _sight[key]
+	var fog := state.fog_enabled(sid)
+	var polys: Array = Vision.of(state, sid, WebScene._eyes(state, sid, pid, false)).polygons if fog and pid != "" else []
+	var seen := {}
+	for tk in state.tokens(sid):
+		if WebScene.shows(state, tk, pid, fog, polys):
+			seen[str(tk.id)] = true
+	var out := {"fog": fog, "explored": state.explored(sid) if fog else {}, "seen": seen}
+	_sight[key] = out
+	return out
 
 
 func _owns_actor(pid: String, actor_id: String) -> bool:

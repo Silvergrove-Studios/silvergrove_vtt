@@ -38,11 +38,8 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	var labels := TokenLabels.of_scene(state.tokens(scene_id), state)
 	var tokens := []
 	for tk in state.tokens(scene_id):
-		if not gm:
-			if bool(tk.get("hidden", false)) or _owners_only(state, tk, player_id):
-				continue
-			if fog and not _owns(state, tk, player_id) and not _party(state, tk) and not Vision.sees(sight.polygons, Vision.token_pos(tk)):
-				continue
+		if not gm and not shows(state, tk, player_id, fog, sight.polygons):
+			continue
 		var out := token_out(state, tk, gm)
 		out.label = str(labels.get(str(tk.id), out.get("label", "")))
 		tokens.append(out)
@@ -65,6 +62,15 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 		out.light_set = str(sc.get("light", "")) if Vision.LIGHT_LEVELS.has(str(sc.get("light", ""))) else ""
 		out.map_light = str(state.level_for(scene_id).get("light", ""))
 	return out
+
+
+## Whether a player's screen shows a token (`polys`: what their characters
+## see, under `fog`): not one the DM hides, nor one only its owner sees; under
+## fog their own, the party's, and what their characters see.
+static func shows(state: EncounterState, tk: Dictionary, player_id: String, fog: bool, polys: Array) -> bool:
+	if bool(tk.get("hidden", false)) or _owners_only(state, tk, player_id):
+		return false
+	return not fog or _owns(state, tk, player_id) or _party(state, tk) or Vision.sees(polys, Vision.token_pos(tk))
 
 
 ## Why a player's screen leaves out the creatures it does, for the DM's

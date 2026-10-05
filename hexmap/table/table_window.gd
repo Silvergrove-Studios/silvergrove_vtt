@@ -1010,6 +1010,22 @@ func _build_toolbar() -> HBoxContainer:
 		b.pressed.connect(_select_tool.bind(t.name))
 		bar.add_child(b)
 		tool_buttons[t.name] = b
+	# the table's shared marks: the DM's own kept to the DMs, and everyone's taken off
+	var only := CheckBox.new()
+	only.text = "Only me"
+	only.tooltip_text = "Your rulers and pings from here: seen by the DMs alone (off: by everyone, but never over what a player can't see)"
+	only.focus_mode = Control.FOCUS_NONE
+	only.toggled.connect(func(on: bool) -> void: ctx.marks_private = on)
+	bar.add_child(only)
+	var clear_marks := Button.new()
+	clear_marks.text = "Clear marks"
+	clear_marks.tooltip_text = "Take every ruler, template, preview and ping off the map: everyone's"
+	clear_marks.theme_type_variation = "ToolButton"
+	clear_marks.focus_mode = Control.FOCUS_NONE
+	clear_marks.pressed.connect(func() -> void:
+		var gone := ctx.marks.clear("gm", "all", true)
+		ctx.say("Marks cleared (%d)" % gone.size()))
+	bar.add_child(clear_marks)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(spacer)
@@ -1438,6 +1454,8 @@ func _set_hosting(on: bool) -> void:
 		host = HostSession.new(ctx.state, ctx.art)
 		host.kernel = ctx.kernel
 		host.plugins = ctx.host
+		# the marks the table shares: the DM's from here, everyone's from the screens
+		host.marks = ctx.marks
 		host.apply_request = _apply_player_request
 		# what the campaign showed the players in earlier sessions: their Journal keeps it
 		host.journal_source = func() -> Array: return ctx.campaign.journal if ctx.campaign != null else []

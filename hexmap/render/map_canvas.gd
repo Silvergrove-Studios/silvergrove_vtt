@@ -51,6 +51,9 @@ var _walls := DrawLayer.new()
 var _tokens := DrawLayer.new()
 var _notes := DrawLayer.new()
 var _fog := DrawLayer.new()
+## The table's shared marks (rulers, templates, previews, pings), over the
+## tokens and the fog: whoever shows them sets its `fn` (MarkDraw).
+var marks_layer := DrawLayer.new()
 ## Tools draw selection boxes and previews here.
 var overlay := DrawLayer.new()
 
@@ -102,7 +105,7 @@ func _init() -> void:
 	var add := CanvasItemMaterial.new()
 	add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_lights.material = add
-	for l in [_backdrop, _terrain, _props, _dark, _lights, _grid, _regions, _walls, _tokens, _notes, _fog, overlay]:
+	for l in [_backdrop, _terrain, _props, _dark, _lights, _grid, _regions, _walls, _tokens, _notes, _fog, marks_layer, overlay]:
 		l.canvas = self
 		add_child(l)
 	if _radial == null:

@@ -28,6 +28,10 @@ extends RefCounted
 ##   intent {kind: typing, to, private} while the chat box holds something
 ##   being written, every few seconds at most, never kept;
 ##   intent {kind: dm, op, …}; need {kind: scene})
+##   mark     {op: set, mark} | {op: remove, id} | {op: clear, whose}
+##                                            the table's shared marks (Marks): a ruler, a
+##                                            template, a spell's preview, a ping — one's own;
+##                                            the DM may remove or clear anyone's. Never kept.
 ## host → client
 ##   welcome  {version, encounter}            the document without its rules blocks
 ##   joined   {player, role}                  the join was accepted
@@ -51,6 +55,10 @@ extends RefCounted
 ##                                             seeing as a player gets theirs and why each
 ##                                             creature they don't see isn't there
 ##   dm       {state}                          the DM's web screen: the campaign as it shows it
+##   marks    {marks}                          every shared mark this client may see (on joining)
+##   mark     {mark}                           one put or changed, with its owner's name and
+##                                             colour (a ruler's `measure` the Table's)
+##   unmark   {ids}                            gone, or no longer for this client
 ##
 ## Version 3: sight follows the light. A scene is lit by daylight, dim light
 ## or dark (its own `light`, else its map level's, else daylight), a
