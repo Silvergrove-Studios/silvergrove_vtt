@@ -187,11 +187,16 @@ ok = ok && (await step('the DM wounds the goblin on its stat block: Bloodied, on
   const hp = await dm.evaluate((aid) => ((((window.hexmap.game.view.actors ?? {})[aid] ?? {}).resources ?? {}).srd5e ?? {}).hp ?? null, goblin.actor);
   expect(hp && hp.max > 1, `the goblin's hit points aren't on the DM's page: ${JSON.stringify(hp)}`);
   const amount = Math.ceil(Number(hp.max) / 2);
-  // its row in the order, by its name alone ("Goblin Warrior" isn't "Goblin
-  // Warrior 2"; the current one's row says its turn after it), chosen
-  const named = { has: dm.locator('.name', { hasText: new RegExp(`^${goblin.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\d| \\d)`) }) };
-  await dm.locator('.fightpanel .order button').filter(named).first().click();
-  await dm.locator('.fightpanel .order button.on').filter(named).first().waitFor({ timeout: 5000 });
+  // its row in the order, by its own name exactly ("Goblin Warrior" isn't "Goblin
+  // Warrior 2", nor "Goblin Warrior JA", a creature spawned out of the players'
+  // sight; the current one's row says its turn after its name), chosen
+  const idx = await dm.evaluate((name) => [...document.querySelectorAll('.fightpanel .order button')].findIndex((b) => {
+    const n = b.querySelector('.name');
+    return !!n && [...n.childNodes].filter((c) => c.nodeType === Node.TEXT_NODE).map((c) => c.textContent).join('').trim() === name;
+  }), goblin.name);
+  expect(idx >= 0, `no row in the order named ${goblin.name}`);
+  await dm.locator('.fightpanel .order button').nth(idx).click();
+  await dm.waitForFunction((i) => !!document.querySelectorAll('.fightpanel .order button')[i]?.classList.contains('on'), idx, { timeout: 5000 });
   const block = dm.locator('.fightpanel .chosen');
   // (the damage is on its stat block: its card's Stat block tab, where the card has tabs)
   const statTab = block.getByRole('tab', { name: 'Stat block' });
