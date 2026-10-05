@@ -25,11 +25,14 @@ extends RefCounted
 ## A player sees the rest of the party wherever they are (a playtest's
 ## player saw a friend's token vanish through a doorway, and took it for a
 ## dropped connection); everything else only in their characters' sight.
-## `health`: what the rulesets say players see of a creature's health
-## (HealthShown): a monster's marks left out for a player where they see
-## nothing of it, and its hit points (`hp`: [current, max]) on its token for
-## everyone where they see them exactly.
-static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool, health: Array = []) -> Dictionary:
+## `known`: what the rulesets say the players know of a creature no player
+## owns (Knowledge): its health — its marks left out for a player where they
+## see nothing of it, its hit points (`hp`: [current, max]) on its token for
+## everyone where they see them exactly; its name — "a creature" to a player
+## until the DM reveals it, labelled "?" (or a number, of several), the DM's
+## told the label the players see it by (`player_label`) and whether they
+## know its name (`name_known`); its conditions.
+static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool, known: Array = []) -> Dictionary:
 	var e := state.encounter
 	var sc := e.scene(scene_id)
 	if sc.is_empty():
@@ -38,14 +41,25 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	var eyes := _eyes(state, scene_id, player_id, gm)
 	var sight: Dictionary = Vision.of(state, scene_id, eyes) if (fog or gm) else {"polygons": [], "cells": [], "los": [], "dark": []}
 	# labels worked out over every token, the hidden ones too: a player sees
-	# the GW2 the DM calls out, whatever else they can't see
+	# the GW2 the DM calls out, whatever else they can't see — but a creature
+	# whose name the players don't know, "?" or a number of the ones they see
 	var labels := TokenLabels.of_scene(state.tokens(scene_id), state)
+	var unnamed := Knowledge.player_labels(state.tokens(scene_id), e.actors, known)
 	var tokens := []
 	for tk in state.tokens(scene_id):
 		if not gm and not shows(state, tk, player_id, fog, sight.polygons):
 			continue
-		var out := token_out(state, tk, gm, health)
+		var out := token_out(state, tk, gm, known)
 		out.label = str(labels.get(str(tk.id), out.get("label", "")))
+		if unnamed.has(str(tk.id)):
+			if gm:
+				out.player_label = str(unnamed[str(tk.id)])
+				out.name_known = false
+			else:
+				Knowledge.unname(out, str(unnamed[str(tk.id)]))
+		elif gm and Knowledge.names_hidden(known) and Knowledge.unowned(tk, e.actors) and not Encounter.is_object(tk):
+			# its name revealed to the players: the DM may keep it again
+			out.name_known = true
 		tokens.append(out)
 	var lvl := state.effective_level(scene_id)
 	var regions := {}
@@ -129,18 +143,21 @@ static func _eyes(state: EncounterState, scene_id: String, player_id: String, gm
 
 ## A token as a web client draws it; the DM also learns whether it is
 ## hidden. An object also brings its own light, which it is drawn glowing in.
-## A creature no player owns shows of its health what `health` says
-## (HealthShown): its marks left out of a player's, its hit points on
-## everyone's where they're shown exactly.
-static func token_out(state: EncounterState, tk: Dictionary, gm: bool, health: Array = []) -> Dictionary:
+## A creature no player owns shows what `known` says the players know of it
+## (Knowledge): its health's marks and its conditions' tags left out of a
+## player's, its hit points on everyone's where they're shown exactly. (Its
+## name is the scene's to say: build.)
+static func token_out(state: EncounterState, tk: Dictionary, gm: bool, known: Array = []) -> Dictionary:
 	var out := {}
 	for k in ["id", "name", "pos", "size", "color", "label", "art", "owner", "actor", "rot", "tags", "elevation"]:
 		if tk.has(k) and tk[k] != null:
 			out[k] = JsonDoc.deep(tk[k])
-	if not health.is_empty() and HealthShown.unowned(tk, state.encounter.actors):
+	if not known.is_empty() and Knowledge.unowned(tk, state.encounter.actors):
 		if not gm and out.get("tags") is Array:
-			out.tags = HealthShown.player_tags(out.tags, health)
-		var hp := HealthShown.shown_hp(state.encounter.resources, str(tk.get("actor", "")), health)
+			var a: Dictionary = state.encounter.actors.get(str(tk.actor), {})
+			var fx := Knowledge.condition_keys(state.encounter.effects, tk, known) if not Knowledge.conditions_known(a, known) else {}
+			out.tags = Knowledge.player_tags(out.tags, known, fx)
+		var hp := Knowledge.shown_hp(state.encounter.resources, str(tk.get("actor", "")), known)
 		if not hp.is_empty():
 			out.hp = hp
 	if Encounter.is_object(tk) and tk.get("light") is Dictionary and not (tk.light as Dictionary).is_empty():

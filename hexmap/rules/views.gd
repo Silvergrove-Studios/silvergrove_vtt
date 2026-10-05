@@ -59,9 +59,10 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 				if str(kind).begins_with("entry:"):
 					out.cards[str(kind).substr(6)] = {"plugin": pid, "schema": p.views[kind]}
 			out.actions[pid] = JsonDoc.deep(p.actions)
-	# actors (a creature no player owns shows a player of its health what the
-	# rulesets say: HealthShown)
-	var health := kernel.health_policies() if role != ROLE_GM else []
+	# actors (a creature no player owns shows a player what the rulesets say
+	# the players know of it — its health, its name, its conditions: Knowledge)
+	var known := kernel.knowledge_policies()
+	var health := known if role != ROLE_GM else []
 	var ids := e.actors.keys()
 	ids.sort()
 	for aid in ids:
@@ -80,13 +81,13 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 				effects.append(JsonDoc.deep(fx))
 		pa.effects = effects
 		pa.resources = _resources(kernel, str(aid))
-		if not health.is_empty() and not mine and str(a.get("owner", "")) == "" and str(a.get("kind", "")) != "pc":
-			HealthShown.filter_actor(pa, health)
 		pa.tokens = []
 		for sc in e.scenes:
 			for tk in sc.tokens:
 				if str(tk.get("actor", "")) == str(aid) and (role == ROLE_GM or not bool(tk.get("hidden", false))):
 					pa.tokens.append({"id": str(tk.id), "scene": str(sc.id), "name": str(tk.get("name", ""))})
+		if not health.is_empty() and not mine and Knowledge.unowned_actor(a):
+			Knowledge.filter_actor(pa, a, health)
 		if host != null and (mine or role == ROLE_GM):
 			for pid in plugin_ids:
 				var p: PluginHost.Plugin = host.plugins[pid]
@@ -140,7 +141,9 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 			var p: PluginHost.Plugin = host.plugins[pid]
 			if p.views.has("status"):
 				out.status.append({"plugin": pid, "schema": p.views["status"], "data": status_data(kernel, out, pid, player_id, role)})
-	return out
+	# the rulesets' words as this viewer reads them: a creature named, or its
+	# conditions told, as far as they know it; who rolled at whom (Knowledge)
+	return Knowledge.for_viewer(out, e.actors, known, role == ROLE_GM)
 
 
 ## A log entry as a viewer with `role` receives it. Its `dm` block — what the

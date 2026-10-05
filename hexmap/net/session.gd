@@ -122,5 +122,6 @@ func turn_summary() -> String:
 			var who := ", ".join(names)
 			if mine:
 				return "Your turn: %s (round %d)" % [who, int(turns.get("round", 1))]
-			return "%s's turn (round %d)" % [who, int(turns.get("round", 1))]
+			# (a creature whose name the players don't know is "a creature": the sentence's capital)
+			return "%s's turn (round %d)" % [who.left(1).to_upper() + who.substr(1), int(turns.get("round", 1))]
 	return ""

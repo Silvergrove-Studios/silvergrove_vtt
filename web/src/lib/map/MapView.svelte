@@ -107,13 +107,17 @@
   // where the table's tools work: this map's grid, the scene, the tokens this
   // screen shows (a ruler never snaps to one it doesn't), its zoom
   const where = $derived<Where | null>(withTools && prep && map ? { grid: prep.grid, scene, map, tokens, scale: cam.scale } : null);
-  // the table's shared marks on this scene; the one being made here drawn from here
+  // the table's shared marks: the DM seeing as a player, the ones that player
+  // is sent (not those over what they can't see; a creature they don't know
+  // unnamed), else this screen's own
+  const shownMarks = $derived(seeAs && game.previewMarks ? game.previewMarks : game.marks);
+  // the shared marks on this scene; the one being made here drawn from here
   const sceneMarks = $derived.by((): Dict[] => {
     if (!withTools || !scene?.id) return [];
     const sid = String(scene.id);
-    const out = Object.values(game.marks).filter((m) => String(m.scene ?? '') === sid);
+    const out = Object.values(shownMarks).filter((m) => String(m.scene ?? '') === sid);
     const d = tools.draft;
-    if (d && String(d.scene ?? '') === sid) {
+    if (d && !seeAs && String(d.scene ?? '') === sid) {
       const echo = game.marks[String(d.id)];
       const me = game.players.find((p) => String(p.id) === game.me);
       const mine: Dict = { name: echo?.name ?? (game.role === 'dm' ? 'DM' : String(me?.name ?? '')), color: echo?.color ?? (game.role === 'dm' ? '#ffffff' : String(me?.color ?? '#ffffff')), owner: game.role === 'dm' ? 'gm' : game.me, ...$state.snapshot(d) };
@@ -607,7 +611,7 @@
     }}
   ></canvas>
   {#if withTools && scene?.id && map}
-    <MapTools {where} {gm} hidden={picking !== ''} />
+    <MapTools {where} {gm} hidden={picking !== ''} marks={shownMarks} />
   {/if}
   {#if !map || !scene?.id}
     <div class="empty">{scene?.id ? 'The map is on its way…' : 'Nothing is on the table yet.'}</div>

@@ -315,6 +315,11 @@ func op(intent: Dictionary) -> String:
 				if intent.has(k):
 					changes[k] = str(intent[k])
 			return ctx.commands.run({"t": "actor.set", "id": str(intent.get("actor", "")), "changes": changes}, "Notes")
+		# a creature's name told to the players, or kept from them again: "Reveal
+		# its name" on its token or stat block, "Reveal all" in the fight (its
+		# actor's audience.name: Knowledge), one step of the Table's undo
+		"reveal_names":
+			return reveal_names(Array(intent.get("actors", [])) if intent.get("actors") is Array else [str(intent.get("actor", ""))], intent.get("known", true) != false)
 		"folder":
 			return _folder(intent)
 		"rules_setting":
@@ -365,6 +370,28 @@ func op(intent: Dictionary) -> String:
 			ctx.campaign_changed.emit()
 			return ""
 	return "unknown DM operation '%s'" % str(intent.get("op", ""))
+
+
+## The names of creatures no player owns (`ids`, actors) told to the players
+## (`known`), or kept from them again: one step. "" or why not.
+func reveal_names(ids: Array, known := true) -> String:
+	var e := win.ctx.encounter()
+	var events := []
+	var names := []
+	for id in ids:
+		var a := e.actor(str(id))
+		if a.is_empty() or not Knowledge.unowned_actor(a):
+			continue
+		var aud: Variant = a.get("audience")
+		var was := aud is Dictionary and str((aud as Dictionary).get("name", "")) == "all"
+		if was == known:
+			continue
+		events.append({"t": "actor.set", "id": str(id), "changes": {"audience/name": "all" if known else null}})
+		names.append(str(a.get("name", id)))
+	if events.is_empty():
+		return "" if not ids.is_empty() else "whose name?"
+	var label := ("Reveal " if known else "Keep hidden: ") + (", ".join(PackedStringArray(names)) if names.size() <= 3 else "%d names" % names.size())
+	return win.ctx.commands.run_all(events, label)
 
 
 ## A token for a thing or a person with no stat block (a cart, a villager):

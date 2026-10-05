@@ -403,6 +403,10 @@ func bank(e: Encounter, encounter_path := "") -> Dictionary:
 		j.erase("caused")
 		j.session = session
 		j.encounter = e.name
+		# (the rulesets' words as the DM reads them: the journal is the DM's book)
+		for k in ["text", "title", "rule"]:
+			if j.get(k) is String:
+				j[k] = Knowledge.plain(j[k])
 		journal.append(j)
 		summary.journal += 1
 	if encounter_path != "":

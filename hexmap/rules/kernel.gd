@@ -85,12 +85,13 @@ func unregister_ruleset(id: String) -> void:
 	rederive_all()
 
 
-## What the loaded rulesets say of their creatures' health and what players
-## see of it (hm.ui.health: HealthShown), from the plugins over this kernel
-## now (a reload's, after a Rules setting changed); [] with none.
-func health_policies() -> Array:
+## What the loaded rulesets say the players know of their creatures — their
+## health, names and conditions (hm.ui.knowledge: Knowledge) — from the
+## plugins over this kernel now (a reload's, after a Rules setting changed);
+## [] with none.
+func knowledge_policies() -> Array:
 	var host: PluginHost = plugin_host.get_ref() if plugin_host != null else null
-	return host.health_policies() if host != null else []
+	return host.knowledge_policies() if host != null else []
 
 
 ## Everything a trigger ends: effects and regions alike.
@@ -463,6 +464,11 @@ func roll(spec: Variant, ctx: Dictionary = {}, label := "Roll", reason: Dictiona
 	result = after.result
 	var entry := {"id": rid, "kind": "roll", "label": label, "spec": s, "result": result, "draw": result.draw,
 		"actor": str(ctx.get("actor", "")), "audience": str(result.get("visibility", "all"))}
+	# the creature it was rolled at (an attack's, its damage's): a screen says
+	# whom, by the name it knows (Knowledge.name_roll)
+	var aimed := _aimed_at(ctx.get("target"))
+	if aimed != "":
+		entry.target = aimed
 	if after.get("dm") is Dictionary and not (after.dm as Dictionary).is_empty():
 		entry.dm = JsonDoc.deep(after.dm)
 	var why := log.record({"t": "log.add", "entry": entry}, label, reason, str(entry.audience))
@@ -516,6 +522,16 @@ func effects_on_actor(actor_id: String) -> Array:
 			if str(tk.get("actor", "")) == actor_id:
 				out.append_array(Effects.on(state, "token:" + str(tk.id)))
 	return out
+
+
+## The actor a roll's `ctx.target` names — an actor id, "actor:<id>",
+## "token:<id>" — or "" (a place, an area, several, nothing).
+func _aimed_at(t: Variant) -> String:
+	if not (t is String) or str(t) == "":
+		return ""
+	var s := str(t)
+	var aid := actor_of_ref(s) if s.begins_with("token:") or s.begins_with("actor:") else s
+	return aid if state.encounter.actors.has(aid) else ""
 
 
 ## The actor a ref resolves to ("" for the encounter or an unlinked token).

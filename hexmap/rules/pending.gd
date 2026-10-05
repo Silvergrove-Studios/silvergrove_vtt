@@ -71,7 +71,8 @@ func open_prompt(request: Dictionary, by: String, continuation: Callable, contex
 	# what everyone is told the table waits on ("a reaction (Ilvara)"): every
 	# viewer's projection lists it under `waiting`, the DM's with a way to go on
 	if str(opts.get("public", "")).strip_edges() != "":
-		rec.public = str(opts.public).strip_edges().left(120)
+		# (120 characters as they read: a creature's name marked whole, Knowledge)
+		rec.public = Knowledge.cut(str(opts.public).strip_edges(), 120)
 	if rec.to == "":
 		rec.to = "gm"
 	var why := kernel.commit([{"t": "pending.open", "kind": "prompts", "record": rec}], "Prompt", {"by": by}, "owner:" + rec.to if rec.to != "gm" else "gm")

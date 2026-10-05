@@ -222,5 +222,7 @@ describe('the DM’s marks and the list', () => {
     expect(markLine(pv, look).catches).toEqual(['Sela', 'Goblin 1']);
     // a screen without the goblin (hidden from it) never names it
     expect(markLine(pv, { ...look, tokens: [tokens[0]] }).catches).toEqual(['Sela']);
+    // nor one whose name it doesn't know: "a creature", as the table sends it
+    expect(markLine(pv, { ...look, tokens: [tokens[0], { ...tokens[1], name: 'a creature', label: '?', unknown: true }] }).catches).toEqual(['Sela', 'a creature']);
   });
 });
