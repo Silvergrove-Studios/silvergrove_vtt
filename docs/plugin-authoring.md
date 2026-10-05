@@ -883,6 +883,22 @@ taken off — the cast's own path and its checks (range, slots, the turn).
 Give no `cast` where the app doesn't cast (a level where the players tick
 their slots by hand): the preview is still shown.
 
+**What the DM does on a template.** An action registered with `target =
+"template"` is the DM's on a template (or a preview) on the map: the DM's
+screens offer it by its `label` (and `hint`) — on the web DM screen in the
+template's banner and on each template's row of the marks list, on the
+Table in the Template tool's options — whatever the level, and send it as
+the DM's (`ctx.gm`) with `caught` (the token ids of the creatures it
+catches, as the DM's screen lays it: `hm.map.template`), `label` (the
+template's words: "20-ft circle", "Fireball, 20-ft sphere") and `scene`.
+The ruleset asks the DM the rest (`hm.prompt("gm", …)`) and does it:
+
+```lua
+hm.actions.register("area_damage", { label = "Damage those caught", target = "template",
+  hint = "Its damage rolled once, a save asked of each",
+  run = function(ctx) … end })
+```
+
 **The marks on the wire** (since protocol 3; `hexmap/net/protocol.gd`):
 
 | client → host | |

@@ -9,7 +9,9 @@
   pinned, and — where the app casts — Cast here. The list says every mark on
   the map in words, with who each template would catch of the creatures
   this screen shows; the DM may take anyone's off, and keep their own to
-  themselves (Only me).
+  themselves (Only me). On the DM's screen a template or a preview offers
+  what the rules do on one (Damage those caught: a ruleset's action with
+  `target: "template"`), on the creatures it catches.
 -->
 <script lang="ts">
   import { game, type Dict } from '../game.svelte';
@@ -24,6 +26,7 @@
     clearMine,
     done,
     myOwner,
+    onTemplate,
     pinMark,
     removeMark,
     reshape,
@@ -31,6 +34,7 @@
     startRuler,
     startTemplate,
     stop,
+    templateActions,
     togglePin,
     tools,
     turn,
@@ -49,6 +53,8 @@
   const look = $derived(where ? { grid: where.grid, rule: ruleOf(where.scene), noGrid: gridless(where.map), tokens: where.tokens } : null);
   const draftWords = $derived(tools.draft && look ? markText(tools.draft, look, game.marks[String(tools.draft.id)]) : '');
   const draftCatches = $derived(tools.draft && where && (tools.mode === 'template' || tools.mode === 'preview') ? catches(tools.draft, where).map(catchName) : []);
+  // what the rules do on a template (Damage those caught): the DM's, on the creatures it catches
+  const acts = $derived(gm ? templateActions(game.view) : []);
   const SHAPES: [string, string][] = [
     ['circle', 'Circle'],
     ['cone', 'Cone'],
@@ -131,6 +137,10 @@
               <button type="button" class="quiet" aria-label="Turn left" title="Turn it {TURN_STEP}° (or drag its round handle)" onclick={() => turn(-TURN_STEP)}>⟲</button>
               <button type="button" class="quiet" aria-label="Turn right" title="Turn it {TURN_STEP}° (or drag its round handle)" onclick={() => turn(TURN_STEP)}>⟳</button>
             {/if}
+            {#each acts as act (act.plugin + '/' + act.action)}
+              <!-- (the DM's: the rules ask what it deals, then roll and ask the saves as the table does) -->
+              <button type="button" class="quiet" disabled={!draftCatches.length} title={act.hint || 'On the creatures it catches'} onclick={() => where && tools.draft && onTemplate(tools.draft, where, act)}>{act.label}</button>
+            {/each}
             <button type="button" class="quiet" aria-pressed={!!tools.draft.pinned} title="A pinned mark stays till it’s taken off" onclick={togglePin}>{tools.draft.pinned ? 'Unpin' : 'Pin'}</button>
             {#if tools.mode === 'preview' && tools.preview?.cast && where}
               <!-- (a spell is cast; an ability — a breath, Turn Undead — used) -->
@@ -157,6 +167,11 @@
                 <strong>{line.who}</strong>: {line.what}{m.pinned ? ' (pinned)' : ''}{#if gm && m.private}<span class="dim"> · only you</span>{/if}
                 {#if m.kind === 'template' || m.kind === 'preview'}<span class="dim catches"> · {catchWords(line.catches)}</span>{/if}
               </span>
+              {#if (m.kind === 'template' || m.kind === 'preview') && where}
+                {#each acts as act (act.plugin + '/' + act.action)}
+                  <button type="button" class="quiet" disabled={!line.catches.length} title={act.hint || 'On the creatures it catches'} aria-label={`${act.label}: ${line.who}’s ${line.what}`} onclick={() => where && onTemplate(m as Dict, where, act)}>{act.label}</button>
+                {/each}
+              {/if}
               {#if String(m.owner ?? '') === owner}
                 <button type="button" class="quiet" onclick={() => pinMark(m as Dict)}>{m.pinned ? 'Unpin' : 'Pin'}</button>
               {/if}

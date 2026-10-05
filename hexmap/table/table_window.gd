@@ -91,6 +91,11 @@ var _layout_save := Timer.new()
 var _native_menus := NativeMenuMirror.new()
 var _last_menu := [-1, -1]
 var _token_form: PropertyForm
+## The template tool's options: its shape and size, and the buttons for the
+## DM's template (Take it off; a ruleset's Damage those caught).
+var _template_box: HBoxContainer
+var _template_form: PropertyForm
+var _template_buttons: HBoxContainer
 ## The campaign picker shown over the dock while no campaign is open.
 var _picker: Control
 ## What this window shows while a game runs: the game is running, the DM's
@@ -461,7 +466,9 @@ func _sync_chrome() -> void:
 	if _tools_row != null:
 		_tools_row.visible = tools
 	if _opts_panel != null:
-		_opts_panel.visible = tools and _tool_name == "token"
+		_opts_panel.visible = tools and _tool_name in ["token", "template"]
+		_token_form.visible = _tool_name == "token"
+		_template_box.visible = _tool_name == "template"
 	_update_banner()
 	_update_session_bar()
 
@@ -1093,7 +1100,92 @@ func _build_tool_options() -> Control:
 						ctx.token_owner = str(p.id)
 		view.canvas.overlay.queue_redraw())
 	tool_options.add_child(_token_form)
+	tool_options.add_child(_build_template_options())
 	return tool_options
+
+
+## The template tool's options: a circle, a cone, a line or a cube, its size
+## (and a line's width) in feet; Take it off; and what the rulesets do on a
+## template, the DM's (GmIntents.template_actions: Damage those caught).
+func _build_template_options() -> Control:
+	_template_box = HBoxContainer.new()
+	_template_box.name = "TemplateOptions"
+	_template_box.add_theme_constant_override("separation", 8)
+	_template_form = PropertyForm.new()
+	_template_form.name = "TemplateForm"
+	_template_form.columns = 6
+	_template_form.build([
+		{"key": "type", "label": "Shape", "type": "enum", "options": [{"id": "circle", "name": "Circle"}, {"id": "cone", "name": "Cone"}, {"id": "line", "name": "Line"}, {"id": "square", "name": "Cube"}]},
+		{"key": "feet", "label": "Size", "type": "int", "min": 1, "max": 5000, "suffix": "ft", "tooltip": "A circle's radius, a cone's or a line's length, a cube's side"},
+		{"key": "width", "label": "Width", "type": "int", "min": 1, "max": 5000, "suffix": "ft", "tooltip": "A line's width"},
+	], {"type": ctx.template_type, "feet": int(ctx.template_feet), "width": int(ctx.template_width_feet)})
+	_template_form.value_changed.connect(func(k: String, v: Variant) -> void:
+		match k:
+			"type": ctx.template_type = str(v)
+			"feet": ctx.template_feet = float(v)
+			"width": ctx.template_width_feet = float(v)
+		_template_width_shown()
+		if view.tool is TableTools.TemplateTool:
+			(view.tool as TableTools.TemplateTool).reshape())
+	_template_box.add_child(_template_form)
+	_template_buttons = HBoxContainer.new()
+	_template_buttons.name = "TemplateButtons"
+	_template_box.add_child(_template_buttons)
+	ctx.template_changed.connect(_refresh_template_buttons)
+	ctx.rules_reloaded.connect(_refresh_template_buttons)
+	# (its time up, or taken off from a screen: nothing left to act on)
+	ctx.marks.removed.connect(func(id: String, _m: Dictionary) -> void:
+		if id == ctx.template_mark:
+			ctx.template_mark = ""
+			_refresh_template_buttons())
+	_template_width_shown()
+	_refresh_template_buttons()
+	return _template_box
+
+
+## A line's width, shown only for a line.
+func _template_width_shown() -> void:
+	var ctl := _template_form.control("width")
+	if ctl == null:
+		return
+	var line := ctx.template_type == "line"
+	ctl.visible = line
+	_template_form.get_child(ctl.get_index() - 1).visible = line
+
+
+## The DM's template's buttons: Take it off, and each of the rulesets'
+## (a template on the map to act on, or they wait for one).
+func _refresh_template_buttons() -> void:
+	if _template_buttons == null:
+		return
+	for c in _template_buttons.get_children():
+		_template_buttons.remove_child(c)
+		c.queue_free()
+	var m: Dictionary = ctx.marks.marks.get(ctx.template_mark, {})
+	var off := Button.new()
+	off.name = "TakeItOff"
+	off.text = "Take it off"
+	off.disabled = m.is_empty()
+	off.tooltip_text = "Take your template off the map (Esc)"
+	off.pressed.connect(func() -> void:
+		if view.tool is TableTools.TemplateTool:
+			(view.tool as TableTools.TemplateTool).take_off()
+		else:
+			ctx.marks.remove("gm", ctx.template_mark, true)
+			ctx.template_mark = ""
+			_refresh_template_buttons())
+	_template_buttons.add_child(off)
+	for act in GmIntents.template_actions(ctx):
+		var b := Button.new()
+		b.name = "Act_" + str(act.action)
+		b.text = str(act.label)
+		b.disabled = m.is_empty()
+		b.tooltip_text = (str(act.hint) + "\n" if str(act.hint) != "" else "") + "On the creatures your template catches (put one down first)."
+		b.pressed.connect(func() -> void:
+			var why := GmIntents.on_template(ctx, ctx.marks.marks.get(ctx.template_mark, {}), act)
+			if why != "":
+				ctx.say(why))
+		_template_buttons.add_child(b)
 
 
 func _refresh_token_owner_options() -> void:

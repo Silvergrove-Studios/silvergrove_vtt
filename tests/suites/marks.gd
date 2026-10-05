@@ -178,6 +178,104 @@ func test_walk_over_rough_ground() -> void:
 	k.map.measure_rules.clear()
 
 
+## The Table's Template tool, as the web screens' is: a circle, a cone, a line
+## or a cube of any size in feet, put down on a cell, moved, turned with [ ]
+## or its handle, changed by the tool options, taken off; and a ruleset's
+## action on a template (target "template": Damage those caught) offered to
+## the DM and sent as theirs with the creatures it catches.
+func test_the_template_tool_on_the_table() -> void:
+	var ctx := _table_ctx()
+	var sid := ctx.scene_id
+	var mods := {"shift": false, "ctrl": false, "alt": false}
+	var g := ctx.map().grid
+	var tool := TableTools.make("template", ctx) as TableTools.TemplateTool
+	tool.activate()
+	var at := g.cell_center(g.offset_to_axial(9, 5))
+	tool.press(at, MOUSE_BUTTON_LEFT, mods)
+	var held: Array = ctx.marks.of_scene(sid).filter(func(m: Dictionary) -> bool: return str(m.kind) == "template")
+	check(held.size() == 1 and bool(held[0].live) and str(held[0].owner) == "gm" and str(held[0].shape.type) == "circle" and is_equal_approx(float(held[0].shape.size), 4.0) and str(held[0].label) == "20-ft circle",
+		"a click puts down a 20-ft circle, four cells round, the DM's: %s" % [held])
+	check(ctx.template_mark == str(held[0].id) and Marks.point(held[0]).distance_to(at) < 0.01, "on the cell's middle; the tool options act on it")
+	tool.release(at, MOUSE_BUTTON_LEFT, mods)
+	check(not bool(ctx.marks.marks[ctx.template_mark].live), "let go: it lingers")
+	# dragged: it moves
+	var to := g.cell_center(g.offset_to_axial(11, 6))
+	tool.press(at, MOUSE_BUTTON_LEFT, mods)
+	tool.drag(to + Vector2(0.1, 0.1), MOUSE_BUTTON_LEFT, mods)
+	tool.release(to, MOUSE_BUTTON_LEFT, mods)
+	check(Marks.point(ctx.marks.marks[ctx.template_mark]).distance_to(to) < 0.01 and ctx.marks.of_scene(sid).size() == 1, "dragged to another cell: the same template, there")
+	# the options: a 15-ft cone, turned by [ ] and by its handle
+	ctx.template_type = "cone"
+	ctx.template_feet = 15.0
+	tool.reshape()
+	var m: Dictionary = ctx.marks.marks[ctx.template_mark]
+	check(str(m.shape.type) == "cone" and is_equal_approx(float(m.shape.size), 3.0) and str(m.label) == "15-ft cone", "the options make it a 15-ft cone: %s" % [m.shape])
+	var ev := InputEventKey.new()
+	ev.pressed = true
+	ev.keycode = KEY_BRACKETRIGHT
+	check(tool.key(ev) and is_equal_approx(float(ctx.marks.marks[ctx.template_mark].direction), 15.0), "] turns it 15°")
+	var k := tool.knob(ctx.marks.marks[ctx.template_mark])
+	check(k != Vector2.INF and k.distance_to(to) > 2.9, "its handle at its far end: %s" % k)
+	tool.press(k, MOUSE_BUTTON_LEFT, mods)
+	tool.drag(to + Vector2(0, 3), MOUSE_BUTTON_LEFT, mods)
+	tool.release(to + Vector2(0, 3), MOUSE_BUTTON_LEFT, mods)
+	check(absf(float(ctx.marks.marks[ctx.template_mark].direction) - 90.0) < 0.5, "its handle dragged south: it faces south (%s)" % ctx.marks.marks[ctx.template_mark].direction)
+	# a 30-ft line, 10 ft wide; a 20-ft cube on the corner between four cells
+	ctx.template_type = "line"
+	ctx.template_feet = 30.0
+	ctx.template_width_feet = 10.0
+	tool.reshape()
+	m = ctx.marks.marks[ctx.template_mark]
+	check(str(m.label) == "30-ft line" and is_equal_approx(float(m.shape.size), 6.0) and is_equal_approx(float(m.shape.width), 2.0), "a 30-ft line, 10 ft wide: %s" % [m.shape])
+	ctx.template_type = "square"
+	ctx.template_feet = 20.0
+	tool.reshape()
+	m = ctx.marks.marks[ctx.template_mark]
+	var c := g.snap_to_center(Marks.point(m) - Vector2(0.5, 0.5))
+	check(str(m.label) == "20-ft cube" and Marks.point(m).distance_to(c + Vector2(0.5, 0.5)) < 0.01, "a 20-ft cube stands on the corner between four cells: %s" % [m.points])
+	# Esc takes it off
+	ev.keycode = KEY_ESCAPE
+	check(tool.key(ev) and ctx.template_mark == "" and ctx.marks.of_scene(sid).is_empty(), "Esc takes it off")
+	# a ruleset's action on a template: offered, and sent as the DM's with whom it catches
+	check(GmIntents.template_actions(ctx).is_empty(), "no ruleset's: nothing offered")
+	if not PluginHost.available():
+		ctx.canvas.free()
+		skip("no Lua runtime in this build")
+		return
+	var why := ctx.host.load_source({"id": "t.areas", "version": "1", "api": 1, "name": "Areas", "capabilities": ["actions", "log"]}, [["main.lua", """
+		local hm = hexmap
+		hm.actions.register("boom", { label = "Damage those caught", target = "template", hint = "Its damage on each",
+			run = function(ctx)
+				hm.log("caught " .. table.concat(ctx.caught or {}, ",") .. " by " .. tostring(ctx.label) .. (ctx.gm and ", the DM's" or ""), "gm")
+				return true
+			end })
+		hm.actions.register("other", { label = "Not this", target = "token", run = function(ctx) return true end })
+	"""]])
+	check(why == "", "the plugin loads: %s" % why)
+	var acts := GmIntents.template_actions(ctx)
+	check(acts.size() == 1 and str(acts[0].label) == "Damage those caught" and str(acts[0].plugin) == "t.areas" and str(acts[0].action) == "boom", "a template's actions, theirs alone: %s" % [acts])
+	var goblin: Dictionary = ctx.state.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Goblin")[0]
+	ctx.template_type = "circle"
+	ctx.template_feet = 5.0
+	tool = TableTools.make("template", ctx) as TableTools.TemplateTool
+	tool.activate()
+	tool.press(Vision.token_pos(goblin), MOUSE_BUTTON_LEFT, mods)
+	tool.release(Vision.token_pos(goblin), MOUSE_BUTTON_LEFT, mods)
+	var before := ctx.state.encounter.log.size()
+	check(GmIntents.on_template(ctx, ctx.marks.marks[ctx.template_mark], acts[0]) == "", "Damage those caught on it")
+	var said := str(ctx.state.encounter.log[-1].get("text", "")) if ctx.state.encounter.log.size() > before else ""
+	var fighter: Dictionary = ctx.state.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Ana's fighter")[0]
+	check(said.begins_with("caught ") and said.contains(str(goblin.id)) and not said.contains(str(fighter.id)) and said.ends_with("by 5-ft circle, the DM's"),
+		"sent with the goblin it catches (not Ana's fighter, far off), its words, as the DM's: %s" % said)
+	ev.keycode = KEY_ESCAPE
+	tool.key(ev)
+	check(GmIntents.on_template(ctx, {}, acts[0]).contains("template"), "no template: said")
+	tool.press(g.cell_center(g.offset_to_axial(0, 0)), MOUSE_BUTTON_LEFT, mods)
+	check(GmIntents.on_template(ctx, ctx.marks.marks[ctx.template_mark], acts[0]) == "the template catches nobody", "over nobody: said")
+	ctx.marks.clear("gm", "all", true)
+	ctx.canvas.free()
+
+
 ## A template mark's cells, as the rules lay them (MapQuery.template through
 ## Measure.template_spec) — the same cases the web screens' own test lays
 ## (web/tests/template.test.ts), so a preview covers what its cast would.

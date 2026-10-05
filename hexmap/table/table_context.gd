@@ -73,6 +73,16 @@ var token_art := ""
 var snap_tokens := true
 ## Fog brush radius in cells.
 var fog_brush := 1
+## The template tool's shape: circle | cone | line | square (a cube), its size
+## in feet (a circle's radius, a cone's or a line's length, a cube's side) and
+## a line's width in feet — turned into the map's cells by its scale.
+var template_type := "circle"
+var template_feet := 20.0
+var template_width_feet := 5.0
+## The DM's template from the Table that the template tool is on (its mark's
+## id, "" for none): what the tool options' buttons act on.
+var template_mark := ""
+signal template_changed
 ## The pick in flight: {kind: token | cell | area, area: {shape, …},
 ## from: token id | "", label, on_done: Callable(target)}; empty when none.
 var pick: Dictionary = {}

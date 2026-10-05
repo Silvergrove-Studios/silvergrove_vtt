@@ -17,7 +17,7 @@ vi.mock('../src/lib/game.svelte', () => ({
 
 import { Grid } from '../src/lib/grid';
 import { game } from '../src/lib/game.svelte';
-import { SEND_MS, abort, castHere, clearMine, done, drag, hover, ping, press, release, removeMark, startPing, startPreview, startRuler, startTemplate, stop, togglePin, tools, turn, type Where } from '../src/lib/map/tools.svelte';
+import { SEND_MS, abort, castHere, clearMine, done, drag, hover, onTemplate, ping, press, release, removeMark, startPing, startPreview, startRuler, startTemplate, stop, templateActions, togglePin, tools, turn, type Where } from '../src/lib/map/tools.svelte';
 import { markLine, placeLabel, rulerMeasure } from '../src/lib/map/marks';
 
 const grid = new Grid({ shape: 'square', columns: 20, rows: 14, distance: 5, units: 'ft' });
@@ -172,6 +172,29 @@ describe('a template, a ping, a preview', () => {
   it('a preview from a caster who isn’t on the map says so', () => {
     startPreview({ kind: 'preview', actor: 'a_nobody', area: { from: 'self', type: 'cone', size: 3, label: 'x' } }, where);
     expect(tools.mode).toBe('');
+  });
+});
+
+describe('what the rules do on a template (Damage those caught)', () => {
+  const view = {
+    actions: {
+      zz: { other: { label: 'Other', target: 'token' } },
+      rules: { cast: { label: 'Cast', target: 'area' }, area_damage: { label: 'Damage those caught', target: 'template', hint: 'Its damage on each' } },
+    },
+  };
+  it('the rulesets’ actions that take a template, theirs alone', () => {
+    expect(templateActions(view)).toEqual([{ plugin: 'rules', action: 'area_damage', label: 'Damage those caught', hint: 'Its damage on each' }]);
+    expect(templateActions({})).toEqual([]);
+    expect(templateActions(null)).toEqual([]);
+  });
+  it('sent as an action with the creatures the template catches here, and its words', async () => {
+    const act = templateActions(view)[0];
+    const m = { kind: 'template', label: '20-ft circle', points: [[8.5, 5.5]], shape: { type: 'circle', size: 1, origin: 'center', include_self: true } };
+    expect(await onTemplate(m, where, act)).toBe(true);
+    expect(h.submitted[0]).toEqual({ kind: 'action', plugin: 'rules', action: 'area_damage', ctx: { scene: 's1', caught: ['t_gob'], label: '20-ft circle' } });
+    // over nobody: nothing sent
+    expect(await onTemplate({ ...m, points: [[1.5, 12.5]] }, where, act)).toBe(false);
+    expect(h.submitted.length).toBe(1);
   });
 });
 

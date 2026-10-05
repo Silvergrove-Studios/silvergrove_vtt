@@ -345,6 +345,43 @@ export function catches(m: Dict, w: Where): Dict[] {
   return caught(w.grid, shape, placement(m, w), w.tokens, String(m.token ?? ''));
 }
 
+/** What a ruleset does on a template: an action it registered with `target: "template"`. */
+export interface TemplateAction {
+  plugin: string;
+  action: string;
+  label: string;
+  hint: string;
+}
+
+/** What the loaded rulesets do on a template (Damage those caught), the DM's,
+ *  in a steady order: from the rules' view's actions. */
+export function templateActions(view: Dict | null | undefined): TemplateAction[] {
+  const out: TemplateAction[] = [];
+  const all = (view?.actions ?? {}) as Dict;
+  for (const plugin of Object.keys(all).sort()) {
+    const actions = all[plugin];
+    if (!actions || typeof actions !== 'object') continue;
+    for (const name of Object.keys(actions).sort()) {
+      const spec = actions[name] as Dict | undefined;
+      if (spec && spec.target === 'template') out.push({ plugin, action: name, label: String(spec.label ?? name), hint: String(spec.hint ?? '') });
+    }
+  }
+  return out;
+}
+
+/** A ruleset's action on a template or a preview on the map (Damage those
+ *  caught), as the DM's: sent with the creatures it catches here — the DM's
+ *  screen shows them all — and its words; the ruleset asks the DM the rest. */
+export async function onTemplate(m: Dict, w: Where, act: TemplateAction): Promise<boolean> {
+  const caught = catches(m, w).map((t) => String(t.id));
+  if (!caught.length) {
+    notice('The template catches nobody', 'error');
+    return false;
+  }
+  const r = await submit({ kind: 'action', plugin: act.plugin, action: act.action, ctx: { scene: String(w.scene.id ?? ''), caught, label: String(m.label ?? '') } });
+  return r.ok;
+}
+
 /** Cast here: the preview's spell (or power) cast where it is and as it faces,
  *  through the cast's own path and checks. Once taken, the preview goes. */
 export async function castHere(w: Where): Promise<void> {

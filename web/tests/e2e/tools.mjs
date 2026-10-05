@@ -7,8 +7,12 @@
 // its label ("Sela: Fireball, 20-ft sphere"), and each says who it would
 // catch — Ben's only the creatures he can see, the DM's the hidden goblin
 // too; Ben measures from Brakka with the ruler and Ana sees it ("Brakka: …
-// ft"); the DM pings by a right-click and both players see it; the DM clears
-// everyone's marks. Screenshots of each step.
+// ft"); the DM pings by a right-click and both players see it; the DM puts a
+// template on the goblins and deals Damage those caught (the DM's card: a
+// fire trap, DC 40): their saves are rolled, it lands, and Ben's chat says
+// so without the hidden goblin; a template on Sela puts her save on a card on
+// Ana's phone — nothing rolled for her — and it lands once she rolls; the DM
+// clears everyone's marks. Screenshots of each step.
 //
 //   node tests/e2e/tools.mjs <host.json> <out dir>
 //
@@ -259,6 +263,92 @@ ok = ok && (await step('the DM pings by a right-click: both players see it', asy
   const benPings = (await marksOn(ben)).filter((m) => m.kind === 'ping');
   expect(benPings.length === 1, `Ben hears of the one ping, not the one over the hidden goblin: ${benPings.length}`);
   await shot(dm, 'dm_pings');
+}));
+
+// A creature's hit points as a page knows them.
+const hpOf = (page, id) =>
+  page.evaluate((tid) => {
+    const g = window.hexmap.game;
+    const t = (g.scene.tokens ?? []).find((x) => x.id === tid);
+    const a = t ? g.view.actors?.[t.actor] : null;
+    return a?.resources?.srd5e?.hp?.current ?? null;
+  }, id);
+
+/** The DM's template put on a creature, a circle of `feet`, and its Damage those caught: the DM's card filled and rolled. */
+async function damageThoseCaught(onId, feet, name, dice) {
+  await dm.getByRole('button', { name: 'Template' }).click();
+  const banner = dm.getByRole('group', { name: 'Template' });
+  await banner.getByText('Tap where it goes').waitFor({ timeout: 4000 });
+  await banner.getByRole('spinbutton', { name: 'Radius in feet' }).fill(String(feet));
+  await banner.getByRole('spinbutton', { name: 'Radius in feet' }).dispatchEvent('change');
+  const at = await screenOf(dm, onId);
+  await dm.mouse.click(at.x, at.y);
+  await banner.getByText(/catches \d+:/).waitFor({ timeout: 4000 });
+  await banner.getByRole('button', { name: 'Damage those caught' }).click();
+  const card = dm.getByRole('dialog', { name: 'Damage those caught' });
+  await card.waitFor({ timeout: 6000 });
+  await card.getByRole('textbox', { name: /^What it is/ }).fill(name);
+  await card.getByRole('textbox', { name: /^Damage: dice/ }).fill(dice);
+  await card.getByRole('combobox', { name: 'Damage type' }).selectOption({ label: 'Fire' });
+  await card.getByRole('spinbutton', { name: 'Its DC' }).fill('40');
+  await shot(dm, `dm_${name.toLowerCase().replace(/[^a-z]+/g, '_')}_card`);
+  await card.getByRole('button', { name: 'Roll it' }).click();
+  await card.waitFor({ state: 'detached', timeout: 8000 });
+  await banner.getByRole('button', { name: 'Done' }).click();
+}
+
+ok = ok && (await step('the DM puts a template on the goblins: Damage those caught rolls their saves and it lands; Ben never reads of the hidden goblin', async () => {
+  const before = await hpOf(dm, seen.id);
+  expect(typeof before === 'number', 'the DM sees the goblin’s hit points');
+  await damageThoseCaught(seen.id, 10, 'Fire trap', '3');
+  await dm.waitForFunction(([tid, hp]) => {
+    const g = window.hexmap.game;
+    const t = (g.scene.tokens ?? []).find((x) => x.id === tid);
+    return g.view.actors?.[t?.actor]?.resources?.srd5e?.hp?.current === hp - 3;
+  }, [seen.id, before], { timeout: 8000 });
+  const lineOn = (page) => page.evaluate(() => (window.hexmap.game.view.log ?? []).map((e) => String(e.text ?? '')).find((t) => t.startsWith('Fire trap (')) ?? '');
+  await ben.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => String(e.text ?? '').startsWith('Fire trap (')), null, { timeout: 8000 });
+  const bens = await lineOn(ben);
+  expect(bens.includes('Fire trap (3 fire; a Dexterity save, DC 40, half on a success)') && bens.includes(`${seen.name}, fails the save, 3 fire damage`), `Ben reads what it did: ${bens}`);
+  expect(!(await ben.evaluate(() => JSON.stringify(window.hexmap.game.view.log ?? []))).includes(hidden.name), 'Ben’s log never names the hidden goblin');
+  await shot(ben, 'ben_reads_the_trap');
+}));
+
+ok = ok && (await step('on Sela: her save is Ana’s, on a card on her phone; she rolls it, and it lands', async () => {
+  const sela = await dm.evaluate(() => (window.hexmap.game.scene.tokens ?? []).find((t) => t.name === 'Sela')?.id ?? '');
+  expect(sela, 'no Sela on the DM’s map');
+  const before = await hpOf(dm, sela);
+  // (the fire trap may have caught her too: its save waits on her card as well)
+  const trap = await dm.evaluate(() => (window.hexmap.game.view.log ?? []).map((e) => String(e.text ?? '')).find((t) => t.startsWith('Fire trap (')) ?? '');
+  const owed = 2 + (trap.includes('Sela, rolls their own Dexterity save') ? 3 : 0);
+  await damageThoseCaught(sela, 5, 'Hot coals', '2');
+  // nothing rolled for her: the card is on her phone (it opens by itself, or from its pill)
+  const card = ana.getByRole('dialog', { name: 'The DM asks' });
+  const pill = ana.getByRole('button', { name: /^The DM asks you to roll/ });
+  await card.or(pill).first().waitFor({ timeout: 8000 });
+  if (!(await card.count())) await pill.click();
+  await card.waitFor({ timeout: 5000 });
+  await dm.waitForTimeout(400);
+  expect((await hpOf(dm, sela)) === before, 'nothing landed before she rolled');
+  await shot(ana, 'ana_her_save_card');
+  // each card's Roll is hers (one at a time, as they come: the next from its pill)
+  const cards = owed > 2 ? 2 : 1;
+  for (let i = 0; i < cards; i++) {
+    await card.or(pill).first().waitFor({ timeout: 8000 });
+    if (!(await card.count())) await pill.click();
+    await card.waitFor({ timeout: 5000 });
+    await ana.waitForTimeout(700);
+    const rolls = () => dm.evaluate(() => (window.hexmap.game.view.log ?? []).filter((e) => /^Sela's Dexterity save against /.test(String(e.text ?? ''))).length);
+    const had = await rolls();
+    await card.getByRole('button', { name: /^Roll a Dexterity save/ }).click();
+    await dm.waitForFunction((n) => (window.hexmap.game.view.log ?? []).filter((e) => /^Sela's Dexterity save against /.test(String(e.text ?? ''))).length > n, had, { timeout: 8000 });
+  }
+  await dm.waitForFunction(([tid, hp]) => {
+    const g = window.hexmap.game;
+    const t = (g.scene.tokens ?? []).find((x) => x.id === tid);
+    return g.view.actors?.[t?.actor]?.resources?.srd5e?.hp?.current === hp;
+  }, [sela, before - owed], { timeout: 8000 });
+  await shot(ana, 'ana_rolled_her_save');
 }));
 
 ok = ok && (await step('the DM clears everyone’s marks', async () => {

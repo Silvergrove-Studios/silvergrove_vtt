@@ -105,7 +105,12 @@ sphere"), and say who it would catch — Ben's only the creatures he can
 see, the DM's the hidden goblin too; Ben measures from Brakka with the
 ruler and Ana's phone shows it as his laptop does; the DM pings by a
 right-click (both players see it, and not a second ping over the hidden
-goblin), then clears everyone's marks.
+goblin); the DM puts a template on the goblins and deals Damage those
+caught from its banner (the DM's card: a fire trap, DC 40) — their saves
+rolled, it lands, Ben's chat saying so without the hidden goblin — and a
+template on Sela puts her save on a card on Ana's phone, nothing rolled for
+her until she rolls it; then the DM clears everyone's marks. (On a package
+built on the rules being tried, as for rulings.mjs.)
 
 `tests/e2e/reactions.mjs <host.json> <out>` (host with `--party --wizard
 --seed 12`: Ana plays Sela, a wizard with Shield prepared, and the dice

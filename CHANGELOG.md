@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **The Table's Template tool, and what the rules do on a template.** The
+  Table has the Template the web screens have (A): a circle, a cone, a line
+  or a cube of any size in feet (its tool options), put down on a cell,
+  dragged, turned by its handle or [ ], pinned (P), taken off (Esc) — for
+  everyone to see with who it catches. A ruleset's action with `target =
+  "template"` is the DM's on a template or a preview: offered by its label
+  in the Template tool's options and, on the web DM screen, in the
+  template's banner and its row of the marks list, and sent with the
+  creatures it catches (`caught`) and its words (`label`) — a ruleset's
+  "Damage those caught", at every level.
 - **A ruler's walk priced as a move.** A ruleset says what ground of a
   kind costs to walk (`hm.map.measure`'s `costs`: difficult ground at
   double, by a region's tags or the art's), and a ruler's walk pays it on

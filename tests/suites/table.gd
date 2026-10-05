@@ -360,6 +360,14 @@ func test_table_window() -> void:
 	ev.pressed = true
 	win._unhandled_key_input(ev)
 	check(win.view.tool is TableTools.TokenTool and win._opts_panel.visible and win._tools_row.visible, "T picks the token tool and shows the tools and its options, in the world too")
+	# the template tool: its shape and size in the options, a line's width only for a line
+	ev.keycode = KEY_A
+	win._unhandled_key_input(ev)
+	check(win.view.tool is TableTools.TemplateTool and win._opts_panel.visible and win._template_box.visible and not win._token_form.visible, "A picks the template tool, its options in place of the token's")
+	check(not win._template_form.control("width").visible and (win._template_buttons.get_node("TakeItOff") as Button).disabled, "a circle has no width; nothing to take off yet")
+	(win._template_form.control("type") as OptionButton).select(2)
+	(win._template_form.control("type") as OptionButton).item_selected.emit(2)
+	check(win.ctx.template_type == "line" and win._template_form.control("width").visible, "a line: its width shown")
 	ev.keycode = KEY_ESCAPE
 	win._unhandled_key_input(ev)
 	check(win.view.tool is TableTools.SelectTool and not win._opts_panel.visible and (win._tools_row.visible == (win.ctx.mode != "world")), "Esc back to select: in the world the tools go again")
