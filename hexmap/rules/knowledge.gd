@@ -184,9 +184,15 @@ static func conditions_known(a: Dictionary, policies: Array) -> bool:
 ## What a screen knows, for its marks: (aspect, actor id) -> bool. The DM's
 ## (`gm`) knows everything.
 static func knower(actors: Dictionary, policies: Array, gm: bool) -> Callable:
-	if gm or not (names_hidden(policies) or conditions_hidden(policies)):
+	if gm:
 		return func(_aspect: String, _aid: String) -> bool: return true
+	var hidden := names_hidden(policies) or conditions_hidden(policies)
 	return func(aspect: String, aid: String) -> bool:
+		# words only the DM reads (hm.known.dm): never a player's
+		if aspect == "dm":
+			return false
+		if not hidden:
+			return true
 		var a: Dictionary = actors.get(aid, {})
 		if aspect == "cond":
 			return conditions_known(a, policies)

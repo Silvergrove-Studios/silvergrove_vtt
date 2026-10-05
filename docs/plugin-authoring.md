@@ -486,8 +486,10 @@ the paths its `audience.fields` marks `owner` or `gm`; any other actor is
 GM-only except the paths marked `all`, and is listed to players only when
 `audience.visible` is `"all"`. Effects, tracks and log entries carry an
 `audience` of `"all"`, `"gm"` or `"owner:<player>"`. This plugin's
-encounter `state` is shown to everyone: keep secrets on GM-only actors
-or in `gm`-audience records.
+encounter `state` is shown to everyone but its `gm` part
+(`hm.state.set("encounter", "", { ["gm/initiative/" .. id] = 17 })`),
+which only the DM's screens are sent: keep secrets there, on GM-only
+actors, or in `gm`-audience records.
 
 **What the players know.** What players know of a creature no player
 owns — its health, its name, its conditions — is often the DM's to
@@ -544,6 +546,7 @@ sent — the words for those who know them, other words for those who don't
 ```lua
 hm.known.name(actor_id, "the Goblin", "a creature")      -- its name: "a creature" to those who don't know it
 hm.known.conditions(actor_id, ", Frightened")            -- its conditions: nothing to those who don't see them
+hm.known.dm(" (DC 15)", "")                              -- words only the DM reads, whatever the players know
 hm.known.plain(text)                                     -- text as the DM reads it, the marks undone
 ```
 

@@ -183,7 +183,7 @@ static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, play
 		"resources": res, "effects": effects, "effect_keys": keys, "tokens": pa.get("tokens", []),
 		"turns": JsonDoc.deep(kernel.state.encounter.turns) if role == ROLE_GM else Knowledge.player_turns(kernel.state.encounter.turns, kernel.state.encounter.doc, kernel.knowledge_policies()),
 		"clock": JsonDoc.deep(kernel.state.encounter.clock),
-		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {})), "party": party_of(kernel, str(pa.id))}
+		"state": plugin_state(kernel, plugin, role), "party": party_of(kernel, str(pa.id))}
 
 
 ## The rest of the party, for a sheet (what to hand something to): the
@@ -195,6 +195,17 @@ static func party_of(kernel: RulesKernel, except: String) -> Array:
 		if str(aid) != except and str(a.get("kind", "")) in ["pc", "companion"]:
 			out.append({"id": str(aid), "name": str(a.get("name", ""))})
 	out.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return str(x.name).naturalnocasecmp_to(str(y.name)) < 0)
+	return out
+
+
+## A ruleset's state in the encounter as a viewer is sent it: whole for the
+## DM; without its `gm` part for anyone else (what a ruleset keeps there — a
+## monster's initiative, a DC the DM keeps, the fight's budget — never reaches
+## a player's device).
+static func plugin_state(kernel: RulesKernel, plugin: String, role: String) -> Dictionary:
+	var out: Dictionary = JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {}))
+	if role != ROLE_GM:
+		out.erase("gm")
 	return out
 
 
@@ -216,7 +227,7 @@ static func status_data(kernel: RulesKernel, projection: Dictionary, plugin: Str
 	# character only to a player without one)
 	return {"me": player_id, "mine": mine, "role": role, "turns": projection.turns, "clock": projection.clock, "actors": actors, "tracks": tracks,
 		"prompts": projection.prompts, "rolls": projection.rolls, "log": projection.log, "scene": str(kernel.state.encounter.active_scene_id),
-		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {}))}
+		"state": plugin_state(kernel, plugin, role)}
 
 
 ## An actor's ext or derived block with the fields this audience may not

@@ -169,6 +169,12 @@ end
 function hm.known.conditions(actor_id, words, unknown)
 	return MARK_A .. hm.known.plain(words) .. MARK_S .. "cond " .. tostring(actor_id) .. " " .. hm.known.plain(unknown or "") .. MARK_E
 end
+-- words only the DM reads, whatever the players know of anyone (a DC kept from
+-- them, a monster's AC, a hidden roll's number, a defence they haven't learned):
+-- a player's screen reads `unknown` instead (nothing, by default)
+function hm.known.dm(words, unknown)
+	return MARK_A .. hm.known.plain(words) .. MARK_S .. "dm - " .. hm.known.plain(unknown or "") .. MARK_E
+end
 
 -- ------------------------------------------------------------------ map --
 -- Questions to the map, and the few things a ruleset may put on it. A

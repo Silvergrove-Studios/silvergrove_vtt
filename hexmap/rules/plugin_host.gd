@@ -1570,7 +1570,11 @@ class Bridge:
 		return test_dispatch_of(plugin_id, action, ctx, answers)
 
 	func test_dispatch_of(plugin: String, action: String, ctx: Variant, answers: Variant) -> Variant:
-		var pc := _h().dispatch(str(plugin), str(action), PluginHost._as_dict(ctx))
+		# (a test's own: what a screen can never send, HostSession drops it)
+		var c := PluginHost._as_dict(ctx)
+		if not c.has("__test"):
+			c["__test"] = true
+		var pc := _h().dispatch(str(plugin), str(action), c)
 		var list: Array = answers if answers is Array else []
 		var i := 0
 		while pc.status == PluginCall.PENDING and i < list.size():

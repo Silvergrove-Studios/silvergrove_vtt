@@ -885,8 +885,12 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 					return why_t
 				ctx = ctx.duplicate()
 				ctx.scene = sc
-			# who sent it, from the connection — never from the wire
+			# who sent it, from the connection — never from the wire; nor anything
+			# the host alone may say (keys beginning "__": a plugin test's own)
 			ctx = ctx.duplicate()
+			for k in ctx.keys():
+				if str(k).begins_with("__"):
+					ctx.erase(k)
 			ctx.player = "" if gm else pid
 			ctx.gm = gm
 			var pc := plugins.dispatch(plugin, action, ctx)

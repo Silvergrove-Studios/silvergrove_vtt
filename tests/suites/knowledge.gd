@@ -206,6 +206,60 @@ func test_marks_in_words() -> void:
 	check(str(v.a[0]) == "A creature hits Wren." and str(v.a[1].b) == "A creature" and str(v.schema.text) == name, "a value walked, a schema passed by")
 
 
+## Words only the DM reads (hm.known.dm: a DC kept, a monster's AC, a hidden
+## roll's number): a player reads the stand-in whatever else they know, even
+## where no ruleset keeps anything from them; the DM reads the words. A
+## ruleset's state has a part of the DM's own (`gm`) that never reaches a
+## player; and a screen can't send what only the host may say (keys "__").
+func test_words_and_state_only_the_dm_has() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, """
+local hm = hexmap
+hm.actions.register('say', { label = 'Say', target = '', run = function(ctx)
+	hm.log('Wren makes the save' .. hm.known.dm(' (DC 15)') .. ' against the ' .. hm.known.dm('AC 17 ', '') .. 'wall.', 'all')
+	hm.commit(hm.state.set('encounter', '', { seen = 1, ['gm/initiative/a_gob'] = 17 }), 'state')
+	hm.log('the test flag ' .. tostring(ctx.__test) .. ', ' .. tostring(ctx.__other), 'all')
+	return true
+end })
+""") == "", "loaded: a ruleset that hides nothing of its creatures")
+	var line := Knowledge.mark("dm", "-", " (DC 15)")
+	var everyone := Knowledge.knower(st.encounter.actors, [], false)
+	check(Knowledge.render("Wren makes the save" + line + ".", everyone) == "Wren makes the save.", "a player reads nothing of it, nothing else kept: %s" % Knowledge.render("Wren makes the save" + line + ".", everyone))
+	check(Knowledge.render("Wren makes the save" + line + ".", Knowledge.knower(st.encounter.actors, [], true), true) == "Wren makes the save (DC 15).", "the DM reads it")
+	check(Knowledge.render(Knowledge.mark("dm", "-", "17", "?"), everyone) == "?", "or its stand-in")
+	_setup(kernel, sid)
+	var host := HostSession.new(st, PackLibrary.new())
+	host.kernel = kernel
+	host.plugins = plugins
+	host.dm_token = "sesame"
+	host.dm_state_source = func() -> Dictionary: return {}
+	check(host.start(0, false, 0) == OK, "hosting")
+	var ana := Web.WebClient.new(host.port)
+	_pump(host, [ana], func() -> bool: return ana.open())
+	ana.send({"t": "hello", "version": Protocol.VERSION, "name": "phone", "web": true})
+	ana.send({"t": "join", "role": "player", "player": ANA})
+	check(_pump(host, [ana], func() -> bool: return not ana.last("joined").is_empty()), "Ana joined")
+	ana.send({"t": "intent", "intent": {"kind": "action", "plugin": "t.known", "action": "say", "ctx": {"__test": true, "__other": "x"}}, "req": "s1"})
+	check(_pump(host, [ana], func() -> bool: return _note(ana.last("view").get("view", {}), "the test flag") != ""), "her action ran")
+	var view: Dictionary = ana.last("view").view
+	check(_note(view, "the test flag") == "the test flag nil, nil", "keys beginning __ never come from a screen: %s" % _note(view, "the test flag"))
+	check(_note(view, "Wren makes") == "Wren makes the save against the wall.", "her log: no DC, no AC: %s" % _note(view, "Wren makes"))
+	var raw := JSON.stringify(ana.inbox)
+	check(not raw.contains("DC 15") and not raw.contains("AC 17"), "nothing she was sent says them")
+	var mine := Views.plugin_state(kernel, "t.known", Views.ROLE_PLAYER)
+	var dms := Views.plugin_state(kernel, "t.known", Views.ROLE_GM)
+	check(int(mine.get("seen", 0)) == 1 and not mine.has("gm"), "a player's view of its state: without its gm part: %s" % [mine])
+	check(int(dms.get("gm", {}).get("initiative", {}).get("a_gob", 0)) == 17, "the DM's: whole")
+	check(not raw.contains("\"initiative\""), "nor did any message carry it")
+	host.stop()
+
+
 ## Names hidden: a creature no player owns is "a creature" on a player's
 ## screens, "?" alone or numbered among those they see (the DM's hidden ones
 ## not counted), until the DM reveals it; the party's and things keep theirs;
