@@ -61,7 +61,7 @@ function table(over: Partial<Registry> = {}): Registry {
     house_rules: '',
     levels: [
       { id: 'bookkeeping', title: 'Bookkeeping', tagline: 'A shared sheet and tracker', lines: ['a', 'b', 'c'] },
-      { id: 'rolling', title: 'Rolling help', tagline: 'Actions roll; nothing is applied', lines: ['a', 'b', 'c'] },
+      { id: 'rolling', title: 'Rolling help', tagline: 'Actions roll; the DM applies them', lines: ['a', 'b', 'c'] },
       { id: 'assisted', title: 'Assisted', tagline: 'The app proposes; the DM approves', lines: ['a', 'b', 'c'] },
       { id: 'automated', title: 'Automated', tagline: 'The app runs the rules', lines: ['a', 'b', 'c'] },
     ],

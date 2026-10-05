@@ -67,6 +67,11 @@
   the roll is still its roller's). The order moves on from the turn that
   ended as the order stands then: a creature its own turn's end killed no
   longer took the next one's turn with it.
+- **Rolling help says what it does.** Its card in the walkthrough and Table
+  settings: tap an attack or a spell and it rolls with every bonus counted
+  and shows the numbers; nothing lands on anyone by itself (the DM applies
+  the number shown); no cards and no checks — a choice goes in the form you
+  press, reach and reactions are the table's.
 
 - **A creature's initiative kept with its rolls.** A ruleset that keeps its
   creatures' rolls from the players says so (`hm.ui.knowledge`'s `rolls`),

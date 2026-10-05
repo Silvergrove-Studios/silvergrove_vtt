@@ -1294,7 +1294,9 @@ where the setting fits:
 - **`x-levels`** — the setting's value under each level:
   - `bookkeeping`: the app is a shared sheet and tracker; players tick
     their own slots, the DM types damage in;
-  - `rolling` (Rolling help): actions roll, nothing is applied;
+  - `rolling` (Rolling help): actions roll with their numbers and show
+    them; nothing lands on another creature by itself (the DM applies
+    the number shown), no cards are asked and no rules checked;
   - `assisted`: the app proposes outcomes and the DM approves them;
   - `automated`: the app runs the rules.
 
