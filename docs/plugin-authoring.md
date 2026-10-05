@@ -1059,7 +1059,12 @@ down — puts a token tagged `object`. It is a thing, not a creature:
   (`effect = "e_…"`) is removed when that effect is — ended, expired, its
   concentration broken (an effect `linked` to it), cleared by hand — in the
   same step, and an undo brings them back together. A ruleset that removes
-  some of them itself in the same batch is not refused.
+  some of them itself in the same batch is not refused. A spell's area that
+  stays where it was cast (a web, a cloud, a field of spikes) is a region of
+  this kind with no token: who is in it is whose space it covers
+  (`hm.map.regions_at` on the cells of their space), read as a turn starts
+  or ends and in `after_move` (a move's `from` says where it came from), so
+  a region the DM takes off the map holds no one.
 - **A region can move with a token.** A region `attached_to` a token id
   moves with it, and with a token attached to that one (a torch carried by
   a creature's token, its light's area with it): its `area` — a template
