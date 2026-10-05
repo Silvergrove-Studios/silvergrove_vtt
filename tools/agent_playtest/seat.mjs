@@ -12,7 +12,8 @@
 // failed requests, the table's socket opening and closing.
 import { chromium } from '../../web/node_modules/playwright-core/index.mjs';
 import http from 'node:http';
-import { appendFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 
 const arg = (k, d) => {
@@ -48,6 +49,23 @@ const context = await browser.newContext({
   isMobile: touch && w < 600,
   userAgent: UAS[arg('--ua', 'mac')],
 });
+// This person's device, kept in their folder: the table gives a player's seat
+// to the device that first took it (web/src/lib/game.svelte.ts deviceKey), so
+// a seat started again (a crash, a resume) must come back as the same device,
+// or its player is refused until the DM frees the seat.
+const keyFile = `${dir}/seat.device`;
+let device = existsSync(keyFile) ? readFileSync(keyFile, 'utf8').trim() : '';
+if (!/^[0-9a-f]{32}$/.test(device)) {
+  device = randomBytes(16).toString('hex');
+  writeFileSync(keyFile, device + '\n');
+}
+await context.addInitScript((key) => {
+  try {
+    if (localStorage.getItem('hexmap.device') !== key) localStorage.setItem('hexmap.device', key);
+  } catch {
+    /* no storage: the page makes its own */
+  }
+}, device);
 const events = [];
 let page;
 async function openPage() {
