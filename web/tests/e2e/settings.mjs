@@ -110,7 +110,8 @@ await step('the rules options and a house rule', async () => {
 
 await step('the summary, then Done: the table is set up at Bookkeeping', async () => {
   await walk.getByText('Step 5 of 5').waitFor({ timeout: 5000 });
-  const summary = walk.getByRole('definition').filter({ hasText: 'Bookkeeping' });
+  // (the level's own line: the sheets' setting at Bookkeeping says the word too)
+  const summary = walk.getByRole('definition').filter({ hasText: /^\s*Bookkeeping — / });
   expect((await summary.count()) === 1, 'the summary says Bookkeeping');
   await walk.getByText('Drinking a potion is a bonus action.').waitFor({ timeout: 5000 });
   await walk.getByText('Change any of this later in Table settings.').waitFor({ timeout: 5000 });
