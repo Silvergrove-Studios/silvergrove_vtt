@@ -27,6 +27,12 @@ function owned(t: Dict, me: string): boolean {
   return !!me && String(t.owner ?? '') === me;
 }
 
+/** Words with a capital to start a sentence ("a creature's turn" is "A
+ *  creature's turn": the name of one the players don't know). */
+export function capital(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
 /** What the ruleset says of a turn for these tokens (`turns.data.notes`,
  *  token id → a line: "Movement 15 of 30 ft"), the first there is, or ''. */
 export function turnNote(turns: Dict, ids: string[]): string {
@@ -62,7 +68,7 @@ export function turnSummary(scene: Dict, me: string): { text: string; mine: bool
   if (String(turns.strategy ?? 'ordered') === 'focus' && turns.running) {
     const up = currentTurnTokens(turns, tokens);
     const t = tokens.find((x) => x.id === up[0]);
-    return { text: t ? `Focus: ${t.name}` : 'Focus: the DM', mine: !!t && owned(t, me) };
+    return { text: t ? `Focus: ${capital(String(t.name ?? ''))}` : 'Focus: the DM', mine: !!t && owned(t, me) };
   }
   switch (String(turns.mode ?? 'free')) {
     case 'free':
@@ -80,7 +86,7 @@ export function turnSummary(scene: Dict, me: string): { text: string; mine: bool
         .filter((t): t is Dict => !!t);
       if (!up.length) return { text: `Round ${round}`, mine: false };
       const who = up.map((t) => String(t.name ?? '')).join(', ');
-      if (!up.some((t) => owned(t, me))) return { text: `${who}'s turn (round ${round})`, mine: false };
+      if (!up.some((t) => owned(t, me))) return { text: `${capital(who)}'s turn (round ${round})`, mine: false };
       const note = turnNote(turns, up.filter((t) => owned(t, me)).map((t) => String(t.id)));
       return note ? { text: `Your turn: ${who} (round ${round})`, mine: true, note } : { text: `Your turn: ${who} (round ${round})`, mine: true };
     }

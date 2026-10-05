@@ -273,6 +273,28 @@ function label(ctx: CanvasRenderingContext2D, l: Label, look: MarkLook, placed: 
   ctx.restore();
 }
 
+/** What a creature is called on a screen that doesn't know its name (the
+ *  Table sends it so: Knowledge). */
+export const UNKNOWN = 'a creature';
+
+/** A creature a template would catch, by name: "a creature" where this
+ *  screen doesn't know its name. */
+export function catchName(t: Dict): string {
+  return t.unknown ? UNKNOWN : String(t.name || t.label || UNKNOWN);
+}
+
+/** Who a template catches, in words: the creatures this screen knows by
+ *  name, then those it doesn't, counted ("catches 3: Wren, 2 creatures";
+ *  "catches 2 creatures"). */
+export function catchWords(names: string[]): string {
+  if (!names.length) return 'catches nobody you can see';
+  const unknown = names.filter((n) => n === UNKNOWN).length;
+  const known = names.filter((n) => n !== UNKNOWN);
+  const some = unknown === 1 ? UNKNOWN : `${unknown} creatures`;
+  if (!known.length) return `catches ${some}`;
+  return `catches ${names.length}: ${[...known, ...(unknown ? [some] : [])].join(', ')}`;
+}
+
 /** A mark in words for a list (a screen reader's, the marks panel): whose, what, and — a template — who it would catch here. */
 export function markLine(m: Dict, look: Pick<MarkLook, 'grid' | 'rule' | 'noGrid' | 'tokens'>, echo?: Dict): { who: string; what: string; catches: string[] } {
   const kind = String(m.kind ?? '');
@@ -280,6 +302,6 @@ export function markLine(m: Dict, look: Pick<MarkLook, 'grid' | 'rule' | 'noGrid
   if (kind === 'ping') return { who, what: 'a ping: look here', catches: [] };
   if (kind === 'ruler') return { who, what: `ruler: ${markText(m, look, echo)}`, catches: [] };
   const shape = m.shape as Shape | undefined;
-  const names = shape ? caught(look.grid, shape, placementOf(m, look.tokens), look.tokens, String(m.token ?? '')).map((t) => String(t.name || t.label || 'a creature')) : [];
+  const names = shape ? caught(look.grid, shape, placementOf(m, look.tokens), look.tokens, String(m.token ?? '')).map(catchName) : [];
   return { who, what: String(m.label ?? (kind === 'preview' ? 'a preview' : 'a template')), catches: names };
 }

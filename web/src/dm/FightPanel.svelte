@@ -1,12 +1,15 @@
 <!--
   The fight, beside the map: the turn order (tap one to choose it), and the
   chosen creature — hidden or seen, its stat block, its actions. An action
-  that needs a target asks for one on the map.
+  that needs a target asks for one on the map. Where the table keeps
+  monsters' names from the players, what each is to them ("a creature",
+  its label on their maps), its name revealed one by one or all at once.
 -->
 <script lang="ts">
   import View from '../lib/views/View.svelte';
   import { dmOp, game, type Dict } from '../lib/game.svelte';
   import { orderRows } from './fight';
+  import NameKnown from './NameKnown.svelte';
 
   let { selected = '', onselect, onopen }: { selected?: string; onselect: (id: string) => void; onopen: (ref: string) => void } = $props();
 
@@ -15,6 +18,8 @@
   const token = $derived(tokens.find((t) => t.id === selected));
   const actor = $derived(token?.actor ? ((game.view.actors ?? {}) as Dict)[String(token.actor)] : undefined);
   const hiddenOnes = $derived(tokens.filter((t) => t.hidden && t.actor));
+  // the creatures whose names the players don't know (one actor's tokens once)
+  const unnamed = $derived([...new Set(tokens.filter((t) => t.name_known === false && t.actor).map((t) => String(t.actor)))]);
   const scene = $derived(String(game.scene.id ?? ''));
 </script>
 
@@ -28,6 +33,7 @@
             <button type="button" class="row" class:current={r.current} class:on={r.ids.includes(selected)} onclick={() => onselect(r.ids[0] ?? '')}>
               <span class="init">{r.label}</span>
               <span class="name">{r.name}{#if r.note}<span class="note">{r.note}</span>{/if}</span>
+              {#if r.playerLabel}<span class="tag" title="What the players call it: they don't know its name">“{r.playerLabel}” to them</span>{/if}
               {#if r.hidden}<span class="tag">hidden</span>{/if}
             </button>
           </li>
@@ -41,6 +47,12 @@
       <button type="button" onclick={() => hiddenOnes.forEach((t) => dmOp('token', { scene, id: t.id, hidden: false }))}>Reveal them all</button>
     </section>
   {/if}
+  {#if unnamed.length}
+    <section class="hidden" aria-label="Names kept from the players">
+      <p class="dim">{unnamed.length === 1 ? 'One creature’s name is' : `${unnamed.length} creatures’ names are`} kept from the players: to them, “a creature”.</p>
+      <button type="button" onclick={() => dmOp('reveal_names', { actors: unnamed, known: true })}>Reveal all</button>
+    </section>
+  {/if}
   {#if token}
     <section class="chosen">
       <div class="who">
@@ -50,6 +62,7 @@
           {#if token.actor}<button type="button" class="quiet" onclick={() => onopen(`actor:${token.actor}`)}>Open the card</button>{/if}
         </div>
       </div>
+      {#if token.actor}<NameKnown actor={String(token.actor)} />{/if}
       {#if actor}
         {#each (actor.sheets as Dict[]) ?? [] as sh, i (i)}
           <View node={sh.schema} ctx={sh.data} />

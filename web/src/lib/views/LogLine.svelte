@@ -10,7 +10,11 @@
   let { entry, actors = {} }: { entry: Dict; actors?: Dict } = $props();
   const kind = $derived(String(entry.kind ?? ''));
   const r = $derived((entry.result ?? {}) as Dict);
-  const who = $derived(entry.actor ? String(actors?.[entry.actor]?.name ?? '') : '');
+  // who rolled, and at whom: named as the table says this screen knows them
+  // ("A creature" for one the players don't know), else from the view
+  const who = $derived(entry.who != null ? String(entry.who) : entry.actor ? String(actors?.[entry.actor]?.name ?? '') : '');
+  // (a spell's label says its target already: "Fire Bolt → a creature")
+  const whom = $derived(entry.whom != null && !String(entry.label ?? '').includes('→') && String(entry.whom) !== who ? String(entry.whom) : '');
   const dice = $derived(((r.dice as Dict[]) ?? []).filter((d) => d && typeof d === 'object'));
   const mod = $derived(Number(r.modifier ?? 0));
   // a natural 20 or 1 looked like any other roll (a playtest's DM announced them by hand)
@@ -32,7 +36,7 @@
   <div class="line roll">
     <div class="what">
       {#if who}<span class="who">{who}</span>{/if}
-      <span class="label">{entry.label ?? 'Roll'}</span>
+      <span class="label">{entry.label ?? 'Roll'}{#if whom}<span class="whom">{` → ${whom}`}</span>{/if}</span>
       {#if entry.audience && entry.audience !== 'all'}<span class="tag">secret</span>{/if}
     </div>
     <div class="result">

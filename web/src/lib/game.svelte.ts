@@ -44,6 +44,10 @@ export const game = $state({
   previewAs: '',
   // …and why each creature they don't see isn't there (token id → hidden | dark | walls | none)
   previewWhy: {} as Record<string, string>,
+  /** …and the marks on the map as that player is sent them (by id): the DM's
+   *  rulers and previews over what they can't see left out, a creature they
+   *  don't know unnamed. null when not seeing as anyone. */
+  previewMarks: null as Record<string, Dict> | null,
   clock: {} as Dict,
   maps: {} as Record<string, Dict>,
   packs: {} as Record<string, Dict>,
@@ -215,15 +219,19 @@ function handle(m: Msg): void {
       game.preview = (m.preview as Dict) ?? null;
       game.previewAs = String(m.preview_as ?? '');
       game.previewWhy = (m.preview_why as Record<string, string>) ?? {};
+      game.previewMarks = m.preview ? marksById(m.preview_marks) : null;
       wantMap(String(game.scene.map ?? ''));
+      break;
+    // the DM seeing as a player: their marks again, a mark put, changed or gone
+    case 'seen_marks':
+      if (game.previewAs && String(m.as ?? '') === game.previewAs) game.previewMarks = marksById(m.marks);
       break;
     case 'dm':
       game.dm = (m.state as Dict) ?? {};
       break;
     // the table's shared marks: all of them on joining, then one at a time
     case 'marks': {
-      const all: Record<string, Dict> = {};
-      for (const mk of (m.marks as Dict[]) ?? []) if (mk && typeof mk === 'object' && mk.id) all[String(mk.id)] = mk;
+      const all = marksById(m.marks);
       game.marks = all;
       for (const id of Object.keys(all)) game.marksBorn[id] ??= performance.now();
       break;
@@ -309,6 +317,13 @@ export function uploadPicture(kind: 'token' | 'picture', data: string, extra: Di
       if (uploadsWaiting.delete(req)) resolve({ why: 'The table did not answer: try again' });
     }, 45000);
   });
+}
+
+/** A list of marks by id (what a screen is told of them). */
+export function marksById(list: unknown): Record<string, Dict> {
+  const out: Record<string, Dict> = {};
+  for (const mk of (Array.isArray(list) ? list : []) as Dict[]) if (mk && typeof mk === 'object' && mk.id) out[String(mk.id)] = mk;
+  return out;
 }
 
 /** For tests: the socket drops as a phone's does (in another app, a Wi-Fi blip); the page reconnects by itself. */

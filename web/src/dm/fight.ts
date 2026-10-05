@@ -53,6 +53,8 @@ export interface OrderRow {
   hidden: boolean;
   /** what the ruleset says of its turn ("Movement 15 of 30 ft"), or '' */
   note: string;
+  /** what the players call it, where they don't know its name ("1", "?"), or '' */
+  playerLabel: string;
 }
 
 export function orderRows(scene: Dict): OrderRow[] {
@@ -72,7 +74,9 @@ export function orderRows(scene: Dict): OrderRow[] {
     if (!group && !toks.length) continue;
     const name = group ? String(turns.data?.groups?.[String(entry).slice(6)]?.label ?? labels[entry] ?? String(entry).slice(6)) : String(toks[0]?.name ?? '');
     const current = ids.some((id) => up.has(id));
-    rows.push({ entry: String(entry), ids, name, label: String(labels[entry] ?? ''), current, hidden: toks.length > 0 && toks.every((t) => t.hidden), note: current ? turnNote(turns, ids) : '' });
+    // (one the players don't know by name: the label they see it by, for the DM to call it out)
+    const unknown = !group && toks[0]?.name_known === false && !toks[0]?.hidden ? String(toks[0]?.player_label ?? '') : '';
+    rows.push({ entry: String(entry), ids, name, label: String(labels[entry] ?? ''), current, hidden: toks.length > 0 && toks.every((t) => t.hidden), note: current ? turnNote(turns, ids) : '', playerLabel: unknown });
   }
   return rows;
 }

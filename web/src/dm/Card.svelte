@@ -12,6 +12,7 @@
   import { pictureUrl } from '../lib/art';
   import AddPicture from '../common/AddPicture.svelte';
   import FightCard from './FightCard.svelte';
+  import NameKnown from './NameKnown.svelte';
   import TokenPicture from '../common/TokenPicture.svelte';
   import { cardData, cardSchema } from '../lib/views/viewlib';
   import { audienceWords, folderChoices, kindWord, layout } from './contents';
@@ -242,6 +243,7 @@
         {@render yours(String(person.notes ?? ''), 'What they want, what they know, how they talk', (v) => setActor('notes', v))}
         <button type="button" class="quiet small" onclick={() => (editing = !editing)}>{editing ? 'Done editing' : 'Edit what the players may learn'}</button>
       {/if}
+      {#if person.kind !== 'pc'}<NameKnown actor={id} />{/if}
       {#if viewActor}
         <!-- the token's picture: the DM's for anyone (the team) -->
         <section class="token">

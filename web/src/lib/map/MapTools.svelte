@@ -14,7 +14,7 @@
 <script lang="ts">
   import { game, type Dict } from '../game.svelte';
   import { gridless, ruleOf } from './measure';
-  import { markLine, markText } from './marks';
+  import { catchName, catchWords, markLine, markText } from './marks';
   import {
     TURN_STEP,
     cancel,
@@ -39,26 +39,22 @@
     type Where,
   } from './tools.svelte';
 
-  let { where, gm = false, hidden = false }: { where: Where | null; gm?: boolean; hidden?: boolean } = $props();
+  // (`marks`: the ones this screen draws — the DM seeing as a player, that player's)
+  let { where, gm = false, hidden = false, marks = undefined }: { where: Where | null; gm?: boolean; hidden?: boolean; marks?: Record<string, Dict> } = $props();
 
   const owner = $derived(myOwner());
   const sceneId = $derived(String(where?.scene?.id ?? ''));
-  const onScene = $derived(Object.values(game.marks).filter((m) => String(m.scene ?? '') === sceneId));
+  const onScene = $derived(Object.values(marks ?? game.marks).filter((m) => String(m.scene ?? '') === sceneId));
   const mineCount = $derived(onScene.filter((m) => String(m.owner ?? '') === owner).length + (tools.draft && !game.marks[String(tools.draft.id)] ? 1 : 0));
   const look = $derived(where ? { grid: where.grid, rule: ruleOf(where.scene), noGrid: gridless(where.map), tokens: where.tokens } : null);
   const draftWords = $derived(tools.draft && look ? markText(tools.draft, look, game.marks[String(tools.draft.id)]) : '');
-  const draftCatches = $derived(tools.draft && where && (tools.mode === 'template' || tools.mode === 'preview') ? catches(tools.draft, where).map((t) => String(t.name || t.label || 'a creature')) : []);
+  const draftCatches = $derived(tools.draft && where && (tools.mode === 'template' || tools.mode === 'preview') ? catches(tools.draft, where).map(catchName) : []);
   const SHAPES: [string, string][] = [
     ['circle', 'Circle'],
     ['cone', 'Cone'],
     ['line', 'Line'],
     ['square', 'Cube'],
   ];
-
-  function catchWords(names: string[]): string {
-    if (!names.length) return 'catches nobody you can see';
-    return `catches ${names.length}: ${names.join(', ')}`;
-  }
 </script>
 
 {#if !hidden}
