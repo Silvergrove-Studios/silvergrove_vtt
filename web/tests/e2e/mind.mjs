@@ -8,7 +8,11 @@
 // next she casts Burning Hands, naming two goblins from the list ("Who does
 // your Burning Hands catch?"), and nothing lands until the DM confirms it on
 // a card (Apply), though this table approves nothing else. The DM adds a
-// wolf, with no token to put down; the fight ends. Screenshots of each step.
+// wolf, with no token to put down, and a priest; on the priest's turn the DM
+// casts its Spirit Guardians, naming who is in it from the list (Brakka) on
+// its card; as Brakka's turn ends there his Wisdom save is asked on Ben's
+// screen, the turn waiting on it until Ben rolls. The fight ends.
+// Screenshots of each step.
 //
 //   node tests/e2e/mind.mjs <host.json> <out dir>
 //
@@ -93,7 +97,7 @@ async function finish() {
     console.log('\nproblems:\n  ' + problems.join('\n  '));
     process.exit(1);
   }
-  console.log(`\na fight in the theatre of the mind, its targets and its area chosen from the list, the DM confirming; ${n} screenshots in ${out}`);
+  console.log(`\na fight in the theatre of the mind, its targets and its area chosen from the list, the DM confirming; who is in a lasting area named from it, a turn waiting on a save there; ${n} screenshots in ${out}`);
 }
 
 const logWords = (page) => page.evaluate(() => (window.hexmap.game.view.log ?? []).map((e) => `${e.kind ?? ''}|${e.label ?? ''}|${e.text ?? ''}`));
@@ -262,6 +266,8 @@ ok = ok && (await step('on her next turn Ana casts Burning Hands, naming two gob
   expect(JSON.stringify(still) === JSON.stringify(hp), `something landed before the DM said so: ${JSON.stringify(hp)} → ${JSON.stringify(still)}`);
   await ana.getByText(/waits on the DM|Waiting on the DM|the DM/).first().waitFor({ timeout: 5000 }).catch(() => {});
   await shot(dm, 'dm_confirms_the_area');
+  // (a card's first moment's taps are its own: it settles)
+  await dm.waitForTimeout(700);
   await card.getByRole('button', { name: 'Apply', exact: true }).click();
   await card.waitFor({ state: 'detached', timeout: 6000 });
   await dm.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => /casts Burning Hands/.test(e.text ?? '')), null, { timeout: 8000 });
@@ -282,6 +288,67 @@ ok = ok && (await step('the DM adds a wolf to the fight: no token to put down', 
   await listOf(dm).locator('.row .name').filter({ hasText: /^Wolf/ }).waitFor({ timeout: 8000 });
   await listOf(ben).locator('.row .name').filter({ hasText: /^Wolf/ }).waitFor({ timeout: 8000 });
   await shot(dm, 'dm_wolf_joins');
+}));
+
+/** A creature's hit points as the DM's screen has them, by its actor id. */
+const hpOf = (page, aid) => page.evaluate((id) => window.hexmap.game.view.actors?.[id]?.resources?.srd5e?.hp?.current ?? null, aid);
+
+let brakka = null;
+ok = ok && (await step('the DM adds a priest; on its turn it casts Spirit Guardians from its stat block, naming who is in it from the list on its card: Brakka', async () => {
+  const join = dm.getByRole('region', { name: 'Add to the fight' });
+  await join.getByRole('searchbox', { name: 'Find a creature to add to the fight' }).fill('priest');
+  await join.locator('.found').filter({ hasText: /^Priest/ }).first().click({ timeout: 8000 });
+  await listOf(dm).locator('.row .name').filter({ hasText: /^Priest/ }).waitFor({ timeout: 8000 });
+  const all = await creatures(dm);
+  const priest = all.find((c) => /^Priest/.test(c.name));
+  brakka = all.find((c) => /^Brakka/.test(c.name));
+  expect(priest && brakka, `the priest and Brakka in the fight: ${all.map((c) => c.name).join(', ')}`);
+  await toTurnOf(priest.name);
+  // its stat block beside the list (a tap on its name): its Spells, Spirit Guardians
+  await listOf(dm).getByRole('button', { name: priest.name }).first().click();
+  const row = dm.locator('.row').filter({ hasText: /^Spirit Guardians ·/ }).first();
+  await row.getByRole('button', { name: 'Cast', exact: true }).click({ timeout: 8000 });
+  // no place for it to be: who is in it, the DM's to say, from the fight's list
+  const card = dm.getByRole('dialog', { name: 'A choice' });
+  await card.waitFor({ timeout: 8000 });
+  await card.getByText("Who's in Priest's Spirit Guardians as it's cast?", { exact: false }).first().waitFor({ timeout: 3000 });
+  expect((await card.getByRole('checkbox', { name: /Priest/ }).count()) === 0, 'its caster offered as in it');
+  await dm.waitForTimeout(700);
+  await card.getByRole('checkbox', { name: /Brakka/ }).click();
+  await shot(dm, 'dm_spirit_guardians_who');
+  await card.getByRole('button', { name: 'These', exact: true }).click();
+  await card.waitFor({ state: 'detached', timeout: 6000 });
+  await dm.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => /casts Spirit Guardians/.test(e.text ?? '') && /in it, in the theatre of the mind: Brakka/.test(e.text ?? '')), null, { timeout: 8000 });
+  // the stat block keeps it: who is in it, the DM's to change as the fight goes
+  await dm.getByRole('button', { name: "Who's in it now?" }).first().waitFor({ timeout: 5000 });
+  await ben.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => /casts Spirit Guardians/.test(e.text ?? '')), null, { timeout: 8000 });
+  await shot(dm, 'dm_spirit_guardians_cast');
+}));
+
+ok = ok && (await step('Brakka’s turn ends in it: his Wisdom save asked on Ben’s screen, the turn waiting on it; Ben rolls, and the turn goes on', async () => {
+  await toTurnOf('Brakka');
+  const hp = await hpOf(dm, brakka.actor);
+  const bar = dm.locator('.fightbar');
+  await bar.getByRole('button', { name: /Next turn/ }).click();
+  const endIt = bar.getByRole('button', { name: /^End (it|.+’s turn)$/ });
+  if (await endIt.count().catch(() => 0)) await endIt.first().click().catch(() => {});
+  const card = ben.getByRole('dialog', { name: 'Your roll' });
+  await card.waitFor({ timeout: 8000 });
+  await card.getByText(/Spirit Guardians \(its turn ends there\): a Wisdom save/).first().waitFor({ timeout: 3000 });
+  await bar.locator('.waits').filter({ hasText: /waiting on Ben: a save \(Brakka\)/ }).waitFor({ timeout: 8000 });
+  expect(await bar.getByRole('button', { name: /Next turn/ }).isDisabled(), 'Next doesn’t wait on Ben’s save');
+  expect((await hpOf(dm, brakka.actor)) === hp, 'something landed before Ben rolled');
+  await shot(ben, 'ben_spirit_guardians_save');
+  await shot(dm, 'dm_turn_waits_on_ben');
+  await ben.waitForTimeout(700);
+  await card.getByRole('button', { name: /^Roll a Wisdom save/ }).click();
+  await card.waitFor({ state: 'detached', timeout: 6000 });
+  await ben.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => /Spirit Guardians \(its turn ends there\): Brakka/.test(e.text ?? '')), null, { timeout: 8000 });
+  const line = (await logWords(ben)).find((w) => /Spirit Guardians \(its turn ends there\): Brakka/.test(w)) ?? '';
+  expect(/saves|fails the save/.test(line), `the save's line: ${line}`);
+  await bar.locator('.waits').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
+  expect(!(await bar.getByRole('button', { name: /Next turn/ }).isDisabled()), 'Next still waits');
+  await shot(ben, 'ben_after_the_save');
 }));
 
 ok = ok && (await step('the fight ends: no list, the region again', async () => {

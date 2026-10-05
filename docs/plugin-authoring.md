@@ -1387,6 +1387,15 @@ judge (declare `x-mind` for its checks), takes an area's creatures from
 `caught` (asking the caster, on a card, whom one around them catches when
 nothing named them), and keeps what that does from landing by itself:
 whom an area catches is the DM's to confirm where nothing has a place.
+What lasts has no place there either — an aura or an emanation round a
+creature, an area that stays, a thing a spell puts down — so a ruleset
+keeps who is in it as a list of its own, named from the fight's tokens on
+a card (a `choose` field: its caster's player's, the DM's to change, those
+in it now the answer's default) and again as the fight goes, and runs what
+it does at a turn's start or end on those named. A thing with no place can
+still have a token, put where a new creature goes (`hm.map.mind_pos`): it
+is far from everything, and the screens' list leaves out tokens tagged
+`object`.
 A plugin test makes one with `t.mind_scene({ {id, actor, owner, hidden}, … })`.
 
 ## Players' preferences
