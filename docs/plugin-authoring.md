@@ -129,7 +129,7 @@ Hooks in API 1:
 | hook | payload | what a handler does |
 |---|---|---|
 | `before_roll` | `{spec, ctx}` | add `spec.parts`, change `spec.expr`, veto |
-| `after_roll` | `{spec, result, ctx}` | set `result.outcome` and anything else the log should show |
+| `after_roll` | `{spec, result, ctx, id, dm}` | set `result.outcome` and anything else the log should show; `id` is the log entry the roll becomes; set `dm[hm.id]` to give the entry the DM's buttons and this ruleset's notes on it (*The log*, below) |
 | `turn_start`, `turn_end` | `{ref, actor, group, events}` | the participant gaining / losing the turn *or the focus*; `group` names the slot when it is a group's member |
 | `round_start`, `round_end` | `{round, events}` | ordered shape only |
 | `combat_end` | `{scene, round, events}` | the turns end (End turns, End the fight): put away what was the fight's own — its initiative, say — with the events the step commits; a veto keeps the turns running |
@@ -522,6 +522,7 @@ hm.dice.pending()
 | `hm.campaign()` | `{id, session}` — which campaign this session belongs to |
 | `hm.scene()` | the scene the Table shows (`""` when the encounter has none): where an action started from a panel rather than a pick on the map should act. The `status` and `gm` views' data carries it as `scene` too |
 | `hm.checkpoint.list()` | the named snapshots in the encounter (needs `state`) |
+| `hm.log_entry(id)` | a log entry — a roll with its `result` and `spec`, its `dm` block, what it `caused` — or nil (and nil for what players say among themselves) |
 | `hm.effects.on(ref [, key])` / `hm.effects.has(ref, key)` | effects on a ref (`"actor:a_1"`, `"token:t_1"`, `"encounter"`) |
 | `hm.resources.get(ref, name)` | a pool or track record, or nil |
 | `hm.settings.get(key [, default])` | a setting |
@@ -544,6 +545,7 @@ Nothing changes until it is committed. The helpers **return events**;
 | `hm.resources.mark/clear(ref, name, n)`, `hm.resources.cross(ref, name, slot [, crossed])` | track changes |
 | `hm.resources.refill(kind)` | every pool and track of this plugin whose `recharge` is `kind` |
 | `hm.state.set(scope, id, changes)` | `ext.set` (change keys may be `a/b/c` paths; `nil`… use JSON `null` semantics: a key set to a null-ish value is a removal only through the host, so prefer setting explicit values) |
+| `hm.log_set(id, changes)` | `log.set` on this plugin's part of a log entry's `dm` block (keys are paths inside it: `{ actions = {…}, ["rule/outcome"] = "miss" }`; needs `log`) |
 
 Change keys that contain `/` are paths into the record
 (`"ext/my.rules/stats/agi"`); plugin ids contain dots, so dots are
@@ -557,6 +559,58 @@ between sessions, searchable from the Table's Campaign pane.
 `hm.checkpoint.mark(name)` → id and `hm.checkpoint.restore(id)` are the
 named snapshots of the whole encounter (needs `state`); a restore is
 one undoable step.
+
+### The log: the DM's buttons, and what a roll caused
+
+A ruleset lets the DM rule on what the rules did — call a hit a miss,
+halve a damage, apply an outcome that waits — from the roll's own line of
+the log, long after (the web DM screen's Chat & rolls, the Table's Rules
+pane). Two things on a log entry make that possible, and neither reaches a
+player:
+
+- **`dm`**, by plugin id: what the DM may do with the entry and the
+  ruleset's notes on it. Only the GM's projection carries it (`Views.project`
+  takes it off every other's, and the DM's *See as* preview of a player's
+  chat too; a session's rolls are banked into the campaign without it). In
+  a ruleset's part, `actions` are the DM's buttons — `[{ id, label, hint,
+  intent }]`, each `intent` what pressing it sends (an action of the
+  ruleset's: whatever it needs to ask — a number, a creature — it asks on a
+  card of the DM's, so the screens draw buttons only) — and `waiting = true`
+  shows them under the line at once rather than behind its *Rule* button (an
+  outcome that waits for the DM). Everything else in it is the ruleset's own:
+  what the roll is to its rules, what it did.
+- **`caused`**: every step committed with `reason.roll` naming the entry
+  is kept on it by the kernel, in the same undo step — `[{ label, by, do,
+  undo }]`, `do` the events it applied (with what went with them: the
+  tokens, regions and creatures an effect took along) and `undo` the events
+  that put them back, last first. It lives in the encounter file, so a
+  correction can find what a roll did in a later session too. No screen
+  receives it.
+
+```lua
+-- the roll's buttons, given as it lands in the log
+hm.on("after_roll", function(p)
+  if p.ctx.kind == "damage" then
+    p.dm[hm.id] = { rule = { target = p.ctx.target }, actions = {
+      { id = "halve", label = "Halve it", intent = { kind = "action", plugin = hm.id, action = "ruling", ctx = { roll = p.id, how = "halve" } } } } }
+  end
+  return p
+end)
+-- what the damage did, kept with its roll (and the step itself, by the kernel)
+hm.commit({ hm.resources.set(ref, "hp", hp_after), hm.log_set(roll.id, { applied = { { actor = id, total = 9, hp = 12 } } }) },
+  "Damage", { roll = roll.id })
+-- later, the DM's ruling: read it back, put back what it took
+local e = hm.log_entry(roll.id)
+for _, step in ipairs(e.caused) do
+  for _, ev in ipairs(step.undo) do --[[ an effect.apply of what it ended, say ]] end
+end
+```
+
+`hm.log_set(id, changes)` changes this plugin's part of an entry's `dm`
+block only (a change of anything else, or of another plugin's part, is
+refused); what was rolled and said is never changed — a correction is a
+line of its own, so the table sees both. `hm.log_entry(id)` reads any entry
+but what players say among themselves.
 
 ### Bulk
 
@@ -859,7 +913,11 @@ local ans = hm.prompt(player, {
   comes without `waved`). With `late` in the default, the plugin can tell a
   player's own "no" from a deadline's or the DM's, and say which.
   The words reach every screen: they shouldn't name what a player may not
-  know (say only "a reaction" for the DM's own creatures).
+  know (say only "a reaction" for the DM's own creatures). A card to the DM
+  (`to = "gm"`: a monster's reaction, an outcome the DM approves) is in front
+  on the DM's own screen; put aside there, it waits in the DM's line of what
+  the table waits on ("Waiting on you: …") with **Open**, which brings it back,
+  and **Go on**, as a player's.
 
 An action that asks for a reaction waits on it with `hm.prompt`, one
 creature at a time (the trigger's damage waits on the Shield). A move's

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **The DM rules on any roll, from its line of the log.** A ruleset can put
+  the DM's buttons on a line of the log — Call it a miss, Halve it, Apply —
+  in the entry's `dm` block, which only the GM's screens receive: the web
+  DM screen's Chat & rolls shows them on the line in hand (its Rule
+  button), and at once under an outcome that waits for the DM; the Table's
+  Rules pane lists the log's newest lines with them. The kernel keeps on a
+  roll's entry every step committed with that roll as its reason
+  (`caused`: what each did and what undoes it, kept in the encounter file
+  and sent to no screen), so a ruleset can correct a roll long after, with
+  changes of its own: the log keeps both what happened and what the DM
+  changed. A new event, `log.set`, changes only those two, never what was
+  rolled or said; `after_roll` knows the entry the roll becomes and may
+  give it its `dm` block; `hm.log_entry` and `hm.log_set` read and change
+  entries (docs/plugin-authoring.md, *The log*). On the DM's screen, a card
+  of the DM's own put aside waits in the line of what the table waits on,
+  with Open and Go on; and a card that comes up in front after another
+  starts from its own values (a second card's amounts came up empty). A
+  journey in a real browser (`web/tests/e2e/rulings.mjs`): at a table whose
+  DM approves outcomes, a goblin's hit waits on the DM's card and the DM
+  changes it; a later hit, called a miss from its line, is healed back.
+
 - **Creatures a spell makes are creatures.** A ruleset can give a spell's
   familiar, steed, animated dead or conjured beast an actor and a token of
   its caster's player's: a target, a tab of its own in the player's

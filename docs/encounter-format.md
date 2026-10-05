@@ -324,7 +324,12 @@ below puts rules in the map or numbers on tokens; it puts them in
   pool, a shared pool). Scenes and tokens may carry `ext.<plugin>` too.
 - **log**: informational entries in order — rolls and notes — each with
   an `audience`. A roll carries its `spec`, its full `result` and the
-  `draw` it came from.
+  `draw` it came from. Any entry may carry `dm`, by plugin id: the DM's
+  buttons on it (`actions`) and a ruleset's notes on it, sent to the GM's
+  screens alone; and `caused`, the steps its roll set off (each `{label, by,
+  do, undo}`: the events applied and those that put them back), kept by the
+  kernel for every step committed with `reason.roll` naming the entry and
+  sent to no screen (docs/plugin-authoring.md, *The log*).
 - **rng**: the dice stream. `Dice.face(seed, index, sides)` is a pure
   function, so a roll records `{seed, index, count}` and moving `index`
   past it is part of applying the `log.add`; a replay reads the recorded
@@ -392,6 +397,7 @@ Events added in version 2 (all invertible, all through `apply()`):
 | `ext.set` | `scope` (`campaign` \| `encounter` \| `scene` \| `token` \| `cell`), `id` / `scene`+`id` (a `"q,r"` key for a cell), `plugin`, `changes` | `ext.set` |
 | `log.add` | `entry` (with `id`, `kind`) [, `index`] | `log.remove` |
 | `log.remove` | `id` | `log.add` at the old index |
+| `log.set` | `id`, `changes` — only an entry's `dm` block and its `caused` (paths allowed: `dm/<plugin>/rule/outcome`); what was rolled or said is never changed | `log.set` |
 | `track.add` / `track.remove` / `track.set` | `track` / `id` / `id`, `changes` | the usual |
 | `pending.open` | `kind` (`prompts` \| `rolls`), `record` | `pending.close` |
 | `pending.close` | `kind`, `id` | `pending.open` |
