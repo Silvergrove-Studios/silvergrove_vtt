@@ -463,6 +463,9 @@ func _cellar() -> HexMap:
 ## on an EncounterState, so this is also the model's smoke test.
 func _chapel_ambush(m: HexMap) -> Encounter:
 	var e := Encounter.create("Chapel Ambush")
+	# (a new encounter's dice once took their seed from the global RNG; their key is
+	# the Crypto's now — that draw taken here, so the example's ids stay as they were)
+	randi()
 	e.doc.meta.description = "The party enters the chapel at dusk; goblins wait in the dark, their chief in the crypt."
 	var st := EncounterState.new(e)
 	st.attach_map(m)
