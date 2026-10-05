@@ -1986,7 +1986,8 @@ func _installed_rulesets() -> Dictionary:
 ## Release this campaign as a package. The first time it asks where the
 ## package goes and the campaign becomes the package's working copy;
 ## after that it asks what changed, bumps the version and writes the same
-## file again, keeping a changelog.
+## file again, keeping a changelog. Each time it asks how its author
+## suggests a table runs it (release_dialog).
 func _export_package_dialog() -> void:
 	if ctx.campaign == null or ctx.campaign.path == "":
 		_info("Save the campaign first: a package is made from what is on disk.")
@@ -1994,10 +1995,7 @@ func _export_package_dialog() -> void:
 	ctx.save_campaign()
 	var src: Dictionary = ctx.campaign.doc.get("source_of", {}) if ctx.campaign.doc.get("source_of") is Dictionary else {}
 	var ask_notes := func(path: String, next: String) -> void:
-		_prompt("Release %s %s" % [ctx.campaign.name, next], "What changed in this version", "" if not src.is_empty() else "First release.", func(notes: String) -> void:
-			# a package carries what it needs: its rules and its art included
-			var r := CampaignPackage.release(ctx.campaign, notes, {"path": path, "plugin_dirs": ctx.plugin_dirs})
-			ctx.say("Released %s %s to %s" % [ctx.campaign.name, str(r.version), ProjectSettings.globalize_path(str(r.path))] if r.ok else "Could not package it: " + str(r.why)))
+		release_dialog(path, next, "" if not src.is_empty() else "First release.")
 	if not src.is_empty():
 		ask_notes.call(str(src.path), CampaignPackage.bump(str(src.get("version", "1.0.0"))))
 		return
@@ -2011,6 +2009,70 @@ func _export_package_dialog() -> void:
 		var came: Dictionary = ctx.campaign.doc.get("package", {}) if ctx.campaign.doc.get("package") is Dictionary else {}
 		ask_notes.call(path, CampaignPackage.bump(str(came.version)) if came.has("version") else "1.0.0"))
 	fd.popup_centered_ratio(0.7)
+
+
+## The release's questions: what changed in this version, and — Suggest how
+## to run it — how its author suggests a table runs it: a level, where
+## fights happen, a note. The suggestion goes in the package (package.json's
+## `recommended`: a DM starting it is offered it in the walkthrough, only a
+## suggestion) and stays on the campaign for the next release. The dialog.
+func release_dialog(path: String, version: String, notes := "") -> ConfirmationDialog:
+	var d := ConfirmationDialog.new()
+	d.name = "ReleaseDialog"
+	d.title = "Release %s %s" % [ctx.campaign.name, version]
+	d.ok_button_text = "Release"
+	d.min_size = Vector2i(520, 0)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	var what := PropertyForm.new()
+	what.name = "Notes"
+	what.build([{"key": "notes", "label": "What changed in this version", "type": "string"}], {"notes": notes})
+	box.add_child(what)
+	var head := Label.new()
+	head.text = "Suggest how to run it"
+	head.theme_type_variation = "HeaderLabel"
+	box.add_child(head)
+	var lead := Label.new()
+	lead.text = "Only a suggestion: a DM starting your adventure is offered it as they set up their table, and chooses."
+	lead.theme_type_variation = "DimLabel"
+	lead.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lead.custom_minimum_size.x = 480
+	box.add_child(lead)
+	var rec := CampaignPackage.suggestion_of(ctx.campaign)
+	var sug := PropertyForm.new()
+	sug.name = "Suggestion"
+	var levels := [{"id": "", "name": "No suggestion"}]
+	for lv in TableSettings.LEVELS:
+		levels.append({"id": lv, "name": "%s — %s" % [str(TableSettings.LEVEL_INFO[lv].title), str(TableSettings.LEVEL_INFO[lv].tagline)]})
+	var spaces := [{"id": "", "name": "No suggestion"}]
+	for s in TableSettings.SPACES:
+		spaces.append({"id": s, "name": str(TableSettings.SPACE_INFO[s].title)})
+	sug.build([
+		{"key": "level", "label": "How much the app does", "type": "enum", "options": levels},
+		{"key": "space", "label": "Where fights happen", "type": "enum", "options": spaces},
+		{"key": "note", "label": "Why, in a sentence or two", "type": "string", "tooltip": "Said with the suggestion: \"The hall's fights are short; the maze is better told.\""},
+	], {"level": str(rec.get("level", "")), "space": str(rec.get("space", "")), "note": str(rec.get("note", ""))})
+	box.add_child(sug)
+	d.add_child(box)
+	d.confirmed.connect(func() -> void:
+		var v: Dictionary = sug.get_values()
+		v.notes = str(what.get_values().get("notes", ""))
+		var r := release_with(path, v)
+		ctx.say("Released %s %s to %s" % [ctx.campaign.name, str(r.version), ProjectSettings.globalize_path(str(r.path))] if r.ok else "Could not package it: " + str(r.why)))
+	d.confirmed.connect(d.queue_free)
+	d.canceled.connect(d.queue_free)
+	d.close_requested.connect(d.queue_free)
+	add_child(d)
+	d.popup_centered()
+	return d
+
+
+## A release with the dialog's answers ({notes, level, space, note}): the
+## suggestion kept on the campaign and carried by the package. A package
+## carries what it needs: its rules and its art included.
+func release_with(path: String, values: Dictionary) -> Dictionary:
+	var rec := CampaignPackage.set_suggestion(ctx.campaign, str(values.get("level", "")), str(values.get("space", "")), str(values.get("note", "")))
+	return CampaignPackage.release(ctx.campaign, str(values.get("notes", "")), {"path": path, "plugin_dirs": ctx.plugin_dirs, "recommended": rec})
 
 
 ## A newer version of the package this campaign came from, if the library

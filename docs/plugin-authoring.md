@@ -1301,7 +1301,10 @@ A campaign package may carry its author's suggestion of how a table runs
 it (`recommended` in package.json: a level, where fights happen, answers
 as `"<plugin>/<key>": value`, a note): the walkthrough on starting it says
 "The author suggests …" and offers it, the DM choosing otherwise if they
-like (docs/campaign-packages.md).
+like (docs/campaign-packages.md). The author says it as they release it:
+the Table's release dialog asks **Suggest how to run it** (a level, where
+fights happen, a note), kept on their campaign (`meta.recommended`) for the
+next release.
 
 ### Fights in the theatre of the mind
 

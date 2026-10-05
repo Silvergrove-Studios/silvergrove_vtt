@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Suggest how to run it.** The package release dialog asks its author how
+  they suggest a table runs their adventure — a level, where fights happen,
+  a note — and the package carries it (package.json's `recommended`, which
+  the walkthrough offers a DM starting it); it opens on the last release's,
+  and "No suggestion" for both suggests nothing.
 - **The Table's Template tool, and what the rules do on a template.** The
   Table has the Template the web screens have (A): a circle, a cone, a line
   or a cube of any size in feet (its tool options), put down on a cell,
