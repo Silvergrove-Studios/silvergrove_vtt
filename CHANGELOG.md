@@ -17,6 +17,22 @@
   familiar cast on a phone, its own tab and turn, moved on the map, and
   gone when an arrow drops it to 0.
 
+- **What players see of a monster's health is the DM's.** A ruleset can
+  declare what players see of the health of a creature no player owns
+  (`hm.ui.health`): its marks (bloodied, down, dead), nothing, or its hit
+  points too. The Table filters before anything is sent — a web screen's
+  scene, a Godot client's document and the token events after it, the
+  rules' view of a creature the players see — and the DM always sees
+  everything; shown exactly, a creature's hit points are drawn under its
+  token on every screen. The rules loaded again with another answer (a
+  setting changed, from whichever screen) send every screen its scene
+  again. A pick may say a wall doesn't stop it (`walls = false`: a table
+  that doesn't check line of sight), and a test can read what a screen is
+  sent (`t.sent`). A journey in a real browser
+  (`web/tests/e2e/bookkeeping.mjs`): a DM sets the sheets to bookkeeping,
+  a player's sheet keeps counters and no Cast, and a goblin's marks leave
+  her map.
+
 - **Playtests by agents** (`tools/agent_playtest/`): a table of AI agents
   — a DM who knows only D&D and players with personalities, each in a
   browser sized like their device (a phone, a tablet, a laptop), talking
