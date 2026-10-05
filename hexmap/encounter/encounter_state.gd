@@ -22,12 +22,17 @@ const EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "sce
 	# version 2: the rules families (docs/encounter-format.md, "Version 2")
 	"actor.add", "actor.remove", "actor.set", "actor.overlay.push", "actor.overlay.pop",
 	"effect.apply", "effect.set", "effect.remove", "resource.set", "ext.set",
-	"log.add", "log.remove",
+	"log.add", "log.remove", "log.set",
 	"track.add", "track.remove", "track.set", "pending.open", "pending.close", "pending.set", "clock.set",
 	"region.add", "region.remove", "region.set", "cell.set",
 	# Phase 7: named snapshots and going back to them
 	"checkpoint.mark", "checkpoint.drop", "checkpoint.restore"]
 const PENDING_KINDS := ["prompts", "rolls"]
+## What a `log.set` may change on an entry: its `dm` block (what the DM may
+## do with it, and the rulesets' notes on it: `dm/<plugin>/…`) and `caused`
+## (the steps its roll set off, which the kernel keeps). Never what was said
+## or rolled: a correction is a line of its own.
+const LOG_SETTABLE := ["dm", "caused"]
 ## Where an `ext.set` may point. "campaign" is the campaign-scoped state
 ## this encounter carries for its campaign (docs/campaign-format.md).
 const EXT_SCOPES := ["campaign", "encounter", "scene", "token", "cell"]
@@ -396,6 +401,16 @@ func validate(ev: Dictionary) -> String:
 		"log.remove":
 			if not _log_has(str(ev.get("id", ""))):
 				return "no log entry '%s'" % str(ev.get("id", ""))
+		"log.set":
+			if not _log_has(str(ev.get("id", ""))):
+				return "no log entry '%s'" % str(ev.get("id", ""))
+			var e := _need_dict(ev, "changes")
+			if e != "":
+				return e
+			for k in ev.changes:
+				var key := str(k)
+				if not LOG_SETTABLE.has(key.get_slice("/", 0)):
+					return "log.set changes an entry's dm block and what it caused, not '%s'" % key
 		"track.add":
 			if not (ev.get("track") is Dictionary) or str(ev.track.get("id", "")) == "":
 				return "track.add needs a track with an id"
@@ -1131,6 +1146,10 @@ func apply(ev: Dictionary) -> Dictionary:
 			if entry.kind == "roll" and entry.has("draw"):
 				inv.rng_index = int(doc.rng.index)
 				doc.rng.index = int(entry.draw.index) + int(entry.draw.count)
+			what = "log"
+		"log.set":
+			var entry: Dictionary = doc.log[_log_index(str(ev.id))]
+			inv = {"t": t, "id": str(ev.id), "changes": JsonDoc.merge_paths(entry, ev.changes)}
 			what = "log"
 		"log.remove":
 			var idx := _log_index(str(ev.id))

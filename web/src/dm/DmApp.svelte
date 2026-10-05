@@ -613,7 +613,7 @@
           />
           <!-- what the table waits on (a player's reaction), over the map's top edge:
                the map never moves under a tap; the DM can go on without waiting -->
-          <div class="waitslot"><Waiting dm onanswer={(id, who) => (answering = { id, who })} /></div>
+          <div class="waitslot"><Waiting dm onanswer={(id, who) => (answering = { id, who })} {putOff} onreopen={(id) => (putOff = putOff.filter((x) => x !== id))} /></div>
           {#snippet pickBanner()}
             {#if pick}
               <PickBanner

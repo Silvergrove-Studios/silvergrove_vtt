@@ -352,6 +352,21 @@ function hm.ruling(text, opts)
 	return call(host.ruling, tostring(text), opts or {})
 end
 
+-- A log entry by id: a roll with its result, this and other plugins' `dm`
+-- blocks, and what its roll `caused` (the steps committed with reason.roll
+-- naming it: { label, by, do = {events}, undo = {events} }). nil when there
+-- is none, or when it's what players said among themselves.
+function hm.log_entry(id) return call(host.log_entry, tostring(id or "")) end
+
+-- The event that changes this plugin's part of a log entry's `dm` block (the
+-- DM's alone: what the DM may do with the entry, and the notes kept on it).
+-- Keys are paths inside it: { actions = {...}, ["rule/outcome"] = "miss" }.
+function hm.log_set(id, changes)
+	local out = {}
+	for k, v in pairs(changes or {}) do out["dm/" .. hm.id .. "/" .. tostring(k)] = v end
+	return { t = "log.set", id = tostring(id or ""), changes = out }
+end
+
 -- One thing done to many refs as one step (docs/plugin-authoring.md, "Bulk").
 hm.bulk = {}
 function hm.bulk.run(targets, op, label) return call(host.bulk_run, targets, op, label or "") end

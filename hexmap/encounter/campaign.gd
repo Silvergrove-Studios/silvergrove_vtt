@@ -383,6 +383,10 @@ func bank(e: Encounter, encounter_path := "") -> Dictionary:
 	for entry in e.log:
 		if str(entry.get("kind", "")) in ["chat", "roll"] and not have.has(str(entry.get("id", ""))):
 			var m: Dictionary = JsonDoc.deep(entry)
+			# (the session's rulings are made: a roll banked keeps what was rolled, not
+			# the DM's actions on it nor what it set off)
+			m.erase("dm")
+			m.erase("caused")
 			m.session = session
 			chat_log.append(m)
 	if chat_log.size() > CHAT_KEPT:
@@ -395,6 +399,8 @@ func bank(e: Encounter, encounter_path := "") -> Dictionary:
 		if not journal_entry(str(entry.get("id", ""))).is_empty():
 			continue
 		var j: Dictionary = JsonDoc.deep(entry)
+		j.erase("dm")
+		j.erase("caused")
 		j.session = session
 		j.encounter = e.name
 		journal.append(j)

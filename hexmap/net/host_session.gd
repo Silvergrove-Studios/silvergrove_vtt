@@ -530,7 +530,8 @@ func _chat_history(may_read: Callable) -> Array:
 			break
 		var m: Variant = hist[i]
 		if m is Dictionary and not live.has(str(m.get("id", ""))) and bool(may_read.call(str(m.get("audience", "all")))):
-			kept.append(JsonDoc.deep(m))
+			# (a session's rolls are done with: no rulings on them, nobody's notes)
+			kept.append(Views.log_entry_for(m, Views.ROLE_PLAYER))
 	kept.reverse()
 	return kept
 
@@ -545,7 +546,8 @@ func preview_chat(pid: String) -> Dictionary:
 	var log := []
 	for entry in kernel.state.encounter.log:
 		if str(entry.get("kind", "")) in ["chat", "roll", "note"] and bool(both.call(str(entry.get("audience", "all")))):
-			log.append(JsonDoc.deep(entry))
+			# (as the player reads it: without the DM's actions and notes on it)
+			log.append(Views.log_entry_for(entry, Views.ROLE_PLAYER))
 	return {"as": pid, "log": log, "chat_history": _chat_history(both)}
 
 

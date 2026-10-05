@@ -2,14 +2,17 @@
   The table's talk and its dice: every message and roll this viewer may
   read, this session's and the campaign's earlier ones, and a box to say
   something — to everyone, to the DM, or to some of the players (privately,
-  if the DM should not read it).
+  if the DM should not read it). The DM rules on any roll from here (its
+  Rule button: Call it a miss, Halve it, Reroll…), and an outcome waiting
+  for the DM shows its Apply, Change and Skip under its line.
 -->
 <script lang="ts">
   import { tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import LogLine from '../lib/views/LogLine.svelte';
-  import { chat, chatLog, dmOp, game, intent, playerName } from '../lib/game.svelte';
+  import { chat, chatLog, dmOp, game, intent, playerName, submit } from '../lib/game.svelte';
   import { TypingSignal, typingWords } from '../lib/typing';
+  import { dmActions, dmWaiting, type DmAction } from '../lib/rulings';
 
   let { compact = false }: { compact?: boolean } = $props();
 
@@ -103,11 +106,21 @@
   const pinnedLines = $derived(dm ? entries.filter((e) => pins.includes(String(e.id ?? ''))) : []);
   const canPin = $derived(dm && !preview);
 
-  // one Pin, on the line the pointer is over (or tapped, or reached with the
-  // arrow keys), not one on every line: a playtest's screen reader found 413
-  // "Pin" buttons in the chat
+  // one Pin (a line of chat) or Rule (a roll the DM may rule on), on the line
+  // the pointer is over (or tapped, or reached with the arrow keys), not one
+  // on every line: a playtest's screen reader found 413 "Pin" buttons in the chat
   let hot = $state('');
-  const pinnable = $derived(canPin ? entries.filter((e) => e.kind === 'chat' && e.id).map((e) => String(e.id)) : []);
+  // the DM's buttons on each line (a ruleset's: the DM's alone), by its id
+  const actsOf = $derived.by(() => {
+    const out = new Map<string, DmAction[]>();
+    if (!canPin) return out;
+    for (const e of entries) {
+      const acts = dmActions(e);
+      if (acts.length && e.id) out.set(String(e.id), acts);
+    }
+    return out;
+  });
+  const pinnable = $derived(canPin ? entries.filter((e) => e.id && (e.kind === 'chat' || actsOf.has(String(e.id)))).map((e) => String(e.id)) : []);
   async function arrows(e: KeyboardEvent): Promise<void> {
     if (!canPin || !['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) || !pinnable.length) return;
     e.preventDefault();
@@ -118,9 +131,21 @@
     else if (e.key === 'Home') i = 0;
     hot = pinnable[i];
     await tick();
-    const btn = list?.querySelector<HTMLButtonElement>(`[data-line="${CSS.escape(hot)}"] .pinbtn`);
+    const btn = list?.querySelector<HTMLButtonElement>(`[data-line="${CSS.escape(hot)}"] :is(.pinbtn, .rulebtn)`);
     btn?.focus();
     btn?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // the line whose rulings are open (its Rule pressed), and the button on its way
+  let ruling = $state('');
+  let acting = $state('');
+  async function act(line: string, a: DmAction): Promise<void> {
+    if (acting) return;
+    acting = `${line}/${a.plugin}/${a.id}`;
+    const r = await submit($state.snapshot(a.intent));
+    acting = '';
+    // (what it asks next, a number or who, comes as a card in front)
+    if (r.ok && ruling === line) ruling = '';
   }
   function leftList(e: FocusEvent): void {
     if (!list?.contains(e.relatedTarget as Node | null)) hot = '';
@@ -148,19 +173,37 @@
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div class="entries scroll" role="region" aria-label="Messages and rolls" tabindex="0" bind:this={list} {onscroll} onkeydown={arrows} onfocusout={leftList}>
     {#each entries as entry (entry.id ?? JSON.stringify(entry))}
-      {#if canPin && entry.kind === 'chat' && entry.id}
+      {#if canPin && entry.id && (entry.kind === 'chat' || actsOf.has(String(entry.id)))}
         {@const id = String(entry.id)}
+        {@const acts = actsOf.get(id) ?? []}
+        {@const waits = acts.length > 0 && dmWaiting(entry)}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <div
           class="line-row"
+          class:waits
           data-line={id}
           onpointerenter={(e) => e.pointerType === 'mouse' && (hot = id)}
           onpointerleave={(e) => e.pointerType === 'mouse' && hot === id && !e.currentTarget.contains(document.activeElement) && (hot = '')}
           onclick={() => (hot = id)}
         >
-          <LogLine {entry} {actors} />
-          {#if hot === id || pins.includes(id)}
+          <div class="line-main">
+            <LogLine {entry} {actors} />
+            <!-- what the DM may do with it: an outcome's at once, a roll's once Rule is pressed -->
+            {#if acts.length && (waits || ruling === id)}
+              <div class="dmacts" role="group" aria-label={waits ? 'Waiting for you' : 'Rule on it'}>
+                {#each acts as a (`${a.plugin}/${a.id}`)}
+                  <button type="button" class="quiet" title={a.hint || undefined} disabled={acting !== ''} onclick={(e) => { e.stopPropagation(); void act(id, a); }}>{a.label}</button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          {#if entry.kind === 'chat' && (hot === id || pins.includes(id))}
             <button type="button" class="quiet pinbtn" class:on={pins.includes(id)} onclick={() => pin(id)} title="Keep it above the chat until it's dealt with">{pins.includes(id) ? 'Unpin' : 'Pin'}</button>
+          {/if}
+          {#if acts.length && !waits && (hot === id || ruling === id)}
+            <button type="button" class="quiet rulebtn" class:on={ruling === id} aria-expanded={ruling === id}
+              onclick={(e) => { e.stopPropagation(); ruling = ruling === id ? '' : id; }}
+              title="Your ruling on it: the table sees the change, and the line stays">Rule</button>
           {/if}
         </div>
       {:else}
@@ -207,14 +250,32 @@
     flex: 1;
     min-width: 0;
   }
-  .pinbtn {
+  .pinbtn,
+  .rulebtn {
     flex: none;
     font-size: 0.75rem;
     padding: 2px 8px;
     min-height: 0;
   }
-  .pinbtn:not(.on) {
+  .pinbtn:not(.on),
+  .rulebtn:not(.on) {
     color: var(--muted);
+  }
+  /* the DM's buttons under a line: a ruling's, or an outcome's that waits */
+  .dmacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    padding: 0 0 6px;
+  }
+  .dmacts button {
+    font-size: 0.8rem;
+    padding: 2px 10px;
+    min-height: 26px;
+  }
+  .waits .dmacts {
+    padding-left: 8px;
+    border-left: 2px solid var(--accent);
   }
   .entries:focus-visible {
     outline: 2px solid var(--accent-soft);
