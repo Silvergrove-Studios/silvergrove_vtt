@@ -138,21 +138,17 @@ func test_initiative_kept_with_the_rolls() -> void:
 	_setup(kernel, sid)
 	var fighter := str(st.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Ana's fighter")[0].id)
 	check(kernel.commit([{"t": "turns.set", "changes": {"scene": sid, "order": [fighter, "t_gob"], "turn": 0, "round": 1,
-		"data": {"labels": {fighter: "12", "t_gob": "17", "group:g1": "Creatures 1"}, "groups": {}}}}], "Order") == "", "an order, labelled")
+		"data": {"labels": {fighter: "12", "t_gob": "17"}, "groups": {}}}}], "Order") == "", "an order, labelled")
 	var known := kernel.knowledge_policies()
 	var view := Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER)
 	var labels: Dictionary = view.turns.data.labels
-	check(not labels.has("t_gob") and str(labels.get(fighter, "")) == "12" and str(labels.get("group:g1", "")) == "Creatures 1", "Ana's view: her fighter's 12, a group's name, no 17 for the goblin: %s" % [labels])
+	check(not labels.has("t_gob") and str(labels.get(fighter, "")) == "12", "Ana's view: her fighter's 12, no 17 for the goblin: %s" % [labels])
 	check((view.turns.order as Array).has("t_gob"), "the goblin still in the order")
 	check(str(Views.project(kernel, plugins, "", Views.ROLE_GM).turns.data.labels.get("t_gob", "")) == "17", "the DM's: 17")
 	check(not WebScene.build(st, sid, ANA, false, known).turns.data.labels.has("t_gob") and str(WebScene.build(st, sid, "", true, known).turns.data.labels.get("t_gob", "")) == "17",
 		"a web screen's scene: Ana's without it, the DM's with")
 	check(not Protocol.client_document(st.encounter.doc, false, known).turns.data.labels.has("t_gob"), "a Godot client's document without")
 	check(str(st.encounter.turns.data.labels.t_gob) == "17", "the order itself untouched")
-	var ev := Knowledge.player_turns_event({"t": "turns.set", "changes": {"data/labels/t_gob": "18", "data/labels/" + fighter: "13"}}, st.encounter.doc, known)
-	check(not ev.changes.has("data/labels/t_gob") and ev.changes.has("data/labels/" + fighter), "an event setting one: the goblin's left out, hers kept")
-	ev = Knowledge.player_turns_event({"t": "turns.set", "changes": {"data": {"labels": {"t_gob": "17", fighter: "12"}}}}, st.encounter.doc, known)
-	check(not ev.changes.data.labels.has("t_gob") and ev.changes.data.labels.has(fighter), "and one setting them all")
 	check(_load(plugins, "hexmap.ui.knowledge({ rolls = 'shown' })") == "", "shown again")
 	check(str(Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER).turns.data.labels.get("t_gob", "")) == "17", "Ana's view has the goblin's 17")
 

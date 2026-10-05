@@ -173,3 +173,115 @@ end })
 	check(not raw.contains("\"draw\"") and not raw.contains("424242") and not raw.contains("31337"), "no draw, no old seed, this session's or the chat banked")
 	check(view.get("chat_history", []).size() == 1, "the banked chat came (without its draw)")
 	host.stop()
+
+
+# ----------------------------------------------------------------- order --
+
+## Ana's fighter and Ben's ranger; two goblins by her fighter, a boss beside
+## them, a lurker the DM hides and a second boss hidden with it; the chapel's
+## own four goblins revealed, out in the dark beyond the fighters' sight.
+func _fight(k: RulesKernel, sid: String) -> Dictionary:
+	var st := k.state
+	var fighter := str(st.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Ana's fighter")[0].id)
+	var ranger := str(st.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Ben's ranger")[0].id)
+	var far: Array = st.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Goblin").map(func(t: Dictionary) -> String: return str(t.id))
+	var events := [
+		{"t": "actor.add", "actor": {"id": "a_fighter", "kind": "pc", "name": "Ana's fighter", "owner": ANA}},
+		{"t": "token.set", "scene": sid, "id": fighter, "changes": {"actor": "a_fighter"}},
+		{"t": "actor.add", "actor": {"id": "a_gob", "kind": "npc", "name": "Goblin", "audience": {"visible": "all"}}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Goblin", Vector2(4.5, 6.6), {"id": "t_gob", "actor": "a_gob", "hidden": false, "tags": ["humanoid"]})},
+		{"t": "actor.add", "actor": {"id": "a_boss", "kind": "npc", "name": "Goblin Boss"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Goblin Boss", Vector2(5.0, 7.4), {"id": "t_boss", "actor": "a_boss", "hidden": false, "tags": ["humanoid"]})},
+		{"t": "actor.add", "actor": {"id": "a_lurk", "kind": "npc", "name": "Lurker"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Lurker", Vector2(3.5, 6.0), {"id": "t_lurk", "actor": "a_lurk", "hidden": true, "tags": []})},
+		{"t": "actor.add", "actor": {"id": "a_boss2", "kind": "npc", "name": "Goblin Boss"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Goblin Boss", Vector2(5.5, 6.0), {"id": "t_boss2", "actor": "a_boss2", "hidden": true, "tags": ["humanoid"]})},
+	]
+	for id in far:
+		events.append({"t": "token.set", "scene": sid, "id": id, "changes": {"hidden": false}})
+	check(k.commit(events, "setup") == "", "set up: the fighters, the goblins by them, a lurker and a boss hidden, the far goblins revealed")
+	return {"fighter": fighter, "ranger": ranger, "far": far}
+
+
+## Every token a screen's order names (a group's members for a group).
+func _order_ids(turns: Dictionary) -> Array:
+	var out := []
+	for e in turns.get("order", []):
+		if str(e).begins_with("group:"):
+			out.append_array(turns.get("data", {}).get("groups", {}).get(str(e).substr(6), {}).get("tokens", []))
+		else:
+			out.append(str(e))
+	return out
+
+
+## The turn order a player is sent has no creature they don't see in any part
+## of it: not the order, a group's members, the labels, the turn's notes and
+## skips, the counters, the turn that ended (nor where tokens stood then);
+## the turn of one they don't see is nobody's (-1); a group of creatures they
+## know no names of says nothing ("Creatures"); a ruleset's own data stays on
+## the Table. The web's scene, the rules' view and a sheet's data agree, and
+## a sheet's End turn, sent by its place in her order, is the Table's place
+## when the rules read it.
+func test_the_order_a_player_is_sent() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, "t.order", """
+local hm = hexmap
+hm.ui.knowledge({ names = 'hidden', rolls = 'hidden' })
+hm.actions.register('end_turn', { label = 'End turn', target = '', run = function(ctx)
+	hm.log('ended at ' .. tostring(ctx.round) .. '/' .. tostring(ctx.turn), 'all')
+	return true
+end })
+""") == "", "a ruleset that keeps names and rolls")
+	var f := _fight(kernel, sid)
+	var fighter := str(f.fighter)
+	var ranger := str(f.ranger)
+	check(kernel.commit([{"t": "turns.set", "changes": {"mode": "ordered", "running": true, "scene": sid, "round": 2, "turn": 0,
+		"order": ["t_lurk", fighter, "t_gob", "group:g1", ranger] + f.far,
+		"data": {"labels": {"t_lurk": "19", fighter: "12", "t_gob": "17", "group:g1": "9", ranger: "8"}, "groups": {"g1": {"tokens": ["t_boss", "t_boss2"], "label": "Goblin Bosses"}},
+			"notes": {"t_lurk": "Movement 30 of 30 ft", fighter: "Movement 15 of 30 ft"}, "skip": {"t_lurk": true, "t_gob": true}, "rolling": "rq_1", "budget": {"xp": 450}},
+		"counters": {"token:t_lurk": {"actions": 1}, "token:" + fighter: {"actions": 0}, "token:t_boss2": {"actions": 1}},
+		"last": {"by": "gm", "entry": "t_lurk", "round": 2, "turn": 0, "log": "n_secret", "pos": {"t_lurk": [3.5, 6.0]}}}}], "An order") == "", "a fight: the lurker first, then Ana's fighter")
+	var known := kernel.knowledge_policies()
+	var view := Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER)
+	var t: Dictionary = view.turns
+	var snap := WebScene.build(st, sid, ANA, false, known)
+	var drawn := {}
+	for tk in snap.tokens:
+		drawn[str(tk.id)] = true
+	check(_order_ids(snap.turns).all(func(id: Variant) -> bool: return drawn.has(str(id))), "every creature in her scene's order is one her screen draws: %s" % [_order_ids(snap.turns)])
+	check(not (t.order as Array).has("t_lurk") and not JSON.stringify(t).contains("t_lurk") and not JSON.stringify(t).contains("t_boss2"), "the hidden ones in no part of her order: %s" % [t.order])
+	check(int(t.turn) == -1 and int(snap.turns.turn) == -1, "the lurker's turn is nobody's to her: %s" % [t.turn])
+	check((t.order as Array).slice(0, 3) == [fighter, "t_gob", "group:g1"], "the rest in their order: %s" % [t.order])
+	check(t.data.groups.g1.tokens == ["t_boss"] and str(t.data.groups.g1.label) == "Creatures", "the group: the boss she sees, called Creatures: %s" % [t.data.groups.g1])
+	check(t.data.labels == {fighter: "12", ranger: "8"}, "the labels: the party's (no creature's initiative, the group's neither): %s" % [t.data.labels])
+	check((t.data.notes as Dictionary).keys() == [fighter] and (t.data.skip as Dictionary).keys() == ["t_gob"], "the turn's notes and skips of what she sees: %s %s" % [t.data.notes, t.data.skip])
+	check(not t.data.has("budget") and str(t.data.get("rolling", "")) == "rq_1", "a ruleset's own data stays on the Table")
+	check((t.counters as Dictionary).keys() == ["token:" + fighter], "the counters: her fighter's: %s" % [t.counters.keys()])
+	check(str(t.last.entry) == "" and int(t.last.turn) == -1 and not t.last.has("pos") and not t.last.has("log"), "the turn that ended: nobody's to her, no places, no log: %s" % [t.last])
+	check((f.far as Array).any(func(id: Variant) -> bool: return not drawn.has(str(id))), "a goblin out there her fighter doesn't see (the fog's own case)")
+	for far_id in f.far:
+		check(drawn.has(str(far_id)) == (t.order as Array).has(str(far_id)), "a far goblin in her order as her screen shows it (%s: %s)" % [far_id, drawn.has(str(far_id))])
+	var gm_turns: Dictionary = Views.project(kernel, plugins, "", Views.ROLE_GM).turns
+	check((gm_turns.order as Array).has("t_lurk") and int(gm_turns.turn) == 0 and gm_turns.data.has("budget"), "the DM's: whole")
+	# her turn: the Table's 1, her 0 — her sheet's End turn says hers
+	check(kernel.commit([{"t": "turns.set", "changes": {"turn": 1}}], "Her turn") == "", "her fighter's turn")
+	var mine := Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER)
+	check(int(mine.turns.turn) == 0, "her view: her own turn, at 0 in her order")
+	var host := _host(st, kernel, plugins)
+	var ana := _web_player(host, ANA)
+	ana.send({"t": "intent", "intent": {"kind": "action", "plugin": "t.order", "action": "end_turn", "ctx": {"actor": "a_fighter", "round": 2, "turn": int(mine.turns.turn)}}, "req": "e1"})
+	check(_pump(host, [ana], func() -> bool: return not ana.last("done").is_empty()), "her End turn sent")
+	var said: Array = st.encounter.log.filter(func(x: Dictionary) -> bool: return str(x.get("text", "")).begins_with("ended at"))
+	check(said.size() == 1 and str(said[0].text) == "ended at 2/1", "the rules read the Table's place: %s" % [said])
+	# the web's scene too: the order as hers
+	_pump(host, [ana], func() -> bool: return not ana.last("scene").is_empty())
+	var scene_turns: Dictionary = ana.last("scene").get("scene", {}).get("turns", {})
+	check(not (scene_turns.get("order", []) as Array).has("t_lurk") and int(scene_turns.get("turn", -2)) == 0, "her screen's scene: her order, her place")
+	check(not JSON.stringify(ana.raw).contains("t_lurk"), "nothing she was sent names the lurker")
+	host.stop()

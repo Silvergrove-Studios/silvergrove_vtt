@@ -46,9 +46,11 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	var labels := TokenLabels.of_scene(state.tokens(scene_id), state)
 	var unnamed := Knowledge.player_labels(state.tokens(scene_id), e.actors, known)
 	var tokens := []
+	var seen := {}
 	for tk in state.tokens(scene_id):
 		if not gm and not shows(state, tk, player_id, fog, sight.polygons):
 			continue
+		seen[str(tk.id)] = true
 		var out := token_out(state, tk, gm, known)
 		out.label = str(labels.get(str(tk.id), out.get("label", "")))
 		if unnamed.has(str(tk.id)):
@@ -76,7 +78,9 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 		"los": (sight.los as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)) if light == "dark" else [],
 		"dark_sight": (sight.dark as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
 		"lights": lights(state, scene_id, lvl, tokens), "regions": regions,
-		"turns": JsonDoc.deep(e.turns) if gm else Knowledge.player_turns(e.turns, e.doc, known)}
+		# (the order as they see it: only the creatures on their screen — of an
+		# order on another scene, nothing)
+		"turns": JsonDoc.deep(e.turns) if gm else Knowledge.player_turns(e.turns, e.doc, known, seen if turns_here(e, scene_id) else {})}
 	if gm:
 		out.light_set = str(sc.get("light", "")) if Vision.LIGHT_LEVELS.has(str(sc.get("light", ""))) else ""
 		out.map_light = str(state.level_for(scene_id).get("light", ""))
@@ -84,6 +88,29 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	if Encounter.is_mind(sc):
 		out.space = Encounter.SPACE_MIND
 	return out
+
+
+## The tokens of a scene a viewer's screen is sent, {id: true}: a player's
+## (`player_id`, shows); a display's (`display`, no player: what every
+## player's characters see). Every screen that isn't the DM's is sent only
+## these — on the map, in the order, in what the table waits on.
+static func seen(state: EncounterState, scene_id: String, player_id: String, display := false) -> Dictionary:
+	var out := {}
+	if state.encounter.scene(scene_id).is_empty():
+		return out
+	var fog := state.fog_enabled(scene_id)
+	var polys: Array = Vision.of(state, scene_id, _eyes(state, scene_id, player_id, display and player_id == "")).polygons if fog else []
+	for tk in state.tokens(scene_id):
+		if shows(state, tk, player_id, fog, polys):
+			out[str(tk.get("id", ""))] = true
+	return out
+
+
+## Whether the turn order is the one of this scene (an order on no scene, from
+## before orders said theirs, is the scene the players see).
+static func turns_here(e: Encounter, scene_id: String) -> bool:
+	var sid := str(e.turns.get("scene", "")) if e.turns.get("scene") != null else ""
+	return sid == scene_id or (sid == "" and scene_id == e.active_scene_id)
 
 
 ## Whether a player's screen shows a token (`polys`: what their characters

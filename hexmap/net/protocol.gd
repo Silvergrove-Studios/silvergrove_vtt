@@ -159,8 +159,9 @@ static func client_document(doc: Dictionary, gm := false, known: Array = []) -> 
 	if out.get("notes") is Array:
 		out.notes = []
 	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
-	# the order without a creature's initiative where its rolls are the DM's (Knowledge)
-	if Knowledge.rolls_hidden(known) and out.get("turns") is Dictionary:
+	# the order as a player sees it: no creature the DM hides in any part of it,
+	# no initiative where a creature's rolls are the DM's (Knowledge)
+	if out.get("turns") is Dictionary:
 		out.turns = Knowledge.player_turns(out.turns, doc, known)
 	for sc in out.get("scenes", []):
 		sc.erase("triggers")

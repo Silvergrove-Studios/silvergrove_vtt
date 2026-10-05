@@ -464,13 +464,13 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 			var ch: Variant = ev.get("changes")
 			if Knowledge.names_hidden(known) and (t == "token.add" or (ch is Dictionary and ((ch as Dictionary).has("hidden") or (ch as Dictionary).has("actor") or (ch as Dictionary).has("owner")))):
 				_docs_dirty = true
-		elif t == "turns.set" and Knowledge.rolls_hidden(known):
-			# the order as a player may see it: a creature's initiative left out
-			# where its rolls are the DM's (Knowledge)
-			var theirs := Protocol.event(Knowledge.player_turns_event(ev, state.encounter.doc, known))
+		elif t == "turns.set":
+			# the order as each player may see it, whole (every part of it replaced):
+			# only the creatures they see, a creature's initiative left out where its
+			# rolls are the DM's (Knowledge.player_turns)
 			for c in _clients:
 				if c.hello and not bool(c.web):
-					_send(c, Protocol.event(ev) if _is_gm(c) else theirs)
+					_send(c, Protocol.event(ev) if _is_gm(c) else Protocol.event({"t": "turns.set", "changes": _turns_for(c)}))
 		else:
 			_broadcast(Protocol.event(ev))
 		if t == "token.remove" and Knowledge.names_hidden(known):
@@ -570,7 +570,7 @@ func projection(c: Dictionary) -> Dictionary:
 		return {}
 	var pid := "" if _is_gm(c) else str(c.player)
 	var role := Views.ROLE_GM if _is_gm(c) else (str(c.role) if c.role != "" else Views.ROLE_PLAYER)
-	var out := Views.project(kernel, plugins, pid, role)
+	var out := Views.project(kernel, plugins, pid, role, null if _is_gm(c) else _seen_by(c))
 	out.notes = PlayerNotes.for_viewer(notes_source.call(), pid, role) if notes_source.is_valid() else []
 	# what can be looked up (the web screens search across these)
 	out.collections = kernel.comp.collections()
@@ -891,6 +891,12 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			for k in ctx.keys():
 				if str(k).begins_with("__"):
 					ctx.erase(k)
+			# a turn a player's screen names ({round, turn}: a sheet's End turn) is its
+			# place in the order as they were sent it, without what they don't see:
+			# the Table's own place, for the rules (Knowledge.table_turn)
+			if not gm and ctx.has("round") and (ctx.get("turn") is int or ctx.get("turn") is float):
+				var e := state.encounter
+				ctx.turn = Knowledge.table_turn(e.turns, e.doc, _known(), _seen_by(c) if WebScene.turns_here(e, e.active_scene_id) else {}, int(ctx.turn))
 			ctx.player = "" if gm else pid
 			ctx.gm = gm
 			var pc := plugins.dispatch(plugin, action, ctx)
@@ -1343,20 +1349,29 @@ func _shown_to(sight: Dictionary, m: Dictionary) -> bool:
 
 
 ## What a player's screen shows of a scene, worked out once until the table
-## changes: {fog, explored (cells), seen (token ids)}. "" is a display's: no eyes.
+## changes: {fog, explored (cells), seen (token ids)}. "" is a display's:
+## what every player's characters see (WebScene.seen).
 func _sight_of(pid: String, sid: String) -> Dictionary:
 	var key := pid + "|" + sid
 	if _sight.has(key):
 		return _sight[key]
 	var fog := state.fog_enabled(sid)
-	var polys: Array = Vision.of(state, sid, WebScene._eyes(state, sid, pid, false)).polygons if fog and pid != "" else []
-	var seen := {}
-	for tk in state.tokens(sid):
-		if WebScene.shows(state, tk, pid, fog, polys):
-			seen[str(tk.id)] = true
-	var out := {"fog": fog, "explored": state.explored(sid) if fog else {}, "seen": seen}
+	var out := {"fog": fog, "explored": state.explored(sid) if fog else {}, "seen": WebScene.seen(state, sid, pid, pid == "")}
 	_sight[key] = out
 	return out
+
+
+## The tokens a screen that isn't a DM's is sent of the scene the players see
+## (a display's: what every player's characters see).
+func _seen_by(c: Dictionary) -> Dictionary:
+	return _sight_of(str(c.player) if c.role == Views.ROLE_PLAYER else "", state.encounter.active_scene_id).seen
+
+
+## The turn order as a screen that isn't a DM's is sent it: only what it sees
+## (Knowledge.player_turns; of an order on a scene the players don't see, nothing).
+func _turns_for(c: Dictionary) -> Dictionary:
+	var e := state.encounter
+	return Knowledge.player_turns(e.turns, e.doc, _known(), _seen_by(c) if WebScene.turns_here(e, e.active_scene_id) else {})
 
 
 func _owns_actor(pid: String, actor_id: String) -> bool:

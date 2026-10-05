@@ -118,7 +118,8 @@ func turn_summary() -> String:
 				if tk.get("owner", null) != null and str(tk.owner) == player_id:
 					mine = true
 			if names.is_empty():
-				return "Round %d" % int(turns.get("round", 1))
+				# (a creature's this device is not sent: nobody's to it, the DM's as it reads)
+				return "The DM's turn (round %d)" % int(turns.get("round", 1))
 			var who := ", ".join(names)
 			if mine:
 				return "Your turn: %s (round %d)" % [who, int(turns.get("round", 1))]
