@@ -82,7 +82,7 @@ func state() -> Dictionary:
 		out.rules = rules_settings()
 		# what the players see of a monster's health (the rulesets' HealthShown: exact, marks,
 		# none), for the DM's list of a fight in the theatre of the mind to say beside each
-		var shown := ctx.kernel.health_policies()
+		var shown := ctx.kernel.knowledge_policies()
 		out.players_see_health = str(shown[0].get("players", "marks")) if not shown.is_empty() else ""
 	# how the table runs: the level, the questions, every setting (TableSettings)
 	out.table = win.table_settings.registry()
