@@ -532,6 +532,20 @@ The team's notes on making a character in the third playtest
   attack lands) has its time budget from the answer, as a paused action
   has: counted from the move, a player's ten seconds' thought had its
   commits cut off.
+- **Light on the players' phones.** The table sent every screen each
+  character sheet's whole layout (a ruleset's view tree, some 290 KB) with
+  every change, the DM's screen once for every creature in the fight. Now
+  a ruleset's layouts — sheets, the status view, cards, the DM's party
+  view — reach each screen once, by an id made from their contents, and
+  after the first view, scene and DM state only what changed travels. In a
+  fight's first two rounds a player's phone was sent 38 KB where it had
+  been sent 7.4 MB, the DM's screen 158 KB where it had 66 MB. A layout
+  built anew for a table setting reaches every screen once; a phone that
+  drops its connection and comes back, or a page reloaded in its tab, says
+  which layouts it holds and is sent none of them again. What each screen
+  may see is decided as before. Protocol 4: a Player app or a page from
+  before is refused, saying so (reload the page). `web/tests/e2e/traffic.mjs`
+  measures what each screen is sent.
 
 ## 2.3.1 — 2026-09-25
 

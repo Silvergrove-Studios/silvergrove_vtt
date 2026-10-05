@@ -3,16 +3,18 @@
 // slept, a Wi-Fi hiccup — and says hello and joins again when it does.
 
 export type Msg = { t: string; [k: string]: unknown };
-// (3: sight follows the scene's light; the table's own, as protocol.gd says)
-export const PROTOCOL = 3;
+// (4: views, scenes and the DM's state by what changed, each schema once —
+// lib/wire.ts; as protocol.gd says)
+export const PROTOCOL = 4;
 
 export class Connection {
   url: string;
   ws: WebSocket | null = null;
   onmessage: (m: Msg) => void = () => {};
   onstatus: (s: 'connecting' | 'open' | 'closed') => void = () => {};
-  /** What to say on every (re)connect: hello, then join. */
-  greeting: Msg[] = [];
+  /** What to say on every (re)connect: hello, then join (made as it is said:
+   *  a join says which schemas the page holds then). */
+  greeting: () => Msg[] = () => [];
   private closedByUs = false;
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -29,7 +31,7 @@ export class Connection {
     ws.onopen = () => {
       this.retry = 0;
       this.onstatus('open');
-      for (const m of this.greeting) this.send(m);
+      for (const m of this.greeting()) this.send(m);
     };
     ws.onmessage = (ev) => {
       try {

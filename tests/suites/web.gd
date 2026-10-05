@@ -259,10 +259,15 @@ func test_light_from_the_dm_screen() -> void:
 	DirAccess.remove_absolute(dir)
 
 
-## A web client over a real socket: its messages, as they come.
+## A web client over a real socket: its messages, as they come — a view, a
+## scene, a DM state made whole again as a screen makes it (Wire.Reader: it
+## asks for one whole when it can't read a patch), and each as it came over
+## the wire in `raw` ({msg, bytes}).
 class WebClient:
 	var ws := WebSocketPeer.new()
 	var inbox: Array = []
+	var raw: Array = []
+	var wire := Wire.Reader.new()
 
 	func _init(port: int) -> void:
 		ws.connect_to_url("ws://127.0.0.1:%d" % port)
@@ -270,9 +275,23 @@ class WebClient:
 	func poll() -> void:
 		ws.poll()
 		while ws.get_available_packet_count() > 0:
+			var text := ws.get_packet().get_string_from_utf8()
 			var j := JSON.new()
-			if j.parse(ws.get_packet().get_string_from_utf8()) == OK and j.data is Dictionary:
-				inbox.append(j.data)
+			if j.parse(text) != OK or not (j.data is Dictionary):
+				continue
+			var m: Dictionary = j.data
+			raw.append({"msg": m, "bytes": text.to_utf8_buffer().size()})
+			if Wire.KINDS.has(str(m.get("t", ""))):
+				var got := wire.read(m)
+				if bool(got.get("need", false)):
+					send({"t": "need", "kind": str(m.t)})
+				if got.get("msg") is Dictionary:
+					inbox.append(got.msg)
+				elif bool(got.get("same", false)):
+					# (nothing changed: the one before, again)
+					inbox.append(last(str(m.t)))
+				continue
+			inbox.append(m)
 
 	func send(msg: Dictionary) -> void:
 		ws.send_text(JSON.stringify(msg))

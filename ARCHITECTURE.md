@@ -24,7 +24,7 @@ player/     the Player: touch-first client                      portable
 encounter/  Encounter, EncounterState, events, Vision, undo,    portable
             TurnSystem
 net/        Session, LocalSession, NetSession, HostSession,     portable
-            Protocol, Discovery
+            Protocol, Wire, Discovery
 render/     MapCanvas, MapRenderer, CanvasView                  portable
 core/       HexMap, HexGrid, LayerTree, Lighting, PackLibrary   portable
 io/         exporters and the PDF writer                        desktop
@@ -170,6 +170,19 @@ broadcasts, for phones that filter multicast) an announcement once a
 second; the Player lists what it hears, or takes a typed address. LAN
 only for now; a relay would sit between `NetSession` and `HostSession`
 speaking the same protocol.
+
+What a client may see of the rules reaches it as its **view**
+(`Views.project` for its audience), and a web screen gets its scene as a
+snapshot and the DM's screen the campaign as a state; `Wire`
+(`hexmap/net/wire.gd`, and `web/src/lib/wire.ts` on the web screens) is how
+those travel. Each is sent whole once per connection, then as a patch on
+the one before; and the view schemas a ruleset registers — a sheet's tree
+is some 290 KB — reach each connection once, by an id made from their
+contents, while every view after carries only its data. A schema
+registered again with other contents (the sheets built anew for a table
+setting) has another id and goes out once more; a screen joining again says
+which it holds, and is not sent those again. The projection is the same
+either way: who may see what is decided before anything is sent.
 
 One thing crosses the wire without being an event: the table's **shared
 marks** — a ruler, a template, a spell's preview, a ping, anyone's —

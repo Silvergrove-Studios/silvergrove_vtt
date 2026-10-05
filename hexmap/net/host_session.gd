@@ -90,7 +90,7 @@ var _sight: Dictionary = {}          # "player|scene" -> what their characters s
 ## How much of the sessions before a view carries (the newest).
 const CHAT_HISTORY_SENT := 400
 var _server := TCPServer.new()
-var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false}]
+var _clients: Array = []   # [{peer: WebSocketPeer, player: "", role: "", hello: false, joined: false, wire: Wire.Peer}]
 var _listening := false
 var _views_dirty := false
 var _scenes_dirty := false
@@ -302,7 +302,9 @@ func poll(delta := 0.0) -> void:
 		peer.outbound_buffer_size = Protocol.BUFFER_SIZE
 		peer.max_queued_packets = 4096
 		if peer.accept_stream(_server.take_connection()) == OK:
-			_clients.append({"peer": peer, "player": "", "role": "", "hello": false, "joined": false, "web": false, "scene": "", "see_as": ""})
+			# (wire: the schemas this connection holds, and the view, scene and DM
+			# state it was sent last, so the next goes as what changed: Wire)
+			_clients.append({"peer": peer, "player": "", "role": "", "hello": false, "joined": false, "web": false, "scene": "", "see_as": "", "wire": Wire.Peer.new()})
 	var gone := []
 	for c in _clients:
 		var peer: WebSocketPeer = c.peer
@@ -561,9 +563,10 @@ func refresh_views() -> void:
 		refresh_scenes()
 
 
+## A client's view: its schemas once, then what changed since the last (Wire).
 func _send_view(c: Dictionary) -> void:
 	if kernel != null:
-		_send(c, Protocol.view(projection(c)))
+		_send(c, (c.wire as Wire.Peer).pack("view", projection(c)))
 
 
 ## A web client's scene: the one the players see (the DM's: the one they
@@ -590,12 +593,13 @@ func _send_scene(c: Dictionary) -> void:
 			msg.preview_as = who
 			# and why each creature they don't see isn't there: hidden, dark or walls
 			msg.preview_why = WebScene.unseen(state, sid, who)
-	_send(c, msg)
+	# (whole the first time, then what changed: Wire)
+	_send(c, (c.wire as Wire.Peer).pack("scene", Wire.body_of(msg)))
 
 
 func _send_dm(c: Dictionary) -> void:
 	if dm_state_source.is_valid():
-		_send(c, {"t": "dm", "state": dm_state_source.call()})
+		_send(c, (c.wire as Wire.Peer).pack("dm", dm_state_source.call()))
 
 
 func _handle(c: Dictionary, msg: Dictionary) -> void:
@@ -650,6 +654,8 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			c.player = pid
 			c.role = role
 			c.joined = true
+			# everything whole once more, less the schemas it says it holds (Wire)
+			(c.wire as Wire.Peer).joined(msg.get("have", []))
 			if _is_gm(c):
 				# the whole scene, now that they may see it
 				_send(c, Protocol.welcome(state.encounter, true))
@@ -723,10 +729,21 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			else:
 				_send(c, {"t": "upload_failed", "req": msg.get("req", ""), "why": str(out.get("why", "refused"))})
 		"need":
-			if str(msg.get("kind", "")) == "scene":
-				_send_scene(c)
-			else:
-				_serve(c, msg)
+			match str(msg.get("kind", "")):
+				# whole again: a screen that couldn't read what changed (Wire)
+				"scene":
+					(c.wire as Wire.Peer).forget("scene")
+					_send_scene(c)
+				"view":
+					if c.joined:
+						(c.wire as Wire.Peer).forget("view")
+						_send_view(c)
+				"dm":
+					if c.joined and c.role == Views.ROLE_DM:
+						(c.wire as Wire.Peer).forget("dm")
+						_send_dm(c)
+				_:
+					_serve(c, msg)
 		"ping":
 			_send(c, {"t": "pong"})
 		"mark":

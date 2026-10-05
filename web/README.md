@@ -8,12 +8,16 @@ a browser on the computer that runs the game.
 
 Svelte 5, TypeScript, Vite. The host never runs this code: it serves
 `webclient.zip` (the build, at the project's root) and talks to the pages
-over its WebSocket (`src/lib/net.ts`, `src/lib/game.svelte.ts`).
+over its WebSocket (`src/lib/net.ts`, `src/lib/game.svelte.ts`). A view, a
+scene and the DM's state come whole once and then as what changed, each
+view schema once by an id made from its contents (`src/lib/wire.ts`, the
+host's `hexmap/net/wire.gd`): the page keeps the schemas, for a reload
+too, and says which it holds when it joins.
 
 ```sh
 npm ci
 npm run check   # types and Svelte
-npm test        # unit tests (grid, expressions, views, the book, picks, turns, rulers and templates)
+npm test        # unit tests (grid, expressions, views, the book, picks, turns, rulers and templates, the wire)
 npm run build   # dist/ → ../webclient.zip — commit it with the sources
 ```
 
@@ -155,6 +159,18 @@ Hands naming two goblins ("Who does your Burning Hands catch?"), and
 nothing lands until the DM applies it on a card, though the table
 approves nothing else. The DM adds a wolf with no token to put down; the
 fight ends.
+
+`tests/e2e/traffic.mjs <host.json> <out> [--budget] [--frames]` (host with
+`--party --seed 12`): what the table sends the screens, measured. The DM's
+screen and Ana's phone through the chapel fight's first rounds (the session
+and the fight started, initiative, the party inside, a goblin's attack, Ana's
+attacks on her turns, a line of chat), Ana's phone dropping its connection
+and coming back, and the DM setting the sheets to Bookkeeping (the sheets
+built anew): every message each page receives counted by kind and size,
+phase by phase; views, scenes and the DM's state taken apart by what they
+carry, the view schemas on their own. `--budget` fails the run when a
+schema reaches a page twice unchanged or a phone's views run large;
+`--frames` writes every message to `<out>/frames.jsonl`.
 
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).

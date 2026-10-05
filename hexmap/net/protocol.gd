@@ -36,7 +36,7 @@ extends RefCounted
 ##   welcome  {version, encounter}            the document without its rules blocks
 ##   joined   {player, role}                  the join was accepted
 ##   event    {ev}                            a scene event applied; apply it too
-##   view     {view}                          the client's projection (Views.project); the DM seeing
+##   view     {view}                          the client's projection (Views.project; since 4, by Wire); the DM seeing
 ##                                             as a player also gets their chat (view.preview_chat)
 ##   refused  {ev | intent, why, req?}        the request was not applied (an intent's `req` with it)
 ##   done     {req}                           the intent sent with `req` was taken (a form says so, and clears);
@@ -51,10 +51,10 @@ extends RefCounted
 ##   error    {why}                           then the host closes
 ##   pong     {}
 ##   scene    {scene, players, clock, online, scenes?, preview?, preview_as?, preview_why?}
-##                                             a web client's scene (WebScene), for it; the DM
-##                                             seeing as a player gets theirs and why each
+##                                             a web client's scene (WebScene), for it (by Wire); the
+##                                             DM seeing as a player gets theirs and why each
 ##                                             creature they don't see isn't there
-##   dm       {state}                          the DM's web screen: the campaign as it shows it
+##   dm       {state}                          the DM's web screen: the campaign as it shows it (by Wire)
 ##   marks    {marks}                          every shared mark this client may see (on joining)
 ##   mark     {mark}                           one put or changed, with its owner's name and
 ##                                             colour (a ruler's `measure` the Table's)
@@ -66,8 +66,25 @@ extends RefCounted
 ## far it sees. A client that works out its own sight (a Godot one) must
 ## do it the table's way, so older ones are refused. A player's device is
 ## sent a map without the DM's notes on it (player_map).
+##
+## Version 4: views travel by what changed (Wire). A view schema — a sheet's,
+## the status view's, an entry's card, the DM's party view — is sent to a
+## connection once: in its place a record carries `schema_ref`
+## ("<plugin>/<kind>@<hash of its contents>"), the message that first needs
+## it carries it in `schemas` ({id: schema}), and one registered again with
+## other contents has another id. A view, a scene and a DM state are sent
+## whole once per connection (with `n`), then as a patch on the one before:
+##   view   {view, n, schemas?} | {patch, base, n, schemas?}
+##   dm     {state, n, schemas?} | {patch, base, n, schemas?}
+##   scene  {scene, players, …, n} | {patch, base, n}
+## (Wire has the patch's form.) A client that can't read one asks for it whole:
+##   need   {kind: view | dm | scene}
+## and says on joining which schemas it holds, which are not sent again:
+##   join   {…, have: [schema ids]}
+## A client of version 3 would draw a view of references and patches as
+## nothing, so it is refused.
 
-const VERSION := 3
+const VERSION := 4
 const ROLES := ["player", "display", "cogm", "dm"]
 ## Events clients apply themselves; everything else reaches them as a view.
 const SCENE_EVENTS := ["encounter.set", "scene.add", "scene.remove", "scene.set", "scene.activate",
@@ -166,10 +183,6 @@ static func player_map(doc: Dictionary, shown: Dictionary = {}) -> Dictionary:
 		# (and their leaves in the layer tree)
 		LayerTree.ensure(lvl)
 	return out
-
-
-static func view(projection: Dictionary) -> Dictionary:
-	return {"t": "view", "view": projection}
 
 
 ## An intent refused, with the `req` it was sent with (if it had one).
