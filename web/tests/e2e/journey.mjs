@@ -470,7 +470,7 @@ await step('initiative is rolled; the order shows', async () => {
 });
 
 await step('the DM chooses a creature: its stat block', async () => {
-  await dm.locator('.order .row').filter({ hasNotText: /Wren|Brakka/ }).first().click();
+  await dm.locator('.order button.row').filter({ hasNotText: /Wren|Brakka/ }).first().click();
   await dm.locator('.chosen').waitFor({ timeout: 5000 });
   await shot(dm, 'dm_statblock');
 });

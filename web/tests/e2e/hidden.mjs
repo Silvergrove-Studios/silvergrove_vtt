@@ -172,7 +172,7 @@ ok = ok && (await step('the chapel fight: one goblin shown — on the players’
   first = pair.a;
   second = pair.b;
   // the DM shows the first: its row in the order, Reveal
-  await dm.locator('.fightpanel .order .row').filter({ hasText: first.name }).first().click();
+  await dm.locator(`.fightpanel .order [data-token="${first.id}"]`).click();
   await dm.locator('.fightpanel .chosen').getByRole('button', { name: 'Reveal', exact: true }).click();
   await dm.waitForFunction((id) => (window.hexmap.game.scene.tokens ?? []).some((t) => t.id === id && !t.hidden), first.id, { timeout: 5000 });
   // the party just west of it, Wren beside it
@@ -220,7 +220,7 @@ ok = ok && (await step('a creature attacks Wren: the players’ chat says a crea
   await dm.mouse.up();
   await dm.waitForTimeout(600);
   // its scimitar at Wren, from its stat block
-  await dm.locator('.fightpanel .order .row').filter({ hasText: first.name }).first().click();
+  await dm.locator(`.fightpanel .order [data-token="${first.id}"]`).click();
   await dm.locator('.fightpanel .chosen .row').filter({ hasText: /^Scimitar\./ }).first().getByRole('button', { name: 'Use' }).click();
   const banner = dm.getByRole('group', { name: 'Choose the target' });
   await banner.waitFor({ timeout: 5000 });
@@ -247,7 +247,7 @@ ok = ok && (await step('a creature attacks Wren: the players’ chat says a crea
 }));
 
 ok = ok && (await step('a second goblin shown: 1 and 2; Ana previews Fireball, and Ben’s screen says 2 creatures', async () => {
-  await dm.locator('.fightpanel .order .row').filter({ hasText: second.name }).first().click();
+  await dm.locator(`.fightpanel .order [data-token="${second.id}"]`).click();
   await dm.locator('.fightpanel .chosen').getByRole('button', { name: 'Reveal', exact: true }).click();
   await ana.waitForFunction((id) => (window.hexmap.game.scene.tokens ?? []).some((t) => t.id === id), second.id, { timeout: 8000 });
   const a1 = await tokenOn(ana, first.id);
@@ -288,7 +288,7 @@ ok = ok && (await step('the DM sees as Ana: her screen’s names and her marks',
 }));
 
 ok = ok && (await step('the DM reveals the first goblin’s name: both players’ screens name it, and the line said before', async () => {
-  await dm.locator('.fightpanel .order .row').filter({ hasText: first.name }).first().click();
+  await dm.locator(`.fightpanel .order [data-token="${first.id}"]`).click();
   await dm.locator('.fightpanel .chosen').getByRole('button', { name: 'Reveal its name' }).click();
   await dm.locator('.fightpanel .chosen').getByText('The players know its name').waitFor({ timeout: 5000 });
   for (const page of [ana, ben]) {
@@ -297,12 +297,20 @@ ok = ok && (await step('the DM reveals the first goblin’s name: both players�
     expect(two.name === 'a creature' && two.label === '?', `the other goblin, still: ${JSON.stringify({ name: two.name, label: two.label })}`);
     await page.waitForFunction((nm) => (window.hexmap.game.view.log ?? []).some((e) => e.kind === 'roll' && e.who === nm && /^Scimitar/.test(e.label ?? '')), first.name, { timeout: 8000 });
   }
-  expect(!(await told(ana)).includes(second.name), 'Ana was told the other goblin’s name');
+  // (both are "Goblin Warrior": what Ana holds of the other one — its token,
+  // its creature, its rolls — names it nowhere)
+  const leak = await ana.evaluate(([tid, aid]) => {
+    const g = window.hexmap.game;
+    const tok = (g.scene.tokens ?? []).find((t) => t.id === tid);
+    const rolls = (g.view.log ?? []).filter((e) => e.actor === aid).map((e) => `${e.who ?? ''} ${e.label ?? ''} ${e.text ?? ''}`);
+    return [tok?.name, (g.view.actors ?? {})[aid]?.name, ...rolls].filter((w) => w && /Goblin/.test(w));
+  }, [second.id, second.actor]);
+  expect(leak.length === 0, `Ana was told the other goblin’s name: ${leak.join(' | ')}`);
   await shot(ana, 'ana_the_goblin_named');
 }));
 
 ok = ok && (await step('a Frightened goblin: the DM’s alone — not on the players’ screens', async () => {
-  await dm.locator('.fightpanel .order .row').filter({ hasText: second.name }).first().click();
+  await dm.locator(`.fightpanel .order [data-token="${second.id}"]`).click();
   const block = dm.locator('.fightpanel .chosen');
   await block.getByRole('combobox', { name: 'Add a condition' }).selectOption({ label: 'Frightened' });
   await block.getByRole('button', { name: 'Add', exact: true }).click();

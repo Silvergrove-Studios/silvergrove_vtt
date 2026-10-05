@@ -41,6 +41,8 @@ export interface Look {
   fight?: boolean;
   /** the table's shared marks on this scene, over everything (marks.ts) */
   marks?: { list: Dict[]; look: MarkLook; echoes: Record<string, Dict> };
+  /** a token chosen from a list (the DM's fight), pulsing a moment: `t` 0..1 through it */
+  flash?: { id: string; t: number };
 }
 
 /** A creature's outer ring: the side it is on, beside its shape. */
@@ -483,6 +485,8 @@ export function drawFrame(f: Frame): void {
   const layer = (d: { t: Dict }) => (isDead(d.t) && !drawnAsThing(d.t) ? 0 : drawnAsThing(d.t) ? (over(d.t) ? 3 : 1) : 2);
   for (const d of [...drawn].sort((a, b) => layer(a) - layer(b))) drawToken(ctx, d.t, d.pos, look, cam.scale, dpr, d.k);
   drawNameTags(ctx, tokens, look, cam.scale, placed);
+  const flashed = look.flash ? drawn.find((d) => String(d.t.id) === look.flash!.id) : undefined;
+  if (flashed && look.flash) drawFlash(ctx, flashed, look.flash.t, cam.scale);
   if (look.gm && !under) drawNotes(ctx, lvl, cam.scale);
   if (look.hoverCell && look.picking) {
     const path = new Path2D();
@@ -495,6 +499,30 @@ export function drawFrame(f: Frame): void {
   }
   // the table's shared marks, over everything: rulers, templates, previews, pings
   if (look.marks?.list.length) drawMarks(ctx, look.marks.list, look.marks.look, look.marks.echoes);
+}
+
+/** A token chosen from a list, pulsed a moment so the eye finds it on the
+ *  map (which of three Goblin Warriors it is): two rings going out from it
+ *  and fading, over the tokens round it, never too small to see at any
+ *  zoom. `t` runs 0..1 through the pulse. */
+export function drawFlash(ctx: CanvasRenderingContext2D, d: { t: Dict; pos: Vec; k: number }, t: number, scale: number): void {
+  const r = tokenRadius(d.t) * d.k;
+  const reach = Math.max(r * 2.2, 30 / scale);
+  for (const lag of [0, 0.35]) {
+    const u = (t - lag) / 0.65;
+    if (u < 0 || u > 1) continue;
+    ctx.save();
+    ctx.globalAlpha = 1 - u;
+    ctx.lineWidth = Math.max(r * 0.14, 3 / scale);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.arc(d.pos.x, d.pos.y, r * 1.15 + reach * u, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth *= 0.6;
+    ctx.strokeStyle = '#ffff4d';
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function drawProps(ctx: CanvasRenderingContext2D, props: Dict[], pxPerUnit: number): void {

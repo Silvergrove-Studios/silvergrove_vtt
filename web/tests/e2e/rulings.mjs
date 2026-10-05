@@ -124,10 +124,11 @@ await step('the DM puts the party inside and Wren beside a goblin', async () => 
     const gobs = toks.filter((t) => /^Goblin/.test(t.name ?? '') && !/Boss/.test(t.name ?? ''));
     const c = document.querySelector('canvas');
     if (!gobs.length || !c?.screenOf) return null;
-    return { at: c.screenOf(gobs[0].id), px: c.pxPerHex(), gob: gobs[0].id, names: gobs.map((g) => g.name) };
+    return { at: c.screenOf(gobs[0].id), px: c.pxPerHex(), gob: gobs[0].id, ids: gobs.map((g) => g.id) };
   });
   if (!where) throw new Error('no goblin on the DM’s map');
-  goblins = where.names;
+  // (by their tokens: every goblin is "Goblin Warrior")
+  goblins = where.ids;
   await dm.locator('.mapbar').getByRole('button', { name: 'Move the party here' }).click();
   await dm.getByText('Move the party here: tap where they are').waitFor({ timeout: 5000 });
   await dm.mouse.click(where.at.x - where.px * 3, where.at.y);
@@ -180,10 +181,10 @@ async function nextRound() {
   }
 }
 
-// One goblin's attack at Wren, by its row's name: true when it hit (its card
+// One goblin's attack at Wren, from its row (by its token): true when it hit (its card
 // in front of the DM).
 async function swing(goblin, attack) {
-  await dm.locator('.order .row').filter({ hasText: goblin }).first().click();
+  await dm.locator(`.order [data-token="${goblin}"]`).click();
   await dm.locator('.chosen').waitFor({ timeout: 5000 });
   await dm.locator('.chosen .row').filter({ hasText: attack }).first().getByRole('button', { name: 'Use' }).click();
   const banner = dm.getByRole('group', { name: 'Choose the target' });

@@ -82,4 +82,36 @@ describe('the fight on the DM’s screen', () => {
     expect(orderRows({ ...scene, turns: left })).toEqual([]);
     expect(orderRows({ ...scene, turns: { ...left, scene: 's1' } }).map((r) => r.name)).toEqual(['Goblin Warrior']);
   });
+
+  // (the owner: names are no key — "just name it Goblin Warrior"; the DM finds
+  // one by the list, a tap showing it on the map)
+  it('lists every creature in the order, a shared slot’s one by one, by its token', () => {
+    const goblins = [
+      { id: 't_a', name: 'Goblin Warrior', actor: 'a_a', pos: [6, 4] },
+      { id: 't_b', name: 'Goblin Warrior', actor: 'a_b', pos: [7, 4], hidden: true },
+      { id: 't_c', name: 'Goblin Warrior', actor: 'a_c', pos: [8, 4], name_known: false, player_label: '2' },
+    ];
+    const order = {
+      mode: 'ordered',
+      running: true,
+      order: ['t_ada', 'group:goblin-warrior', 't_grace'],
+      round: 1,
+      turn: 1,
+      data: { labels: { t_ada: '17', 'group:goblin-warrior': '12', t_grace: '9' }, groups: { 'goblin-warrior': { label: 'Goblin Warrior', tokens: ['t_a', 't_b', 't_c'] } } },
+    };
+    const rows = orderRows({ id: 's1', tokens: [...tokens.slice(0, 2), ...goblins], turns: order });
+    expect(rows.map((r) => [r.name, r.group, r.members.map((m) => m.id)])).toEqual([
+      ['Ada Vex', false, ['t_ada']],
+      ['Goblin Warrior', true, ['t_a', 't_b', 't_c']],
+      ['Grace', false, ['t_grace']],
+    ]);
+    const slot = rows[1];
+    expect(slot.current && slot.label === '12').toBe(true);
+    // each of the slot's: the same name, told apart by its token, what the players call it said
+    expect(slot.members.map((m) => [m.name, m.hidden, m.playerLabel])).toEqual([
+      ['Goblin Warrior', false, ''],
+      ['Goblin Warrior', true, ''],
+      ['Goblin Warrior', false, '2'],
+    ]);
+  });
 });

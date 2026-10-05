@@ -325,11 +325,12 @@ ok = ok && (await step('the owl’s own turn: Ana moves it on the map and ends i
 }));
 
 ok = ok && (await step('a goblin’s arrow drops the owl to 0: it’s gone — from the map, the order and Ana’s tabs', async () => {
-  const goblins = await dm.evaluate(() => (window.hexmap.game.scene.tokens ?? []).filter((t) => /^Goblin/.test(t.name ?? '')).map((t) => t.name));
+  // (by their tokens: every goblin is "Goblin Warrior")
+  const goblins = await dm.evaluate(() => (window.hexmap.game.scene.tokens ?? []).filter((t) => /^Goblin/.test(t.name ?? '')).map((t) => t.id));
   let gone = false;
   for (let round = 0; round < 3 && !gone; round++) {
     for (const g of goblins) {
-      await dm.locator('.order .row').filter({ hasText: g }).first().click();
+      await dm.locator(`.order [data-token="${g}"]`).click();
       await dm.locator('.chosen').waitFor({ timeout: 5000 });
       const bow = dm.locator('.chosen .row').filter({ hasText: /^Shortbow\./ }).first();
       if (!(await bow.count())) continue;

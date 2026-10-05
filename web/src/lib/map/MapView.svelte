@@ -92,6 +92,11 @@
   // drawn, and (dropped) where the table last had it
   let drag = $state<{ id: string; pos: Vec; from?: Vec } | null>(null);
   let artTick = $state(0);
+  // a token chosen from a list (showToken), pulsing a moment so the eye finds
+  // it; and the last one shown (for tests)
+  let flash: { id: string; at: number } | null = null;
+  let lastShown = '';
+  const FLASH_MS = 1400;
   let fitted = '';
   // the camera is still the one fit() chose (nobody has panned or zoomed
   // since): a resize fits again, with the same `first`
@@ -170,6 +175,8 @@
     }
     if (width <= 0 || height <= 0) return;
     ensureTerrain();
+    const flashT = flash ? (performance.now() - flash.at) / FLASH_MS : 1;
+    if (flashT >= 1) flash = null;
     drawFrame({
       ctx,
       width,
@@ -193,6 +200,7 @@
         seeAs,
         ghosts,
         fight,
+        flash: flash ? { id: flash.id, t: flashT } : undefined,
         marks: withTools
           ? {
               list: sceneMarks,
@@ -213,8 +221,8 @@
           : undefined,
       },
     });
-    // a ping's rings move and fade: drawn again till it has gone
-    if (sceneMarks.some((m) => m.kind === 'ping' && performance.now() - (game.marksBorn[String(m.id)] ?? 0) < PING_MS)) schedule();
+    // a ping's rings move and fade, and a token's pulse: drawn again till they have gone
+    if (flash || sceneMarks.some((m) => m.kind === 'ping' && performance.now() - (game.marksBorn[String(m.id)] ?? 0) < PING_MS)) schedule();
   }
 
   $effect(() => {
@@ -324,14 +332,24 @@
     auto = { on: true, first };
   }
 
-  export function centerOnToken(id: string): void {
-    const t = tokens.find((x) => x.id === id);
-    if (!t) return;
-    const p = tokenPos(t);
-    cam.x = p.x;
-    cam.y = p.y;
-    cam.scale = Math.max(cam.scale, clampScale(48));
-    auto.on = false;
+  /** A token chosen from a list (the DM's fight): brought into view where it
+   *  isn't well inside it (the zoom kept), and pulsed a moment so the eye
+   *  finds it — which of three Goblin Warriors it is. A token this screen
+   *  doesn't draw (another scene's) is left alone. */
+  export function showToken(id: string): void {
+    const t = tokens.find((x) => String(x.id) === id);
+    if (!t || !prep) return;
+    const p = placed?.get(id)?.pos ?? tokenPos(t);
+    const sx = width / 2 + (p.x - cam.x) * cam.scale;
+    const sy = height / 2 + (p.y - cam.y) * cam.scale;
+    if (sx < width * 0.15 || sx > width * 0.85 || sy < height * 0.15 || sy > height * 0.85) {
+      auto.on = false;
+      cam.x = p.x;
+      cam.y = p.y;
+    }
+    flash = { id, at: performance.now() };
+    lastShown = id;
+    schedule();
   }
 
   function zoomAt(sx: number, sy: number, scale: number): void {
@@ -557,7 +575,7 @@
   }
 
   onMount(() => {
-    Object.assign(canvas, { screenOf, pxPerHex: () => cam.scale });
+    Object.assign(canvas, { screenOf, pxPerHex: () => cam.scale, shown: () => lastShown });
     const ro = new ResizeObserver(() => {
       const r = host.getBoundingClientRect();
       dpr = Math.min(window.devicePixelRatio || 1, 3);

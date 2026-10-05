@@ -62,7 +62,7 @@
     {#each rows as r (r.id)}
       {@const n = times(r.target)}
       {@const can = pick ? r.target in why && !why[r.target] : false}
-      <li class="row" class:current={r.current} class:dead={r.dead} class:on={selected === r.id} class:chosen={n > 0}>
+      <li class="row" class:current={r.current} class:dead={r.dead} class:on={selected === r.id} class:chosen={n > 0} data-token={r.id}>
         <div class="who">
           {#if inOrder}<span class="init" title="Its place in the order">{r.init || (r.order >= 0 ? String(r.order + 1) : '')}</span>{/if}
           {#if gm && onSelect}

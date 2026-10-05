@@ -134,6 +134,11 @@ let ok = await step('Ana and Ben join; the DM gives Sela Fireball', async () => 
 
 let seen = null; // the goblin the party sees
 let hidden = null; // the one the DM keeps hidden
+// (every goblin is "Goblin Warrior": a screen's words are counted, not searched
+// for a name, and the hidden one is looked for by its ids)
+const goblinsNamed = (words) => (String(words).match(/Goblin Warrior/g) ?? []).length;
+let anaNamed = 0;
+let benNamed = 0;
 ok = ok && (await step('the chapel fight: the goblins revealed but one, the party beside them', async () => {
   await dm.getByRole('button', { name: /Start session/ }).first().click().catch(() => {});
   await dm.locator('.book').getByRole('button', { name: /^The ruined chapel/ }).first().click();
@@ -152,14 +157,15 @@ ok = ok && (await step('the chapel fight: the goblins revealed but one, the part
       for (const b of toks) {
         if (a === b) continue;
         const d = Math.hypot(a.pos[0] - b.pos[0], a.pos[1] - b.pos[1]);
-        if (d >= 0.9 && d <= 3 && (!best || d < best.d)) best = { d, a: { id: a.id, name: a.name }, b: { id: b.id, name: b.name } };
+        if (d >= 0.9 && d <= 3 && (!best || d < best.d)) best = { d, a: { id: a.id, name: a.name, actor: a.actor }, b: { id: b.id, name: b.name, actor: b.actor } };
       }
     return best;
   });
   expect(pair, 'no two goblins near each other in the chapel');
   seen = pair.a;
   hidden = pair.b;
-  await dm.locator('.fightpanel').getByRole('button', { name: new RegExp(hidden.name) }).first().click();
+  // (by its token: every goblin is "Goblin Warrior")
+  await dm.locator(`.fightpanel .order [data-token="${hidden.id}"]`).click();
   await dm.locator('.fightpanel .chosen').getByRole('button', { name: 'Hide' }).click();
   await dm.waitForFunction((id) => (window.hexmap.game.scene.tokens ?? []).some((t) => t.id === id && t.hidden), hidden.id, { timeout: 5000 });
   // the party just west of the goblin they see
@@ -202,7 +208,10 @@ ok = ok && (await step('Ana previews Fireball off her turn: on the goblins, sayi
   await ana.mouse.click(at.x, at.y);
   await banner.getByText(/catches \d+:/).waitFor({ timeout: 5000 });
   const words = await banner.innerText();
-  expect(words.includes(seen.name) && !words.includes(hidden.name), `Ana's preview names the goblin she sees and not the hidden one: ${words}`);
+  // (her screen holds no token of the hidden one: what it names, it names of those it holds)
+  const holds = await ana.evaluate((id) => (window.hexmap.game.scene.tokens ?? []).some((t) => t.id === id), hidden.id);
+  anaNamed = goblinsNamed(words);
+  expect(anaNamed >= 1 && !holds, `Ana's preview names the goblin she sees, and nothing of the hidden one: ${words}`);
   await shot(ana, 'ana_fireball_on_the_goblins');
 }));
 
@@ -213,12 +222,14 @@ ok = ok && (await step('Ben’s screen and the DM’s show it, labelled; Ben’s
   expect((await marksOn(ben)).some(isFireball), 'Ben has the preview');
   const benList = await marksList(ben);
   expect(benList.words.includes('Sela: Fireball, 20-ft sphere'), `Ben's list says it: ${benList.words}`);
-  expect(benList.words.includes(seen.name), `Ben's says it catches ${seen.name}: ${benList.words}`);
-  expect(!benList.words.includes(hidden.name), `Ben's never names the hidden goblin: ${benList.words}`);
+  benNamed = goblinsNamed(benList.words);
+  expect(benNamed >= 1, `Ben's says it catches the goblin he sees: ${benList.words}`);
   await shot(ben, 'ben_sees_the_preview');
   await benList.close();
   const dmList = await marksList(dm);
-  expect(dmList.words.includes('Sela: Fireball, 20-ft sphere') && dmList.words.includes(hidden.name) && dmList.words.includes(seen.name), `the DM's says both goblins: ${dmList.words}`);
+  // (the DM's names the hidden one too: one goblin more than either player's)
+  const dmNamed = goblinsNamed(dmList.words);
+  expect(dmList.words.includes('Sela: Fireball, 20-ft sphere') && dmNamed > anaNamed && dmNamed > benNamed, `the DM's says both goblins (${dmNamed}; Ana's ${anaNamed}, Ben's ${benNamed}): ${dmList.words}`);
   await shot(dm, 'dm_sees_the_preview');
   await dmList.close();
   // Ana pins it and puts the tool away: it stays for the table to talk over
@@ -349,7 +360,11 @@ ok = ok && (await step('the DM puts a template on the goblins: Damage those caug
   await ben.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => String(e.text ?? '').startsWith('Fire trap (')), null, { timeout: 8000 });
   const bens = await lineOn(ben);
   expect(bens.includes('Fire trap (3 fire; a Dexterity save, DC 40, half on a success)') && bens.includes(`${seen.name}, fails the save, 3 fire damage`), `Ben reads what it did: ${bens}`);
-  expect(!(await ben.evaluate(() => JSON.stringify(window.hexmap.game.view.log ?? []))).includes(hidden.name), 'Ben’s log never names the hidden goblin');
+  // (no more goblins in his line than his screen holds; nothing in his log carries the hidden one's ids)
+  const benGoblins = await ben.evaluate(() => (window.hexmap.game.scene.tokens ?? []).filter((t) => t.name === 'Goblin Warrior').length);
+  expect(goblinsNamed(bens) <= benGoblins, `Ben's line names more goblins than his screen holds (${benGoblins}): ${bens}`);
+  const benLog = await ben.evaluate(() => JSON.stringify(window.hexmap.game.view.log ?? []));
+  expect(!benLog.includes(hidden.id) && !benLog.includes(hidden.actor), 'Ben’s log never names the hidden goblin');
   await shot(ben, 'ben_reads_the_trap');
 }));
 

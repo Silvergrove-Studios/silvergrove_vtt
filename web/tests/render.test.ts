@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
-import { DEAD_APART, DEAD_SIZE, FAN_SIZE, OBJECT_APART, drawnAsThing, hpWords, isDead, isObject, layout, tokenAt, underDiscs } from '../src/lib/map/render';
+import { DEAD_APART, DEAD_SIZE, FAN_SIZE, OBJECT_APART, drawFlash, drawnAsThing, hpWords, isDead, isObject, layout, tokenAt, underDiscs } from '../src/lib/map/render';
 
 describe('the map, as it is drawn', () => {
   const grid = new Grid({ columns: 10, rows: 8 });
@@ -76,6 +76,40 @@ describe('the map, as it is drawn', () => {
   });
 
   // (a playtest's "Fire of broken pews" covered two goblins and the Warden)
+  // (a token chosen from the DM's list: which of three Goblin Warriors it is)
+  it('pulses a token chosen from a list: rings going out from it and fading, big enough to see zoomed out', () => {
+    const arcs: { r: number; alpha: number }[] = [];
+    let alpha = 1;
+    const ctx = {
+      save: () => {},
+      restore: () => (alpha = 1),
+      beginPath: () => {},
+      stroke: () => {},
+      arc: (_x: number, _y: number, r: number) => arcs.push({ r, alpha }),
+      set globalAlpha(a: number) {
+        alpha = a;
+      },
+      lineWidth: 1,
+      strokeStyle: '',
+    } as unknown as CanvasRenderingContext2D;
+    const d = { t: { id: 'g', size: 1 }, pos: { x: 3, y: 3 }, k: 1 };
+    drawFlash(ctx, d, 0.1, 40);
+    const early = arcs.splice(0);
+    drawFlash(ctx, d, 0.6, 40);
+    const later = arcs.splice(0);
+    // one ring at first, the second following; each wider and fainter as it goes
+    expect(early.length).toBe(1);
+    expect(later.length).toBe(2);
+    expect(later[0].r).toBeGreaterThan(early[0].r);
+    expect(later[0].alpha).toBeLessThan(early[0].alpha);
+    // gone at the end
+    drawFlash(ctx, d, 1, 40);
+    expect(arcs.splice(0).filter((a) => a.alpha > 0.01).length).toBe(0);
+    // zoomed far out (4 px a hex), it still reaches about 30 px out
+    drawFlash(ctx, d, 0.64, 4);
+    expect(arcs[0].r * 4).toBeGreaterThan(25);
+  });
+
   it('knows a label a token is over', () => {
     const box = { x0: 2, y0: 2, x1: 5, y1: 2.3 };
     expect(underDiscs(box, [{ x: 3, y: 2.6, r: 0.4 }])).toBe(true);

@@ -183,20 +183,40 @@ ok = ok && (await step('the chapel fight: started, the goblins revealed, the par
   await shot(dm, 'dm_fight');
 }));
 
+// (the owner: "the dm should just be able to see the list of tokens, and then
+// clicking one should highlight it on the map")
+ok = ok && (await step('the DM’s list finds the goblin: the map zoomed in on a corner away from it, its row in the order brings it into view, pulsed', async () => {
+  const box = await dm.locator('.mapholder canvas').boundingBox();
+  expect(box, 'no map on the DM’s screen');
+  // (the wheel, at the map's corner: nothing pressed on the way)
+  await dm.mouse.move(box.x + box.width * 0.05, box.y + box.height * 0.9);
+  for (let i = 0; i < 6; i++) await dm.mouse.wheel(0, -400);
+  await dm.waitForTimeout(300);
+  const inView = (id) =>
+    dm.evaluate((tid) => {
+      const c = document.querySelector('.mapholder canvas');
+      const p = c?.screenOf?.(tid);
+      const r = c?.getBoundingClientRect();
+      return !!p && !!r && p.x > r.left && p.x < r.right && p.y > r.top && p.y < r.bottom;
+    }, id);
+  const before = await inView(goblin.id);
+  await dm.locator(`.fightpanel .order [data-token="${goblin.id}"]`).click();
+  await dm.waitForFunction((id) => document.querySelector('.mapholder canvas')?.shown?.() === id, goblin.id, { timeout: 3000 });
+  expect(await inView(goblin.id), `the goblin isn't in view after its row was chosen (in view before: ${before})`);
+  expect(await dm.locator(`.fightpanel .order [data-token="${goblin.id}"]`).evaluate((b) => b.classList.contains('on')), 'its row isn’t marked chosen');
+  await shot(dm, 'dm_list_finds_goblin');
+}));
+
 ok = ok && (await step('the DM wounds the goblin on its stat block: Bloodied, on Ana’s map too (the players see the marks)', async () => {
   const hp = await dm.evaluate((aid) => ((((window.hexmap.game.view.actors ?? {})[aid] ?? {}).resources ?? {}).srd5e ?? {}).hp ?? null, goblin.actor);
   expect(hp && hp.max > 1, `the goblin's hit points aren't on the DM's page: ${JSON.stringify(hp)}`);
   const amount = Math.ceil(Number(hp.max) / 2);
-  // its row in the order, by its own name exactly ("Goblin Warrior" isn't "Goblin
-  // Warrior 2", nor "Goblin Warrior JA", a creature spawned out of the players'
-  // sight; the current one's row says its turn after its name), chosen
-  const idx = await dm.evaluate((name) => [...document.querySelectorAll('.fightpanel .order button')].findIndex((b) => {
-    const n = b.querySelector('.name');
-    return !!n && [...n.childNodes].filter((c) => c.nodeType === Node.TEXT_NODE).map((c) => c.textContent).join('').trim() === name;
-  }), goblin.name);
-  expect(idx >= 0, `no row in the order named ${goblin.name}`);
-  await dm.locator('.fightpanel .order button').nth(idx).click();
-  await dm.waitForFunction((i) => !!document.querySelectorAll('.fightpanel .order button')[i]?.classList.contains('on'), idx, { timeout: 5000 });
+  // its row in the order, by its token (every goblin is "Goblin Warrior": a
+  // name is no key, the list is how the DM finds one), chosen
+  const row = dm.locator(`.fightpanel .order [data-token="${goblin.id}"]`);
+  expect((await row.count()) === 1, `no row in the order for ${goblin.id}`);
+  await row.click();
+  await dm.waitForFunction((id) => !!document.querySelector(`.fightpanel .order [data-token="${id}"]`)?.classList.contains('on'), goblin.id, { timeout: 5000 });
   const block = dm.locator('.fightpanel .chosen');
   // (the damage is on its stat block: its card's Stat block tab, where the card has tabs)
   const statTab = block.getByRole('tab', { name: 'Stat block' });

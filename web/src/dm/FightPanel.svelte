@@ -1,6 +1,10 @@
 <!--
-  The fight, beside the map: the turn order (tap one to choose it), and the
-  chosen creature — hidden or seen, its stat block, its actions. An action
+  The fight, beside the map: the turn order, every creature in it — a slot
+  several share (a stat block's goblins) with each of them under it — and
+  the chosen creature: hidden or seen, its stat block, its actions. The
+  list is how the DM finds one of three Goblin Warriors: tapped, it is
+  chosen and shown on the map (brought into view and pulsed a moment); in
+  the theatre of the mind its stat block, here, is what shows it. An action
   that needs a target asks for one on the map. Where the table keeps
   monsters' names from the players, what each is to them ("a creature",
   its label on their maps), its name revealed one by one or all at once.
@@ -9,6 +13,7 @@
   import View from '../lib/views/View.svelte';
   import { dmOp, game, type Dict } from '../lib/game.svelte';
   import { orderRows } from './fight';
+  import { inMind } from '../lib/mind';
   import NameKnown from './NameKnown.svelte';
 
   let { selected = '', onselect, onopen }: { selected?: string; onselect: (id: string) => void; onopen: (ref: string) => void } = $props();
@@ -21,6 +26,8 @@
   // the creatures whose names the players don't know (one actor's tokens once)
   const unnamed = $derived([...new Set(tokens.filter((t) => t.name_known === false && t.actor).map((t) => String(t.actor)))]);
   const scene = $derived(String(game.scene.id ?? ''));
+  const mind = $derived(inMind(game.scene));
+  const TO_THEM = "What the players call it: they don't know its name";
 </script>
 
 <div class="panel scroll">
@@ -30,12 +37,33 @@
       <ol class="order">
         {#each rows as r (r.entry)}
           <li>
-            <button type="button" class="row" class:current={r.current} class:on={r.ids.includes(selected)} onclick={() => onselect(r.ids[0] ?? '')}>
-              <span class="init">{r.label}</span>
-              <span class="name">{r.name}{#if r.note}<span class="note">{r.note}</span>{/if}</span>
-              {#if r.playerLabel}<span class="tag" title="What the players call it: they don't know its name">“{r.playerLabel}” to them</span>{/if}
-              {#if r.hidden}<span class="tag">hidden</span>{/if}
-            </button>
+            {#if r.group}
+              <!-- a slot several share: the slot, then each creature in it to choose -->
+              <div class="row slot" class:current={r.current}>
+                <span class="init">{r.label}</span>
+                <span class="name">{r.name}{#if r.note}<span class="note">{r.note}</span>{/if}</span>
+                {#if r.hidden}<span class="tag">hidden</span>{/if}
+              </div>
+              <ol class="members" aria-label={r.name}>
+                {#each r.members as m (m.id)}
+                  <li>
+                    <button type="button" class="row" class:on={m.id === selected} data-token={m.id} onclick={() => onselect(m.id)}>
+                      <span class="init"></span>
+                      <span class="name">{m.name}</span>
+                      {#if m.playerLabel}<span class="tag" title={TO_THEM}>“{m.playerLabel}” to them</span>{/if}
+                      {#if m.hidden && !r.hidden}<span class="tag">hidden</span>{/if}
+                    </button>
+                  </li>
+                {/each}
+              </ol>
+            {:else}
+              <button type="button" class="row" class:current={r.current} class:on={r.ids.includes(selected)} data-token={r.ids[0] ?? ''} onclick={() => onselect(r.ids[0] ?? '')}>
+                <span class="init">{r.label}</span>
+                <span class="name">{r.name}{#if r.note}<span class="note">{r.note}</span>{/if}</span>
+                {#if r.playerLabel}<span class="tag" title={TO_THEM}>“{r.playerLabel}” to them</span>{/if}
+                {#if r.hidden}<span class="tag">hidden</span>{/if}
+              </button>
+            {/if}
           </li>
         {/each}
       </ol>
@@ -72,7 +100,7 @@
       {/if}
     </section>
   {:else}
-    <p class="dim hint">Tap a creature on the map, or in the order, to see its stat block and act with it.</p>
+    <p class="dim hint">{mind ? 'Tap a creature in the order, or in the list, to see its stat block and act with it.' : 'Tap a creature on the map, or in the order, to see its stat block and act with it.'}</p>
   {/if}
 </div>
 
@@ -115,6 +143,18 @@
     background: rgba(255, 215, 90, 0.14);
     color: var(--heading);
     font-weight: 600;
+  }
+  /* a slot several share: its creatures under it, each a row of its own */
+  .slot {
+    cursor: default;
+  }
+  .members {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
   .init {
     min-width: 26px;

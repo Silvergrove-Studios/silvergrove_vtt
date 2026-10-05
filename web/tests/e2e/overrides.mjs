@@ -72,11 +72,12 @@ const dm = await open(info.dm, { width: 1440, height: 900 }, 'dm');
 const ana = await open(info.player, { width: 390, height: 844 }, 'ana');
 const ben = await open(info.player, { width: 1280, height: 800 }, 'ben');
 
-// A token's creature as a page knows it: its derived numbers, its pools, its turn's counters.
+// A token's creature as a page knows it: its derived numbers, its pools, its
+// turn's counters. By its token's id, or a character's name.
 const creature = (page, name) =>
   page.evaluate((who) => {
     const g = window.hexmap.game;
-    const t = (g.scene.tokens ?? []).find((x) => x.name === who);
+    const t = (g.scene.tokens ?? []).find((x) => x.id === who) ?? (g.scene.tokens ?? []).find((x) => x.name === who);
     const a = t ? g.view.actors?.[t.actor] : null;
     if (!t) return null;
     return {
@@ -114,9 +115,10 @@ async function nextUntil(who) {
   await bar.getByText(new RegExp(`${who}’s turn`)).waitFor({ timeout: 2000 });
 }
 
-// A creature chosen in the DM's turn order, on one of its tabs.
-async function choose(name, tab) {
-  await dm.locator('.order .row').filter({ hasText: name }).first().click();
+// A creature chosen in the DM's turn order, on one of its tabs: a goblin by
+// its token (every goblin is "Goblin Warrior"), a character by name.
+async function choose(who, tab) {
+  await (typeof who === 'string' ? dm.locator('.order .row').filter({ hasText: who }).first() : dm.locator(`.order [data-token="${who.id}"]`)).click();
   const chosen = dm.locator('.chosen');
   await chosen.waitFor({ timeout: 5000 });
   if (tab) await chosen.getByRole('tab', { name: tab, exact: true }).click({ timeout: 5000 });
@@ -204,16 +206,16 @@ ok = ok && (await step('the DM puts the party inside and Sela beside a goblin', 
 }));
 
 ok = ok && (await step('the DM opens the goblin’s Adjust tab and sets its AC to 17: “AC 17 · 15 computed, set by the DM”', async () => {
-  const before = await creature(dm, goblin.name);
+  const before = await creature(dm, goblin.id);
   expect(before.ac === 15, `the goblin's AC before: ${before.ac}`);
-  const chosen = await choose(goblin.name, 'Adjust');
+  const chosen = await choose(goblin, 'Adjust');
   await chosen.getByRole('combobox', { name: 'Number' }).selectOption({ label: 'AC' });
   await chosen.getByRole('combobox', { name: 'How' }).first().selectOption({ label: 'Set it to' });
   await chosen.getByRole('spinbutton', { name: 'Value' }).fill('17');
   await chosen.getByRole('textbox', { name: 'Why (said in the log)' }).first().fill('a shield from the chapel');
   await chosen.getByRole('button', { name: 'Change it' }).first().click();
   await chosen.getByText('AC 17 · 15 computed, set by the DM').first().waitFor({ timeout: 8000 });
-  const after = await creature(dm, goblin.name);
+  const after = await creature(dm, goblin.id);
   expect(after.ac === 17, `its AC now: ${after.ac}`);
   await shot(dm, 'dm_goblin_adjust_ac');
   // the log says so, to the DM alone (a monster's AC isn't the players' to know)
@@ -236,7 +238,7 @@ ok = ok && (await step('the DM opens the goblin’s Adjust tab and sets its AC t
 let before = null;
 ok = ok && (await step('the goblin’s scimitar hits Sela; Ana casts Shield on her phone: the attack misses, her reaction is spent', async () => {
   before = await creature(dm, 'Sela');
-  const chosen = await choose(goblin.name, 'Stat block');
+  const chosen = await choose(goblin, 'Stat block');
   const row = chosen.locator('.row').filter({ hasText: /^Scimitar\./ }).first();
   await row.getByRole('button', { name: 'Use' }).click();
   const banner = dm.getByRole('group', { name: 'Choose the target' });

@@ -44,6 +44,18 @@ export function liveFight(dm: Dict): Dict | null {
   return null;
 }
 
+/** One creature of an entry in the order, as the DM's list shows it: the
+ *  list is how the DM finds one of three Goblin Warriors (names are words,
+ *  never keys: a tap shows it on the map). */
+export interface OrderMember {
+  /** its token's id */
+  id: string;
+  name: string;
+  hidden: boolean;
+  /** what the players call it, where they don't know its name ("1", "?"), or '' */
+  playerLabel: string;
+}
+
 export interface OrderRow {
   entry: string;
   ids: string[];
@@ -55,6 +67,15 @@ export interface OrderRow {
   note: string;
   /** what the players call it, where they don't know its name ("1", "?"), or '' */
   playerLabel: string;
+  /** a slot several share (a stat block's creatures, or one and those acting with it) */
+  group: boolean;
+  /** the creatures it stands for on this scene, each to choose: one, or a slot's several */
+  members: OrderMember[];
+}
+
+/** What the players call a token they don't know by name, for the DM to call it out ('' where they know it, or don't see it). */
+function playerLabelOf(t: Dict | undefined): string {
+  return t?.name_known === false && !t?.hidden ? String(t?.player_label ?? '') : '';
 }
 
 export function orderRows(scene: Dict): OrderRow[] {
@@ -75,8 +96,9 @@ export function orderRows(scene: Dict): OrderRow[] {
     const name = group ? String(turns.data?.groups?.[String(entry).slice(6)]?.label ?? labels[entry] ?? String(entry).slice(6)) : String(toks[0]?.name ?? '');
     const current = ids.some((id) => up.has(id));
     // (one the players don't know by name: the label they see it by, for the DM to call it out)
-    const unknown = !group && toks[0]?.name_known === false && !toks[0]?.hidden ? String(toks[0]?.player_label ?? '') : '';
-    rows.push({ entry: String(entry), ids, name, label: String(labels[entry] ?? ''), current, hidden: toks.length > 0 && toks.every((t) => t.hidden), note: current ? turnNote(turns, ids) : '', playerLabel: unknown });
+    const unknown = group ? '' : playerLabelOf(toks[0]);
+    const members = toks.map((t) => ({ id: String(t.id), name: String(t.name ?? ''), hidden: !!t.hidden, playerLabel: playerLabelOf(t) }));
+    rows.push({ entry: String(entry), ids, name, label: String(labels[entry] ?? ''), current, hidden: toks.length > 0 && toks.every((t) => t.hidden), note: current ? turnNote(turns, ids) : '', playerLabel: unknown, group, members });
   }
   return rows;
 }

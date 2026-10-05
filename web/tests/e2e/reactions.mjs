@@ -147,7 +147,7 @@ await step('the DM puts the party inside and Sela beside a goblin', async () => 
 let before = null;
 await step('the goblin’s scimitar hits Sela: a Shield card on Ana’s phone at once, with its seconds; Ben’s and the DM’s screens say whom the fight waits on', async () => {
   before = await sela();
-  await dm.locator('.order .row').filter({ hasText: goblin.name }).first().click();
+  await dm.locator(`.order [data-token="${goblin.id}"]`).click();
   await dm.locator('.chosen').waitFor({ timeout: 5000 });
   const row = dm.locator('.chosen .row').filter({ hasText: /^Scimitar\./ }).first();
   await row.getByRole('button', { name: 'Use' }).click();
@@ -213,10 +213,11 @@ await step('the next round, her reaction back: the DM goes on without waiting fo
   if (s.reactions !== 1) throw new Error(`her reaction isn't back: ${s.reactions}`);
   // a goblin's shortbow at her, then the next one's, until one hits (the dice are the seed's)
   const card = ana.getByRole('dialog', { name: 'Your reaction' });
-  const goblins = await dm.evaluate(() => (window.hexmap.game.scene.tokens ?? []).filter((t) => /^Goblin Warrior/.test(t.name ?? '')).map((t) => t.name));
+  // (each by its token: every goblin is "Goblin Warrior")
+  const goblins = await dm.evaluate(() => (window.hexmap.game.scene.tokens ?? []).filter((t) => /^Goblin Warrior/.test(t.name ?? '')).map((t) => t.id));
   let asked = false;
   for (const g of goblins) {
-    await dm.locator('.order .row').filter({ hasText: g }).first().click();
+    await dm.locator(`.order [data-token="${g}"]`).click();
     await dm.locator('.chosen').waitFor({ timeout: 5000 });
     await dm.locator('.chosen .row').filter({ hasText: /^Shortbow\./ }).first().getByRole('button', { name: 'Use' }).click();
     const banner = dm.getByRole('group', { name: 'Choose the target' });

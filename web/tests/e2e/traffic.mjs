@@ -298,7 +298,7 @@ ok = ok && (await step('the session and the chapel fight: initiative, the goblin
 
 await begin('round 1');
 ok = ok && (await step('round 1: a goblin’s scimitar at Wren; the turns on to Wren; Ana attacks; on to round 2', async () => {
-  await dm.locator('.order .row').filter({ hasText: goblin.name }).first().click();
+  await dm.locator(`.order [data-token="${goblin.id}"]`).click();
   await dm.locator('.chosen').waitFor({ timeout: 5000 });
   await dm.locator('.chosen .row').filter({ hasText: /^Scimitar\./ }).first().getByRole('button', { name: 'Use' }).click();
   const banner = dm.getByRole('group', { name: 'Choose the target' });

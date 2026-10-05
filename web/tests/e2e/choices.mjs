@@ -281,8 +281,8 @@ async function nextRoundOf(who) {
 ok = ok && (await step('her throw hits: a card in front on Ana’s phone at once — Piercing or Lightning, its seconds counting — and the DM’s screen says the table waits on her', async () => {
   const target = await dm.evaluate((first) => {
     const toks = window.hexmap.game.scene.tokens ?? [];
-    // (a goblin spawned out of the players' sight is named apart by a tag that counts nothing: "Goblin Warrior Q7", "13N")
-    const gob = toks.find((t) => /^Goblin Warrior( [A-Z0-9]+)?$/.test(t.name ?? '') && t.id !== first);
+    // (every goblin is "Goblin Warrior": another by its token)
+    const gob = toks.find((t) => t.name === 'Goblin Warrior' && t.id !== first);
     return gob ? { id: gob.id, name: gob.name } : null;
   }, goblin.id);
   expect(target, 'no goblin left standing');

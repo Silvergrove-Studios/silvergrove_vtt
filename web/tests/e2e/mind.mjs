@@ -229,7 +229,8 @@ ok = ok && (await step('on Sela’s turn Ana picks a goblin from the list for he
   const list = listOf(ana);
   await list.getByText('Fire Bolt: choose a creature below, then Done.').waitFor({ timeout: 5000 });
   await shot(ana, 'ana_fire_bolt_pick');
-  await list.getByRole('button', { name: `Choose ${gob1.name}`, exact: true }).click();
+  // (by its row's token: every goblin is "Goblin Warrior")
+  await list.locator(`[data-token="${gob1.id}"]`).getByRole('button', { name: /^Choose / }).click();
   await list.getByRole('button', { name: 'Done' }).click();
   await ana.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => /casts Fire Bolt at/.test(e.text ?? '')), null, { timeout: 8000 });
   const went = sent.get('ana').slice(before).map((m) => m.intent).filter((i) => i?.kind === 'action' && i.action === 'cast');
@@ -252,7 +253,7 @@ ok = ok && (await step('on her next turn Ana casts Burning Hands, naming two gob
   const list = listOf(ana);
   await list.getByText('Who does your Burning Hands catch? Choose each creature it catches below, then Done.').waitFor({ timeout: 5000 });
   // two of them, from the list
-  for (const g of goblins.slice(1)) await list.getByRole('button', { name: `Choose ${g.name}`, exact: true }).click();
+  for (const g of goblins.slice(1)) await list.locator(`[data-token="${g.id}"]`).getByRole('button', { name: /^Choose / }).click();
   await list.getByText(`Burning Hands catches ${goblins[1].name}, ${goblins[2].name}`).waitFor({ timeout: 3000 });
   await shot(ana, 'ana_burning_hands_caught');
   await list.getByRole('button', { name: 'Done' }).click();
@@ -261,7 +262,7 @@ ok = ok && (await step('on her next turn Ana casts Burning Hands, naming two gob
   // the DM's card: whom she named, what it does; nothing landed yet
   const card = dm.getByRole('dialog', { name: 'To approve' });
   await card.waitFor({ timeout: 10000 });
-  await card.getByText(/Sela's Burning Hands, catching the Goblin Warrior/).first().waitFor({ timeout: 3000 });
+  await card.getByText(/Sela's Burning Hands, catching the two Goblin Warriors/).first().waitFor({ timeout: 3000 });
   const still = await dm.evaluate((ids) => Object.fromEntries(ids.map((id) => [id, window.hexmap.game.view.actors?.[id]?.resources?.srd5e?.hp?.current])), goblins.map((g) => g.actor));
   expect(JSON.stringify(still) === JSON.stringify(hp), `something landed before the DM said so: ${JSON.stringify(hp)} → ${JSON.stringify(still)}`);
   await ana.getByText(/waits on the DM|Waiting on the DM|the DM/).first().waitFor({ timeout: 5000 }).catch(() => {});

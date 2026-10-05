@@ -51,6 +51,7 @@
   let walkPutOff = $state(false);
   let bookOpen = $state(false);
   let selected = $state('');
+  let mapView = $state<ReturnType<typeof MapView>>();
   let pick = $state<Dict | null>(null);
   // the creatures tapped so far, for a pick of several (Bless: up to three)
   let picked = $state<string[]>([]);
@@ -416,6 +417,15 @@
     return who ? `${String(who.name)}’s, moved by them` : 'a thing on the map';
   }
 
+  // a creature chosen from a list (the fight's order, the book): chosen, and
+  // shown on the map — brought into view and pulsed a moment, so the DM sees
+  // which of three Goblin Warriors it is (names are words, never keys); in
+  // the theatre of the mind, its stat block beside the list is what shows it
+  function choose(id: string): void {
+    selected = id;
+    if (id && !mind) mapView?.showToken(id);
+  }
+
   // in a fight, a creature of it opened from the book is its stat block
   // beside the map (a playtest's DM, the Warden risen, clicked its name in
   // the book and got its picture)
@@ -425,7 +435,7 @@
       open(ref);
       return;
     }
-    selected = tid;
+    choose(tid);
     side = 'fight';
     card = '';
     history = [];
@@ -650,6 +660,7 @@
             </MindFight>
           {:else}
           <MapView
+            bind:this={mapView}
             {map}
             scene={seeing ? (game.preview as Dict) : game.scene}
             gm={!seeing}
@@ -746,7 +757,7 @@
               {/each}
             </div>
           {:else if side === 'fight'}
-            <div class="fightpanel"><FightPanel {selected} onselect={(id) => (selected = id)} onopen={open} /></div>
+            <div class="fightpanel"><FightPanel {selected} onselect={choose} onopen={open} /></div>
           {/if}
           {#if side !== 'chat'}
             <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->

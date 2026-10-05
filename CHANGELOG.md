@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **The DM's list finds a creature on the map.** A creature chosen in the
+  fight's turn order (or opened from the book) is brought into view on the
+  DM's map if it isn't well inside it, and pulses a moment, so the DM sees
+  which of three creatures sharing a stat block's name it is; in the
+  theatre of the mind, its stat block beside the list shows it. A slot
+  several creatures share lists each of them under it, each to choose (it
+  chose only the first). Where creatures share a name (three Goblin
+  Warriors), the list is how the DM tells them apart: a name is never a
+  key. Every row carries its token's id (`data-token`).
+
 - **Whether a call may wait, told to the ruleset.** `hm.may_wait()` says
   whether the code running now may wait on a card: an action, a hook that
   waits (a turn's steps, `after_move`, a card's answer) may; a hook the
