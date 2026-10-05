@@ -52,6 +52,11 @@ export const game = $state({
   /** Who is writing in the chat now (a player's id, or "gm"): the id of their
    *  newest line when they began, so the line they send ends it. */
   typing: {} as Record<string, { after: string }>,
+  /** The table's shared marks this screen may see (rulers, templates,
+   *  previews, pings), by id: the Table's word, its own included. */
+  marks: {} as Record<string, Dict>,
+  /** When each mark was first heard of here (performance.now(): a ping fades from then). */
+  marksBorn: {} as Record<string, number>,
 });
 
 let conn: Connection | null = null;
@@ -214,6 +219,27 @@ function handle(m: Msg): void {
       break;
     case 'dm':
       game.dm = (m.state as Dict) ?? {};
+      break;
+    // the table's shared marks: all of them on joining, then one at a time
+    case 'marks': {
+      const all: Record<string, Dict> = {};
+      for (const mk of (m.marks as Dict[]) ?? []) if (mk && typeof mk === 'object' && mk.id) all[String(mk.id)] = mk;
+      game.marks = all;
+      for (const id of Object.keys(all)) game.marksBorn[id] ??= performance.now();
+      break;
+    }
+    case 'mark': {
+      const mk = m.mark as Dict | undefined;
+      if (!mk || typeof mk !== 'object' || !mk.id) break;
+      game.marks[String(mk.id)] = mk;
+      game.marksBorn[String(mk.id)] ??= performance.now();
+      break;
+    }
+    case 'unmark':
+      for (const id of (m.ids as string[]) ?? []) {
+        delete game.marks[String(id)];
+        delete game.marksBorn[String(id)];
+      }
       break;
     case 'map': {
       const doc = (m.doc as Dict) ?? {};

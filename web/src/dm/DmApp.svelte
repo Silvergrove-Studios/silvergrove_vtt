@@ -26,6 +26,7 @@
   import { Grid } from '../lib/grid';
   import { DEAD_WORDS, moveTo, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
   import PickBanner from '../lib/map/PickBanner.svelte';
+  import { startPreview, tools, whereOf } from '../lib/map/tools.svelte';
   import QuickToken from './QuickToken.svelte';
   import { fightToken, liveFight } from './fight';
   import { currentTurnTokens } from '../lib/turns';
@@ -52,7 +53,16 @@
     intent: (p) => {
       if (p?.kind === 'lookup') open(`entry:${p.collection}/${p.id}`);
       else if (p?.kind === 'show' && p.actor) open(`actor:${p.actor}`);
-      else intent(p);
+      else if (p?.kind === 'preview') {
+        // a spell's or a creature's power's shape on the map, for the table to see
+        const w = whereOf(game.scene, map);
+        if (!w) notice('There is no map shown to put it on', 'error');
+        else {
+          pick = null;
+          placing = null;
+          startPreview(p, w);
+        }
+      } else intent(p);
     },
     submit,
     pick: (p) => startPick(p),
@@ -572,6 +582,7 @@
             picking={pick ? pickWords(pick) : placing?.kind === 'party' ? 'Move the party here: tap where they are' : placing ? `${placing.name}: tap where it goes` : ''}
             banner={pick ? pickBanner : undefined}
             {canDrag}
+            tools
             {onTokenClick}
             {onCellClick}
             {onTokenDrop}
@@ -618,7 +629,7 @@
           <!-- (put away while a pick waits, or a tap puts the party or a thing
                down, and back after: a playtest's DM armed a player's attack and
                the card covered the creatures) -->
-          {#if card && !pick && !placing}
+          {#if card && !pick && !placing && !tools.mode}
             <div class="reader scroll">
               {#if history.length}<button type="button" class="quiet backbtn" onclick={back}>‹ Back</button>{/if}
               {#key card}

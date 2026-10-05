@@ -11,6 +11,7 @@ import { asset, assetArt, image, raster, terrainImage } from '../art';
 import type { Dict } from '../game.svelte';
 import { drawDarkSight, drawFog, drawGhosts, fogPaths, type FogPaths } from './sight';
 import { drawWalls, wallsFor } from './walls';
+import { drawMarks, type MarkLook } from './marks';
 
 export interface Camera {
   x: number; // the world point at the centre of the view
@@ -38,6 +39,8 @@ export interface Look {
   ghosts?: Dict[];
   /** a fight is on: the DM's notes go under the tokens */
   fight?: boolean;
+  /** the table's shared marks on this scene, over everything (marks.ts) */
+  marks?: { list: Dict[]; look: MarkLook; echoes: Record<string, Dict> };
 }
 
 /** A creature's outer ring: the side it is on, beside its shape. */
@@ -478,6 +481,8 @@ export function drawFrame(f: Frame): void {
     ctx.strokeStyle = 'rgba(255, 215, 90, 0.95)';
     ctx.stroke(path);
   }
+  // the table's shared marks, over everything: rulers, templates, previews, pings
+  if (look.marks?.list.length) drawMarks(ctx, look.marks.list, look.marks.look, look.marks.echoes);
 }
 
 function drawProps(ctx: CanvasRenderingContext2D, props: Dict[], pxPerUnit: number): void {

@@ -18,8 +18,9 @@ export interface ViewUi {
 }
 
 /** The intents a page does itself (a lookup opens a card; the DM's "show"
- *  opens a sheet): nothing is sent to the table, and nothing waits for it. */
-export const PAGE_INTENTS = ['lookup', 'show'];
+ *  opens a sheet; a spell's "preview" puts its shape on the map, a mark the
+ *  page sends): nothing waits for the table. */
+export const PAGE_INTENTS = ['lookup', 'show', 'preview'];
 
 const KEY = Symbol('view-ui');
 

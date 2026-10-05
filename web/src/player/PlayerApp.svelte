@@ -27,6 +27,7 @@
   import { Grid } from '../lib/grid';
   import { DEAD_WORDS, blocksMove, followedToken, moveTo, moveWords, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, sightOf, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
   import PickBanner from '../lib/map/PickBanner.svelte';
+  import { startPreview, tools, whereOf } from '../lib/map/tools.svelte';
   import { fogOf, fogWords } from '../lib/map/sight';
   import type { Cell } from '../lib/grid';
   import { movedOn, turnSummary } from '../lib/turns';
@@ -105,8 +106,8 @@
     // (a message written but not yet sent counts too: playtest players' Send
     // clicks landed on a card that came up between typing and sending)
     const draft = (document.querySelector('[aria-label="Message"]') as HTMLTextAreaElement | HTMLInputElement | null)?.value?.trim() ?? '';
-    // (and a target or a move being chosen on the map)
-    const picking = !!(pick || moving || confirmPick || confirmMove);
+    // (and a target or a move being chosen on the map, or a ruler, a template being made)
+    const picking = !!(pick || moving || confirmPick || confirmMove || tools.mode);
     return typing || draft !== '' || pressedLately() || picking || document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
   }
   // a press in the last few seconds: a card that came up as a click was on its
@@ -125,7 +126,18 @@
   provideViewUi({
     intent: (p) => {
       if (p?.kind === 'lookup') lookup = { collection: String(p.collection ?? ''), id: String(p.id ?? '') };
-      else intent(p);
+      else if (p?.kind === 'preview') {
+        // a spell's shape on the map, for everyone to see, any time: the map comes up
+        const w = whereOf(game.scene, map);
+        if (!w) {
+          notice('There is no map shown to put it on', 'error');
+          return;
+        }
+        pick = null;
+        stopMoving();
+        startPreview(p, w);
+        if (!wide) tab = 'map';
+      } else intent(p);
     },
     submit,
     pick: (p, words) => {
@@ -547,6 +559,7 @@
           centerOn={followed}
           follow={followed}
           canDrag={(t) => String(t.owner ?? '') === game.me}
+          tools
           {onTokenClick}
           {onCellClick}
           {onTokenDrop}
@@ -812,16 +825,17 @@
     stroke-linejoin: round;
     stroke-linecap: round;
   }
+  /* (clear of the table's tools down the map's right edge) */
   .drag-tip {
     position: absolute;
     left: 50%;
     top: 12px;
-    transform: translateX(-50%);
+    transform: translateX(calc(-50% - 32px));
     z-index: 5;
     display: flex;
     gap: 8px;
     align-items: center;
-    max-width: calc(100% - 24px);
+    max-width: calc(100% - 92px);
     padding: 6px 6px 6px 12px;
     background: var(--panel);
     border: 1px solid var(--border);
