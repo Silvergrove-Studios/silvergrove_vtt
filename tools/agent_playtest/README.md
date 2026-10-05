@@ -16,7 +16,9 @@ tools, can read and write only their own folder, and research D&D on the web.
   (a phone, a tablet, a laptop); runs the scripts posted to it on 127.0.0.1.
 - `table-mcp.mjs` — the browser as tools (MCP): `screenshot` (the image comes
   back to the agent), `look` (the accessibility tree), `act` (a few lines of
-  Playwright), `wait_for_change`. Every answer starts with the time. Tools, not
+  Playwright), `wait_for_change`, and `roll_dice` (the person's own real dice
+  beside them, rolled fairly, for a table that types its dice in). Every
+  answer starts with the time. Tools, not
   a shell: scripts with braces in them were refused by the shell's permission
   checks, which the agents took for clicks that didn't land.
 - `cast.json` — who plays: persona, device, model, seat port, camera roll.
@@ -26,6 +28,12 @@ tools, can read and write only their own folder, and research D&D on the web.
   players lead, as the DM brief now asks of every DM. `cast4.json` is a table
   of rules lawyers for a `oneshot` at level 12: experienced players who do
   their homework and check the site against the rules at every level.
+- `cast5-bookkeeping.json`, `cast5-rolling.json`, `cast5-assisted.json`,
+  `cast5-automated.json` — the levels playtest: four tables, each with a DM
+  whose persona wants one of the site's four ways of running a table (never
+  named to them: they choose in the site's walkthrough) and players whose
+  dice and devices vary. Each table has its own seat ports (9310s, 9320s,
+  9330s, 9340s), so they can run side by side.
 - `briefs/` — the DM's and the players' briefs (a `session` or a whole
   `campaign`; a `oneshot` has briefs of its own, `dm-oneshot.md` and
   `player-oneshot.md`: build a level-12 character, keep a rules log in
@@ -78,3 +86,26 @@ For a one-shot of rules lawyers, give them the rulebook they're limited to:
 `<run>` must be outside any repository. The allowed tools are the table's,
 reading and editing the agent's own folder, and web search for D&D; anything
 else is refused (`--permission-mode dontAsk`, `--strict-mcp-config`).
+
+## The levels playtest
+
+Four tables, one per way of running a table. The DM sets the table up through
+the site's walkthrough (`--walkthrough` on the host), and the briefs'
+`{{#setup}}` sections (`setup.mjs --setup`) ask the DM to set it up their own
+way, make their rulings through the site, give slow players time to answer,
+and try the map's tools; the players read how their table runs and roll
+their own dice with `roll_dice` where the table types dice in.
+
+```
+# one table (here the first); each table its own host ports, away from 47777/47780
+./run.sh godot --headless --path . -s tools/web_host.gd -- <package> --walkthrough \
+    --seconds 21600 --web-port 48710 --ws-port 48711 --info <run>/host.json --stop <run>/host.stop --log <run>/host.jsonl
+node tools/agent_playtest/setup.mjs --run <run> --host <run>/host.json --mode session --setup \
+    --cast tools/agent_playtest/cast5-bookkeeping.json
+```
+
+The other tables: `cast5-rolling.json`, `cast5-assisted.json`,
+`cast5-automated.json`, each with its own `<run>` and host ports. A package
+may suggest a level (The Ruined Chapel suggests Assisted); the walkthrough
+shows the suggestion and each DM chooses for themselves.
+

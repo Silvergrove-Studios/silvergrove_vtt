@@ -7,8 +7,10 @@
 //
 //   node tools/agent_playtest/setup.mjs --run <dir> --host <host.json>
 //       [--mode session|campaign|oneshot] [--hours 3.5] [--in 3] [--cast cast.json] [--timelapse 120]
-//       [--docs <dir>] [--dm-docs <dir>]
+//       [--docs <dir>] [--dm-docs <dir>] [--setup]
 //
+// --setup: the DM sets the table up the site's way (host it with --walkthrough):
+// the briefs' {{#setup}} sections say so, and the DM's slow players need time.
 // A mode may have briefs of its own (briefs/player-oneshot.md, dm-oneshot.md);
 // the others share briefs/player.md and dm.md, whose {{#mode}} sections say
 // what differs. --docs copies a folder into each player's own as srd/ (a
@@ -37,7 +39,7 @@ const arg = (k, d) => {
 const run = arg('--run') && resolve(arg('--run'));
 const hostFile = arg('--host') && resolve(arg('--host'));
 if (!run || !hostFile) {
-  console.error('usage: node tools/agent_playtest/setup.mjs --run <dir> --host <host.json> [--mode session|campaign|oneshot] [--hours 3.5] [--in 3] [--docs <dir>] [--dm-docs <dir>]');
+  console.error('usage: node tools/agent_playtest/setup.mjs --run <dir> --host <host.json> [--mode session|campaign|oneshot] [--hours 3.5] [--in 3] [--docs <dir>] [--dm-docs <dir>] [--setup]');
   process.exit(2);
 }
 const mode = arg('--mode', 'campaign');
@@ -67,11 +69,17 @@ const times = {
   t_review: at(end + (oneshot ? 25 : 15)),
 };
 
+// the briefs' optional sections: the mode's, and --setup's
+const flags = { setup: process.argv.includes('--setup') };
 function fill(template, values) {
   let s = template;
   for (const m of ['session', 'campaign', 'oneshot']) {
     const re = new RegExp(`\\{\\{#${m}\\}\\}([\\s\\S]*?)\\{\\{/${m}\\}\\}`, 'g');
     s = s.replace(re, (_, inner) => (m === mode ? inner : ''));
+  }
+  for (const [f, on] of Object.entries(flags)) {
+    const re = new RegExp(`\\{\\{#${f}\\}\\}([\\s\\S]*?)\\{\\{/${f}\\}\\}`, 'g');
+    s = s.replace(re, (_, inner) => (on ? inner : ''));
   }
   s = s.replace(/\{\{(\w+)\}\}/g, (_, k) => {
     if (!(k in values)) throw new Error(`the brief wants {{${k}}}`);

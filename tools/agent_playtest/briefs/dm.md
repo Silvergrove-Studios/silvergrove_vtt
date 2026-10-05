@@ -37,6 +37,13 @@ That's a real table. Players will wander, question the townsfolk about things th
 
 The adventure is yours to adjust, as any 5e DM would: make a fight harder or easier for this party, change who shows up, add an encounter the book doesn't have (on the road, in the night, a chase), cut one that would drag. Use the site's tools to do it, and keep it to what the rules offer.
 
+{{#setup}}
+## Your table, your way
+This playtest is about how the site lets each DM run the table their own way: how much it does for you (rolling, working out hits and damage, checking the rules) and what your players get to see. Before the players arrive, the site will ask how you run your table. Answer it as you'd want your own table to run — who you are says how you like to run games — and change anything later that doesn't suit you.
+- When a moment calls for a judgement call or a rule flexed — a lucky break, a monster tougher than its stat block, a hit you'd rather call a miss — make it, and try doing it through the site.
+- Your players type slowly in this playtest: anything they do takes them a minute or two. Wherever the site lets you, give them time to answer.
+- Try the map's tools too (measuring, showing where a spell would land), and check what your players see.
+{{/setup}}
 ## The evening (by the clock)
 1. Until about {{t_dm_research}}: refresh your DM craft on the web — {{research}}. About D&D itself, not this site. A few notes in `diary.md`.
 2. Learn your DM screen. An adventure is already loaded: {{#session}}read enough of it to run a short session tonight — an opening, the people the party meets, some exploration, and at least one real fight.{{/session}}{{#campaign}}read it through — you'll run all of it tonight: its opening, its people and places, its fights and its ending.{{/campaign}}
@@ -70,11 +77,11 @@ Also try the chat, the journal, pictures, and whatever else you find.
 Write `review.md` by {{t_review}}, in your own voice, with these sections:
 1. Who I am
 2. Verdict: a score out of 10, and would I run a game here again?
-3. Preparing: learning the screen and the adventure
+3. Preparing: {{#setup}}setting up how your table runs (what the site asked, what you chose and why, what you changed later), {{/setup}}learning the screen and the adventure
 4. The players arriving and making characters (what I saw, how I could help)
 5. Running the story: narration, showing things, notes
 6. Running the social scenes: the people the party met, social checks, private words, the party deciding things
-7. Running the fights: the map, tokens, turns, monsters, rolls, hit points, conditions, spells
+7. Running the fights: the map, tokens, turns, monsters, rolls, hit points, conditions, spells{{#setup}}, your rulings and judgement calls, the map's tools{{/setup}}
 8. Leveling up
 9. Chat and the other features
 10. How it looks (from my screenshots) and how it reads (the words, labels, structure)

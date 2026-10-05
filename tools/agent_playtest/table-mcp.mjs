@@ -6,6 +6,7 @@
 //
 // With the folder, every call goes into <folder>/log/tools.jsonl: when, which
 // tool, what it was asked, how long it took, and what it answered.
+import { randomInt } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
@@ -37,6 +38,23 @@ function textOf(r, max = 8000) {
   if (t.length > max) t = t.slice(0, max) + `\n… (${t.length - max} more characters: look at a smaller part of the page)`;
   if (r.events?.length) t += '\n\n[the page also said]\n' + r.events.map((e) => '  ' + e).join('\n');
   return `(${clock()})\n${t}`;
+}
+
+// A person's own dice on the table beside them, for a table that rolls real
+// dice and types what came up into the site: "1d20", "2d6", "4d6", "1d20 1d20"
+// (several at once). Each die is rolled fairly (crypto), never chosen.
+function rollDice(text) {
+  const groups = String(text ?? '').toLowerCase().match(/\d*d\d+/g) ?? [];
+  if (groups.length === 0) return { error: 'say which dice, like "1d20" or "2d6" (several: "1d20 1d20")' };
+  const out = [];
+  for (const g of groups) {
+    const [n0, s0] = g.split('d');
+    const n = Math.max(1, Math.min(20, Number(n0 || 1))), sides = Number(s0);
+    if (![2, 3, 4, 6, 8, 10, 12, 20, 100].includes(sides)) return { error: `there's no d${sides} in your dice bag` };
+    const faces = Array.from({ length: n }, () => randomInt(1, sides + 1));
+    out.push(`${n}d${sides}: ${faces.join(', ')} (total ${faces.reduce((a, b) => a + b, 0)})`);
+  }
+  return { text: out.join('\n') };
 }
 
 const TOOLS = [
@@ -71,6 +89,16 @@ const TOOLS = [
     description: "Read your screen directly: the page's accessibility tree (its headings, buttons, fields, text), or one part of it by CSS selector.",
     inputSchema: { type: 'object', properties: { selector: { type: 'string', description: 'Only this part of the page (a CSS selector). Default: all of it.' } } },
     run: async (a) => ({ content: [{ type: 'text', text: textOf(await seat(`return await look(${JSON.stringify(a.selector || 'body')})`)) }] }),
+  },
+  {
+    name: 'roll_dice',
+    description:
+      "Roll your own dice — the real ones on the table beside you. Use them when your table rolls real dice and the site asks you to type in what you rolled (they're not the site's dice). Say which dice: \"1d20\", \"2d6\", \"1d20 1d20\" for two d20s at once. You get each die and the total.",
+    inputSchema: { type: 'object', properties: { dice: { type: 'string', description: 'Which dice, like "1d20" or "2d6 1d4".' } }, required: ['dice'] },
+    run: async (a) => {
+      const r = rollDice(a.dice);
+      return { content: [{ type: 'text', text: `(${clock()})\n${r.error ? 'ERROR: ' + r.error : r.text}` }], isError: !!r.error };
+    },
   },
   {
     name: 'wait_for_change',

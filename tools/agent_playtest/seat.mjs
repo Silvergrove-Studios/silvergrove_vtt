@@ -4,7 +4,7 @@
 // async function, with `page` and a few helpers) and keeps screenshots in
 // <dir>/shots. Only on 127.0.0.1.
 //
-//   node seat.mjs --port 9301 --url <url> --size 390x844 [--touch] [--ua iphone|android|windows|mac] --dir <folder>
+//   node seat.mjs --port 9301 --url <url> --size 390x844 [--touch] [--ua iphone|ipad|android|windows|mac] --dir <folder>
 //       [--timelapse <seconds>]   a picture of the screen that often, in <folder>/timelapse
 //
 // <folder>/log/page.jsonl is what happened in the page: every script run on it
@@ -28,6 +28,8 @@ const UAS = {
   iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1',
   android: 'Mozilla/5.0 (Linux; Android 15; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
   windows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+  // (iPadOS's Safari asks for the desktop site: a Mac's Safari, with touch)
+  ipad: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15',
   mac: undefined,
 };
 mkdirSync(`${dir}/shots`, { recursive: true });
