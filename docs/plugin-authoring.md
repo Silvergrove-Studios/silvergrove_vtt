@@ -38,6 +38,7 @@ is `tests/plugins/sample.ordered`: read it first.
   "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice", "content"],
   "policy": {"status": "best", "circumstance": "best"},
   "settings": {"schema": {…}, "defaults": {"critical_on": 20}},
+  "preferences": {"schema": {…}, "defaults": {…}},   what each player chooses, where the DM lets them
   "tests": true
 }
 ```
@@ -424,6 +425,18 @@ and `list`, a form or wizard field may be:
   cap, source}`: increases on some of the stats (+2 and +1, or +1 to
   each of three). Its value: `{method, base, bonus, final}`. The client
   keeps it within the method; the plugin checks it again.
+- `dice {dice, plus, default}` — real dice typed in: a box a die, `dice`
+  each one's sides (`{20, 20}` for two d20s under Advantage), the total
+  worked out as it's typed with `plus` (the roll's own number), `default`
+  the faces to start from (a card asked again keeps what was typed). Each
+  face is a whole number from 1 to its die's sides (a d10's 0 is its 10,
+  as the die shows it); the web screens take the next box as soon as a face
+  can't grow another digit, and a card's choices other than `app`, `none`,
+  `skip` and `cancel` wait until every die is typed. Its value: the faces,
+  `null` for a box empty or typed wrong (the plugin checks them again).
+  A ruleset that asks a player for their roll this way, and makes the roll
+  with the faces typed (`spec.faces`), can mark it: `spec.typed = true`
+  on the roll's spec, and the web screens' chat says *rolled at the table*.
 
 A client that does not know a field type shows a line of text for it.
 
@@ -631,6 +644,8 @@ hm.dice.pending()
 | `hm.effects.on(ref [, key])` / `hm.effects.has(ref, key)` | effects on a ref (`"actor:a_1"`, `"token:t_1"`, `"encounter"`) |
 | `hm.resources.get(ref, name)` | a pool or track record, or nil |
 | `hm.settings.get(key [, default])` | a setting |
+| `hm.players.list()` | the players at the table: `{ {id, name}, … }` |
+| `hm.players.pref(player, key [, default])` | what a player chose of this plugin's preferences: theirs while the table offers it, else the manifest's default, else `default` ([Players' preferences](#players-preferences)) |
 | `hm.value(n)` | a number's value whether typed or plain |
 
 ### Changing things
@@ -1143,7 +1158,8 @@ end)
 Each test runs on a fresh scratch encounter with a fixed dice seed.
 `t.ok(cond, msg)`, `t.eq(a, b, msg)`, `t.actor(data)` → id,
 `t.roll_with_faces(faces, spec, ctx)` (typed-in faces, nothing drawn),
-`t.commit(events, label)`, `t.setting(key, value)` (a campaign setting
+`t.pref(player, key, value)` (a player's preference, the player added to
+the table if new), `t.commit(events, label)`, `t.setting(key, value)` (a campaign setting
 for this test; the defaults come back for the next), `t.dispatch(action, ctx, answers)` (answers
 are given to the action's prompts in order), `t.scene([map_path,
 tokens])` → a scene id over a real map (the examples' chapel by default)
@@ -1283,6 +1299,53 @@ judge (declare `x-mind` for its checks), takes an area's creatures from
 nothing named them), and keeps what that does from landing by itself:
 whom an area catches is the DM's to confirm where nothing has a place.
 A plugin test makes one with `t.mind_scene({ {id, actor, owner, hidden}, … })`.
+
+## Players' preferences
+
+Some of how a table runs is each player's own to choose, where the DM lets
+them: whether they roll their own dice, whether they're asked about their
+reactions. A ruleset declares these beside its settings:
+
+```json
+"preferences": {
+  "schema": {"type": "object", "properties": {
+    "dice": {"type": "string", "enum": ["app", "typed"], "title": "My dice",
+      "enumNames": ["The app rolls them", "My own dice: I roll and type what came up"],
+      "x-when": {"dice_players": "choice"}},
+    "reactions": {"type": "boolean", "title": "Ask me about my reactions",
+      "x-when": {"prompt_reactions": true}}}},
+  "defaults": {"dice": "app", "reactions": true}
+}
+```
+
+- The types are a setting's (a choice, a switch, a number, words), with
+  their `title`, `description` and `enumNames`.
+- **`x-when`** names the plugin's own settings that must hold for players
+  to be offered it — a value, or a list of them (`{"armour_reduces": [1,
+  2, 3]}`). Leave it out and it's always offered. The DM's "each player
+  chooses" is a setting value that offers a preference.
+- **`defaults`**: what a player who hasn't chosen has, and what everyone
+  has while it isn't offered.
+
+A player sets theirs from their screen's ⋯ menu (*My preferences*: the
+ones offered now, from the projection's `table.prefs`), each change kept at
+once on their record in the encounter's `players` — `prefs`, by plugin id,
+`{"srd5e": {"dice": "typed"}}` — which the campaign keeps with the player.
+A player may change only their own, and only one the table offers; the DM
+sees every player's in *Table settings* (the DM's screen and the Table) and
+may change any of them, as one step of the Table's undo.
+
+```lua
+if hm.settings.get("dice_players", "app") == "choice" and hm.players.pref(player, "dice") == "typed" then … end
+```
+
+`hm.players.pref(player, key [, default])` gives the player's choice while
+the preference is offered (and fits its schema), else the manifest's
+default, else `default`; a Table from before preferences has no
+`hm.players` (guard it: `if hm.players then … end`). A test sets one with
+`t.pref(player, key, value)`. `plugintest` checks the metadata: a type no
+screen shows, an `x-when` naming no setting of the plugin, a default the
+schema refuses.
 
 ## Conventions
 

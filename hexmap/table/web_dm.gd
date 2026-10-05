@@ -348,6 +348,9 @@ func op(intent: Dictionary) -> String:
 			return done
 		"table_undo":
 			return win.table_settings.undo_last()
+		# a player's own choice (their dice, the cards they're asked), the DM's to change too
+		"player_pref":
+			return win.table_settings.set_pref(str(intent.get("player", "")), str(intent.get("plugin", "")), str(intent.get("key", "")), intent.get("value"))
 		"session":
 			if str(intent.get("do", "")) == "start":
 				return ctx.start_session()

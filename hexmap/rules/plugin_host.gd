@@ -47,6 +47,9 @@ const MANIFEST_SCHEMA := {
 		"capabilities": {"type": "array", "items": {"type": "string", "enum": CAPABILITIES}},
 		"policy": {"type": "object"},
 		"settings": {"type": "object"},
+		# what each player chooses for themselves, within what the DM allows
+		# (PlayerPrefs): {schema: {properties}, defaults}, each with its `x-when`
+		"preferences": {"type": "object"},
 		"tests": {"type": "boolean"},
 	},
 	"additionalProperties": true,
@@ -810,7 +813,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_move", "map_cell", "map_cells", "map_token", "map_path", "map_space", "map_mind", "map_mind_pos", "test_scene", "test_mind_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
 			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting",
-			"ui_health", "ui_knowledge", "test_sent", "test_shown", "log_entry"]:
+			"ui_health", "ui_knowledge", "test_sent", "test_shown", "log_entry", "players_list", "players_pref", "test_pref"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -986,6 +989,32 @@ class Bridge:
 	## A test's setting; run_tests restores the plugin's settings after each test.
 	func test_setting(key: String, value: Variant) -> bool:
 		JsonDoc.set_at_path(_p().settings, str(key), value)
+		return true
+
+	## The players at the table: [{id, name}].
+	func players_list() -> Array:
+		var out := []
+		for p in _k().state.encounter.players:
+			out.append({"id": str(p.get("id", "")), "name": str(p.get("name", ""))})
+		return out
+
+	## A player's preference for this plugin (PlayerPrefs): theirs while the DM
+	## allows it, else the manifest's default; null for one it doesn't declare.
+	func players_pref(pid: String, key: String) -> Variant:
+		var p := _p()
+		return PlayerPrefs.value(_k().state.encounter, p.manifest, p.settings, plugin_id, str(pid), str(key))
+
+	## A test's player preference, kept on the scratch encounter's player
+	## record (the player added if the test's table has none by that id).
+	func test_pref(pid: String, key: String, value: Variant) -> bool:
+		var st := _k().state
+		if st.encounter.player(str(pid)).is_empty():
+			st.apply({"t": "player.add", "player": {"id": str(pid), "name": str(pid)}})
+		var all: Dictionary = JsonDoc.deep(st.encounter.player(str(pid)).get("prefs", {})) if st.encounter.player(str(pid)).get("prefs") is Dictionary else {}
+		var mine: Dictionary = all.get(plugin_id, {}) if all.get(plugin_id) is Dictionary else {}
+		mine[str(key)] = value
+		all[plugin_id] = mine
+		st.apply({"t": "player.set", "id": str(pid), "changes": {"prefs": all}})
 		return true
 
 	## A ruling in the log (kind "ruling"): what was decided, the rule it

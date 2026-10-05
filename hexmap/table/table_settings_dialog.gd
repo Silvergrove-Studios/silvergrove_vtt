@@ -245,7 +245,80 @@ func refresh() -> void:
 		if qid == "table":
 			_body.add_child(_house_rules(str(reg.house_rules)))
 		_body.add_child(HSeparator.new())
+	_prefs_section(reg, words)
 	_scroll.set_deferred("scroll_vertical", keep)
+
+
+## What each player chose for themselves (PlayerPrefs): the preferences the
+## table offers them now, a row a player, each the DM's to change; the ones
+## it doesn't offer say which setting would.
+func _prefs_section(reg: Dictionary, words: String) -> void:
+	var items: Array = reg.get("prefs", [])
+	var players: Array = reg.get("players", [])
+	if items.is_empty():
+		return
+	var hay := ["players' preferences", "player", "preferences"]
+	for it in items:
+		hay.append(str(it.title))
+	for p in players:
+		hay.append(str(p.name))
+	if not _words_match(words, hay):
+		return
+	var head := VBoxContainer.new()
+	head.name = "Section_prefs"
+	var title_l := Label.new()
+	title_l.text = "Players' preferences"
+	title_l.theme_type_variation = "HeaderLabel"
+	head.add_child(title_l)
+	var desc := Label.new()
+	desc.text = "What each player chooses for themselves, where the table lets them: set from their ⋯ menu (My preferences), and yours to change."
+	desc.theme_type_variation = "DimLabel"
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	head.add_child(desc)
+	_body.add_child(head)
+	var offered := items.filter(func(it: Dictionary) -> bool: return bool(it.get("offered", false)))
+	if offered.is_empty() or players.is_empty():
+		var none := Label.new()
+		none.name = "PrefsNone"
+		none.text = "No player has joined yet." if offered.size() > 0 else "The players choose none of these at this table now."
+		none.theme_type_variation = "DimLabel"
+		_body.add_child(none)
+	for p in players:
+		if offered.is_empty():
+			break
+		var name_l := Label.new()
+		name_l.text = str(p.name)
+		_body.add_child(name_l)
+		for it in offered:
+			var row := HBoxContainer.new()
+			row.name = "Pref_%s_%s" % [str(p.id), str(it.key)]
+			row.add_theme_constant_override("separation", 12)
+			var t := Label.new()
+			t.text = "   " + str(it.title) + ("" if bool((p.get("own", {}) as Dictionary).get(str(it.id), false)) else "  (as the table has it)")
+			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			row.add_child(t)
+			var pid := str(p.id)
+			var plugin := str(it.plugin)
+			var key := str(it.key)
+			row.add_child(control_for(it, (p.get("values", {}) as Dictionary).get(str(it.id), it.get("default")), func(v: Variant) -> void:
+				var why := settings.set_pref(pid, plugin, key, v)
+				if why != "":
+					settings.ctx.say(why)
+					refresh()))
+			_body.add_child(row)
+	# the ones the table doesn't offer, and the setting that would
+	for it in items:
+		if bool(it.get("offered", false)):
+			continue
+		var w := Label.new()
+		var when := PackedStringArray()
+		for c in it.get("when", []):
+			when.append("%s: %s" % [str(c.title), str(c.value)])
+		w.text = "%s: not the players' to choose now.%s" % [str(it.title), (" To let them: " + ", ".join(when) + ".") if not when.is_empty() else ""]
+		w.theme_type_variation = "DimLabel"
+		w.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_body.add_child(w)
 
 
 func _refresh_levels(reg: Dictionary) -> void:

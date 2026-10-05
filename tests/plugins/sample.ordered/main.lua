@@ -301,10 +301,16 @@ hm.actions.register("strike", {
 		if out.outcome == "critical" then amount = amount * 2 end
 		local armour = hm.resources.get("actor:" .. ctx.target, "armour")
 		if armour ~= nil and armour.marked < armour.max and target.owner ~= nil and target.owner ~= "" then
-			local answer = hm.prompt(target.owner, {
-				title = "Spend armour?",
-				fields = { { key = "spend", type = "bool", label = "Mark an armour slot to reduce the hit by " .. hm.settings.get("armour_reduces", 2) } },
-			}, { default = { spend = false }, deadline = 30 })
+			-- the target's player's own choice (the manifest's preferences): asked each
+			-- time, or always or never without asking
+			local wish = hm.players and hm.players.pref(target.owner, "armour", "ask") or "ask"
+			local answer = { spend = wish == "always" }
+			if wish == "ask" then
+				answer = hm.prompt(target.owner, {
+					title = "Spend armour?",
+					fields = { { key = "spend", type = "bool", label = "Mark an armour slot to reduce the hit by " .. hm.settings.get("armour_reduces", 2) } },
+				}, { default = { spend = false }, deadline = 30 })
+			end
 			if answer and answer.spend then
 				hm.commit(hm.resources.mark("actor:" .. ctx.target, "armour", 1), "Armour")
 				amount = math.max(0, amount - hm.settings.get("armour_reduces", 2))

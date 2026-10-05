@@ -384,3 +384,84 @@ func test_players_are_told_how_the_table_runs() -> void:
 	check(not summary.set and summary.title == "Automated", "a table set up before levels: Automated")
 	win.queue_free()
 	await tree.process_frame
+
+
+## What each player chooses for themselves (PlayerPrefs): a ruleset's
+## preferences, offered while its settings say so (`x-when`); a player sets
+## their own from their screen, within what the DM allows; the DM sees each
+## player's and changes anyone's, one step of the Table's undo; the campaign
+## keeps them on the player's record; a plugin reads them (hm.players.pref).
+func test_players_preferences() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var win := _table("user://table_settings_prefs_test")
+	await tree.process_frame
+	var ctx := win.ctx
+	var ts := win.table_settings
+	var reg := ts.registry()
+	var prefs: Array = reg.get("prefs", [])
+	check(prefs.size() == 1 and str(prefs[0].id) == "sample.ordered/armour" and bool(prefs[0].offered) and prefs[0].labels == ["Ask me each time", "Always mark a slot", "Never: I'd rather keep it"], "the reference plugin's preference, offered (its armour takes something off a hit): %s" % [prefs])
+	var players: Array = reg.get("players", [])
+	check(players.size() == 1 and str(players[0].name) == "Ana" and str(players[0].values["sample.ordered/armour"]) == "ask" and not bool((players[0].own as Dictionary).get("sample.ordered/armour", false)), "Ana's: the default, not her own choice yet: %s" % [players])
+	# Ana chooses from her screen (a host that never listens: the Table's own commands)
+	var host := HostSession.new(ctx.state, ctx.art)
+	host.kernel = ctx.kernel
+	host.plugins = ctx.host
+	host.table_source = func() -> Dictionary: return ts.players_summary()
+	var ana := {"player": "pl_1", "role": Views.ROLE_PLAYER, "see_as": ""}
+	var view := host.projection(ana)
+	check((view.table.prefs as Array).size() == 1 and str(view.table.prefs[0].key) == "armour", "her screen is told what she may choose")
+	check(host._handle_intent(ana, {"kind": "prefs", "plugin": "sample.ordered", "key": "armour", "value": "always"}) == "", "her choice taken")
+	check(ctx.encounter().player("pl_1").get("prefs") == {"sample.ordered": {"armour": "always"}}, "kept on her record at the table: %s" % [ctx.encounter().player("pl_1").get("prefs")])
+	check(str(ts.registry().players[0].values["sample.ordered/armour"]) == "always" and bool(ts.registry().players[0].own["sample.ordered/armour"]), "the DM's Table settings list it as hers")
+	var plugin: PluginHost.Plugin = ctx.host.plugins["sample.ordered"]
+	check(PlayerPrefs.value(ctx.encounter(), plugin.manifest, plugin.settings, "sample.ordered", "pl_1", "armour") == "always", "what the plugin reads (hm.players.pref)")
+	check(host._handle_intent(ana, {"kind": "prefs", "plugin": "sample.ordered", "key": "armour", "value": "loudly"}).ends_with("not one of the choices"), "a value it can't be")
+	check(host._handle_intent(ana, {"kind": "prefs", "plugin": "sample.ordered", "key": "colour", "value": "red"}).contains("no preference"), "a preference it doesn't have")
+	check(PlayerPrefs.change(ctx.encounter(), ctx.host, "pl_1", "sample.ordered", "armour", "never", "pl_2", func(_e: Array, _l: String, _r: Dictionary) -> String: return "") == "your own preferences only", "nobody else's")
+	check(host._handle_intent({"player": "", "role": Views.ROLE_DM, "see_as": ""}, {"kind": "prefs", "plugin": "sample.ordered", "key": "armour", "value": "never"}).contains("Table settings"), "the DM's are changed in Table settings")
+	# the table stops offering it: Ana can't change it, the DM can, and it reads as the default
+	check(ts.set_setting("sample.ordered", "armour_reduces", 0) == "", "armour takes nothing off a hit now")
+	check(not bool(ts.registry().prefs[0].offered) and (ts.players_summary().prefs as Array).is_empty(), "not offered: her screen offers nothing")
+	# (the rules loaded again with it: the host hears of them as the Table's does)
+	host.plugins = ctx.host
+	var refused := host._handle_intent(ana, {"kind": "prefs", "plugin": "sample.ordered", "key": "armour", "value": "never"})
+	check(refused.ends_with("is the DM's to choose at this table"), "her change refused, saying why: %s" % refused)
+	plugin = ctx.host.plugins["sample.ordered"]
+	check(PlayerPrefs.value(ctx.encounter(), plugin.manifest, plugin.settings, "sample.ordered", "pl_1", "armour") == "ask", "and the plugin reads the default")
+	var depth := ctx.history.undo_depth()
+	check(win.web_dm.op({"op": "player_pref", "player": "pl_1", "plugin": "sample.ordered", "key": "armour", "value": "never"}) == "", "the DM changes it anyway, from the web screen")
+	check(ctx.history.undo_depth() == depth + 1 and ctx.history.undo_label().begins_with("Ana: My armour"), "one step of the Table's undo: %s" % ctx.history.undo_label())
+	check(ctx.encounter().player("pl_1").prefs["sample.ordered"]["armour"] == "never", "on her record")
+	check(ts.set_pref("pl_9", "sample.ordered", "armour", "never") == "no such player", "a player who isn't here")
+	check(ts.set_setting("sample.ordered", "armour_reduces", 2) == "", "armour back")
+	# the campaign keeps it with the player
+	ctx.campaign.capture(ctx.encounter())
+	check(ctx.campaign.player("pl_1").get("prefs") == {"sample.ordered": {"armour": "never"}}, "the campaign's player record keeps it: %s" % [ctx.campaign.player("pl_1").get("prefs")])
+	# the Table's own window lists it, the DM's to change
+	win.open_table_settings()
+	await tree.process_frame
+	var d := win._settings_dialog
+	check(d != null and d._body.find_child("Section_prefs", true, false) != null and d._body.find_child("Pref_pl_1_armour", true, false) != null, "Table settings on the Table: Players' preferences, Ana's row")
+	win.queue_free()
+	await tree.process_frame
+
+
+func test_preferences_metadata_is_checked() -> void:
+	var m := {"id": "test.rules", "version": "1.0.0", "api": 1, "name": "T", "settings": {"schema": {"type": "object", "properties": {
+		"dice": {"type": "string", "enum": ["app", "typed", "choice"], "title": "Dice", "x-question": "dice"}}}, "defaults": {"dice": "app"}},
+		"preferences": {"schema": {"type": "object", "properties": {
+			"mine": {"type": "string", "enum": ["app", "typed"], "title": "My dice", "x-when": {"dice": "choice"}},
+			"lost": {"type": "boolean", "title": "Lost", "x-when": {"nothing": true}},
+			"blob": {"type": "object", "title": "Blob"},
+			"wrong": {"type": "string", "enum": ["a", "b"], "title": "Wrong"}}},
+			"defaults": {"mine": "app", "lost": true, "wrong": "c"}}}
+	var problems := PlayerPrefs.check_manifest(m)
+	check(problems.size() == 3, "three mistakes said: %s" % [problems])
+	check(problems.any(func(p: String) -> bool: return p.contains("'nothing'")) and problems.any(func(p: String) -> bool: return p.contains("'blob'")) and problems.any(func(p: String) -> bool: return p.contains("'wrong'") and p.contains("not one of the choices")), "an x-when naming no setting, a type no screen shows, a default the schema refuses")
+	var mine: Dictionary = m.preferences.schema.properties.mine
+	check(PlayerPrefs.offered(mine, {"dice": "choice"}) and not PlayerPrefs.offered(mine, {"dice": "typed"}), "offered while its setting says so")
+	check(PlayerPrefs.offered({"x-when": {"n": [1, 2]}}, {"n": 2}) and not PlayerPrefs.offered({"x-when": {"n": [1, 2]}}, {"n": 0}) and PlayerPrefs.offered({}, {}), "one of several values; none named: always")
+	var fine := PlayerPrefs.check_manifest(JsonDoc.parse(FileAccess.get_file_as_string("res://tests/plugins/sample.ordered/manifest.json")))
+	check(fine.is_empty(), "the reference plugin's preferences are right: %s" % [fine])

@@ -420,6 +420,18 @@ function hm.settings.get(key, default)
 	return v
 end
 
+-- The players at the table ({ {id, name}, … }), and what each chooses for
+-- themselves of this plugin's preferences (the manifest's `preferences`):
+-- the player's choice while the DM allows it (its `x-when`), else the
+-- manifest's default, else `default`.
+hm.players = {}
+function hm.players.list() return call(host.players_list) end
+function hm.players.pref(player_id, key, default)
+	local v = call(host.players_pref, tostring(player_id or ""), tostring(key or ""))
+	if v == nil then return default end
+	return v
+end
+
 -- ----------------------------------------------------------------- dice --
 
 hm.dice = {}
@@ -552,6 +564,8 @@ function __run_test(index, helpers)
 	function h.turns_start(scene, strategy) return hm.turns.start(scene, strategy or hm.id) end
 	-- a campaign setting for this test (the manifest's defaults come back for the next)
 	function h.setting(key, value) return call(host.test_setting, key, value) end
+	-- a player's preference for this test (the player added to the table if new)
+	function h.pref(player, key, value) return call(host.test_pref, player, key, value) end
 	-- a scene over a map file (the examples' chapel by default), with tokens = { {id, actor, x, y}, … }
 	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end
 	-- a fight in the theatre of the mind, shown: no map, tokens = { {id, actor, name, owner, hidden}, … } far apart

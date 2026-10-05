@@ -10,6 +10,7 @@
 <script lang="ts">
   import FieldInput from './FieldInput.svelte';
   import { viewUi } from './context';
+  import { startingDice } from '../dice';
   import { optionValue, shown, type Dict } from './viewlib';
   import type { Choice } from './fieldcheck';
 
@@ -51,6 +52,8 @@
         return f.single ? String(v ?? f.default ?? '') : Array.isArray(v) ? v.map(String) : [];
       case 'scores':
         return v && typeof v === 'object' ? v : null;
+      case 'dice':
+        return startingDice(f, v);
       default:
         return String(v ?? f.default ?? '');
     }
@@ -89,7 +92,7 @@
 
 <div class="form">
   {#each drawn as f (f.key)}
-    <div class="row" class:wide={f.type === 'list' || f.type === 'text' || f.type === 'scores' || f.type === 'choose'}>
+    <div class="row" class:wide={f.type === 'list' || f.type === 'text' || f.type === 'scores' || f.type === 'choose' || f.type === 'dice'}>
       {#if f.label !== ''}<label for={undefined} class="label" class:strong={f.type === 'scores' || f.type === 'choose'} title={f.tooltip ?? ''}>{f.label ?? f.key}</label>{/if}
       {#if f.help}<p class="help">{f.help}</p>{/if}
       <div class="control">

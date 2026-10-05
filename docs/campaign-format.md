@@ -97,7 +97,10 @@ party is), `sessions` and `runtime`. Every other field is as before.
   of how a table runs it in `package.recommended` (a `level`, a `space`,
   `answers`, a `note`): the walkthrough offers it, and that is all.
 - `players`: the group. A session's encounter gets them on start and
-  gives back any it added.
+  gives back any it added. A player's `prefs` are what they chose for
+  themselves of each ruleset's preferences, by plugin id (`{"srd5e":
+  {"dice": "typed"}}`): set from their screen, changed by the DM in Table
+  settings (docs/plugin-authoring.md, "Players' preferences").
 - `actors`: the persistent ones — player characters, companions,
   recurring NPCs (an actor marked `persistent: true`, as the NPC pane
   marks what it adds) — without their `derived` blocks (the kernel recomputes

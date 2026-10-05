@@ -76,6 +76,38 @@ hm.test("strike: a hit spends the target's hit points, armour asks first", funct
 	end
 end)
 
+hm.test("preferences: a player's own choice, while the table offers it; the default otherwise", function(t)
+	t.eq(hm.players.pref("pl_1", "armour"), "ask", "nobody has chosen: the manifest's default")
+	t.eq(hm.players.pref("pl_1", "nothing", "x"), "x", "a preference the plugin doesn't declare: the caller's default")
+	t.pref("pl_1", "armour", "always")
+	t.eq(hm.players.pref("pl_1", "armour"), "always", "Hero's player's choice")
+	t.eq(hm.players.pref("pl_2", "armour"), "ask", "another player's is their own")
+	t.ok(#hm.players.list() >= 1 and hm.players.list()[1].id == "pl_1", "the players at the table")
+	-- the table no longer offers it (armour takes nothing off a hit): the default stands
+	t.setting("armour_reduces", 0)
+	t.eq(hm.players.pref("pl_1", "armour"), "ask", "not offered: the default")
+	t.setting("armour_reduces", 2)
+	-- the strike reads it: always marks without asking (the dispatch would fail on a prompt)
+	local a = hero(t, 3, 2)
+	local b = t.actor({ id = "a_gob", kind = "npc", name = "Goblin", owner = "pl_1",
+		ext = { [hm.id] = { level = 1, stats = { agi = 0, str = 0, wit = 0 }, armour = 2 } } })
+	t.dispatch("setup", { actor = a })
+	t.dispatch("setup", { actor = b })
+	local hit = false
+	for _ = 1, 6 do
+		if t.dispatch("strike", { actor = a, target = b }).outcome ~= "failure" then hit = true break end
+	end
+	t.ok(hit, "a hit came")
+	t.eq(hm.resources.get("actor:" .. b, "armour").marked, 1, "always: a slot marked, nobody asked")
+	t.pref("pl_1", "armour", "never")
+	hit = false
+	for _ = 1, 6 do
+		if t.dispatch("strike", { actor = a, target = b }).outcome ~= "failure" then hit = true break end
+	end
+	t.ok(hit, "another hit came")
+	t.eq(hm.resources.get("actor:" .. b, "armour").marked, 1, "never: kept, nobody asked")
+end)
+
 hm.test("rest refills and logs", function(t)
 	local a = hero(t)
 	t.dispatch("setup", { actor = a })

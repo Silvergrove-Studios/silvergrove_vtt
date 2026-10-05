@@ -369,9 +369,16 @@ static func player_summary(reg: Dictionary) -> Dictionary:
 		if not items.is_empty():
 			answers.append({"question": q, "title": str(QUESTION_INFO[q].title), "items": items})
 	var space := str(reg.get("space", "maps"))
+	# what each player may choose for themselves at this table (PlayerPrefs): the
+	# ones offered now; a player's screen reads its own choices off its record
+	var prefs := []
+	for it in reg.get("prefs", []):
+		if bool(it.get("offered", false)):
+			prefs.append(JsonDoc.deep(it))
 	return {"level": level, "title": str(info.title), "tagline": str(info.tagline), "lines": (info.lines as Array).duplicate(),
 		"set": bool(reg.get("level_set", false)), "space": space, "space_title": str(SPACE_INFO.get(space, SPACE_INFO.maps).title),
-		"space_words": str(SPACE_INFO.get(space, SPACE_INFO.maps).words), "answers": answers, "house_rules": str(reg.get("house_rules", ""))}
+		"space_words": str(SPACE_INFO.get(space, SPACE_INFO.maps).words), "answers": answers, "house_rules": str(reg.get("house_rules", "")),
+		"prefs": prefs}
 
 
 ## What is wrong with a manifest's table-settings metadata (the `x-*` keys
@@ -444,6 +451,9 @@ func registry() -> Dictionary:
 	if not rec.is_empty():
 		reg.recommended = rec
 	reg.fight_spaces = FIGHT_SPACES.map(func(s: String) -> Dictionary: return {"id": s, "title": str(FIGHT_SPACE_INFO[s].title), "words": str(FIGHT_SPACE_INFO[s].words)})
+	# what players may choose for themselves (PlayerPrefs), and each one's choices
+	reg.prefs = PlayerPrefs.items(ctx.host)
+	reg.players = PlayerPrefs.players(ctx.encounter(), ctx.host)
 	return reg
 
 
@@ -619,6 +629,20 @@ func reset_question(question: String) -> String:
 	if writes.is_empty():
 		return "nothing in %s follows the level" % str(QUESTION_INFO[question].title)
 	return _write(writes, {}, "%s back to %s" % [str(QUESTION_INFO[question].title), str(LEVEL_INFO[level].title)])
+
+
+## A player's preference, as the DM sets it (whatever the table offers them
+## now: the DM can change anything), one step of the Table's undo. "" or
+## why not.
+func set_pref(pid: String, plugin: String, key: String, value: Variant) -> String:
+	if ctx == null or ctx.campaign == null:
+		return "no campaign is open"
+	var why := PlayerPrefs.change(ctx.encounter(), ctx.host, pid, plugin, key, value, "",
+		func(events: Array, label: String, reason: Dictionary) -> String: return ctx.commands.run_all(events, label, reason))
+	if why == "":
+		ctx.campaign.touch()
+		ctx.campaign_changed.emit()
+	return why
 
 
 ## The table's own: where fights happen, the house rules. "" or why not.

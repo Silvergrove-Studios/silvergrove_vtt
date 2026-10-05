@@ -6,6 +6,9 @@ import {
   levelChanges,
   noticeWords,
   ownAnswers,
+  prefOwn,
+  prefValue,
+  prefWhenWords,
   questionLine,
   registryOf,
   same,
@@ -14,6 +17,7 @@ import {
   summaryOf,
   summarySeenKey,
   valueWords,
+  type Pref,
   type Registry,
   type Setting,
 } from '../src/lib/tablesettings';
@@ -164,5 +168,40 @@ describe('how a table runs, as the DM’s screen works it out', () => {
     expect(summarySeenKey('c1', 'pl_1', 'assisted')).not.toBe(summarySeenKey('c1', 'pl_1', 'bookkeeping'));
     expect(noticeWords('players')).toBe('players notice');
     expect(noticeWords('')).toBe('');
+  });
+});
+
+// what a player may choose for themselves (hexmap/rules/player_prefs.gd's items)
+const dicePref: Pref = {
+  id: 'srd5e/dice', plugin: 'srd5e', plugin_name: '5E', key: 'dice', title: 'My dice', description: '', type: 'string',
+  enum: ['app', 'typed'], labels: ['The app rolls them', 'My own dice: I roll and type what came up'], default: 'app', offered: true,
+  when: [{ key: 'dice_players', title: "Players' dice", value: 'Each player chooses (their preference)' }],
+};
+
+describe("a player's own preferences", () => {
+  it('reads each player’s choice off their record, else the table’s default', () => {
+    const players = [
+      { id: 'pl_1', name: 'Ana', prefs: { srd5e: { dice: 'typed' } } },
+      { id: 'pl_2', name: 'Ben' },
+      { id: 'pl_3', name: 'Cy', prefs: { other: { dice: 'typed' } } },
+    ];
+    expect(prefValue(players, 'pl_1', dicePref)).toBe('typed');
+    expect(prefOwn(players, 'pl_1', dicePref)).toBe(true);
+    expect(prefValue(players, 'pl_2', dicePref)).toBe('app');
+    expect(prefOwn(players, 'pl_2', dicePref)).toBe(false);
+    expect(prefValue(players, 'pl_3', dicePref)).toBe('app');
+    expect(prefValue(players, 'nobody', dicePref)).toBe('app');
+  });
+
+  it('says a choice in words, and what would let players choose one the table keeps', () => {
+    expect(valueWords(dicePref, 'typed')).toBe('My own dice: I roll and type what came up');
+    expect(valueWords({ type: 'boolean' }, false)).toBe('Off');
+    expect(prefWhenWords(dicePref)).toBe("Players' dice: Each player chooses (their preference)");
+    expect(prefWhenWords({ ...dicePref, when: [] })).toBe('');
+  });
+
+  it('comes with what the players are told, the offered ones', () => {
+    const s = summaryOf({ table: { title: 'Assisted', lines: [], answers: [], house_rules: '', prefs: [dicePref] } });
+    expect(s?.prefs?.[0].key).toBe('dice');
   });
 });

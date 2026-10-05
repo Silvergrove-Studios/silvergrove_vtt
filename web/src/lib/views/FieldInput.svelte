@@ -1,7 +1,8 @@
 <!--
   One control of a form, by the field's type (PropertyForm's types): a
   number, a switch, a choice, a colour, a line or a box of text, a pair of
-  numbers, or a list of records each edited with its own small form.
+  numbers, a list of records each edited with its own small form, or real
+  dice typed in (a box a die).
   `value` follows every keystroke; `commit` is called when an edit is done
   (a choice made, a box left, Enter pressed).
 -->
@@ -9,6 +10,7 @@
   import Form from './Form.svelte';
   import ScoresField from './ScoresField.svelte';
   import ChooseField from './ChooseField.svelte';
+  import DiceField from './DiceField.svelte';
   import { optionValue, optionLabel, type Dict } from './viewlib';
   import type { Choice } from './fieldcheck';
 
@@ -50,6 +52,8 @@
 
 {#if type === 'scores'}
   <ScoresField {field} bind:value {ctx} />
+{:else if type === 'dice'}
+  <DiceField {field} bind:value />
 {:else if type === 'choose'}
   <ChooseField {field} bind:value bind:options />
 {:else if type === 'int' || type === 'float'}

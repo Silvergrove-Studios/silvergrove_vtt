@@ -62,7 +62,8 @@ or an export. Everything below holds for both.
 
   Tokens not in the order simply have no turn.
 - `players`: who can join and what they own. `id` is stable across sessions;
-  `color` tints their tokens' rings. The DM is not a player.
+  `color` tints their tokens' rings; `prefs` (optional) holds what they
+  chose of each ruleset's preferences, by plugin id. The DM is not a player.
 - `notes`: encounter-level DM notes (map notes stay on the map).
 
 ## Scene

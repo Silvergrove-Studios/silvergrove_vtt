@@ -35,6 +35,27 @@
 - A scene with no map moves its tokens without counting cells (a push in
   the theatre of the mind measured nothing and failed).
 
+- **Real dice, typed in.** A ruleset can ask the person who rolls a roll
+  what came up, on a card with a new field, `dice`: a box a die (`dice`,
+  each one's sides), the total worked out as it's typed with the roll's
+  own number (`plus`), each face checked from 1 to its die's sides (a d10's
+  0 is its 10) before the card's Done goes, and the next box taken as soon
+  as a face can't grow another digit (eight d6s are eight taps). The web
+  screens and the Table's own form draw it. A roll made with typed faces
+  can say so (`spec.typed`): the web screens' chat marks it *rolled at the
+  table*. *Roll it for me* on such a card is drawn as the quiet choice.
+- **Players' own preferences, within what the DM allows.** A ruleset
+  declares preferences beside its settings (the manifest's `preferences`:
+  a JSON schema's properties and defaults, each saying with `x-when` which
+  settings must hold for players to be offered it — a DM's "each player
+  chooses"). A player sets theirs from the ⋯ menu (*My preferences*), kept
+  on their record at the table (`prefs`, by ruleset) and in the campaign;
+  *Table settings* lists each player's choices, on the DM's screen and the
+  Table, and the DM can change any of them (one step of the undo). A
+  ruleset reads one with `hm.players.pref(player, key)`: the player's
+  choice while the table offers it, else its default (`hm.players.list()`
+  names the players; `t.pref` sets one in a test). `plugintest` checks the
+  metadata: an `x-when` naming no setting, a default the schema refuses.
 - **Table settings: how much the app does is the DM's to say.** A DM
   picks one of four levels — *Bookkeeping* (a shared sheet and tracker:
   players tick their own, the DM types damage in), *Rolling help*
