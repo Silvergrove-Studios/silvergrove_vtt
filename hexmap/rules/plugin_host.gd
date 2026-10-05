@@ -1552,9 +1552,10 @@ class Bridge:
 		var gm := str(player) == ""
 		var sid := str(scene) if str(scene) != "" else k.state.encounter.active_scene_id
 		var known := k.knowledge_policies()
-		var view := Views.project(k, _h(), str(player), Views.ROLE_GM if gm else Views.ROLE_PLAYER)
+		var seen := WebScene.seen(k.state, sid, str(player)) if not gm else {}
+		var view := Views.project(k, _h(), str(player), Views.ROLE_GM if gm else Views.ROLE_PLAYER, null if gm else seen)
 		var out := {"scene": WebScene.build(k.state, sid, str(player), gm, known) if sid != "" else {},
-			"document": Protocol.client_document(k.state.encounter.doc, gm, known),
+			"document": Protocol.client_document(k.state.encounter.doc, true, known) if gm else Protocol.player_document(k.state, sid, str(player), seen, known),
 			"actors": view.actors, "log": view.log, "prompts": view.prompts, "waiting": view.waiting, "rolls": view.rolls}
 		return Knowledge.render_value(out, Knowledge.knower(k.state.encounter.actors, known, gm), gm)
 

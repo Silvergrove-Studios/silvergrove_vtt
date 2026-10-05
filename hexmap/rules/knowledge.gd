@@ -203,8 +203,9 @@ static func knower(actors: Dictionary, policies: Array, gm: bool) -> Callable:
 
 ## The labels the players see on the creatures whose names they don't know,
 ## {token id: label}: "?" for one, numbers in the scene's order for several
-## — those the DM hides aren't counted (they keep "?"), so a number never
-## tells of a creature the players haven't seen. {} with names shown.
+## — those the DM hides aren't counted (they keep "?"), and a screen passes
+## only the tokens it shows (WebScene, Protocol.player_tokens), so a number
+## never tells of a creature that player hasn't seen. {} with names shown.
 static func player_labels(tokens: Array, actors: Dictionary, policies: Array) -> Dictionary:
 	var out := {}
 	if not names_hidden(policies):
@@ -291,38 +292,6 @@ static func unname(out: Dictionary, label: String) -> void:
 	out.name = UNKNOWN
 	out.label = label if label != "" else UNKNOWN_LABEL
 	out.unknown = true
-
-
-## A token event as a player's Godot client is sent it: a token added or
-## changed for a creature no player owns, its health and condition tags taken
-## out and its name kept (`label`: the one the players see it by). `token` is
-## the token as it is now (for a change: who it is).
-static func player_event(ev: Dictionary, token: Dictionary, doc: Dictionary, policies: Array, label := "") -> Dictionary:
-	if not hides(policies):
-		return ev
-	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
-	match str(ev.get("t", "")):
-		"token.add":
-			if ev.get("token") is Dictionary and unowned(ev.token, actors):
-				var out := ev.duplicate()
-				out.token = player_token(ev.token, doc, policies, label)
-				return out
-		"token.set":
-			var ch: Variant = ev.get("changes")
-			if ch is Dictionary and unowned(token, actors):
-				var out := ev.duplicate()
-				out.changes = (ch as Dictionary).duplicate()
-				if (ch as Dictionary).get("tags") is Array:
-					var probe := token.duplicate()
-					probe.tags = ch.tags
-					out.changes.tags = player_token(probe, doc, policies).tags
-				if nameless(token, actors, policies):
-					if out.changes.has("name"):
-						out.changes.name = UNKNOWN
-					if out.changes.has("label"):
-						out.changes.label = label if label != "" else UNKNOWN_LABEL
-				return out
-	return ev
 
 
 # ---------------------------------------------------------------- turns --

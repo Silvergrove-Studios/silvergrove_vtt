@@ -283,15 +283,18 @@ func test_names_kept_from_players() -> void:
 	var dm := WebScene.build(st, sid, "", true, known)
 	check(str(_tok(dm, "t_gob").name) == "Goblin" and str(_tok(dm, "t_gob").player_label) == "1" and _tok(dm, "t_gob").name_known == false, "the DM's: its name, and the label the players see")
 	check((_tok(dm, "t_gob").tags as Array).has("frightened"), "the DM's: every tag")
-	# a Godot player's document, and a token event after it
-	var doc := Protocol.client_document(st.encounter.doc, false, known)
+	# a Godot player's document, and the goblin as his client holds it after a change
+	var doc := Protocol.player_document(st, sid, BEN, WebScene.seen(st, sid, BEN), known)
 	check(str(_doc_tok(doc, "t_gob").name) == "a creature" and str(_doc_tok(doc, "t_gob").label) == "1", "Ben's Godot client: a creature, 1")
-	check(str(_doc_tok(doc, "t_lurk").name) == "a creature" and str(_doc_tok(doc, "t_lurk").label) == "?", "the lurker his client holds, hidden: a creature, ? (its name never there)")
+	check(_doc_tok(doc, "t_lurk").is_empty(), "the hidden lurker his client doesn't hold at all")
 	check(str(_doc_tok(Protocol.client_document(st.encounter.doc, true, known), "t_gob").name) == "Goblin", "a co-GM's: its name")
-	var ev := {"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"name": "Goblin Warrior", "label": "GW", "tags": ["humanoid", "frightened"]}}
-	var theirs := Knowledge.player_event(ev, st.token(sid, "t_gob"), st.encounter.doc, known, "1")
-	check(str(theirs.changes.name) == "a creature" and str(theirs.changes.label) == "1" and not (theirs.changes.tags as Array).has("frightened"), "a change of its name and tags, as a player's client is sent it: %s" % [theirs.changes])
-	check(str(ev.changes.name) == "Goblin Warrior", "the DM's event untouched")
+	var changed := st.token(sid, "t_gob").duplicate(true)
+	changed.name = "Goblin Warrior"
+	changed.label = "GW"
+	changed.tags = ["humanoid", "frightened"]
+	var theirs := Protocol.player_token(st, changed, BEN, known, "1")
+	check(str(theirs.name) == "a creature" and str(theirs.label) == "1" and not (theirs.tags as Array).has("frightened"), "a change of its name and tags, as a player's client holds it: %s" % [theirs])
+	check(str(changed.name) == "Goblin Warrior", "the DM's token untouched")
 	# the rules' view: the goblin listed to players is a creature, its Frightened kept
 	var view := Views.project(k, plugins, ANA, Views.ROLE_PLAYER)
 	check(str(view.actors.a_gob.name) == "a creature" and str(view.actors.a_gob.tokens[0].name) == "a creature", "Ana's view: a creature: %s" % [view.actors.a_gob.name])
@@ -427,17 +430,32 @@ func test_names_over_the_wire() -> void:
 	check(preview_marks.any(func(m: Dictionary) -> bool: return str(m.id) == "dm-ruler") and not preview_marks.any(func(m: Dictionary) -> bool: return str(m.id) == "dm-far"), "her marks: the ruler she sees, not the one over what she can't: %s" % [preview_marks.map(func(m: Dictionary) -> String: return str(m.id))])
 	host.marks.remove("gm", "dm-ruler", true)
 	check(_pump(host, all, func() -> bool: return not dm.last("seen_marks").is_empty() and (dm.last("seen_marks").marks as Array).is_empty()), "a mark gone: the See as's marks follow")
-	# the DM reveals the goblin's name: Ana's screen and Ben's document at once
-	var welcomes := ben.count("welcome")
+	# the DM reveals the goblin's name: Ana's screen and Ben's client at once
 	check(kernel.commit([{"t": "actor.set", "id": "a_gob", "changes": {"audience/name": "all"}}], "Reveal") == "", "revealed")
-	check(_pump(host, all, func() -> bool: return str(_tok(ana.last("scene").scene, "t_gob").name) == "Goblin" and ben.count("welcome") > welcomes), "Ana's screen names it, Ben's client is sent its document again")
-	check(str(_doc_tok(ben.last("welcome").encounter, "t_gob").name) == "Goblin" and str(_doc_tok(ben.last("welcome").encounter, "t_gob2").label) == "?", "Ben's: the Goblin, and the boss alone unknown: ?")
-	# the lurker shows itself: the creatures the players don't know numbered afresh
-	welcomes = ben.count("welcome")
+	check(_pump(host, all, func() -> bool: return str(_tok(ana.last("scene").scene, "t_gob").name) == "Goblin" and str(_doc_tok(_held(ben), "t_gob").name) == "Goblin"), "Ana's screen names it, and Ben's client")
+	check(str(_doc_tok(_held(ben), "t_gob2").label) == "?", "Ben's: the boss alone unknown: ?")
+	# the lurker shows itself: Ben's client has it, the creatures the players don't know numbered afresh
 	kernel.commit([{"t": "token.set", "scene": sid, "id": "t_lurk", "changes": {"hidden": false}}], "Show the lurker")
-	check(_pump(host, all, func() -> bool: return ben.count("welcome") > welcomes), "Ben's document again")
-	check(str(_doc_tok(ben.last("welcome").encounter, "t_gob2").label) == "1" and str(_doc_tok(ben.last("welcome").encounter, "t_lurk").label) == "2", "the boss 1, the lurker 2")
+	check(_pump(host, all, func() -> bool: return not _doc_tok(_held(ben), "t_lurk").is_empty()), "Ben's client has the lurker now")
+	check(str(_doc_tok(_held(ben), "t_gob2").label) == "1" and str(_doc_tok(_held(ben), "t_lurk").label) == "2", "the boss 1, the lurker 2")
 	host.stop()
+
+
+## What a Godot client holds now: the last document it was sent, with every
+## event sent after it applied (as NetSession does).
+static func _held(w: Web.WebClient) -> Dictionary:
+	var at := -1
+	for i in w.inbox.size():
+		if str(w.inbox[i].get("t", "")) == "welcome":
+			at = i
+	if at < 0:
+		return {}
+	var st := EncounterState.new(Encounter.from_json(JSON.stringify(w.inbox[at].encounter)))
+	for i in range(at + 1, w.inbox.size()):
+		var m: Dictionary = w.inbox[i]
+		if str(m.get("t", "")) == "event" and m.get("ev") is Dictionary and st.validate(m.ev) == "":
+			st.apply(m.ev)
+	return st.encounter.doc
 
 
 ## Conditions kept: what is on a creature no player owns isn't in a

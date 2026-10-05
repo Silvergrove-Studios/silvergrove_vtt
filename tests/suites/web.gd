@@ -124,11 +124,11 @@ func test_web_scene() -> void:
 	check(WebScene.build(st, "nope", ana, false).is_empty(), "no such scene: nothing")
 
 
-## Labels worked out once, over every token on the scene (in a playtest
-## every goblin was "G": a Minion and a Warrior were both G1, the Bandit
-## Captain and a Bandit both B1): initials and numbers, the players' own
-## kept, the same on every screen — a player whose view hides GW1 still
-## sees the GW2 the DM calls out.
+## Labels worked out over the tokens a screen is shown (in a playtest every
+## goblin was "G": a Minion and a Warrior were both G1, the Bandit Captain
+## and a Bandit both B1): initials and numbers, the players' own kept; the
+## DM's over every token, a player's over only what their screen shows — a
+## number never tells them of one they can't see (GW2 with no GW1 did).
 func test_token_labels() -> void:
 	var st := _chapel_state()
 	var m: HexMap = st.map_for(st.encounter.active_scene_id)
@@ -153,7 +153,7 @@ func test_token_labels() -> void:
 	var ana := {}
 	for t in WebScene.build(st, sid, "pl_fe0170c1", false).tokens:
 		ana[str(t.id)] = str(t.label)
-	check(not ana.has("t_goblin_warrior") and ana.get("t_goblin_warrior_2", "") == "GW2" and ana.get("t_gareth", "") == "GA", "Ana doesn't see GW1, and sees GW2 as the DM calls it: %s" % [ana])
+	check(not ana.has("t_goblin_warrior") and ana.get("t_goblin_warrior_2", "") == "GW" and ana.get("t_gareth", "") == "GA", "Ana doesn't see GW1: the one warrior she sees is GW, no number telling of another: %s" % [ana])
 	var dm := {}
 	for t in WebScene.build(st, sid, "", true).tokens:
 		dm[str(t.id)] = str(t.label)
@@ -581,15 +581,17 @@ func test_monster_health_as_players_are_sent_it() -> void:
 	check(not tok.call(snap, "t_gob").has("hp"), "no hit points")
 	check((tok.call(WebScene.build(st, sid, "", true, health), "t_gob").tags as Array).has("bloodied"), "the DM's snapshot has it")
 	check((tok.call(WebScene.build(st, sid, ana, false), "t_gob").tags as Array).has("bloodied"), "(with nothing declared, as before)")
-	var doc := Protocol.client_document(st.encounter.doc, false, health)
+	var doc := Protocol.player_document(st, sid, ana, WebScene.seen(st, sid, ana), health)
 	check((doc_tok.call(doc, "t_gob").tags as Array) == ["humanoid"] and (doc_tok.call(doc, fighter).tags as Array).has("bloodied"), "a Godot player's document: the goblin's mark gone, her fighter's kept")
 	check((doc_tok.call(Protocol.client_document(st.encounter.doc, true, health), "t_gob").tags as Array).has("bloodied"), "a co-GM's whole")
 	check((doc_tok.call(st.encounter.doc, "t_gob").tags as Array).has("bloodied"), "and the Table's own document keeps it")
-	# a token event after it: a player's without the mark
-	var ev := {"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"tags": ["humanoid", "dead"]}}
-	var mine := Knowledge.player_event(ev, st.token(sid, "t_gob"), st.encounter.doc, health)
-	check(mine.changes.tags == ["humanoid"] and ev.changes.tags == ["humanoid", "dead"], "a change of its marks, as a player's client is sent it: %s" % [mine.changes])
-	check(Knowledge.player_event({"t": "token.set", "scene": sid, "id": fighter, "changes": {"tags": ["down"]}}, st.token(sid, fighter), st.encounter.doc, health).changes.tags == ["down"], "her fighter's, whole")
+	# the goblin changed, as a player's client holds it: without the mark
+	var dead := st.token(sid, "t_gob").duplicate(true)
+	dead.tags = ["humanoid", "dead"]
+	check(Protocol.player_token(st, dead, ana, health).tags == ["humanoid"], "a change of its marks, as a player's client holds it")
+	var down := st.token(sid, fighter).duplicate(true)
+	down.tags = ["down"]
+	check(Protocol.player_token(st, down, ana, health).tags == ["down"], "her fighter's, whole")
 	# the rules' view: a person of the world the players see, her pool and her death the DM's
 	var view := Views.project(k, plugins, ana, Views.ROLE_PLAYER)
 	check(view.actors.has("a_marta") and not (view.actors.a_marta.resources.get("t.health", {}) as Dictionary).has("hp"), "Marta is in Ana's view, not her hit points")
@@ -666,11 +668,14 @@ func test_monster_health_over_the_wire() -> void:
 					return t.get("tags", [])
 		return ["(not there)"]
 	check(welcome_tags.call(ben) == [], "Ben's Godot client's document: no mark")
-	# it drops: Ben's client's event without the mark, the DM's screen with it
+	# it drops: the DM's screen with the mark; Ben's client is told nothing (the
+	# goblin he holds has not changed, for him)
 	var before := ben.count("event")
 	kernel.commit([{"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"tags": ["down"]}}], "down")
-	check(_pump(host, all, func() -> bool: return ben.count("event") > before and tags_in.call(dm.last("scene")) == ["down"]), "the change reaches the screens")
-	check(ben.last("event").ev.changes.tags == [], "Ben's client is told the change without the mark: %s" % [ben.last("event").ev])
+	check(_pump(host, all, func() -> bool: return tags_in.call(dm.last("scene")) == ["down"]), "the change reaches the DM's screen")
+	_pump(host, all, func() -> bool: return false, 200)
+	check(not ben.inbox.slice(0).filter(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "event").slice(before).any(func(m: Dictionary) -> bool: return str(m.ev.get("id", m.ev.get("token", {}).get("id", ""))) == "t_gob"),
+		"Ben's client is sent nothing of it")
 	check(tags_in.call(ana.last("scene")) == [], "Ana's screen: still none")
 	# the views refreshed, the rules saying the same of health: no scene sent again
 	host.refresh_views()

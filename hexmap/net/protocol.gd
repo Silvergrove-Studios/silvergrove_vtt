@@ -33,10 +33,17 @@ extends RefCounted
 ##                                            template, a spell's preview, a ping — one's own;
 ##                                            the DM may remove or clear anyone's. Never kept.
 ## host → client
-##   welcome  {version, encounter}            the document without its rules blocks (a web
-##                                             client's: the table's name and players alone)
+##   welcome  {version, encounter}            a co-GM's: the document without its rules blocks; a
+##                                             player's Godot client's (a display's): what their
+##                                             screen shows, the scene the players see and the
+##                                             tokens they see (player_document); a web client's,
+##                                             and any client's before it joins: the table's name
+##                                             and players alone
 ##   joined   {player, role}                  the join was accepted
-##   event    {ev}                            a scene event applied; apply it too
+##   event    {ev}                            a scene event applied; apply it too (a player's
+##                                             client: what it sees of it — its tokens and the
+##                                             order kept in step, token.add / token.remove as
+##                                             they come into its sight or leave it)
 ##   view     {view}                          the client's projection (Views.project; since 4, by Wire); the DM seeing
 ##                                             as a player also gets their chat (view.preview_chat)
 ##   refused  {ev | intent, why, req?}        the request was not applied (an intent's `req` with it)
@@ -136,7 +143,10 @@ static func welcome(encounter: Encounter, gm := false, known: Array = []) -> Dic
 ## A web screen's welcome: the table's name and its players (a returning one
 ## taps their name). It holds no document: its scene comes as snapshots.
 static func welcome_web(encounter: Encounter) -> Dictionary:
-	return {"t": "welcome", "version": VERSION, "encounter": {"name": encounter.name, "players": JsonDoc.deep(encounter.players)}}
+	# (a document a Godot client can read: nothing in it but who the players are,
+	# for a screen that hasn't said who it is yet)
+	return {"t": "welcome", "version": VERSION, "encounter": {"format": Encounter.FORMAT, "version": Encounter.VERSION, "name": encounter.name,
+		"players": public_players(encounter.players), "rng": {}}}
 
 
 ## With `gm` (a co-GM), the scene is sent whole: GM regions, every cell,
@@ -179,6 +189,104 @@ static func client_document(doc: Dictionary, gm := false, known: Array = []) -> 
 		for key in cells.keys():
 			if not bool(cells[key].get("revealed", false)):
 				cells.erase(key)
+	return out
+
+
+## A player's welcome (Godot, a display too): their document (player_document).
+static func player_welcome(doc: Dictionary) -> Dictionary:
+	return {"t": "welcome", "version": VERSION, "encounter": doc}
+
+
+## The fields a player's Godot client is sent of a token that isn't the
+## party's: what a web screen's snapshot has of it (no darkvision, nothing the
+## DM keeps on it), and the light it carries (a client lights its own map).
+const PLAYER_TOKEN_KEYS := ["id", "name", "pos", "size", "color", "label", "art", "owner", "actor", "rot", "tags", "elevation", "light"]
+## The fields of a scene a player's Godot client is sent: not its triggers, a
+## ruleset's own data on it, nor where the DM keeps its map.
+const PLAYER_SCENE_KEYS := ["id", "name", "map", "level", "fog", "light", "space"]
+
+
+## The document a player's Godot client holds (a display's: `player_id` "",
+## what every player's characters see): only what their screen would show —
+## the scene the players see (`scene_id`) and of it the tokens they see
+## (`seen`: WebScene.seen), each as they may know it (player_token); its
+## regions and cells as far as they're shown; the order as they see it
+## (Knowledge.player_turns); the table's players, clock and name. No other
+## scene (a fight staged ahead, a map they haven't been shown), no token the
+## DM hides or they can't see, no rules blocks, no DM's notes, nothing a
+## ruleset keeps on the encounter or the campaign. `known`: what the
+## rulesets say the players know (Knowledge).
+static func player_document(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array) -> Dictionary:
+	var e := state.encounter
+	var out := {"format": Encounter.FORMAT, "version": int(e.doc.get("version", Encounter.VERSION)), "id": str(e.doc.get("id", "")), "name": e.name,
+		"active_scene": scene_id, "players": public_players(e.players), "clock": JsonDoc.deep(e.clock),
+		"campaign": {"id": str(e.campaign.get("id", ""))}, "scenes": [], "rng": {},
+		"turns": Knowledge.player_turns(e.turns, e.doc, known, seen if WebScene.turns_here(e, scene_id) else {})}
+	var sc := e.scene(scene_id)
+	if not sc.is_empty():
+		out.scenes.append(player_scene(state, sc, player_id, seen, known))
+	return out
+
+
+## A scene as a player's Godot client holds it (player_document).
+static func player_scene(state: EncounterState, sc: Dictionary, player_id: String, seen: Dictionary, known: Array) -> Dictionary:
+	var out := {}
+	for k in PLAYER_SCENE_KEYS:
+		if sc.has(k):
+			out[k] = JsonDoc.deep(sc[k])
+	out.tokens = player_tokens(state, str(sc.get("id", "")), player_id, seen, known).values()
+	out.overrides = JsonDoc.deep(sc.get("overrides", {}))
+	var regions := {}
+	for id in sc.get("regions", {}):
+		if str(sc.regions[id].get("audience", "all")) != "gm":
+			regions[id] = JsonDoc.deep(sc.regions[id])
+	out.regions = regions
+	var cells := {}
+	for key in sc.get("cells", {}):
+		if bool(sc.cells[key].get("revealed", false)):
+			cells[key] = JsonDoc.deep(sc.cells[key])
+	out.cells = cells
+	return out
+
+
+## The tokens of a scene a player's Godot client holds, {id: token}, in the
+## scene's order: those `seen`, each as player_token has it, the creatures
+## whose names they don't know labelled as they see them (only those they see
+## counted: Knowledge.player_labels).
+static func player_tokens(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array) -> Dictionary:
+	var shown: Array = state.tokens(scene_id).filter(func(tk: Dictionary) -> bool: return seen.has(str(tk.get("id", ""))))
+	var labels := Knowledge.player_labels(shown, state.encounter.actors, known)
+	var out := {}
+	for tk in shown:
+		out[str(tk.id)] = player_token(state, tk, player_id, known, str(labels.get(str(tk.id), "")))
+	return out
+
+
+## A token as a player's Godot client holds it: the party's whole (their
+## eyes are what a client works out its sight from); any other only
+## PLAYER_TOKEN_KEYS, and of a creature no player owns what the players know
+## of it (Knowledge.player_token: its health's marks and conditions' tags as
+## they see them, its name kept where they don't know it, `label`).
+static func player_token(state: EncounterState, tk: Dictionary, player_id: String, known: Array, label := "") -> Dictionary:
+	var out := {}
+	if WebScene._owns(state, tk, player_id) or WebScene._party(state, tk):
+		out = JsonDoc.deep(tk)
+	else:
+		for k in PLAYER_TOKEN_KEYS:
+			if tk.has(k) and tk[k] != null:
+				out[k] = JsonDoc.deep(tk[k])
+	return Knowledge.player_token(out, state.encounter.doc, known, label)
+
+
+## The table's players as every screen may know them: who they are, not the
+## secret a seat is claimed with.
+static func public_players(players: Array) -> Array:
+	var out := []
+	for p in players:
+		if p is Dictionary:
+			var q: Dictionary = JsonDoc.deep(p)
+			q.erase("seat")
+			out.append(q)
 	return out
 
 

@@ -216,13 +216,34 @@ func _knows_for(c: Dictionary) -> Callable:
 
 
 ## The document a screen is sent as it says hello, joins, or the encounter
-## changes under it: a Godot client's to hold, as it may (Protocol.welcome); a
-## web screen's only the table's name and its players — it draws from its
-## snapshots, never a document (it was sent every token, the hidden too).
+## changes under it: a co-GM's whole (Protocol.welcome); a Godot player's or
+## a display's only what their screen shows (Protocol.player_document: the
+## scene the players see, the tokens they see — kept in step after by
+## _sync_player); a web screen's, and any screen's before it has joined, only
+## the table's name and its players (a web screen draws from its snapshots,
+## never a document).
 func _welcome(c: Dictionary) -> Dictionary:
-	if bool(c.get("web", false)):
+	if bool(c.get("web", false)) or not bool(c.get("joined", false)):
 		return Protocol.welcome_web(state.encounter)
-	return Protocol.welcome(state.encounter, _is_gm(c), _known())
+	if _is_gm(c):
+		return Protocol.welcome(state.encounter, true, _known())
+	var sid := state.encounter.active_scene_id
+	var seen := _seen_by(c)
+	var known := _known()
+	var doc := Protocol.player_document(state, sid, _viewer(c), seen, known)
+	# (what it holds now: the tokens and the order, kept in step from here)
+	var held := {}
+	for tk in (doc.scenes[0].tokens if not (doc.scenes as Array).is_empty() else []):
+		held[str(tk.id)] = tk
+	c["held"] = {"scene": sid, "tokens": held, "turns": JsonDoc.deep(doc.turns)}
+	c["doc_due"] = false
+	return Protocol.player_welcome(doc)
+
+
+## Whose eyes a screen that isn't a DM's sees by: its player's, or (a
+## display's) "" — every player's.
+func _viewer(c: Dictionary) -> String:
+	return str(c.player) if c.role == Views.ROLE_PLAYER else ""
 
 
 ## What each screen holds of the scene, sent again as the rules loaded now
@@ -240,8 +261,50 @@ func refresh_scenes() -> void:
 func _send_docs() -> void:
 	_docs_dirty = false
 	for c in _clients:
-		if c.hello and not _is_gm(c) and not bool(c.web):
-			_send(c, Protocol.welcome(state.encounter, false, _known()))
+		if c.hello and c.joined and not _is_gm(c) and not bool(c.web):
+			_send(c, _welcome(c))
+
+
+## A Godot player's (or a display's) client kept in step with what its screen
+## shows, as the web's snapshots are: a new document where the players are
+## shown another scene (or the DM said so: `doc_due`); else the tokens it
+## holds and the order as they are now for it — a token come into its sight
+## added, one gone from it (hidden, out of sight, gone) removed, one changed
+## sent as what changed, the order whole where it changed.
+func _sync_player(c: Dictionary) -> void:
+	var held: Dictionary = c.get("held", {})
+	var sid := state.encounter.active_scene_id
+	if bool(c.get("doc_due", false)) or held.is_empty() or str(held.get("scene", "")) != sid:
+		_send(c, _welcome(c))
+		return
+	var now := Protocol.player_tokens(state, sid, _viewer(c), _seen_by(c), _known())
+	var had: Dictionary = held.tokens
+	for id in had.keys():
+		if not now.has(id):
+			_send(c, Protocol.event({"t": "token.remove", "scene": sid, "id": str(id)}))
+	var at := 0
+	for id in now:
+		if not had.has(id):
+			_send(c, Protocol.event({"t": "token.add", "scene": sid, "token": now[id], "index": at}))
+		elif not JsonDoc.same(had[id], now[id]):
+			var changes := {}
+			for k in now[id]:
+				if not JsonDoc.same((had[id] as Dictionary).get(k), now[id][k]):
+					changes[k] = now[id][k]
+			for k in had[id]:
+				if not (now[id] as Dictionary).has(k):
+					changes[k] = null
+			_send(c, Protocol.event({"t": "token.set", "scene": sid, "id": str(id), "changes": changes}))
+		at += 1
+	held.tokens = now
+	var turns := _turns_for(c)
+	if not JsonDoc.same(turns, held.get("turns", {})):
+		var whole: Dictionary = turns.duplicate()
+		for k in held.get("turns", {}):
+			if not turns.has(k):
+				whole[k] = null
+		_send(c, Protocol.event({"t": "turns.set", "changes": whole}))
+		held.turns = turns
 
 
 ## Is the client on this machine (the DM's own browser)?
@@ -358,13 +421,16 @@ func poll(delta := 0.0) -> void:
 	# the players don't know numbered afresh), once however many changes did it
 	if _docs_dirty:
 		_send_docs()
-	# web clients get the scene whole, a few times a second at most
+	# web clients get the scene whole, a few times a second at most (a Godot
+	# player's what changed of what its screen shows)
 	if _scenes_dirty and Time.get_ticks_msec() - _last_scene_ms >= 50:
 		_scenes_dirty = false
 		_last_scene_ms = Time.get_ticks_msec()
 		for c in _clients:
 			if c.joined and bool(c.web):
 				_send_scene(c)
+			elif c.joined and not _is_gm(c):
+				_sync_player(c)
 	# (and the DM's screen its campaign state, as often)
 	if _dm_dirty and Time.get_ticks_msec() - _last_dm_ms >= 150:
 		_dm_dirty = false
@@ -447,59 +513,36 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		_views_dirty = true
 		return
 	var known := _known()
-	if Protocol.SCENE_EVENTS.has(t):
-		if (t == "token.add" or t == "token.set") and Knowledge.hides(known):
-			# a monster as each may see it (Knowledge): the DM's whole, a player's
-			# without what the players don't know — its health's marks, its
-			# conditions' tags, its name (and the label they know it by)
-			var sid := str(ev.get("scene", ""))
-			var tid := str(ev.token.get("id", "")) if t == "token.add" and ev.get("token") is Dictionary else str(ev.get("id", ""))
-			var now := state.token(sid, tid)
-			var labels := Knowledge.player_labels(state.tokens(sid), state.encounter.actors, known)
-			var mine := Protocol.event(Knowledge.player_event(ev, now, state.encounter.doc, known, str(labels.get(tid, ""))))
-			for c in _clients:
-				if c.hello and not bool(c.web):
-					_send(c, Protocol.event(ev) if _is_gm(c) else mine)
-			# one come, hidden or shown: the others the players don't know are numbered afresh
-			var ch: Variant = ev.get("changes")
-			if Knowledge.names_hidden(known) and (t == "token.add" or (ch is Dictionary and ((ch as Dictionary).has("hidden") or (ch as Dictionary).has("actor") or (ch as Dictionary).has("owner")))):
-				_docs_dirty = true
-		elif t == "turns.set":
-			# the order as each player may see it, whole (every part of it replaced):
-			# only the creatures they see, a creature's initiative left out where its
-			# rolls are the DM's (Knowledge.player_turns)
-			for c in _clients:
-				if c.hello and not bool(c.web):
-					_send(c, Protocol.event(ev) if _is_gm(c) else Protocol.event({"t": "turns.set", "changes": _turns_for(c)}))
-		else:
-			_broadcast(Protocol.event(ev))
-		if t == "token.remove" and Knowledge.names_hidden(known):
-			_docs_dirty = true
+	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t):
+		# a co-GM's client holds the scene whole: every event as it is. A player's
+		# (a display's) only what its screen shows: its tokens and the order kept
+		# in step at the next poll (_sync_player), the rest as far as it is about
+		# the scene it holds (_player_events). (Web screens get snapshots.)
+		for c in _clients:
+			if not c.hello or bool(c.web):
+				continue
+			if _is_gm(c) and c.joined:
+				_send(c, Protocol.event(ev))
+				continue
+			for out in _player_events(c, ev, inv):
+				_send(c, Protocol.event(out))
 		# a note on the map shown to the players (or hidden again): their
 		# devices get the map again, with it (or without it)
 		if t == "element.set" and str(ev.get("ref", "")).begins_with("notes:"):
 			var mid := str(state.encounter.scene(str(ev.get("scene", ""))).get("map", ""))
 			for c in _clients:
-				if c.hello and not _is_gm(c) and not bool(c.web) and state.maps.has(mid):
+				if c.hello and c.joined and not _is_gm(c) and not bool(c.web) and state.maps.has(mid):
 					_send(c, _map_msg(c, mid))
-	elif Protocol.AUDIENCE_EVENTS.has(t):
-		# co-GMs hold the scene whole: every region and cell event as it is
-		_broadcast(Protocol.event(ev), true)
-		for msg in _audience_events(ev, inv):
-			for c in _clients:
-				if c.hello and not _is_gm(c) and not bool(c.web):
-					_send(c, Protocol.event(msg))
 	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t) or t.begins_with("token.") or t == "checkpoint.restore":
 		_scenes_dirty = true
 	# a creature's hit points, on its token where the players see them exactly
 	if t == "resource.set" and Knowledge.exact(known):
 		_scenes_dirty = true
 	# a creature's name revealed (or kept again), or who it is or whose: every
-	# screen's scene and a Godot player's document follow (its name, the labels);
+	# screen's scene and a Godot player's tokens follow (its name, the labels);
 	# an effect on a creature whose conditions the players don't know: its tags
 	if Knowledge.hides(known) and (t in ["actor.add", "actor.remove"] or (t == "actor.set" and _names_whom(ev)) or (t.begins_with("effect.") and Knowledge.conditions_hidden(known))):
 		_scenes_dirty = true
-		_docs_dirty = true
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
 		# the DM's screen draws the party (hit points, conditions) from its state too
@@ -510,6 +553,58 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		for c in _clients:
 			if c.hello:
 				_send(c, {"t": "packs", "packs": listing})
+
+
+## A scene event as a player's (a display's) Godot client is sent it: only
+## what is about the scene it holds, as far as its screen shows it. Its
+## tokens and the order are not sent as they come — _sync_player keeps them
+## in step with what it sees; a scene come or gone, or the players shown
+## another, brings it a new document at the next poll (`doc_due`); a scene's
+## own fields but its triggers and a ruleset's data; the table's name, its
+## players (not a seat's secret), its clock; regions and cells as far as the
+## players are shown them; nothing a ruleset keeps on the encounter or the
+## campaign. Before it has joined, only who the players are.
+func _player_events(c: Dictionary, ev: Dictionary, inv: Dictionary) -> Array:
+	var t := str(ev.get("t", ""))
+	if t in ["player.add", "player.remove", "player.set"]:
+		var out: Dictionary = JsonDoc.deep(ev)
+		if out.get("player") is Dictionary:
+			(out.player as Dictionary).erase("seat")
+		if out.get("changes") is Dictionary:
+			(out.changes as Dictionary).erase("seat")
+			if (out.changes as Dictionary).is_empty():
+				return []
+		return [out]
+	if not bool(c.get("joined", false)):
+		return []
+	var sid := str(c.get("held", {}).get("scene", ""))
+	match t:
+		"token.add", "token.set", "token.remove", "turns.set":
+			return []
+		"scene.activate", "scene.add", "scene.remove":
+			if t == "scene.activate" or bool(ev.get("activate", false)) or str(ev.get("id", "")) == sid or state.encounter.active_scene_id != sid:
+				c["doc_due"] = true
+			return []
+		"scene.set":
+			if str(ev.get("id", "")) != sid or not (ev.get("changes") is Dictionary):
+				return []
+			var ch := {}
+			for k in ev.changes:
+				var root := str(k).get_slice("/", 0)
+				if root != "id" and Protocol.PLAYER_SCENE_KEYS.has(root):
+					ch[k] = JsonDoc.deep(ev.changes[k])
+			return [] if ch.is_empty() else [{"t": "scene.set", "id": sid, "changes": ch}]
+		"encounter.set":
+			if ev.get("changes") is Dictionary and (ev.changes as Dictionary).has("name"):
+				return [{"t": "encounter.set", "changes": {"name": str(ev.changes.name)}}]
+			return []
+		"clock.set":
+			return [ev]
+		"element.set", "fog.set", "fog.reveal", "fog.hide":
+			return [ev] if str(ev.get("scene", "")) == sid else []
+	if Protocol.AUDIENCE_EVENTS.has(t) and str(ev.get("scene", "")) == sid:
+		return _audience_events(ev, inv)
+	return []
 
 
 ## Whether an actor's change touches who it is to the players: its name, its
@@ -657,7 +752,7 @@ func _send_scene(c: Dictionary) -> void:
 		sid = e.active_scene_id
 	var known := _known()
 	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c), known) if sid != "" else {},
-		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
+		"players": Protocol.public_players(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
 	if not (msg.scene as Dictionary).is_empty():
 		msg.scene.role = str(map_role.call(str(msg.scene.get("map", "")))) if map_role.is_valid() else ""
 		# how the table's rulers count (the rules' diagonal rule): a screen counts the
@@ -758,6 +853,10 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 					for mid in state.maps:
 						_send(c, _map_msg(c, str(mid)))
 			_send(c, {"t": "joined", "player": pid, "role": role, "name": _player_name(pid) if pid != "" else ""})
+			# a Godot player's (a display's) document, now that it is someone: what
+			# its screen shows (it had only the table's name and its players)
+			if not bool(c.web) and not _is_gm(c):
+				_send(c, _welcome(c))
 			_send_view(c)
 			if bool(c.web):
 				_send_scene(c)

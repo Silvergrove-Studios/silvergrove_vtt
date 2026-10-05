@@ -40,16 +40,15 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	var fog := state.fog_enabled(scene_id)
 	var eyes := _eyes(state, scene_id, player_id, gm)
 	var sight: Dictionary = Vision.of(state, scene_id, eyes) if (fog or gm) else {"polygons": [], "cells": [], "los": [], "dark": []}
-	# labels worked out over every token, the hidden ones too: a player sees
-	# the GW2 the DM calls out, whatever else they can't see — but a creature
-	# whose name the players don't know, "?" or a number of the ones they see
-	var labels := TokenLabels.of_scene(state.tokens(scene_id), state)
-	var unnamed := Knowledge.player_labels(state.tokens(scene_id), e.actors, known)
+	# what this screen is shown, and the labels worked out over only that: a
+	# number never tells a player of a creature they don't see (GW2 with no GW1
+	# on their screen said there was one) — the DM's over every token
+	var shown: Array = state.tokens(scene_id) if gm else state.tokens(scene_id).filter(func(tk: Dictionary) -> bool: return shows(state, tk, player_id, fog, sight.polygons))
+	var labels := TokenLabels.of_scene(shown, state)
+	var unnamed := Knowledge.player_labels(shown, e.actors, known)
 	var tokens := []
 	var seen := {}
-	for tk in state.tokens(scene_id):
-		if not gm and not shows(state, tk, player_id, fog, sight.polygons):
-			continue
+	for tk in shown:
 		seen[str(tk.id)] = true
 		var out := token_out(state, tk, gm, known)
 		out.label = str(labels.get(str(tk.id), out.get("label", "")))
