@@ -131,6 +131,28 @@
   a player's sheet keeps counters and no Cast, and a goblin's marks leave
   her map.
 
+- **A monster's name and its conditions are the DM's too.** What players
+  know of a creature no player owns is one declaration
+  (`hm.ui.knowledge`: its health, as `hm.ui.health` gave it, its name, its
+  conditions) and one filter on the Table. Where names are kept, a creature
+  is "a creature" on every player's screen — its token labelled "?" (or 1,
+  2, … of several: those the DM hides aren't counted), its name in the
+  rules' view, every line, roll, card and refusal that names it — until the
+  DM reveals it: *Reveal its name* on its stat block or card, *Reveal all*
+  in the fight, *Keep it hidden* to take it back; the DM's screen says what
+  the players call each one. A ruleset names a creature in its words through
+  a mark (`hm.known.name`), and the Table puts each right for each screen
+  as it is sent, so a reveal reaches every line said before it. Where
+  conditions are kept, the effects on such a creature leave the players'
+  view of it and its tokens' tags, and words marked as its conditions
+  (`hm.known.conditions`) read as nothing to them. A roll says who rolled
+  and at whom, as the screen knows them ("A creature: Scimitar → Wren").
+  The DM's *See as* draws the marks that player is sent, not the DM's own;
+  a web screen's welcome is the table's name and players alone (it was sent
+  the whole document); a test reads the cards and what the table waits on
+  in `t.sent`, and words as a player reads them with `t.shown`. A journey
+  in a real browser (`web/tests/e2e/hidden.mjs`).
+
 - **Playtests by agents** (`tools/agent_playtest/`): a table of AI agents
   — a DM who knows only D&D and players with personalities, each in a
   browser sized like their device (a phone, a tablet, a laptop), talking

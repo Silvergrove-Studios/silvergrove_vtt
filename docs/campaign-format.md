@@ -243,6 +243,9 @@ elsewhere).
 - `audience.fields`: per-field visibility the plugin declared or the GM
   set: `gm` | `owner` | `all`. Projection to a Player drops what they may
   not see.
+- `audience.name`: `all` once the players know the name of a creature no
+  player owns, where a ruleset keeps names from them (the DM's *Reveal its
+  name*); until then it is "a creature" on their screens.
 - `packs`: the pack versions this actor's references were resolved
   against, so "update to latest" knows what changed.
 - `persistent`: kept by the campaign though it is not a character (a

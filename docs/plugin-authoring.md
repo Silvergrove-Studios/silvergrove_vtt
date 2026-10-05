@@ -468,30 +468,81 @@ GM-only except the paths marked `all`, and is listed to players only when
 encounter `state` is shown to everyone: keep secrets on GM-only actors
 or in `gm`-audience records.
 
-**A creature's health.** What players see of the health of a creature no
-player owns is often the DM's to decide. Declare it as the plugin loads
-(a setting changed loads the plugin again, so read it from a setting):
+**What the players know.** What players know of a creature no player
+owns — its health, its name, its conditions — is often the DM's to
+decide. Declare it as the plugin loads (a setting changed loads the plugin
+again, so read it from settings):
 
 ```lua
-hm.ui.health({ tags = { "bloodied", "down", "dead" }, resource = "hp",
-  effects = { "dead", "dying" }, players = hm.settings.get("monster_health", "marks") })
+hm.ui.knowledge({
+  health = { tags = { "bloodied", "down", "dead" }, resource = "hp",
+    effects = { "dead", "dying" }, players = hm.settings.get("monster_health", "marks") },
+  names = hm.settings.get("monster_names", "shown"),           -- "shown" | "hidden"
+  conditions = hm.settings.get("monster_conditions", "shown"), -- "shown" | "hidden"
+})
 ```
 
-`tags` are the marks its tokens carry for it (the maps draw `bloodied`,
-`down` and `dead`), `resource` the pool its hit points are kept in,
-`effects` the keys that say it is dying or dead. `players`: `"marks"` (as
-without a declaration), `"none"` (no mark on its tokens, its pool and those
-effects not in a player's view, for a creature listed to players), or
-`"exact"` (its marks, and its hit points on its tokens — `hp: [current,
-max]` in a web screen's scene, drawn under the disc — for every screen).
-The Table filters before anything is sent: a web screen's scene, a Godot
-client's document and the token events after it, the rules' view. The DM
-sees everything; a token or actor with an owner is the party's own. A
-Table from before it has no `hm.ui.health`: guard the call (`if
-hm.ui.health then … end`). A test reads what a screen is sent with
-`t.sent(player, scene)`, for a player (their id) or the DM (`nil`):
-`{scene, document, actors, log}` (a web screen's scene, a Godot client's
-document, the rules' view's actors and log).
+The Table filters by it before anything is sent — a web screen's scene, a
+Godot client's document and the token events after it, the rules' view,
+and every message on the wire — so a player's device never holds what the
+DM keeps. The DM sees everything; a token or actor with an owner (or a
+player's character) is the party's own.
+
+- **health**: `tags` are the marks its tokens carry for it (the maps draw
+  `bloodied`, `down` and `dead`), `resource` the pool its hit points are
+  kept in, `effects` the keys that say it is dying or dead. `players`:
+  `"marks"` (as without a declaration), `"none"` (no mark on its tokens,
+  its pool and those effects not in a player's view, for a creature listed
+  to players), or `"exact"` (its marks, and its hit points on its tokens —
+  `hp: [current, max]` in a web screen's scene, drawn under the disc — for
+  every screen). `hm.ui.health(health)` declares this part alone (a part
+  not given stays as declared before).
+- **names** `"hidden"`: the creature is "a creature" on a player's screens
+  — its token's name, its label `?` (or `1`, `2`, … of several on the scene:
+  those the DM hides aren't counted, so a number never tells of one the
+  players haven't seen), its name in the rules' view — until the DM reveals
+  it: its actor's `audience.name` becomes `"all"` (the DM's *Reveal its
+  name*; a creature a player made can start with it). The DM's scene says
+  of each such token `name_known` and the label the players see it by
+  (`player_label`).
+- **conditions** `"hidden"`: the effects on it leave a player's view of it
+  (but those its health declares, which follow its health), and so do its
+  tokens' tags that are its effects' keys.
+
+A creature's name and conditions are in your words too: a log line, a
+roll's label, a card, an `error`, words kept in your state. Write them
+through a **mark**, and the Table puts each right for each screen as it is
+sent — the words for those who know them, other words for those who don't
+— so a name revealed reaches every line said before:
+
+```lua
+hm.known.name(actor_id, "the Goblin", "a creature")      -- its name: "a creature" to those who don't know it
+hm.known.conditions(actor_id, ", Frightened")            -- its conditions: nothing to those who don't see them
+hm.known.plain(text)                                     -- text as the DM reads it, the marks undone
+```
+
+A mark is plain text (Unicode's interlinear annotation characters round
+the words and what they're about), so it goes anywhere a string does; the
+words you give it are the DM's, the last its stand-in. A stand-in at the
+head of a sentence is given a capital; words read as nothing take their
+list's comma with them ("fails the save, Frightened" reads "fails the save").
+Mark only where it matters (where your setting keeps names or conditions):
+your own tests then read your words as before. A roll's entry says whom it
+was rolled at (`target`, from `ctx.target`), and each screen reads who rolled
+and at whom as it knows them (`who`, `whom`). A line that is all about a
+creature's condition is better given the GM's audience where its conditions
+are kept. Don't put a creature's name in an id the players hold (a token's,
+an order's group): the Table never rewrites those. A Table from before it has
+no `hm.ui.knowledge` nor `hm.known`: guard both (`if hm.ui.knowledge then …
+elseif hm.ui.health then … end`).
+
+A test reads what a screen is sent with `t.sent(player, scene)`, for a
+player (their id) or the DM (`nil`), as the wire carries it: `{scene,
+document, actors, log, prompts, waiting, rolls}` (a web screen's scene, a
+Godot client's document, the rules' view's actors and log, the cards for
+that viewer, what the table waits on, the rolls asked of the table). Words
+an action gives back (an `error`'s, a card's) read as a screen reads them
+with `t.shown(text, player)`.
 
 **Picks.** A button's intent with `pick = "token" | "cell" | "area"` asks
 the map first; the rest of its keys say what the pick may take and are
@@ -1178,7 +1229,7 @@ and fails on what it finds. A test may read its plugin's manifest as data
 - What everyone may see of a creature's state goes on its tokens as
   tags the maps draw: `bloodied` (a red ring and mark), `down` (the
   token darkened), `dead` (darkened and crossed out); what players see of
-  them is the plugin's to declare (`hm.ui.health`). A token named with
+  them is the plugin's to declare (`hm.ui.knowledge`'s health). A token named with
   a number ("Goblin Warrior 2") shows it after its label ("G2"), and the
   unnumbered one of the set shows "G1".
 - Effects that last rounds or turns (`duration.kind` `rounds`,

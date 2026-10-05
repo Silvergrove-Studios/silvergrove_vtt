@@ -327,7 +327,12 @@ below puts rules in the map or numbers on tokens; it puts them in
   pool, a shared pool). Scenes and tokens may carry `ext.<plugin>` too.
 - **log**: informational entries in order — rolls and notes — each with
   an `audience`. A roll carries its `spec`, its full `result` and the
-  `draw` it came from. Any entry may carry `dm`, by plugin id: the DM's
+  `draw` it came from, the `actor` that rolled and the one it was rolled
+  at (`target`, an attack's or its damage's): each screen is told who and
+  whom (`who`, `whom`) by the names it knows. Text may carry a ruleset's
+  marks round a creature's name or its conditions (docs/plugin-authoring.md,
+  *What the players know*): the Table reads them for each screen as it
+  sends. Any entry may carry `dm`, by plugin id: the DM's
   buttons on it (`actions`) and a ruleset's notes on it, sent to the GM's
   screens alone; and `caused`, the steps its roll set off (each `{label, by,
   do, undo}`: the events applied and those that put them back), kept by the

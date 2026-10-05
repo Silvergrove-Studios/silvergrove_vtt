@@ -143,5 +143,18 @@ applies it, and the log says so; a later hit applied as it is, the DM
 calls it a miss from its line in Chat & rolls (Rule), and the damage is
 healed back — the roll's line kept as it was rolled.
 
+`tests/e2e/hidden.mjs <host.json> <out>` (host with `--party`, on a package
+built on the rules being tried, as for rulings.mjs): what the players know.
+The DM keeps monsters' names and conditions from the players (Rules
+settings) and gives Wren Fireball. In the chapel fight one goblin is shown:
+on Ana's phone and Ben's laptop it is "a creature" labelled "?", the DM's
+stat block saying what the players call it; its scimitar at Wren is "A
+creature: Scimitar → Wren" in their chat and the goblin's in the DM's. A
+second goblin shown, the two are 1 and 2, and Ana's Fireball preview says
+"2 creatures" on Ben's screen; the DM seeing as Ana has her names and her
+marks; the DM reveals the first goblin's name (Reveal its name) and both
+players' screens name it, its token and the roll said before; a Frightened
+put on the other goblin from its stat block reaches neither player.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).
