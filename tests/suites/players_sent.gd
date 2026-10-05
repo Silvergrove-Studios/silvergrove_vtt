@@ -417,6 +417,134 @@ static func _tok_in(doc: Dictionary, id: String) -> Dictionary:
 	return {}
 
 
+# --------------------------------------------- pictures, names, lookups --
+
+## A pack of pictures and a creature's token art, on disk for a test.
+func _picture_pack() -> PackLibrary:
+	var root := ProjectSettings.globalize_path(out_dir()).path_join("t5_art")
+	for sub in ["pictures", "tokens"]:
+		DirAccess.make_dir_recursive_absolute(root.path_join("t_pics").path_join(sub))
+	var put := func(rel: String, text: String) -> void:
+		var f := FileAccess.open(root.path_join("t_pics").path_join(rel), FileAccess.WRITE)
+		f.store_string(text)
+		f.close()
+	put.call("pack.json", JSON.stringify({"format": "silvergrove.pack", "version": 1, "id": "t_pics", "name": "Pictures", "pack_version": "1", "license": "CC0-1.0",
+		"pictures": [{"id": "thornwick", "name": "Thornwick", "texture": "pictures/thornwick.png"}, {"id": "vicar_secret", "name": "The vicar's crime", "texture": "pictures/vicar_secret.png"}],
+		"tokens": [{"id": "goblin_boss", "name": "Goblin Boss", "texture": "tokens/goblin_boss.png"}]}))
+	put.call("pictures/thornwick.png", "PNG-thornwick")
+	put.call("pictures/vicar_secret.png", "PNG-vicar")
+	put.call("tokens/goblin_boss.png", "PNG-boss")
+	var lib := PackLibrary.new()
+	lib.set_extra_dirs(PackedStringArray([root]))
+	lib.reload()
+	return lib
+
+
+static func _pack(listing: Array, id: String) -> Dictionary:
+	for p in listing:
+		if str(p.get("id", "")) == id:
+			return p
+	return {}
+
+
+static func _http(host: HostSession, path: String) -> String:
+	return host.web.respond("GET %s HTTP/1.1\r\n\r\n" % path).get_string_from_utf8()
+
+
+## A picture reaches a player only once it is shown to them, at an address
+## only they were sent (never by its name, which an unshown one's would
+## give away); the art of a creature whose name they don't know by an id
+## that names nothing; its kind's tags, and its power's label on a preview
+## of the DM's, kept from them; the collections a ruleset says are the DM's
+## neither searchable nor openable from a player's screen, as if empty.
+func test_pictures_names_and_lookups() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var lib := _picture_pack()
+	check(lib.picture_packs().has("t_pics"), "a pack of pictures and token art")
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, "t.names", "hexmap.ui.knowledge({ names = 'hidden', name_tags = { 'humanoid', 'undead' }, dm_collections = { 'creatures' } })") == "", "a ruleset keeping names, its kind tags and its bestiary")
+	var known := kernel.knowledge_policies()
+	check(Knowledge.kind_tags(known).has("humanoid") and Knowledge.dm_collections(known).has("creatures"), "declared: %s" % [known])
+	check(plugins.load_source({"id": "t.bad4", "version": "1", "api": 1, "name": "Bad"}, [["main.lua", "hexmap.ui.knowledge({ name_tags = 'humanoid' })"]]) != "", "a list it must be")
+	var f := _fight(kernel, sid)
+	kernel.commit([{"t": "token.set", "scene": sid, "id": "t_boss", "changes": {"art": "t_pics:goblin_boss", "tags": ["humanoid", "bloodied"]}}], "The boss's art")
+	kernel.comp.load_pack({"id": "t_book", "name": "Book"}, {"creatures": [{"id": "goblin-boss", "name": "Goblin Boss", "type": "humanoid"}], "spells": [{"id": "light", "name": "Light"}]})
+	var host := HostSession.new(st, lib)
+	host.kernel = kernel
+	host.plugins = plugins
+	host.dm_token = "sesame"
+	host.dm_state_source = func() -> Dictionary: return {}
+	check(host.start(0, false, 0) == OK, "hosting")
+	var ana := _web_player(host, ANA)
+	var ben := _web_player(host, BEN, [ana])
+	ana.send({"t": "need", "kind": "packs"})
+	check(_pump(host, [ana, ben], func() -> bool: return not ana.last("packs").is_empty()), "her packs")
+	var listing: Array = ana.last("packs").packs
+	var art := _pack(listing, HostSession.ART_PACK)
+	check(_pack(listing, "t_pics").is_empty(), "no picture of the pack's: none shown to her")
+	check(not art.is_empty() and (art.manifest.tokens as Array).size() == 1 and str(art.manifest.tokens[0].url).begins_with("/pic/"), "the boss's art in a pack of its own, at an address: %s" % [art])
+	_pump(host, [ana, ben], func() -> bool: return not ana.last("scene").is_empty())
+	var boss: Dictionary = {}
+	for tk in ana.last("scene").scene.tokens:
+		if str(tk.id) == "t_boss":
+			boss = tk
+	check(str(boss.get("art", "")) == HostSession.ART_PACK + ":" + str(art.manifest.tokens[0].id), "her screen's boss: its art by an id that names nothing: %s" % [boss.get("art")])
+	check(boss.get("tags", []) == ["bloodied"], "without the tag that says its kind, its mark kept: %s" % [boss.get("tags")])
+	check(_http(host, "/art/t_pics/tokens/goblin_boss.png").begins_with("HTTP/1.1 404"), "its art by its name: never")
+	check(_http(host, str(art.manifest.tokens[0].url)).ends_with("PNG-boss"), "by its address: served")
+	# the DM shows Ana the village: her picture, at an address; not the vicar's, not Ben's
+	kernel.commit([{"t": "log.add", "entry": {"id": "h1", "kind": "handout", "title": "Thornwick", "text": "", "audience": "players:" + ANA, "image": "t_pics:thornwick"}}], "Show Ana")
+	check(_pump(host, [ana, ben], func() -> bool: return not _pack(ana.last("packs").packs, "t_pics").is_empty()), "shown: her packs again, with it")
+	var pics: Array = _pack(ana.last("packs").packs, "t_pics").manifest.pictures
+	check(pics.size() == 1 and str(pics[0].id) == "thornwick" and str(pics[0].url).begins_with("/pic/"), "the village alone, at its address: %s" % [pics])
+	check(not (_pack(ana.last("packs").packs, "t_pics").files as Array).has("pictures/vicar_secret.png"), "the vicar's file not in what she may fetch")
+	check(_http(host, str(pics[0].url)).ends_with("PNG-thornwick"), "served at its address")
+	check(_http(host, "/art/t_pics/pictures/thornwick.png").begins_with("HTTP/1.1 404") and _http(host, "/art/t_pics/pictures/vicar_secret.png").begins_with("HTTP/1.1 404"), "and no picture by its name")
+	check(_pack(ben.last("packs").get("packs", []), "t_pics").is_empty(), "Ben, not shown it, wasn't sent it")
+	var godot := _godot(host, BEN, [ana, ben])
+	_pump(host, [ana, ben, godot], func() -> bool: return not godot.last("packs").is_empty())
+	godot.send({"t": "need", "kind": "file", "pack": "t_pics", "file": "pictures/thornwick.png"})
+	godot.send({"t": "need", "kind": "file", "pack": "t_pics", "file": "pictures/vicar_secret.png"})
+	check(_pump(host, [ana, ben, godot], func() -> bool: return godot.count("error") >= 2), "his Godot client asking for either by name: refused")
+	check(godot.count("file") == 0, "no file sent")
+	var dm := Web.WebClient.new(host.port)
+	_pump(host, [ana, ben, godot, dm], func() -> bool: return dm.open())
+	dm.send({"t": "hello", "version": Protocol.VERSION, "name": "dm", "web": true})
+	dm.send({"t": "join", "role": "dm", "token": "sesame"})
+	_pump(host, [ana, ben, godot, dm], func() -> bool: return not dm.last("joined").is_empty())
+	dm.send({"t": "need", "kind": "packs"})
+	check(_pump(host, [ana, ben, godot, dm], func() -> bool: return not dm.last("packs").is_empty()), "the DM's packs")
+	var dmp: Dictionary = _pack(dm.last("packs").packs, "t_pics").manifest
+	check((dmp.pictures as Array).size() == 2 and (dmp.tokens as Array).size() == 1 and (dmp.pictures as Array).all(func(p: Dictionary) -> bool: return str(p.get("url", "")).begins_with("/pic/")), "the DM's: every picture, each at its address")
+	# a preview of the boss's breath, the DM's: hers without its name or its power's
+	check(host._put_mark("gm", {"id": "boss-breath", "kind": "preview", "scene": sid, "points": [[5.0, 7.4]], "shape": {"type": "cone", "size": 3.0}, "label": "Fire Breath, 15-ft cone", "actor": "a_boss", "token": "t_boss"}, true) == "", "the DM previews the boss's breath")
+	check(_pump(host, [ana, ben, godot, dm], func() -> bool: return ana.inbox.any(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "mark" and str(m.mark.id) == "boss-breath")), "it reaches her screen")
+	var mark: Dictionary = ana.inbox.filter(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "mark" and str(m.mark.id) == "boss-breath").back().mark
+	check(str(mark.get("name", "")) == "A creature" and not mark.has("label"), "a creature's, no label naming its power: %s" % [mark])
+	# the bestiary is the DM's: not searchable, not openable, from her screen
+	ana.send({"t": "need", "kind": "view"})
+	_pump(host, [ana, ben, godot, dm], func() -> bool: return false, 200)
+	var colls: Array = ana.last("view").view.get("collections", [])
+	check(not colls.has("creatures") and colls.has("spells"), "her Lookup: the spells, not the bestiary: %s" % [colls])
+	ana.send({"t": "need", "kind": "comp", "req": "q1", "collection": "creatures", "query": {"text": "goblin", "facets": ["type"]}})
+	ana.send({"t": "need", "kind": "comp", "req": "q2", "collection": "creatures", "id": "goblin-boss"})
+	check(_pump(host, [ana, ben, godot, dm], func() -> bool: return ana.count("comp") >= 2), "her asking anyway")
+	var answers := ana.inbox.filter(func(m: Dictionary) -> bool: return str(m.get("t", "")) == "comp")
+	check(int(answers[0].page.total) == 0 and (answers[0].page.entries as Array).is_empty() and str(answers[1].get("error", "")) == "no such entry", "an empty page, and no such entry: %s" % [answers])
+	dm.send({"t": "need", "kind": "comp", "req": "q3", "collection": "creatures", "id": "goblin-boss"})
+	check(_pump(host, [ana, ben, godot, dm], func() -> bool: return not dm.last("comp").is_empty()) and str(dm.last("comp").entry.name) == "Goblin Boss", "the DM's: the stat block")
+	for w in [ana, ben]:
+		var raw := JSON.stringify((w as Web.WebClient).raw)
+		for said in ["goblin_boss", "vicar", "Goblin Boss"]:
+			check(not raw.contains(said), "nothing a player was sent says %s" % said)
+	host.stop()
+
+
 # ------------------------------------------------------------------- maps --
 
 static func _el(lvl: Dictionary, coll: String, id: String) -> Dictionary:

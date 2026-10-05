@@ -48,9 +48,18 @@ extends RefCounted
 ## every line said of it before, at once. A ruleset that never marks a name
 ## leaves it as it wrote it.
 ##
+## Two lists go with it:
+##
+## - **name_tags**: the tags a ruleset puts on its creatures' tokens that say
+##   what kind of creature one is ("undead", "dragon"): where the players
+##   don't know a creature's name, its tokens are sent without them.
+## - **dm_collections**: the collections of its content that are the DM's
+##   (its creatures' stat blocks): not searchable or openable from a player's
+##   screen (the Lookup, a compendium request) — a missing entry to them.
+##
 ## A declaration: {plugin, players, resource, tags, effects, names,
-## conditions, rolls} (the health keys flat, as `hm.ui.health` has always
-## given them).
+## conditions, rolls, name_tags, dm_collections} (the health keys flat, as
+## `hm.ui.health` has always given them).
 
 const MODES := ["exact", "marks", "none"]
 const SHOWN := ["shown", "hidden"]
@@ -75,8 +84,9 @@ static func make(plugin: String, spec: Variant, base: Dictionary = {}) -> Varian
 	if spec is Array and (spec as Array).is_empty():
 		spec = {}
 	if not (spec is Dictionary):
-		return "hm.ui.knowledge takes a table: {health, names, conditions, rolls}"
-	var out := {"plugin": plugin, "players": "marks", "resource": "", "tags": [], "effects": [], "names": "shown", "conditions": "shown", "rolls": "shown"}
+		return "hm.ui.knowledge takes a table: {health, names, conditions, rolls, name_tags, dm_collections}"
+	var out := {"plugin": plugin, "players": "marks", "resource": "", "tags": [], "effects": [], "names": "shown", "conditions": "shown", "rolls": "shown",
+		"name_tags": [], "dm_collections": []}
 	for k in base:
 		out[k] = JsonDoc.deep(base[k])
 	out.plugin = plugin
@@ -104,6 +114,34 @@ static func make(plugin: String, spec: Variant, base: Dictionary = {}) -> Varian
 			if not SHOWN.has(v):
 				return "hm.ui.knowledge: %s is shown or hidden, not '%s'" % [key, v]
 			out[key] = v
+	for key in ["name_tags", "dm_collections"]:
+		if spec.has(key):
+			var v: Variant = spec[key]
+			if v is Dictionary:
+				v = (v as Dictionary).values()
+			if not (v is Array):
+				return "hm.ui.knowledge: %s is a list" % key
+			out[key] = (v as Array).map(func(x: Variant) -> String: return str(x))
+	return out
+
+
+## The tags that say what kind a creature is (`name_tags`), of every
+## declaration: {tag: true}.
+static func kind_tags(policies: Array) -> Dictionary:
+	var out := {}
+	for p in policies:
+		for tg in p.get("name_tags", []):
+			out[str(tg)] = true
+	return out
+
+
+## The collections that are the DM's (`dm_collections`), of every declaration:
+## {collection: true}.
+static func dm_collections(policies: Array) -> Dictionary:
+	var out := {}
+	for p in policies:
+		for c in p.get("dm_collections", []):
+			out[str(c)] = true
 	return out
 
 
@@ -224,9 +262,12 @@ static func player_labels(tokens: Array, actors: Dictionary, policies: Array) ->
 
 ## A token's tags as a player is sent them: the health marks a declaration
 ## keeps from the players ("none") taken out, and — conditions hidden — the
-## tags that are keys of the creature's effects (`fx_keys`).
-static func player_tags(tags: Array, policies: Array, fx_keys: Dictionary = {}) -> Array:
+## tags that are keys of the creature's effects (`fx_keys`); of a creature
+## whose name they don't know (`unknown`), the tags that say its kind.
+static func player_tags(tags: Array, policies: Array, fx_keys: Dictionary = {}, unknown := false) -> Array:
 	var gone := fx_keys.duplicate()
+	if unknown:
+		gone.merge(kind_tags(policies))
 	for p in policies:
 		if str(p.get("players", "marks")) == "none":
 			for tg in p.get("tags", []):
@@ -271,18 +312,21 @@ static func shown_hp(resources: Dictionary, actor_id: String, policies: Array) -
 
 ## A token as a player is sent it, from what the DM's screen would get: for a
 ## creature no player owns, its tags filtered (its health, its conditions)
-## and — its name unknown — "a creature", labelled `label` (player_labels).
+## and — its name unknown — "a creature", labelled `label` (player_labels),
+## without the tags that say its kind or an art whose name says it (unart).
 ## `doc` the encounter's document (actors, effects).
-static func player_token(tk: Dictionary, doc: Dictionary, policies: Array, label := "") -> Dictionary:
+static func player_token(tk: Dictionary, doc: Dictionary, policies: Array, label := "", art_of: Callable = Callable()) -> Dictionary:
 	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
 	if not hides(policies) or not unowned(tk, actors):
 		return tk
 	var out := tk.duplicate()
+	var unknown := nameless(tk, actors, policies)
 	if tk.get("tags") is Array:
 		var fx: Dictionary = doc.get("effects", {}) if doc.get("effects") is Dictionary else {}
-		out.tags = player_tags(tk.tags, policies, condition_keys(fx, tk, policies) if conditions_hidden(policies) and not conditions_known(actors.get(str(tk.actor), {}), policies) else {})
-	if nameless(tk, actors, policies):
+		out.tags = player_tags(tk.tags, policies, condition_keys(fx, tk, policies) if conditions_hidden(policies) and not conditions_known(actors.get(str(tk.actor), {}), policies) else {}, unknown)
+	if unknown:
 		unname(out, label)
+		unart(out, art_of)
 	return out
 
 
@@ -292,6 +336,21 @@ static func unname(out: Dictionary, label: String) -> void:
 	out.name = UNKNOWN
 	out.label = label if label != "" else UNKNOWN_LABEL
 	out.unknown = true
+
+
+## A token's art kept from a screen that doesn't know its creature's name,
+## in place: a picture of its own (an upload's address says nothing) stays;
+## a pack's, whose name would name it ("monsters:goblin_boss"), is what
+## `art_of` makes of it (the host's: an address that says nothing), or none.
+static func unart(out: Dictionary, art_of: Callable) -> void:
+	var art := str(out.get("art", "")) if out.get("art") != null else ""
+	if art == "" or art.begins_with(Uploads.PREFIX):
+		return
+	var opaque := str(art_of.call(art)) if art_of.is_valid() else ""
+	if opaque == "":
+		out.erase("art")
+	else:
+		out.art = opaque
 
 
 # ---------------------------------------------------------------- turns --
@@ -470,6 +529,10 @@ static func filter_actor(pa: Dictionary, a: Dictionary, policies: Array) -> void
 		if pa.get("token") is Dictionary:
 			(pa.token as Dictionary).erase("name")
 			(pa.token as Dictionary).erase("label")
+			# (and an art whose name would name it, and the tags that say its kind)
+			unart(pa.token, Callable())
+			if (pa.token as Dictionary).get("tags") is Array:
+				pa.token.tags = player_tags(pa.token.tags, policies, {}, true)
 
 
 # ---------------------------------------------------------------- words --

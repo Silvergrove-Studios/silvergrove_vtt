@@ -31,8 +31,10 @@ extends RefCounted
 ## everyone where they see them exactly; its name — "a creature" to a player
 ## until the DM reveals it, labelled "?" (or a number, of several), the DM's
 ## told the label the players see it by (`player_label`) and whether they
-## know its name (`name_known`); its conditions.
-static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool, known: Array = []) -> Dictionary:
+## know its name (`name_known`); its conditions; and — its name unknown — no
+## tag that says its kind, and its art as `art_of` makes it (an address that
+## says nothing: the host's; none without it).
+static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool, known: Array = [], art_of: Callable = Callable()) -> Dictionary:
 	var e := state.encounter
 	var sc := e.scene(scene_id)
 	if sc.is_empty():
@@ -58,6 +60,7 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 				out.name_known = false
 			else:
 				Knowledge.unname(out, str(unnamed[str(tk.id)]))
+				Knowledge.unart(out, art_of)
 		elif gm and Knowledge.names_hidden(known) and Knowledge.unowned(tk, e.actors) and not Encounter.is_object(tk):
 			# its name revealed to the players: the DM may keep it again
 			out.name_known = true
@@ -183,7 +186,7 @@ static func token_out(state: EncounterState, tk: Dictionary, gm: bool, known: Ar
 		if not gm and out.get("tags") is Array:
 			var a: Dictionary = state.encounter.actors.get(str(tk.actor), {})
 			var fx := Knowledge.condition_keys(state.encounter.effects, tk, known) if not Knowledge.conditions_known(a, known) else {}
-			out.tags = Knowledge.player_tags(out.tags, known, fx)
+			out.tags = Knowledge.player_tags(out.tags, known, fx, Knowledge.nameless(tk, state.encounter.actors, known))
 		var hp := Knowledge.shown_hp(state.encounter.resources, str(tk.get("actor", "")), known)
 		if not hp.is_empty():
 			out.hp = hp

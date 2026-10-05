@@ -216,7 +216,7 @@ const PLAYER_SCENE_KEYS := ["id", "name", "map", "level", "fog", "light", "space
 ## DM hides or they can't see, no rules blocks, no DM's notes, nothing a
 ## ruleset keeps on the encounter or the campaign. `known`: what the
 ## rulesets say the players know (Knowledge).
-static func player_document(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array) -> Dictionary:
+static func player_document(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array, art_of: Callable = Callable()) -> Dictionary:
 	var e := state.encounter
 	var out := {"format": Encounter.FORMAT, "version": int(e.doc.get("version", Encounter.VERSION)), "id": str(e.doc.get("id", "")), "name": e.name,
 		"active_scene": scene_id, "players": public_players(e.players), "clock": JsonDoc.deep(e.clock),
@@ -224,17 +224,17 @@ static func player_document(state: EncounterState, scene_id: String, player_id: 
 		"turns": Knowledge.player_turns(e.turns, e.doc, known, seen if WebScene.turns_here(e, scene_id) else {})}
 	var sc := e.scene(scene_id)
 	if not sc.is_empty():
-		out.scenes.append(player_scene(state, sc, player_id, seen, known))
+		out.scenes.append(player_scene(state, sc, player_id, seen, known, art_of))
 	return out
 
 
 ## A scene as a player's Godot client holds it (player_document).
-static func player_scene(state: EncounterState, sc: Dictionary, player_id: String, seen: Dictionary, known: Array) -> Dictionary:
+static func player_scene(state: EncounterState, sc: Dictionary, player_id: String, seen: Dictionary, known: Array, art_of: Callable = Callable()) -> Dictionary:
 	var out := {}
 	for k in PLAYER_SCENE_KEYS:
 		if sc.has(k):
 			out[k] = JsonDoc.deep(sc[k])
-	out.tokens = player_tokens(state, str(sc.get("id", "")), player_id, seen, known).values()
+	out.tokens = player_tokens(state, str(sc.get("id", "")), player_id, seen, known, art_of).values()
 	out.overrides = player_overrides(sc.get("overrides", {}), state.level_for(str(sc.get("id", ""))))
 	var regions := {}
 	for id in sc.get("regions", {}):
@@ -253,12 +253,12 @@ static func player_scene(state: EncounterState, sc: Dictionary, player_id: Strin
 ## scene's order: those `seen`, each as player_token has it, the creatures
 ## whose names they don't know labelled as they see them (only those they see
 ## counted: Knowledge.player_labels).
-static func player_tokens(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array) -> Dictionary:
+static func player_tokens(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array, art_of: Callable = Callable()) -> Dictionary:
 	var shown: Array = state.tokens(scene_id).filter(func(tk: Dictionary) -> bool: return seen.has(str(tk.get("id", ""))))
 	var labels := Knowledge.player_labels(shown, state.encounter.actors, known)
 	var out := {}
 	for tk in shown:
-		out[str(tk.id)] = player_token(state, tk, player_id, known, str(labels.get(str(tk.id), "")))
+		out[str(tk.id)] = player_token(state, tk, player_id, known, str(labels.get(str(tk.id), "")), art_of)
 	return out
 
 
@@ -267,7 +267,7 @@ static func player_tokens(state: EncounterState, scene_id: String, player_id: St
 ## PLAYER_TOKEN_KEYS, and of a creature no player owns what the players know
 ## of it (Knowledge.player_token: its health's marks and conditions' tags as
 ## they see them, its name kept where they don't know it, `label`).
-static func player_token(state: EncounterState, tk: Dictionary, player_id: String, known: Array, label := "") -> Dictionary:
+static func player_token(state: EncounterState, tk: Dictionary, player_id: String, known: Array, label := "", art_of: Callable = Callable()) -> Dictionary:
 	var out := {}
 	if WebScene._owns(state, tk, player_id) or WebScene._party(state, tk):
 		out = JsonDoc.deep(tk)
@@ -275,7 +275,7 @@ static func player_token(state: EncounterState, tk: Dictionary, player_id: Strin
 		for k in PLAYER_TOKEN_KEYS:
 			if tk.has(k) and tk[k] != null:
 				out[k] = JsonDoc.deep(tk[k])
-	return Knowledge.player_token(out, state.encounter.doc, known, label)
+	return Knowledge.player_token(out, state.encounter.doc, known, label, art_of)
 
 
 ## The table's players as every screen may know them: who they are, not the

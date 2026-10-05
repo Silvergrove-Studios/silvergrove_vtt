@@ -30,7 +30,8 @@
   });
 
   // what the search looks through, as one string: every view the table sends
-  // is a new list, and the search ran again on each
+  // is a new list, and the search ran again on each (a player's has none the
+  // ruleset says are the DM's: its creatures' stat blocks)
   const colls = $derived(((game.view.collections as string[]) ?? []).join('\n'));
 
   $effect(() => {
@@ -72,7 +73,7 @@
     <input
       type="search"
       aria-label="Look up"
-      placeholder="A spell, a creature, an item, a condition…"
+      placeholder={colls.split('\n').includes('creatures') ? 'A spell, a creature, an item, a condition…' : 'A spell, an item, a condition…'}
       bind:value={q}
       autofocus={!at}
       onkeydown={(e) => {
