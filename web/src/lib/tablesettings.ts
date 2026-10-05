@@ -45,6 +45,38 @@ export interface Setting {
   levels: Partial<Record<Level, unknown>>;
   level_value?: unknown;
   differs: boolean;
+  /** the DM may set it for one fight alone (x-per-fight) */
+  per_fight?: boolean;
+  /** what it is in the theatre of the mind (x-mind), where it says */
+  mind?: unknown;
+  /** what the fight running now makes it, where that differs from the table's */
+  fight_value?: unknown;
+  fight_words?: string;
+  /** why: the fight's own setting, or the theatre of the mind's */
+  fight_why?: 'fight' | 'mind';
+}
+
+/** The fight in front of everybody, as Table settings says it. */
+export interface ThisFight {
+  id: string;
+  name: string;
+  space: 'maps' | 'mind';
+  space_title: string;
+  /** its own settings: "<plugin>/<key>" → value */
+  settings: Record<string, unknown>;
+  /** how many settings it makes otherwise than the table */
+  differs: number;
+}
+
+/** An adventure's author's suggestion of how a table runs it (a campaign started from their package). */
+export interface Recommended {
+  level?: Level;
+  space?: string;
+  answers: Record<string, unknown>;
+  note: string;
+  by: string;
+  /** "The author suggests Assisted, on maps." */
+  words: string;
 }
 
 export interface Registry {
@@ -64,6 +96,12 @@ export interface Registry {
   undo?: string;
   new_level?: Level;
   existing_level?: Level;
+  /** the fight running now, when it runs otherwise than the table (or at all) */
+  this_fight?: ThisFight;
+  /** where one fight happens, as the screens say it */
+  fight_spaces?: { id: string; title: string; words: string }[];
+  /** what the adventure's author suggests */
+  recommended?: Recommended;
 }
 
 export interface Change {
@@ -232,4 +270,51 @@ export function summaryOf(view: Dict): PlayerSummary | null {
 /** The key a browser keeps once a player has been shown how a table runs (shown again when the level changes). */
 export function summarySeenKey(table: string, player: string, level: string): string {
   return `hexmap.table-runs/${table}/${player}/${level}`;
+}
+
+/** The settings a fight may have of its own (x-per-fight), in Table settings' order. */
+export function fightSettings(reg: Registry | null): Setting[] {
+  return (reg?.settings ?? []).filter((s) => s.per_fight === true);
+}
+
+/** What Table settings says of the fight running now: "This fight (On the
+ *  bridge, in the theatre of the mind) runs otherwise: 2 settings differ
+ *  for it." — or '' when none runs, or it runs as the table does. */
+export function thisFightWords(reg: Registry | null): string {
+  const f = reg?.this_fight;
+  if (!f) return '';
+  const where = f.space === 'mind' ? ', in the theatre of the mind' : '';
+  if (!f.differs) return f.space === 'mind' ? `This fight (${f.name || 'the fight'}) is in the theatre of the mind.` : '';
+  return `This fight (${f.name || 'the fight'}${where}) runs otherwise: ${f.differs} setting${f.differs === 1 ? ' differs' : 's differ'} for it, and only while it runs.`;
+}
+
+/** Why a setting is otherwise in this fight, in words. */
+export function fightWhyWords(s: Setting): string {
+  if (s.fight_value === undefined) return '';
+  return s.fight_why === 'mind' ? `This fight: ${s.fight_words ?? ''} (the theatre of the mind: yours to judge)` : `This fight: ${s.fight_words ?? ''} (its own)`;
+}
+
+/** The walkthrough's start from an author's suggestion: where fights
+ *  happen, the level, and its answers over the level's values — or null
+ *  when the campaign came with none. */
+export function suggestedDraft(reg: Registry): { space: string; level: Level; values: Record<string, unknown> } | null {
+  const rec = reg.recommended;
+  if (!rec) return null;
+  const level: Level = rec.level && LEVELS.includes(rec.level) ? rec.level : (reg.new_level ?? 'assisted');
+  const space = rec.space && reg.spaces.some((s) => s.id === rec.space) ? rec.space : reg.spaces.some((s) => s.id === reg.space) ? reg.space : 'maps';
+  const values = draftFor(reg, level);
+  for (const [id, v] of Object.entries(rec.answers ?? {})) if (id in values) values[id] = v;
+  return { space, level, values };
+}
+
+/** What the walkthrough says of an author's suggestion: "The author suggests
+ *  Assisted, on maps for The Ruined Chapel. Its words. It's only a
+ *  suggestion: choose what suits your table." */
+export function suggestionWords(reg: Registry | null): string {
+  const rec = reg?.recommended;
+  if (!rec) return '';
+  let said = rec.words || 'The author suggests how to run it.';
+  if (rec.by) said = `${said.replace(/\.$/, '')} for ${rec.by}.`;
+  if (rec.note) said = `${said} ${rec.note}`;
+  return `${said} It's only a suggestion: choose what suits your table.`;
 }

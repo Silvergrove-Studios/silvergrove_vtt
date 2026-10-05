@@ -8,6 +8,7 @@
   import { prepare } from '../lib/pictures';
   import { book, kindWord, type Item, type Node } from './contents';
   import Ask from '../common/Ask.svelte';
+  import { registryOf } from '../lib/tablesettings';
 
   // a name to type, or a yes: asked in the table's own words (Ask), never the browser's
   type Question = { title: string; text?: string; value?: string | null; yes?: string; danger?: boolean };
@@ -117,16 +118,18 @@
   }
 
   // a fight of the DM's own: made at once over the first battle map, then its
-  // card (name it, choose the map, add creatures, start it)
+  // card (name it, choose the map, add creatures, start it); where fights may
+  // be in the theatre of the mind, one needs no map
   function newFight(): void {
     menu = '';
-    const battle = ((game.dm.maps as Dict[]) ?? []).find((m) => m.role !== 'regional') ?? ((game.dm.maps as Dict[]) ?? [])[0];
-    if (!battle) {
+    const space = String(registryOf(game.dm)?.space ?? 'maps');
+    const battle = space === 'mind' ? undefined : (((game.dm.maps as Dict[]) ?? []).find((m) => m.role !== 'regional') ?? ((game.dm.maps as Dict[]) ?? [])[0]);
+    if (!battle && space === 'maps') {
       notice('The campaign has no map to fight on: add one on the Table first', 'error');
       return;
     }
     const id = `enc_${Math.random().toString(36).slice(2, 10)}`;
-    dmOp('new_fight', { id, name: 'A new fight', map: battle.id });
+    dmOp('new_fight', { id, name: 'A new fight', map: battle ? String(battle.id) : '' });
     onopen(`fight:${id}`);
   }
 

@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- **Fights in the theatre of the mind.** Where fights happen is the DM's —
+  on maps, in the theatre of the mind, or each fight its own — and a fight
+  in the mind needs no map: its scene has none (`space: "mind"`), its
+  creatures only who is in it. The DM's screen shows them where the map
+  would be, as a list — **Who's in the fight**: each one's name, its hit
+  points and marks, what is on it, the order and whose turn it is, a tap
+  for its stat block — and **Add to the fight** brings creatures in with no
+  token to put down. A player's Map tab shows the same list, with what the
+  table lets them know of each creature's health. A target is chosen from
+  the list, and *No target: just roll* stays; an area is named from it
+  ("Who does your Fireball catch?"), and goes with the creatures chosen
+  (`ctx.caught`). Range, sight and movement are the DM's to judge there: a
+  setting says what it is in the theatre of the mind (`x-mind`), over the
+  table's and the fight's. `hm.map.mind`, `hm.map.mind_pos` and, for a
+  plugin's tests, `t.mind_scene` (docs/plugin-authoring.md, "Fights in the
+  theatre of the mind"). A journey in a real browser
+  (`web/tests/e2e/mind.mjs`).
+- **A fight's own settings.** Where the table leaves it to each fight, the
+  DM chooses map or mind as it starts (*Start on its map*, *Start in the
+  theatre of the mind*, on its card and its place's; the Table's Maps pane
+  says where each is fought). A fight may have its own settings, for that
+  fight alone — those a ruleset marks `x-per-fight` (what it checks, whether
+  the DM approves its outcomes, what the players see of its creatures'
+  health) — kept on the prepared fight, set on its card (*This fight's
+  settings*) or the Table's (*This fight's settings…*); the rules load with
+  them while it runs, and *Table settings* says what differs for it.
+- **An adventure's suggestion.** A campaign package may carry its author's
+  suggestion of how a table runs it (`recommended`: a level, where fights
+  happen, answers, a note). Starting it, the walkthrough says "The author
+  suggests …" and offers it chosen; it's only a suggestion.
+- A scene with no map moves its tokens without counting cells (a push in
+  the theatre of the mind measured nothing and failed).
+
 - **Table settings: how much the app does is the DM's to say.** A DM
   picks one of four levels — *Bookkeeping* (a shared sheet and tracker:
   players tick their own, the DM types damage in), *Rolling help*

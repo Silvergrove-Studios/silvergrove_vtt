@@ -143,5 +143,18 @@ applies it, and the log says so; a later hit applied as it is, the DM
 calls it a miss from its line in Chat & rolls (Rule), and the damage is
 healed back — the roll's line kept as it was rolled.
 
+`tests/e2e/mind.mjs <host.json> <out>` (host with `--party --wizard
+--seed 12`, on a package built on the rules being tried, as for
+rulings.mjs): a fight in the theatre of the mind. The DM lets each fight
+decide where it happens (Table settings), gives Sela Burning Hands and
+makes a fight with no map — three goblins — and starts it in the theatre
+of the mind: the DM's screen and both players' Map tabs show who's in the
+fight (names, health, the order) and no map. On Sela's turn Ana picks a
+goblin from the list for her Fire Bolt; on her next she casts Burning
+Hands naming two goblins ("Who does your Burning Hands catch?"), and
+nothing lands until the DM applies it on a card, though the table
+approves nothing else. The DM adds a wolf with no token to put down; the
+fight ends.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).
