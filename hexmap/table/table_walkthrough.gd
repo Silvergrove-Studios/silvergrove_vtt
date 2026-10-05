@@ -6,7 +6,8 @@ extends AcceptDialog
 ## what the players will notice; Assisted offered first, for the DM to
 ## confirm or change); the table's questions, each with a line of what the
 ## level answers and a Change to open it; the rules options and the house
-## rules; and a summary. Nothing changes until Done: then it is one step of
+## rules; and a summary, each of its lines a press back to where it is set
+## (go_to). Nothing changes until Done: then it is one step of
 ## the Table's undo (TableSettings.finish_setup), and the campaign is set
 ## up. "Not now" leaves it to be done later (the DM's web screen offers it).
 
@@ -190,7 +191,18 @@ func question_preview(question: String) -> String:
 
 ## The summary's words (for tests): everything on the last step.
 func summary_text() -> String:
-	return "\n".join(PackedStringArray(_summary_lines()))
+	return "\n".join(PackedStringArray(_summary_lines().map(func(l: Dictionary) -> String: return str(l.text))))
+
+
+## Back to a step from a line of the summary: its question opened there (a
+## level's question on the third step, a rules option on the fourth).
+func go_to(name: String, question := "") -> void:
+	var i := STEPS.find(name)
+	if i < 0:
+		return
+	step = i
+	opened = question if name == "questions" else ""
+	_show()
 
 
 func _show() -> void:
@@ -269,29 +281,46 @@ func _show() -> void:
 			te.text_changed.connect(func() -> void: draft.house_rules = te.text)
 			_body.add_child(te)
 		"summary":
+			# (each line a press back to where it's set: its step, its question opened)
 			for line in _summary_lines():
-				var l := Label.new()
-				l.text = line
-				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-				l.custom_minimum_size.x = 600
-				if line.begins_with("Change any of this"):
-					l.theme_type_variation = "DimLabel"
-				_body.add_child(l)
+				if str(line.get("step", "")) == "":
+					var l := Label.new()
+					l.text = str(line.text)
+					l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+					l.custom_minimum_size.x = 600
+					l.theme_type_variation = "DimLabel" if str(line.text).begins_with("Change any of this") else ""
+					_body.add_child(l)
+					continue
+				var b := Button.new()
+				b.name = "Link_%s%s" % [str(line.step), ("_" + str(line.question)) if str(line.get("question", "")) != "" else ""]
+				b.text = str(line.text)
+				b.flat = true
+				b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				b.custom_minimum_size.x = 600
+				b.tooltip_text = "Change it: back to %s" % str(STEP_TITLES[str(line.step)]).to_lower()
+				b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+				var to := str(line.step)
+				var q := str(line.get("question", ""))
+				b.pressed.connect(func() -> void: go_to(to, q))
+				_body.add_child(b)
 
 
+## The summary's lines: {text, step (where it's set; "" for none), question}.
 func _summary_lines() -> Array:
-	var lines := ["Change any of this later in Table settings."]
+	var lines := [{"text": "Change any of this later in Table settings.", "step": ""}]
 	var info: Dictionary = TableSettings.LEVEL_INFO[draft.level]
-	lines.append("Where fights happen: %s" % str(TableSettings.SPACE_INFO[draft.space].title))
-	lines.append("How much the app does: %s — %s" % [str(info.title), str(info.tagline)])
+	lines.append({"text": "Where fights happen: %s" % str(TableSettings.SPACE_INFO[draft.space].title), "step": "space"})
+	lines.append({"text": "How much the app does: %s — %s" % [str(info.title), str(info.tagline)], "step": "level"})
 	for l in info.lines:
-		lines.append("  • " + str(l))
+		lines.append({"text": "  • " + str(l), "step": ""})
 	for q in reg.get("questions", []):
 		if (q.settings as Array).is_empty():
 			continue
-		lines.append("%s: %s" % [str(q.title), question_preview(str(q.id))])
+		var level_q := bool(q.level)
+		lines.append({"text": "%s: %s" % [str(q.title), question_preview(str(q.id))], "step": "questions" if level_q else "rules", "question": str(q.id) if level_q else ""})
 	if str(draft.house_rules).strip_edges() != "":
-		lines.append("House rules: %s" % str(draft.house_rules).strip_edges())
+		lines.append({"text": "House rules: %s" % str(draft.house_rules).strip_edges(), "step": "rules"})
 	return lines
 
 

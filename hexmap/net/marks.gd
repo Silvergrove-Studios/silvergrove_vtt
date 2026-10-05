@@ -15,7 +15,8 @@ extends RefCounted
 ##
 ## A mark on a token (`token`: a preview that goes out from its caster)
 ## stands where the token stands, and goes with it. A ruler's `measure` is
-## worked out here (Measure.ruler), by the map's own rules.
+## worked out here (Measure.ruler), by the map's own rules and the ground's
+## price as the rules have it.
 ##
 ##   {id, owner, kind: ruler | template | preview | ping, scene,
 ##    points: [[x, y], …] (hex units: a ruler's waypoints, one place for the rest),
@@ -312,8 +313,9 @@ func _anchor(m: Dictionary) -> void:
 func _measure(m: Dictionary, had: Dictionary) -> void:
 	if not had.is_empty() and had.get("points") == m.points and had.has("measure"):
 		m.measure = had.measure
-		if had.has("_walk_cells"):
-			m._walk_cells = had._walk_cells
+		for k in ["_walk_cells", "_walk_secret"]:
+			if had.has(k):
+				m[k] = had[k]
 		return
 	if state == null or map_query == null or (m.points as Array).size() < 2:
 		m.erase("measure")
@@ -327,6 +329,12 @@ func _measure(m: Dictionary, had: Dictionary) -> void:
 		me.erase("cells")
 	else:
 		m.erase("_walk_cells")
+	# (the DM's walk priced by ground the players aren't shown: theirs is the distance alone)
+	if bool(me.get("secret", false)):
+		m._walk_secret = true
+	else:
+		m.erase("_walk_secret")
+	me.erase("secret")
 	m.measure = me
 
 
@@ -349,8 +357,8 @@ func _on_applied(ev: Dictionary, _inv: Dictionary) -> void:
 			for id in marks.keys():
 				if str(marks[id].scene) == str(ev.get("id", "")):
 					_drop(str(id))
-		"element.set", "fog.set", "fog.reveal", "fog.hide", "scene.set":
-			# the walls or what is known changed: the rulers there are measured again
+		"element.set", "fog.set", "fog.reveal", "fog.hide", "scene.set", "region.add", "region.remove", "region.set":
+			# the walls, the ground's price or what is known changed: the rulers there are measured again
 			_legs.clear()
 			var sid := str(ev.get("scene", ev.get("id", "")))
 			for id in marks:

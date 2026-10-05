@@ -11,7 +11,7 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
   import { game, notice, submit } from '../lib/game.svelte';
-  import { draftFor, levelTitle, ownAnswers, questionLine, registryOf, suggestedDraft, suggestionWords, valueWords, type Level, type Setting } from '../lib/tablesettings';
+  import { draftFor, levelTitle, ownAnswers, questionLine, registryOf, suggestedDraft, suggestionWords, summaryStep, valueWords, type Level, type Setting } from '../lib/tablesettings';
 
   let { onclose, ondone }: { onclose: () => void; ondone: (seeAll: boolean) => void } = $props();
 
@@ -63,6 +63,12 @@
 
   function setValue(s: Setting, v: unknown): void {
     values = { ...values, [s.id]: v };
+  }
+
+  // a line of the summary pressed: back to where it's set, its question opened there
+  function goTo(to: (typeof STEPS)[number], question = ''): void {
+    step = STEPS.indexOf(to);
+    opened = to === 'questions' ? question : '';
   }
 
   async function finish(seeAll: boolean): Promise<void> {
@@ -170,26 +176,28 @@
     {:else}
       {@const info = reg.levels.find((l) => l.id === level)}
       <p class="dim">Change any of this later in Table settings.</p>
+      <!-- (each line a press back to where it's set) -->
       <dl class="summary" aria-label="Your table">
         <dt>Where fights happen</dt>
-        <dd>{reg.spaces.find((s) => s.id === space)?.title}</dd>
+        <dd><button type="button" class="link" title="Change it: back to where fights happen" onclick={() => goTo('space')}>{reg.spaces.find((s) => s.id === space)?.title}</button></dd>
         <dt>How much the app does</dt>
         <dd>
-          <strong>{info?.title}</strong> — {info?.tagline}
+          <button type="button" class="link" title="Change it: back to the levels" onclick={() => goTo('level')}><strong>{info?.title}</strong> — {info?.tagline}</button>
           <ul>{#each info?.lines ?? [] as line (line)}<li>{line}</li>{/each}</ul>
         </dd>
         {#each [...asked, ...options] as q (q.id)}
+          {@const to = summaryStep(q)}
           <dt>{q.title}</dt>
           <dd>
             {#each q.settings as id (id)}
               {@const s = byId.get(id)}
-              {#if s}<span class="item">{s.title}: <strong>{valueWords(s, values[s.id] ?? s.value)}</strong></span>{/if}
+              {#if s}<button type="button" class="item link" title={`Change it: back to ${TITLES[to.step].toLowerCase()}`} onclick={() => goTo(to.step, to.opened)}>{s.title}: <strong>{valueWords(s, values[s.id] ?? s.value)}</strong></button>{/if}
             {/each}
           </dd>
         {/each}
         {#if house.trim()}
           <dt>House rules</dt>
-          <dd class="pre">{house.trim()}</dd>
+          <dd class="pre"><button type="button" class="link" title="Change them: back to the rules options" onclick={() => goTo('rules')}>{house.trim()}</button></dd>
         {/if}
       </dl>
     {/if}
@@ -343,6 +351,23 @@
   }
   .item {
     display: block;
+  }
+  /* a summary line: a press back to where it's set */
+  .link {
+    background: none;
+    border: none;
+    padding: 1px 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    white-space: inherit;
+    cursor: pointer;
+    text-decoration: underline dotted var(--muted);
+    text-underline-offset: 3px;
+  }
+  .link:hover {
+    color: var(--accent);
   }
   .pre {
     white-space: pre-wrap;

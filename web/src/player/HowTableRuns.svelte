@@ -2,19 +2,25 @@
   How this table runs, for a player: how much the app does here (the
   DM's level, in plain words), where fights happen, the house rules, and
   the answers a player notices (who rolls, what lands by itself, the
-  rules options). Shown once on joining a table that has been set up, and
-  from the ⋯ menu any time.
+  rules options). Shown once on joining (a table its DM has set up, or a
+  campaign from before levels), again when the DM changes its level or its
+  house rules — saying which — and from the ⋯ menu any time.
 -->
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
   import { markdown } from '../lib/markdown';
   import type { PlayerSummary } from '../lib/tablesettings';
 
-  let { summary, onclose }: { summary: PlayerSummary; onclose: () => void } = $props();
+  let { summary, why = '', onclose }: { summary: PlayerSummary; why?: '' | 'new' | 'level' | 'house'; onclose: () => void } = $props();
 </script>
 
 <Modal title="How this table runs" {onclose}>
   <div class="runs">
+    {#if why === 'house'}
+      <p class="changed" role="note">The DM has changed the house rules.</p>
+    {:else if why === 'level'}
+      <p class="changed" role="note">The DM has changed how much the app does.</p>
+    {/if}
     <p class="level"><strong>{summary.title}</strong> <span class="dim">— {summary.tagline}</span></p>
     <ul class="lines">
       {#each summary.lines as line (line)}<li>{line}</li>{/each}
@@ -41,6 +47,13 @@
   .runs h3 {
     margin: 14px 0 6px;
     font-size: 1.05rem;
+  }
+  .changed {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--accent-soft);
+    background: var(--accent-bg);
   }
   .level {
     margin: 0 0 6px;

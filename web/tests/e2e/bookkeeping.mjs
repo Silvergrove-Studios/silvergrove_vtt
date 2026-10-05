@@ -30,6 +30,14 @@ let n = 0;
 async function open(url, viewport, name) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, hasTouch: viewport.width < 600 });
   const page = await ctx.newPage();
+  // (How this table runs comes up as a player joins a table: read, and put away)
+  await page.addInitScript(() => {
+    new MutationObserver(() => {
+      const d = document.querySelector('[role="dialog"][aria-label="How this table runs"]');
+      const b = d ? [...d.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Got it') : null;
+      if (b) b.click();
+    }).observe(document, { childList: true, subtree: true });
+  });
   page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() === 'error' && !/WebSocket/.test(m.text())) problems.push(`${name} console: ${m.text()}`);

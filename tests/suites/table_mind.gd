@@ -235,6 +235,54 @@ func test_a_fights_own_settings() -> void:
 	await tree.process_frame
 
 
+## Suggest how to run it, in the package release dialog: a level, where
+## fights happen and a note, opened on what the campaign suggested last,
+## kept on the campaign and carried by the package as `recommended` (what
+## the walkthrough offers); no level and no place, nothing suggested.
+func test_the_release_dialog_suggests_how_to_run_it() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var home := "user://table_release_suggest_test"
+	if DirAccess.dir_exists_absolute(home):
+		PluginHost._rm_rf(home)
+	DirAccess.make_dir_recursive_absolute(home.path_join("author"))
+	var author := Campaign.create("The Test Hall")
+	author.plugins.append({"id": "sample.ordered"})
+	author.doc.table = {"level": "automated"}
+	author.doc.meta.recommended = {"level": "assisted", "note": "Old words.", "answers": {"sample.ordered/armour_reduces": 1}}
+	check(author.save(home.path_join("author/hall.campaign")) == OK, "an author's campaign")
+	var win := TableWindow.new()
+	win.app = App.new("user://test_prefs_release_suggest.json")
+	win.app.prefs.campaigns_dir = ProjectSettings.globalize_path(home.path_join("campaigns"))
+	root.add_child(win)
+	win.ctx.plugin_dirs = ["res://tests/plugins"]
+	win._open_campaign_path(home.path_join("author/hall.campaign"))
+	await tree.process_frame
+	check(win.ctx.campaign != null and win.ctx.campaign.name == "The Test Hall", "open on the Table")
+	var pkg := home.path_join("hall.campaignpkg")
+	var d := win.release_dialog(pkg, "1.0.0", "First release.")
+	var sug := d.find_child("Suggestion", true, false) as PropertyForm
+	check(sug != null and str(sug.get_values().level) == "assisted" and str(sug.get_values().space) == "" and str(sug.get_values().note) == "Old words.",
+		"Suggest how to run it opens on what the campaign suggested: %s" % [sug.get_values() if sug != null else {}])
+	sug.set_values({"level": "rolling", "space": "mind", "note": "Short fights, told."})
+	d.confirmed.emit()
+	await tree.process_frame
+	var info := CampaignPackage.read(pkg)
+	check(info.ok if info.has("ok") else not info.is_empty(), "released")
+	var rec: Dictionary = info.get("recommended", {})
+	check(str(rec.get("level", "")) == "rolling" and str(rec.get("space", "")) == "mind" and str(rec.get("note", "")) == "Short fights, told."
+		and int((rec.get("answers", {}) as Dictionary).get("sample.ordered/armour_reduces", 0)) == 1 and (rec.get("answers", {}) as Dictionary).size() == 1,
+		"its package.json carries the suggestion, the settings it suggested kept: %s" % [rec])
+	check(CampaignPackage.suggestion_of(win.ctx.campaign).get("level", "") == "rolling", "and the campaign keeps it for the next release")
+	# no level and no place: the next release suggests nothing
+	var r := win.release_with(pkg, {"notes": "Second", "level": "", "space": "", "note": "words alone"})
+	check(r.ok and (CampaignPackage.read(pkg).recommended as Dictionary).is_empty() and not (win.ctx.campaign.doc.meta as Dictionary).has("recommended"), "No suggestion: none carried, none kept")
+	win.queue_free()
+	await tree.process_frame
+	PluginHost._rm_rf(home)
+
+
 func test_a_package_suggests_how_its_table_runs() -> void:
 	if not PluginHost.available():
 		skip("no Lua runtime in this build")

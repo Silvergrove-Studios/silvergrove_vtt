@@ -103,9 +103,16 @@ Fireball on her phone off her turn and puts it on the goblins; Ben's
 screen and the DM's show it with its label ("Sela: Fireball, 20-ft
 sphere"), and say who it would catch — Ben's only the creatures he can
 see, the DM's the hidden goblin too; Ben measures from Brakka with the
-ruler and Ana's phone shows it as his laptop does; the DM pings by a
+ruler and Ana's phone shows it as his laptop does; the DM measures across
+the chapel's rubble ("10 ft straight, 15 ft to walk round": the walk
+priced as a move pays for difficult ground); the DM pings by a
 right-click (both players see it, and not a second ping over the hidden
-goblin), then clears everyone's marks.
+goblin); the DM puts a template on the goblins and deals Damage those
+caught from its banner (the DM's card: a fire trap, DC 40) — their saves
+rolled, it lands, Ben's chat saying so without the hidden goblin — and a
+template on Sela puts her save on a card on Ana's phone, nothing rolled for
+her until she rolls it; then the DM clears everyone's marks. (On a package
+built on the rules being tried, as for rulings.mjs.)
 
 `tests/e2e/reactions.mjs <host.json> <out>` (host with `--party --wizard
 --seed 12`: Ana plays Sela, a wizard with Shield prepared, and the dice
@@ -120,11 +127,16 @@ the campaign as a DM starting it has it, not yet set up): how the table
 runs. The walkthrough opens by itself on the DM's screen — on maps,
 Assisted offered and Bookkeeping picked, the table's questions each with a
 line of its answer (one opened with Change), the rules options and a house
-rule, a summary that says Bookkeeping; then Table settings: "As Bookkeeping
+rule, a summary that says Bookkeeping (its lines back to where each is
+set: a dice answer, the house rule); then Table settings: "As Bookkeeping
 has it", a switch to Automated that says what it would change and is
 cancelled, a setting changed by hand ("Customized") and its section's
-Reset. A player joins and is shown How this table runs, and finds it again
-in the ⋯ menu.
+Reset; the chapel's fight given its own Count movement, and a switch to
+Automated saying the fight keeps it while it runs. A player joins and is
+shown How this table runs, and finds it again
+in the ⋯ menu; the DM changes the house rules, and she is shown it again,
+saying so. (Every other journey's pages put How this table runs away as it
+comes up: a player joining a campaign from before levels is shown it too.)
 
 `tests/e2e/overrides.mjs <host.json> <out>` (host with `--party --wizard
 --seed 12`): the DM's hand on anything. In the chapel fight the DM opens a
@@ -134,6 +146,11 @@ the other goblins keep 15; a goblin's hit on Sela puts a Shield card on
 Ana's phone, she casts it and her reaction is spent, and the DM gives it
 back from Sela's Adjust tab (said to everyone); on her turn her Fire Bolt at
 the goblin is rolled against AC 17 (the DM's log says so; Ana's doesn't).
+Then the DM turns on *Players may change the numbers on their own sheets*:
+Ana's own sheet has the Adjust tab, she sets Sela's AC ("AC 15 · 17
+computed, set by its player", said at the table as her player's), and the
+DM's view of Sela says so. (As they join, each player is told how this
+table runs: a campaign from before levels runs as Automated.)
 
 `tests/e2e/rulings.mjs <host.json> <out>` (host with `--party --seed 12`,
 on a package built on the rules being tried: `tools/package.py --out` and

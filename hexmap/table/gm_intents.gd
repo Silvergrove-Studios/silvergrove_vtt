@@ -90,6 +90,43 @@ static func preview(ctx: TableContext, payload: Dictionary) -> String:
 	return ""
 
 
+## What the loaded rulesets do on a template (an action registered with
+## `target = "template"`: docs/plugin-authoring.md, "Table tools"), the DM's:
+## [{plugin, action, label, hint}], in a steady order.
+static func template_actions(ctx: TableContext) -> Array:
+	var out := []
+	if ctx.host == null:
+		return out
+	var ids := ctx.host.plugins.keys()
+	ids.sort()
+	for pid in ids:
+		var p: PluginHost.Plugin = ctx.host.plugins[pid]
+		var names := p.actions.keys()
+		names.sort()
+		for name in names:
+			var spec: Dictionary = p.actions[name]
+			if str(spec.get("target", "")) == "template":
+				out.append({"plugin": str(pid), "action": str(name), "label": str(spec.get("label", name)), "hint": str(spec.get("hint", ""))})
+	return out
+
+
+## A ruleset's template action (template_actions) on a template or a
+## preview on the map, as the DM's: sent with the creatures it catches as the
+## rules lay it (MapQuery.template: `caught`, token ids) and its words
+## (`label`); the ruleset asks the DM the rest. "" or why not.
+static func on_template(ctx: TableContext, m: Dictionary, act: Dictionary) -> String:
+	if m.is_empty() or not (str(m.get("kind", "")) in ["template", "preview"]):
+		return "put a template on the map first"
+	if ctx.kernel == null:
+		return "no rules are loaded"
+	var area := ctx.kernel.map.template(str(m.scene), Measure.template_spec(m))
+	var caught: Array = (area.get("tokens", []) as Array).map(func(t: Variant) -> String: return str(t))
+	if caught.is_empty():
+		return "the template catches nobody"
+	return run(ctx, {"kind": "action", "plugin": str(act.get("plugin", "")), "action": str(act.get("action", "")),
+		"ctx": {"scene": str(m.scene), "caught": caught, "label": str(m.get("label", ""))}})
+
+
 ## A ruleset's preview spec as a mark's shape ({type, size, width, angle,
 ## origin, include_self}), or {} when it isn't one.
 static func preview_shape(area: Dictionary) -> Dictionary:

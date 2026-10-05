@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+- **A level switch says what the prepared fights keep.** Switching the
+  table's level, the preview says, under what changes, each prepared
+  fight's own values that will still win over the level while it runs
+  ("Goblins in the chapel: Count movement on each creature's turn Off
+  (Automated: On)"), on the Table and the DM's web screen.
+- **The walkthrough's summary goes back to each setting.** Each line of
+  "Your table" is a press back to where it is set — where fights happen,
+  the level, a question's answer (opened there), the rules options and
+  the house rules — on the Table and the DM's web screen alike, nothing
+  of the answers lost on the way.
+- **How this table runs, again when it changes.** A player is shown how
+  the table runs as they join a campaign from before levels too (it runs
+  as Automated) — not one whose DM hasn't set it up yet — and again when
+  the DM changes the house rules (or the level), the card saying which. A
+  browser remembers what it last showed, table by table and player by
+  player.
+- **Suggest how to run it.** The package release dialog asks its author how
+  they suggest a table runs their adventure — a level, where fights happen,
+  a note — and the package carries it (package.json's `recommended`, which
+  the walkthrough offers a DM starting it); it opens on the last release's,
+  and "No suggestion" for both suggests nothing.
+- **The Table's Template tool, and what the rules do on a template.** The
+  Table has the Template the web screens have (A): a circle, a cone, a line
+  or a cube of any size in feet (its tool options), put down on a cell,
+  dragged, turned by its handle or [ ], pinned (P), taken off (Esc) — for
+  everyone to see with who it catches. A ruleset's action with `target =
+  "template"` is the DM's on a template or a preview: offered by its label
+  in the Template tool's options and, on the web DM screen, in the
+  template's banner and its row of the marks list, and sent with the
+  creatures it catches (`caught`) and its words (`label`) — a ruleset's
+  "Damage those caught", at every level.
+- **A ruler's walk priced as a move.** A ruleset says what ground of a
+  kind costs to walk (`hm.map.measure`'s `costs`: difficult ground at
+  double, by a region's tags or the art's), and a ruler's walk pays it on
+  any map with dear ground on the way — rubble on an open field, no walls
+  at all: "20 ft straight, 25 ft to walk round". A player's walk is priced
+  only by the ground they are shown: a region kept to the DM prices nothing
+  of theirs, and the DM's own ruler reaches them as the distance alone
+  where such ground priced or turned its walk. A ruler is measured again
+  when a region changes.
 - **A creature's initiative kept with its rolls.** A ruleset that keeps its
   creatures' rolls from the players says so (`hm.ui.knowledge`'s `rolls`),
   and the turn order a player is sent leaves out their labels there (their

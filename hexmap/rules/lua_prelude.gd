@@ -181,7 +181,8 @@ end
 -- place is "token:<id>", a "q,r" cell, or {x, y} in hex units.
 hm.map = {}
 function hm.map.bands(table) call(host.map_bands, table) end          -- { {name=, max=}, … } ascending
--- how the table's rulers count: { diagonals = "5-5-5" | "5-10-5" | "euclid" } (squares)
+-- how the table's rulers count: { diagonals = "5-5-5" | "5-10-5" | "euclid" } (squares),
+-- costs = { tag = n } (what ground of a kind costs to walk, as hm.map.path takes them)
 function hm.map.measure(rule) call(host.map_measure, rule or {}) end
 function hm.map.distance(scene, a, b) return call(host.map_distance, scene, a, b) end   -- {units, edge, cells, band}
 function hm.map.band(scene, a, b) return call(host.map_distance, scene, a, b).band end

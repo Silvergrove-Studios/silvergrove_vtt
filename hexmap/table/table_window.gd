@@ -91,6 +91,11 @@ var _layout_save := Timer.new()
 var _native_menus := NativeMenuMirror.new()
 var _last_menu := [-1, -1]
 var _token_form: PropertyForm
+## The template tool's options: its shape and size, and the buttons for the
+## DM's template (Take it off; a ruleset's Damage those caught).
+var _template_box: HBoxContainer
+var _template_form: PropertyForm
+var _template_buttons: HBoxContainer
 ## The campaign picker shown over the dock while no campaign is open.
 var _picker: Control
 ## What this window shows while a game runs: the game is running, the DM's
@@ -461,7 +466,9 @@ func _sync_chrome() -> void:
 	if _tools_row != null:
 		_tools_row.visible = tools
 	if _opts_panel != null:
-		_opts_panel.visible = tools and _tool_name == "token"
+		_opts_panel.visible = tools and _tool_name in ["token", "template"]
+		_token_form.visible = _tool_name == "token"
+		_template_box.visible = _tool_name == "template"
 	_update_banner()
 	_update_session_bar()
 
@@ -1093,7 +1100,92 @@ func _build_tool_options() -> Control:
 						ctx.token_owner = str(p.id)
 		view.canvas.overlay.queue_redraw())
 	tool_options.add_child(_token_form)
+	tool_options.add_child(_build_template_options())
 	return tool_options
+
+
+## The template tool's options: a circle, a cone, a line or a cube, its size
+## (and a line's width) in feet; Take it off; and what the rulesets do on a
+## template, the DM's (GmIntents.template_actions: Damage those caught).
+func _build_template_options() -> Control:
+	_template_box = HBoxContainer.new()
+	_template_box.name = "TemplateOptions"
+	_template_box.add_theme_constant_override("separation", 8)
+	_template_form = PropertyForm.new()
+	_template_form.name = "TemplateForm"
+	_template_form.columns = 6
+	_template_form.build([
+		{"key": "type", "label": "Shape", "type": "enum", "options": [{"id": "circle", "name": "Circle"}, {"id": "cone", "name": "Cone"}, {"id": "line", "name": "Line"}, {"id": "square", "name": "Cube"}]},
+		{"key": "feet", "label": "Size", "type": "int", "min": 1, "max": 5000, "suffix": "ft", "tooltip": "A circle's radius, a cone's or a line's length, a cube's side"},
+		{"key": "width", "label": "Width", "type": "int", "min": 1, "max": 5000, "suffix": "ft", "tooltip": "A line's width"},
+	], {"type": ctx.template_type, "feet": int(ctx.template_feet), "width": int(ctx.template_width_feet)})
+	_template_form.value_changed.connect(func(k: String, v: Variant) -> void:
+		match k:
+			"type": ctx.template_type = str(v)
+			"feet": ctx.template_feet = float(v)
+			"width": ctx.template_width_feet = float(v)
+		_template_width_shown()
+		if view.tool is TableTools.TemplateTool:
+			(view.tool as TableTools.TemplateTool).reshape())
+	_template_box.add_child(_template_form)
+	_template_buttons = HBoxContainer.new()
+	_template_buttons.name = "TemplateButtons"
+	_template_box.add_child(_template_buttons)
+	ctx.template_changed.connect(_refresh_template_buttons)
+	ctx.rules_reloaded.connect(_refresh_template_buttons)
+	# (its time up, or taken off from a screen: nothing left to act on)
+	ctx.marks.removed.connect(func(id: String, _m: Dictionary) -> void:
+		if id == ctx.template_mark:
+			ctx.template_mark = ""
+			_refresh_template_buttons())
+	_template_width_shown()
+	_refresh_template_buttons()
+	return _template_box
+
+
+## A line's width, shown only for a line.
+func _template_width_shown() -> void:
+	var ctl := _template_form.control("width")
+	if ctl == null:
+		return
+	var line := ctx.template_type == "line"
+	ctl.visible = line
+	_template_form.get_child(ctl.get_index() - 1).visible = line
+
+
+## The DM's template's buttons: Take it off, and each of the rulesets'
+## (a template on the map to act on, or they wait for one).
+func _refresh_template_buttons() -> void:
+	if _template_buttons == null:
+		return
+	for c in _template_buttons.get_children():
+		_template_buttons.remove_child(c)
+		c.queue_free()
+	var m: Dictionary = ctx.marks.marks.get(ctx.template_mark, {})
+	var off := Button.new()
+	off.name = "TakeItOff"
+	off.text = "Take it off"
+	off.disabled = m.is_empty()
+	off.tooltip_text = "Take your template off the map (Esc)"
+	off.pressed.connect(func() -> void:
+		if view.tool is TableTools.TemplateTool:
+			(view.tool as TableTools.TemplateTool).take_off()
+		else:
+			ctx.marks.remove("gm", ctx.template_mark, true)
+			ctx.template_mark = ""
+			_refresh_template_buttons())
+	_template_buttons.add_child(off)
+	for act in GmIntents.template_actions(ctx):
+		var b := Button.new()
+		b.name = "Act_" + str(act.action)
+		b.text = str(act.label)
+		b.disabled = m.is_empty()
+		b.tooltip_text = (str(act.hint) + "\n" if str(act.hint) != "" else "") + "On the creatures your template catches (put one down first)."
+		b.pressed.connect(func() -> void:
+			var why := GmIntents.on_template(ctx, ctx.marks.marks.get(ctx.template_mark, {}), act)
+			if why != "":
+				ctx.say(why))
+		_template_buttons.add_child(b)
 
 
 func _refresh_token_owner_options() -> void:
@@ -1894,7 +1986,8 @@ func _installed_rulesets() -> Dictionary:
 ## Release this campaign as a package. The first time it asks where the
 ## package goes and the campaign becomes the package's working copy;
 ## after that it asks what changed, bumps the version and writes the same
-## file again, keeping a changelog.
+## file again, keeping a changelog. Each time it asks how its author
+## suggests a table runs it (release_dialog).
 func _export_package_dialog() -> void:
 	if ctx.campaign == null or ctx.campaign.path == "":
 		_info("Save the campaign first: a package is made from what is on disk.")
@@ -1902,10 +1995,7 @@ func _export_package_dialog() -> void:
 	ctx.save_campaign()
 	var src: Dictionary = ctx.campaign.doc.get("source_of", {}) if ctx.campaign.doc.get("source_of") is Dictionary else {}
 	var ask_notes := func(path: String, next: String) -> void:
-		_prompt("Release %s %s" % [ctx.campaign.name, next], "What changed in this version", "" if not src.is_empty() else "First release.", func(notes: String) -> void:
-			# a package carries what it needs: its rules and its art included
-			var r := CampaignPackage.release(ctx.campaign, notes, {"path": path, "plugin_dirs": ctx.plugin_dirs})
-			ctx.say("Released %s %s to %s" % [ctx.campaign.name, str(r.version), ProjectSettings.globalize_path(str(r.path))] if r.ok else "Could not package it: " + str(r.why)))
+		release_dialog(path, next, "" if not src.is_empty() else "First release.")
 	if not src.is_empty():
 		ask_notes.call(str(src.path), CampaignPackage.bump(str(src.get("version", "1.0.0"))))
 		return
@@ -1919,6 +2009,70 @@ func _export_package_dialog() -> void:
 		var came: Dictionary = ctx.campaign.doc.get("package", {}) if ctx.campaign.doc.get("package") is Dictionary else {}
 		ask_notes.call(path, CampaignPackage.bump(str(came.version)) if came.has("version") else "1.0.0"))
 	fd.popup_centered_ratio(0.7)
+
+
+## The release's questions: what changed in this version, and — Suggest how
+## to run it — how its author suggests a table runs it: a level, where
+## fights happen, a note. The suggestion goes in the package (package.json's
+## `recommended`: a DM starting it is offered it in the walkthrough, only a
+## suggestion) and stays on the campaign for the next release. The dialog.
+func release_dialog(path: String, version: String, notes := "") -> ConfirmationDialog:
+	var d := ConfirmationDialog.new()
+	d.name = "ReleaseDialog"
+	d.title = "Release %s %s" % [ctx.campaign.name, version]
+	d.ok_button_text = "Release"
+	d.min_size = Vector2i(520, 0)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	var what := PropertyForm.new()
+	what.name = "Notes"
+	what.build([{"key": "notes", "label": "What changed in this version", "type": "string"}], {"notes": notes})
+	box.add_child(what)
+	var head := Label.new()
+	head.text = "Suggest how to run it"
+	head.theme_type_variation = "HeaderLabel"
+	box.add_child(head)
+	var lead := Label.new()
+	lead.text = "Only a suggestion: a DM starting your adventure is offered it as they set up their table, and chooses."
+	lead.theme_type_variation = "DimLabel"
+	lead.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lead.custom_minimum_size.x = 480
+	box.add_child(lead)
+	var rec := CampaignPackage.suggestion_of(ctx.campaign)
+	var sug := PropertyForm.new()
+	sug.name = "Suggestion"
+	var levels := [{"id": "", "name": "No suggestion"}]
+	for lv in TableSettings.LEVELS:
+		levels.append({"id": lv, "name": "%s — %s" % [str(TableSettings.LEVEL_INFO[lv].title), str(TableSettings.LEVEL_INFO[lv].tagline)]})
+	var spaces := [{"id": "", "name": "No suggestion"}]
+	for s in TableSettings.SPACES:
+		spaces.append({"id": s, "name": str(TableSettings.SPACE_INFO[s].title)})
+	sug.build([
+		{"key": "level", "label": "How much the app does", "type": "enum", "options": levels},
+		{"key": "space", "label": "Where fights happen", "type": "enum", "options": spaces},
+		{"key": "note", "label": "Why, in a sentence or two", "type": "string", "tooltip": "Said with the suggestion: \"The hall's fights are short; the maze is better told.\""},
+	], {"level": str(rec.get("level", "")), "space": str(rec.get("space", "")), "note": str(rec.get("note", ""))})
+	box.add_child(sug)
+	d.add_child(box)
+	d.confirmed.connect(func() -> void:
+		var v: Dictionary = sug.get_values()
+		v.notes = str(what.get_values().get("notes", ""))
+		var r := release_with(path, v)
+		ctx.say("Released %s %s to %s" % [ctx.campaign.name, str(r.version), ProjectSettings.globalize_path(str(r.path))] if r.ok else "Could not package it: " + str(r.why)))
+	d.confirmed.connect(d.queue_free)
+	d.canceled.connect(d.queue_free)
+	d.close_requested.connect(d.queue_free)
+	add_child(d)
+	d.popup_centered()
+	return d
+
+
+## A release with the dialog's answers ({notes, level, space, note}): the
+## suggestion kept on the campaign and carried by the package. A package
+## carries what it needs: its rules and its art included.
+func release_with(path: String, values: Dictionary) -> Dictionary:
+	var rec := CampaignPackage.set_suggestion(ctx.campaign, str(values.get("level", "")), str(values.get("space", "")), str(values.get("note", "")))
+	return CampaignPackage.release(ctx.campaign, str(values.get("notes", "")), {"path": path, "plugin_dirs": ctx.plugin_dirs, "recommended": rec})
 
 
 ## A newer version of the package this campaign came from, if the library

@@ -52,18 +52,71 @@ func register_bands(plugin: String, bands: Array) -> void:
 
 ## How the table's rulers count, as a ruleset says its game does: `diagonals`
 ## on squares, "5-5-5" (every step one cell), "5-10-5" (every second
-## diagonal two) or "euclid" (as the crow flies). Anything else is ignored.
+## diagonal two) or "euclid" (as the crow flies); and `costs`, what ground of
+## a kind costs to walk ({tag: n}, as `path` takes them: difficult ground at
+## 2), so a ruler's walk is priced as a move is. Anything else is ignored (a
+## cost of 1 or less, or not a number, is no cost).
 func register_measure(plugin: String, rule: Dictionary) -> void:
 	var d := str(rule.get("diagonals", "5-5-5"))
-	measure_rules[plugin] = {"diagonals": d if Measure.RULES.has(d) else "5-5-5"}
+	var out := {"diagonals": d if Measure.RULES.has(d) else "5-5-5"}
+	var costs := {}
+	if rule.get("costs") is Dictionary:
+		for tg in rule.costs:
+			var n: Variant = rule.costs[tg]
+			if str(tg) != "" and (n is float or n is int) and is_finite(float(n)) and float(n) > 1.0:
+				costs[str(tg)] = minf(float(n), 100.0)
+	if not costs.is_empty():
+		out.costs = costs
+	measure_rules[plugin] = out
 
 
 ## The rulers' rule: the first ruleset's that registered one (by id, so it
-## is the same every time), else every step a cell.
+## is the same every time), else every step a cell and no ground dearer.
 func measure_rule() -> Dictionary:
 	var ids := measure_rules.keys()
 	ids.sort()
-	return (measure_rules[ids[0]] as Dictionary).duplicate() if not ids.is_empty() else {"diagonals": "5-5-5"}
+	return (measure_rules[ids[0]] as Dictionary).duplicate(true) if not ids.is_empty() else {"diagonals": "5-5-5"}
+
+
+## The cells of a scene whose ground costs more to walk by `costs` ({tag: n},
+## as `path` takes them), priced as `path` prices them — the dearest of the
+## tags of the regions on a cell and of its terrain (its art's, and the
+## terrain's own name): {"q,r": n}. A region kept to the DM (`audience`
+## "gm") prices nothing unless `gm`: what a player is shown of the ground is
+## all their ruler knows of it.
+func costly_cells(scene_id: String, costs: Dictionary, gm := true) -> Dictionary:
+	var out := {}
+	if costs.is_empty() or grid(scene_id) == null:
+		return out
+	var regions: Dictionary = scene(scene_id).get("regions", {})
+	for rid in regions:
+		var r: Dictionary = regions[rid]
+		if not gm and str(r.get("audience", "all")) == "gm":
+			continue
+		var m := 1.0
+		for tg in r.get("tags", []):
+			if costs.has(str(tg)):
+				m = maxf(m, float(costs[str(tg)]))
+		if m > 1.0:
+			for k in r.get("cells", []):
+				out[str(k)] = maxf(float(out.get(str(k), 1.0)), m)
+	var terrain: Dictionary = kernel.state.effective_level(scene_id).get("terrain", {})
+	var cache := {}
+	var by_ref := {}
+	for k in terrain:
+		var t: Variant = terrain[k]
+		if not (t is Dictionary):
+			continue
+		var ref := str(t.get("t", ""))
+		if not by_ref.has(ref):
+			var m := 1.0
+			for tg in _terrain_tags(ref, cache) + [ref.get_slice(":", ref.get_slice_count(":") - 1)]:
+				if costs.has(str(tg)):
+					m = maxf(m, float(costs[str(tg)]))
+			by_ref[ref] = m
+		if float(by_ref[ref]) > 1.0:
+			out[str(k)] = maxf(float(out.get(str(k), 1.0)), float(by_ref[ref]))
+	return out
 
 
 # ----------------------------------------------------------------- basics --

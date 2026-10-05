@@ -9,13 +9,18 @@ extends RefCounted
 ## as the crow flies) — and point to point on a map drawn without one (a
 ## painted region). The walk is priced by the way movement goes
 ## (MapQuery.path: round the walls, doors as they are, a diagonal never
-## cutting a wall's corner), and said only where it is longer than the
-## ground alone would make it: "30 ft straight, 45 ft to walk round".
+## cutting a wall's corner, and over ground as the rules price it — the
+## `costs` a ruleset registered with hm.map.measure: difficult ground at
+## double), worked out on any map with walls or dear ground, and said only
+## where it is longer than the ground alone would make it: "30 ft straight,
+## 45 ft to walk round".
 ##
 ## A player's walk goes only over the ground their party knows (under fog,
-## the cells explored): measuring into the dark says nothing of what is
-## there. The web screens count the straight distance themselves the same
-## way (web/src/lib/map/measure.ts) while a ruler is dragged.
+## the cells explored), priced only by what they are shown of it (a region
+## kept to the DM prices nothing for them): measuring into the dark says
+## nothing of what is there. The web screens count the straight distance
+## themselves the same way (web/src/lib/map/measure.ts) while a ruler is
+## dragged.
 
 const RULES := ["5-5-5", "5-10-5", "euclid"]
 
@@ -77,11 +82,13 @@ static func open_walk(grid: HexGrid, points: Array, diagonals := "5-5-5") -> flo
 
 
 ## The walk along `points`, leg by leg, by MapQuery.path: {ok, length (map
-## units), cells (every cell of the way, in order), why}. `blocked` cells
-## are never entered (a player's unknown ground). `legs` keeps each leg
-## walked (a ruler dragged asks again and again), for as long as the caller
-## knows nothing has changed.
-static func walk(mq: MapQuery, scene_id: String, points: Array, diagonals := "5-5-5", blocked: Array = [], legs: Variant = null) -> Dictionary:
+## units, each cell priced as `dear` says: {"q,r": n}, MapQuery.costly_cells),
+## cells (every cell of the way, in order), why}. `blocked` cells are never
+## entered (a player's unknown ground). `legs` keeps each leg walked (a
+## ruler dragged asks again and again), for as long as the caller knows
+## nothing has changed; `sig` tells apart walks priced differently (whose
+## ground: the DM's, or the players').
+static func walk(mq: MapQuery, scene_id: String, points: Array, diagonals := "5-5-5", blocked: Array = [], legs: Variant = null, dear: Dictionary = {}, sig := "") -> Dictionary:
 	var g := mq.grid(scene_id)
 	if g == null:
 		return {"ok": false, "why": "no map", "length": 0.0, "cells": []}
@@ -92,21 +99,39 @@ static func walk(mq: MapQuery, scene_id: String, points: Array, diagonals := "5-
 		var b := g.world_to_axial(points[i])
 		if a == b:
 			continue
-		var key := "%s|%d,%d|%d,%d|%s|%d" % [scene_id, a.x, a.y, b.x, b.y, diagonals, blocked.size()]
+		var key := "%s|%d,%d|%d,%d|%s|%d|%d|%s" % [scene_id, a.x, a.y, b.x, b.y, diagonals, blocked.size(), dear.size(), sig]
 		var p: Dictionary = (legs as Dictionary).get(key, {}) if legs is Dictionary else {}
 		if p.is_empty():
-			p = mq.path(scene_id, a, b, {"diagonals": diagonals, "blocked": blocked})
+			var opts := {"diagonals": diagonals, "blocked": blocked}
+			if not dear.is_empty():
+				opts.cell_costs = dear
+			p = mq.path(scene_id, a, b, opts)
 			if legs is Dictionary:
 				if (legs as Dictionary).size() > 512:
 					(legs as Dictionary).clear()
 				legs[key] = p
 		if not bool(p.get("ok", false)):
 			return {"ok": false, "why": str(p.get("why", "walls")), "length": 0.0, "cells": cells}
-		length += float(p.get("length", 0.0))
+		# (its cost: the length with each dear cell priced as it is)
+		length += float(p.get("cost", p.get("length", 0.0)))
 		for k in p.get("cells", []):
 			if cells.is_empty() or str(cells[-1]) != str(k):
 				cells.append(str(k))
 	return {"ok": true, "why": "", "length": length * g.distance, "cells": cells}
+
+
+## The dear ground of a scene by the rulers' rule (MapQuery.costly_cells),
+## the DM's (`gm`) or the players', kept in `legs` with the legs walked.
+static func dear_ground(mq: MapQuery, scene_id: String, costs: Dictionary, gm: bool, legs: Variant = null) -> Dictionary:
+	if costs.is_empty():
+		return {}
+	var key := "dear|%s|%s|%s" % [scene_id, "g" if gm else "p", str(costs)]
+	if legs is Dictionary and (legs as Dictionary).has(key):
+		return legs[key]
+	var out := mq.costly_cells(scene_id, costs, gm)
+	if legs is Dictionary:
+		legs[key] = out
+	return out
 
 
 ## The cells a player's party doesn't know on a scene: under fog, every
@@ -134,8 +159,10 @@ static func has_walls(state: EncounterState, scene_id: String) -> bool:
 
 
 ## A ruler's measure on its scene: {straight, units, words, walk (when it is
-## a detour), no_way (when nothing walks there), cells (the walk's, kept on
-## the Table to tell what a player may be told)}. `owner` is "gm" or a
+## a detour, or dear ground makes it longer), no_way (when nothing walks
+## there), cells (the walk's, kept on the Table to tell what a player may be
+## told), secret (the DM's walk priced by ground the players aren't shown:
+## theirs to have only the straight distance)}. `owner` is "gm" or a
 ## player's id: a player's walk keeps to the ground their party knows.
 ## `legs`: Measure.walk's.
 static func ruler(mq: MapQuery, state: EncounterState, scene_id: String, points: Array, owner := "gm", legs: Variant = null) -> Dictionary:
@@ -143,18 +170,29 @@ static func ruler(mq: MapQuery, state: EncounterState, scene_id: String, points:
 	if m == null or points.size() < 2:
 		return {"straight": 0.0, "units": m.grid.units if m != null else "ft", "words": amount(0.0, m.grid.units if m != null else "ft")}
 	var g := m.grid
-	var rule := str(mq.measure_rule().get("diagonals", "5-5-5"))
+	var measure := mq.measure_rule()
+	var rule := str(measure.get("diagonals", "5-5-5"))
+	var costs: Dictionary = measure.get("costs", {}) if measure.get("costs") is Dictionary else {}
+	var gm := owner == "gm"
+	var dear := dear_ground(mq, scene_id, costs, gm, legs)
 	var gridless := not m.shows_grid()
 	var out := {"straight": straight(g, points, rule, gridless), "units": g.units}
-	if has_walls(state, scene_id):
-		var unknown := unknown_cells(state, scene_id) if owner != "gm" else {}
+	if has_walls(state, scene_id) or not dear.is_empty():
+		var unknown := unknown_cells(state, scene_id) if not gm else {}
 		var reachable := true
 		for p in points:
 			if unknown.has(HexMap.cell_key(g.world_to_axial(p))):
 				reachable = false
 		if reachable:
-			var w := walk(mq, scene_id, points, rule, unknown.keys(), legs)
+			var w := walk(mq, scene_id, points, rule, unknown.keys(), legs, dear, "g" if gm else "p")
 			out.cells = w.cells
+			# (the DM's walk, priced or turned aside by ground the players aren't shown)
+			if gm and not dear.is_empty():
+				var shown := dear_ground(mq, scene_id, costs, false, legs)
+				if shown != dear:
+					var pw := walk(mq, scene_id, points, rule, [], legs, shown, "p")
+					if bool(pw.ok) != bool(w.ok) or not is_equal_approx(float(pw.length), float(w.length)) or pw.cells != w.cells:
+						out.secret = true
 			if bool(w.ok):
 				# (on a map without a grid, the walk is cells' worth: said when it beats the open walk by a cell)
 				var open := open_walk(g, points, rule)

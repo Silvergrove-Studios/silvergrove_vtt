@@ -2,7 +2,8 @@ class_name TableTools
 extends RefCounted
 ## The Table's tools: small state machines fed pointer events in hex units by
 ## the canvas view. Select moves tokens and flips doors and lights with a
-## click; Token places new ones; Fog reveals or hides cells with a brush.
+## click; Token places new ones; Fog reveals or hides cells with a brush;
+## Ruler and Template are the table's shared marks, the DM's.
 ## Every change goes through EncounterCommands so it is one undo step and,
 ## later, one message to the players.
 
@@ -13,6 +14,7 @@ static func make(tool_name: String, ctx: TableContext) -> Tool:
 		"fog": t = FogTool.new()
 		"pick": t = PickTool.new()
 		"ruler": t = RulerTool.new()
+		"template": t = TemplateTool.new()
 		_: t = SelectTool.new()
 	t.ctx = ctx
 	t.tool_name = tool_name
@@ -25,6 +27,7 @@ static func all_tools() -> Array[Dictionary]:
 		{"name": "token", "label": "Token", "key": "T", "icon": "circle-dot", "hint": "Click to place a token. Set its name, colour and owner in Tool options."},
 		{"name": "fog", "label": "Fog", "key": "F", "icon": "moon-star", "hint": "Drag to reveal cells to the players; right-drag hides them again. [ ] change the brush."},
 		{"name": "ruler", "label": "Ruler", "key": "M", "icon": "ruler", "hint": "Drag to measure, or click for each point of a path; double-click or Enter ends it, Esc takes it off, P pins it. Everyone sees it (Only me: the DMs alone). Right-click anywhere: a ping, “look here”."},
+		{"name": "template", "label": "Template", "key": "A", "icon": "shapes", "hint": "A circle, a cone, a line or a cube, any size (Tool options): click to put it down, drag to move it, drag its handle or [ ] to turn it. Enter lets it go, Esc takes it off, P pins it. Everyone sees it and who it catches; Damage those caught is yours."},
 	]
 
 
@@ -623,3 +626,196 @@ class RulerTool extends Tool:
 		_fixed = []
 		_dragging = false
 		_moved = false
+
+
+# =============================================================================
+
+## The template: a circle, a cone, a line or a cube of any size — the tool
+## options say which, and how big in feet, by the map's scale — for everyone
+## to see as it is made ("DM: 20-ft circle · catches 3"), as the web screens'
+## Template is. Click to put it down (on a cell's middle, a cube of an even
+## side on the corner between four; anywhere on a map with no grid drawn),
+## drag it to move it, drag its round handle to turn it (a cone, a line, a
+## cube), or [ and ] to turn it a step. Enter or another tool lets it go (it
+## lingers a minute; P pins it); Esc or Delete takes it off. The tool
+## options' rulesets' buttons (Damage those caught) act on the creatures it
+## catches. Right-click pings.
+class TemplateTool extends Tool:
+	const TURN_STEP := 15.0
+	var _id := ""
+	## "" | "move" | "turn": what a press took hold of.
+	var _grab := ""
+	var _offset := Vector2.ZERO
+
+	func cursor() -> Control.CursorShape:
+		return Control.CURSOR_CROSS
+
+	func activate() -> void:
+		# (the DM's template on this map, if one is still there: the tool takes it up again)
+		var m: Dictionary = ctx.marks.marks.get(ctx.template_mark, {})
+		_id = ctx.template_mark if not m.is_empty() and str(m.get("scene", "")) == ctx.scene_id else ""
+
+	func deactivate() -> void:
+		finish()
+
+	## The shape the tool options say, in the map's cells.
+	func shape() -> Dictionary:
+		var per := Vision.hexes_per("ft", grid())
+		var s := {"type": ctx.template_type, "size": maxf(0.2, ctx.template_feet * per), "origin": "center", "include_self": true}
+		if ctx.template_type == "line":
+			s.width = maxf(0.2, ctx.template_width_feet * per)
+		if ctx.template_type == "cone":
+			s.angle = 53.0
+		return s
+
+	## Its words: "20-ft circle", "15-ft cone", "20-ft cube".
+	static func words(type: String, feet: float) -> String:
+		return "%s-ft %s" % [TableSettings.number_words(snappedf(feet, 0.1)), "cube" if type == "square" else type]
+
+	func mark() -> Dictionary:
+		return ctx.marks.marks.get(_id, {}) if _id != "" else {}
+
+	## Where a template put down at `p` stands: a cell's middle (a cube of an
+	## even side, the corner between four), or the point on a map with no grid.
+	func place_at(p: Vector2, s: Dictionary) -> Vector2:
+		if ctx.map() == null or not ctx.map().shows_grid():
+			return p
+		var c := grid().snap_to_center(p)
+		return c + Vector2(0.5, 0.5) if GmIntents.square_even(s) else c
+
+	## Whether it turns: not a circle.
+	func turnable(m: Dictionary) -> bool:
+		return not m.is_empty() and str((m.get("shape", {}) as Dictionary).get("type", "circle")) != "circle"
+
+	## Its round handle (the far end, which turns it), or INF.
+	func knob(m: Dictionary) -> Vector2:
+		if not turnable(m):
+			return Vector2.INF
+		var spec := Measure.template_spec(m)
+		var at: Vector2 = spec.at if spec.at is Vector2 else Marks.point(m)
+		return at + Vector2.from_angle(deg_to_rad(float(m.get("direction", 0.0)))) * float(spec.get("length", 0.0))
+
+	func inside(m: Dictionary, p: Vector2) -> bool:
+		if m.is_empty() or ctx.kernel == null:
+			return false
+		var cells: Array = ctx.kernel.map.template(ctx.scene_id, Measure.template_spec(m)).get("cells", [])
+		return cells.has(HexMap.cell_key(grid().world_to_axial(p))) or Marks.point(m).distance_to(p) <= 0.5
+
+	## The template as it is now, to everyone; `live` while it is being moved.
+	func put(at: Vector2, direction: float, live: bool) -> void:
+		var s := shape()
+		var had := mark()
+		var id := ctx.put_mark({"kind": "template", "points": [[at.x, at.y]], "shape": s, "direction": direction,
+			"label": words(ctx.template_type, ctx.template_feet), "live": live, "pinned": bool(had.get("pinned", false))}, _id if not had.is_empty() else "")
+		# (a new one: the tool options act on it now)
+		if id != "" and (id != _id or ctx.template_mark != id):
+			_id = id
+			ctx.template_mark = id
+			ctx.template_changed.emit()
+
+	## The tool options changed the shape: the template on the map follows.
+	func reshape() -> void:
+		var m := mark()
+		if m.is_empty():
+			return
+		var s := shape()
+		put(place_at(Marks.point(m), s) if ctx.map() != null and ctx.map().shows_grid() else Marks.point(m), float(m.get("direction", 0.0)), false)
+
+	func press(p: Vector2, button: int, _mods: Dictionary) -> bool:
+		if button == MOUSE_BUTTON_RIGHT:
+			ping(p)
+			return true
+		if button != MOUSE_BUTTON_LEFT or ctx.map() == null:
+			return false
+		var m := mark()
+		var k := knob(m)
+		if k != Vector2.INF and k.distance_to(p) <= maxf(handle_hex(12.0), 0.35):
+			_grab = "turn"
+			return true
+		if inside(m, p):
+			_grab = "move"
+			_offset = Marks.point(m) - p
+			return true
+		# put down here: a new one, or this one brought here
+		put(place_at(p, shape()), float(m.get("direction", 0.0)), true)
+		_grab = "move"
+		_offset = Vector2.ZERO
+		return true
+
+	func drag(p: Vector2, _button: int, _mods: Dictionary) -> void:
+		var m := mark()
+		if m.is_empty() or _grab == "":
+			return
+		if _grab == "turn":
+			put(Marks.point(m), roundf(rad_to_deg((p - Marks.point(m)).angle())), true)
+		else:
+			put(place_at(p + _offset, shape()), float(m.get("direction", 0.0)), true)
+
+	func release(_p: Vector2, _button: int, _mods: Dictionary) -> void:
+		if _grab == "":
+			return
+		_grab = ""
+		var m := mark()
+		if not m.is_empty():
+			put(Marks.point(m), float(m.get("direction", 0.0)), false)
+
+	## Turn it a step (a cone, a line, a cube).
+	func turn(deg: float) -> void:
+		var m := mark()
+		if not turnable(m):
+			return
+		put(Marks.point(m), wrapf(float(m.get("direction", 0.0)) + deg, -180.0, 180.0), false)
+
+	func key(event: InputEventKey) -> bool:
+		if not event.pressed:
+			return false
+		match event.keycode:
+			KEY_BRACKETLEFT:
+				turn(-TURN_STEP)
+				return _id != ""
+			KEY_BRACKETRIGHT:
+				turn(TURN_STEP)
+				return _id != ""
+			KEY_ENTER, KEY_KP_ENTER:
+				if _id != "":
+					finish()
+					return true
+			KEY_ESCAPE, KEY_DELETE, KEY_BACKSPACE:
+				if _id != "":
+					take_off()
+					return true
+			KEY_P:
+				var m := mark()
+				if not m.is_empty():
+					var pinned := not bool(m.get("pinned", false))
+					ctx.put_mark({"kind": "template", "points": m.points, "shape": m.shape, "direction": m.get("direction", 0.0), "label": m.get("label", ""), "pinned": pinned}, _id)
+					ctx.say("Template pinned: it stays till you take it off" if pinned else "Template unpinned")
+					ctx.template_changed.emit()
+					return true
+		return false
+
+	## Let it go: it lingers a minute and goes, unless pinned (the tool options act on it meanwhile).
+	func finish() -> void:
+		var m := mark()
+		if not m.is_empty() and bool(m.get("live", false)):
+			put(Marks.point(m), float(m.get("direction", 0.0)), false)
+		_grab = ""
+
+	## Take it off the map.
+	func take_off() -> void:
+		if _id != "":
+			ctx.marks.remove("gm", _id, true)
+		_id = ""
+		_grab = ""
+		ctx.template_mark = ""
+		ctx.template_changed.emit()
+
+	func draw_overlay(c: Node2D) -> void:
+		draw_markers(c)
+		var m := mark()
+		var k := knob(m)
+		if k == Vector2.INF:
+			return
+		var r := handle_hex(7.0) * ctx.canvas.ppx
+		c.draw_circle(px(k), r + 2.0 / maxf(1e-6, ctx.zoom), Color(0, 0, 0, 0.7))
+		c.draw_circle(px(k), r, Color(str(m.get("color", "#ffffff"))))

@@ -84,6 +84,39 @@ func test_the_preview_of_a_level_switch() -> void:
 	check(TableSettings.change_words(to_assisted).begins_with("1 setting changes: "), "one change reads as one")
 
 
+## A level switch says what it leaves to the prepared fights: each one's own
+## values (the DM's for that fight alone) that will still win over the level
+## while it runs — on the Table's Table settings and to the DM's web screen.
+func test_a_level_switch_says_what_the_fights_keep() -> void:
+	var reg := TableSettings.build([{"id": "test.rules", "name": "Test rules", "manifest": _manifest(), "values": {}}], {})
+	var c := Campaign.create("Fights")
+	c.encounters.append({"id": "enc_bridge", "name": "On the bridge", "settings": {"test.rules/auto_hit": true, "test.rules/wait": 30, "test.rules/edition": "2014", "test.rules/gone": 1}})
+	c.encounters.append({"id": "enc_hall", "name": "The hall"})
+	var keeps := TableSettings.fights_keeping(c, reg, "bookkeeping")
+	check(keeps.size() == 1 and str(keeps[0].name) == "On the bridge" and (keeps[0].items as Array).map(func(i: Dictionary) -> String: return str(i.title)) == ["Apply a hit at once", "Seconds to answer"],
+		"to Bookkeeping: the bridge keeps its own hit and its seconds (not a rules option no level names, nor a setting gone): %s" % [keeps])
+	check(str(keeps[0].items[0].own_words) == "On" and str(keeps[0].items[0].level_words) == "Off", "each with its value and the level's")
+	check(TableSettings.fights_keeping(c, reg, "automated").is_empty(), "to Automated: the bridge's own are the level's, nothing to say")
+	check(TableSettings.keeping_lines(keeps, "bookkeeping") == PackedStringArray(["On the bridge: Apply a hit at once On (Bookkeeping: Off); Seconds to answer 30 (Bookkeeping: 0)"]), "in words: %s" % [TableSettings.keeping_lines(keeps, "bookkeeping")])
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var win := _table("user://table_settings_keep_test", {"level": "assisted"})
+	await tree.process_frame
+	win.ctx.campaign.encounters.append({"id": "enc_bridge", "name": "On the bridge", "settings": {"sample.ordered/armour_reduces": 2}})
+	check((win.table_settings.registry().fights_keep as Dictionary).has("bookkeeping") and not (win.table_settings.registry().fights_keep as Dictionary).has("automated"), "the model has it by level")
+	check(str(win.web_dm.state().table.fights_keep.bookkeeping[0].name) == "On the bridge", "and the DM's web screen")
+	win.open_table_settings()
+	await tree.process_frame
+	var d := win._settings_dialog
+	if d != null:
+		d.ask_level("bookkeeping")
+		check(d.preview_text().contains("\n" + TableSettings.KEEPING_HEAD + "\n   •  On the bridge: What a marked armour slot takes off a hit 2 (Bookkeeping: 0)"), "the switch says it: %s" % d.preview_text())
+		d.cancel_level()
+	win.queue_free()
+	await tree.process_frame
+
+
 func test_values_are_checked_against_their_schema() -> void:
 	var reg := TableSettings.build([{"id": "test.rules", "name": "T", "manifest": _manifest(), "values": {}}], {})
 	var wait := _find(reg, "wait")
@@ -252,6 +285,20 @@ func test_the_walkthrough_on_a_new_campaign() -> void:
 	var summary := w.summary_text()
 	check(w.step_name() == "summary" and summary.contains("How much the app does: Bookkeeping") and summary.contains("Where fights happen: In the theatre of the mind") and summary.contains("House rules: No flanking.") and summary.begins_with("Change any of this later in Table settings."), "a summary: %s" % summary)
 	check(w._see_all.visible and w.get_ok_button().text == "Done", "with See every setting, and Done")
+	# each line of the summary goes back to where it's set
+	var link := w._body.find_child("Link_questions_outcomes", true, false) as Button
+	check(link != null and link.text.begins_with("What a roll does: "), "a question's line is a press: %s" % [link.text if link != null else "none"])
+	if link != null:
+		link.pressed.emit()
+	check(w.step_name() == "questions" and w.opened == "outcomes" and w._body.find_child("Setting_armour_reduces", true, false) != null, "back to its question, opened")
+	w.go_to("summary")
+	var space := w._body.find_child("Link_space", true, false) as Button
+	if space != null:
+		space.pressed.emit()
+	check(w.step_name() == "space", "where fights happen: back to its step")
+	w.go_to("summary")
+	check(w._body.find_child("Link_level", true, false) != null and w._body.find_child("Link_rules", true, false) != null, "the level's line and the house rules' go back to theirs")
+	check(w.draft.house_rules == "No flanking." and str(w.draft.space) == "mind", "nothing lost on the way")
 	var depth := win.ctx.history.undo_depth()
 	w.next()
 	await tree.process_frame
@@ -381,7 +428,10 @@ func test_players_are_told_how_the_table_runs() -> void:
 	var summary := TableSettings.player_summary(TableSettings.build([{"id": "test.rules", "name": "T", "manifest": _manifest(), "values": {}}], {}))
 	var asked: Array = summary.answers.map(func(a: Dictionary) -> String: return str(a.question))
 	check(not asked.has("table") and summary.answers.filter(func(a: Dictionary) -> bool: return a.items.any(func(i: Dictionary) -> bool: return str(i.title) == "Ask the DM first")).is_empty(), "what only the DM notices isn't said to the players")
-	check(not summary.set and summary.title == "Automated", "a table set up before levels: Automated")
+	check(not summary.set and summary.title == "Automated" and not summary.pending, "a table set up before levels: Automated, nothing waiting (its players are told on joining)")
+	var waiting := TableSettings.player_summary(TableSettings.build([{"id": "test.rules", "name": "T", "manifest": _manifest(), "values": {}}], {"setup": "pending"}))
+	check(waiting.pending and not waiting.set, "a new table whose walkthrough waits: nothing to tell its players yet")
+	check(not bool(t.get("pending", true)), "this one's set up")
 	win.queue_free()
 	await tree.process_frame
 

@@ -1315,7 +1315,8 @@ func _mark_for(c: Dictionary, m: Dictionary) -> Dictionary:
 		var known := not bool(sight.fog)
 		if not known:
 			known = (m.get("_walk_cells", []) as Array).all(func(k: Variant) -> bool: return (sight.explored as Dictionary).has(str(k)))
-		if not known or me.has("no_way"):
+		# (a walk priced by ground kept from the players is the DM's: Measure.ruler's `secret`)
+		if not known or me.has("no_way") or bool(m.get("_walk_secret", false)):
 			me.erase("walk")
 			me.erase("no_way")
 			me.words = Measure.words(me)

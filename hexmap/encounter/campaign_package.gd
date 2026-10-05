@@ -103,6 +103,38 @@ static func clean_recommended(v: Variant) -> Dictionary:
 	return out
 
 
+## What an author's campaign suggests of how a table runs it, for its next
+## release (its `meta.recommended`, as clean_recommended keeps it); {} for
+## none.
+static func suggestion_of(c: Campaign) -> Dictionary:
+	if c == null or not (c.doc.get("meta") is Dictionary):
+		return {}
+	return clean_recommended(c.doc.meta.get("recommended", {}))
+
+
+## The release dialog's Suggest how to run it, kept on the campaign for this
+## release and the next: a level and where fights happen ("" for none of
+## each) and a note; what it suggested of the settings stays with them. No
+## level and no place clears it all. Returns the suggestion as a package
+## will carry it.
+static func set_suggestion(c: Campaign, level: String, space: String, note: String) -> Dictionary:
+	if c == null:
+		return {}
+	if not (c.doc.get("meta") is Dictionary):
+		c.doc.meta = {}
+	var had := suggestion_of(c)
+	var raw := {"level": level, "space": space, "note": note}
+	if had.has("answers") and (level != "" or space != ""):
+		raw.answers = had.answers
+	var rec := clean_recommended(raw)
+	if rec.is_empty():
+		c.doc.meta.erase("recommended")
+	else:
+		c.doc.meta.recommended = rec
+	c.touch()
+	return rec
+
+
 ## A package's cover as an image, or null when it has none or it will not
 ## load. An SVG cover is drawn `svg_width` pixels across.
 static func cover_image(path: String, info: Dictionary, svg_width := 640) -> Image:
