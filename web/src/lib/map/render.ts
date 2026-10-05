@@ -84,6 +84,18 @@ export function isObject(t: Dict): boolean {
   return Array.isArray(t.tags) && (t.tags as unknown[]).includes('object');
 }
 
+/** A creature's hit points as its token shows them, "7/15", where the table
+ *  shows the players a monster's exactly (the host's `hp`: [current, max]);
+ *  '' where it doesn't. */
+export function hpWords(t: Dict): string {
+  const hp = t.hp;
+  if (!Array.isArray(hp) || hp.length < 2) return '';
+  const cur = Number(hp[0]);
+  const max = Number(hp[1]);
+  if (!Number.isFinite(cur) || !Number.isFinite(max)) return '';
+  return `${Math.max(0, Math.round(cur))}/${Math.round(max)}`;
+}
+
 /** Whether a token is drawn as a thing: an object, but not one that looks
  *  like its caster (a "likeness": Mislead's double, Project Image's copy),
  *  which is drawn as the creature it copies — though it is no more a
@@ -755,6 +767,26 @@ export function drawToken(ctx: CanvasRenderingContext2D, t: Dict, pos: Vec, look
     ctx.lineWidth = Math.max(r * 0.05, 1 / scale);
     ctx.strokeStyle = 'rgba(0,0,0,0.7)';
     ctx.stroke();
+  }
+  // its hit points, where the table shows them (a pill under its disc)
+  const hpText = hpWords(t);
+  if (hpText) {
+    const fs = Math.max(r * 0.42, 9 / scale);
+    ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const w = ctx.measureText(hpText).width + fs * 0.7;
+    const h = fs * 1.25;
+    const y = pos.y + r + h * 0.35;
+    ctx.beginPath();
+    ctx.roundRect(pos.x - w / 2, y - h / 2, w, h, h / 2);
+    ctx.fillStyle = 'rgba(12,12,16,0.82)';
+    ctx.fill();
+    ctx.lineWidth = Math.max(fs * 0.08, 1 / scale);
+    ctx.strokeStyle = tags.includes('bloodied') || tags.includes('down') || tags.includes('dead') ? 'rgba(214,48,49,0.95)' : 'rgba(255,255,255,0.6)';
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(hpText, pos.x, y + fs * 0.04);
   }
   if (Math.abs(Number(t.rot ?? 0)) > 0.01) {
     // which way it faces

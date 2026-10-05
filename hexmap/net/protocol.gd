@@ -96,13 +96,17 @@ static func hello(p_name: String) -> Dictionary:
 
 ## The document as a client holds it: without the rules blocks (those
 ## reach it projected, as a view) and with the plugin state emptied.
-static func welcome(encounter: Encounter, gm := false) -> Dictionary:
-	return {"t": "welcome", "version": VERSION, "encounter": client_document(encounter.doc, gm)}
+## `health`: what the rulesets say players see of a creature's health
+## (HealthShown), for a player's document.
+static func welcome(encounter: Encounter, gm := false, health: Array = []) -> Dictionary:
+	return {"t": "welcome", "version": VERSION, "encounter": client_document(encounter.doc, gm, health)}
 
 
 ## With `gm` (a co-GM), the scene is sent whole: GM regions, every cell,
-## the scene's triggers. The rules blocks still travel as a view.
-static func client_document(doc: Dictionary, gm := false) -> Dictionary:
+## the scene's triggers. The rules blocks still travel as a view. A
+## player's leaves out of a monster's tokens the marks of its health that
+## `health` keeps from the players (HealthShown).
+static func client_document(doc: Dictionary, gm := false, health: Array = []) -> Dictionary:
 	var out: Dictionary = JsonDoc.deep(doc)
 	for k in RULES_BLOCKS:
 		if out.has(k):
@@ -116,8 +120,14 @@ static func client_document(doc: Dictionary, gm := false) -> Dictionary:
 	# the encounter's own notes are the DM's
 	if out.get("notes") is Array:
 		out.notes = []
+	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
 	for sc in out.get("scenes", []):
 		sc.erase("triggers")
+		if HealthShown.hides(health) and sc.get("tokens") is Array:
+			var kept := []
+			for tk in sc.tokens:
+				kept.append(HealthShown.player_token(tk, actors, health) if tk is Dictionary else tk)
+			sc.tokens = kept
 		var regions: Dictionary = sc.get("regions", {})
 		for id in regions.keys():
 			if str(regions[id].get("audience", "all")) == "gm":

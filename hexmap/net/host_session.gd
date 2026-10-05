@@ -154,13 +154,30 @@ func set_state(p_state: EncounterState) -> void:
 		state.applied.connect(_on_applied)
 		announcer.name = state.encounter.name
 		for c in _clients:
-			_send(c, Protocol.welcome(state.encounter, _is_gm(c)))
+			_send(c, Protocol.welcome(state.encounter, _is_gm(c), _health()))
 		_scenes_dirty = true
 		_dm_dirty = true
 
 
 func _is_gm(c: Dictionary) -> bool:
 	return c.role == Views.ROLE_COGM or c.role == Views.ROLE_DM
+
+
+## What the rulesets loaded now say players see of a creature's health
+## (HealthShown): each player's snapshot, document and token events follow it.
+func _health() -> Array:
+	return kernel.health_policies() if kernel != null else []
+
+
+## The rules were loaded again (a Rules setting changed): what each screen
+## holds of the scene is sent again, as the rules loaded now would have it — a
+## web screen's snapshot, a Godot player's document (a monster's marks, shown
+## or kept from the players: HealthShown).
+func refresh_scenes() -> void:
+	_scenes_dirty = true
+	for c in _clients:
+		if c.hello and not _is_gm(c) and not bool(c.web):
+			_send(c, Protocol.welcome(state.encounter, false, _health()))
 
 
 ## Is the client on this machine (the DM's own browser)?
@@ -335,11 +352,21 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		# the whole document changed under everyone: start them over
 		for c in _clients:
 			if c.hello:
-				_send(c, Protocol.welcome(state.encounter, _is_gm(c)))
+				_send(c, Protocol.welcome(state.encounter, _is_gm(c), _health()))
 		_views_dirty = true
 		return
 	if Protocol.SCENE_EVENTS.has(t):
-		_broadcast(Protocol.event(ev))
+		if (t == "token.add" or t == "token.set") and HealthShown.hides(_health()):
+			# a monster's marks of its health as each may see them (HealthShown): the DM's
+			# whole, a player's without what the players see nothing of
+			var tid := str(ev.token.get("id", "")) if t == "token.add" and ev.get("token") is Dictionary else str(ev.get("id", ""))
+			var now := state.token(str(ev.get("scene", "")), tid)
+			var mine := Protocol.event(HealthShown.player_event(ev, now, state.encounter.actors, _health()))
+			for c in _clients:
+				if c.hello and not bool(c.web):
+					_send(c, Protocol.event(ev) if _is_gm(c) else mine)
+		else:
+			_broadcast(Protocol.event(ev))
 		# a note on the map shown to the players (or hidden again): their
 		# devices get the map again, with it (or without it)
 		if t == "element.set" and str(ev.get("ref", "")).begins_with("notes:"):
@@ -355,6 +382,9 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 				if c.hello and not _is_gm(c) and not bool(c.web):
 					_send(c, Protocol.event(msg))
 	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t) or t.begins_with("token.") or t == "checkpoint.restore":
+		_scenes_dirty = true
+	# a creature's hit points, on its token where the players see them exactly
+	if t == "resource.set" and HealthShown.exact(_health()):
 		_scenes_dirty = true
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
@@ -478,13 +508,14 @@ func _send_view(c: Dictionary) -> void:
 
 
 ## A web client's scene: the one the players see (the DM's: the one they
-## chose), whole, as they may see it.
+## chose), whole, as they may see it (a monster's health too: HealthShown).
 func _send_scene(c: Dictionary) -> void:
 	var e := state.encounter
 	var sid := str(c.get("scene", ""))
 	if sid == "" or e.scene(sid).is_empty() or not _is_gm(c):
 		sid = e.active_scene_id
-	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c)) if sid != "" else {},
+	var health := _health()
+	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c), health) if sid != "" else {},
 		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
 	if not (msg.scene as Dictionary).is_empty():
 		msg.scene.role = str(map_role.call(str(msg.scene.get("map", "")))) if map_role.is_valid() else ""
@@ -493,7 +524,7 @@ func _send_scene(c: Dictionary) -> void:
 		# seeing as a player: that player's snapshot of the scene, as their screen has it
 		var who := str(c.get("see_as", ""))
 		if who != "" and sid != "" and not e.player(who).is_empty():
-			msg.preview = WebScene.build(state, sid, who, false)
+			msg.preview = WebScene.build(state, sid, who, false, health)
 			msg.preview_as = who
 			# and why each creature they don't see isn't there: hidden, dark or walls
 			msg.preview_why = WebScene.unseen(state, sid, who)
@@ -524,7 +555,7 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 				return
 			c.hello = true
 			c.name = str(msg.get("name", ""))
-			_send(c, Protocol.welcome(state.encounter))
+			_send(c, Protocol.welcome(state.encounter, false, _health()))
 		"join":
 			var pid := str(msg.get("player", ""))
 			var role := str(msg.get("role", Views.ROLE_PLAYER))

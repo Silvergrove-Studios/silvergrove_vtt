@@ -86,6 +86,9 @@ class Plugin:
 	var views: Dictionary = {}
 	## improvisation benchmarks: name -> {label, params}
 	var improv: Dictionary = {}
+	## what its creatures' tokens say of their health, and what players see of
+	## it (hm.ui.health: HealthShown's declaration); {} for none
+	var health: Dictionary = {}
 
 	func can(cap: String) -> bool:
 		return capabilities.has(cap)
@@ -394,6 +397,19 @@ func unload(id: String) -> void:
 
 func plugin(id: String) -> Plugin:
 	return plugins.get(id)
+
+
+## What each loaded ruleset says of its creatures' health (hm.ui.health), by
+## its id: the Table filters what players are sent by these (HealthShown).
+func health_policies() -> Array:
+	var out := []
+	var ids := plugins.keys()
+	ids.sort()
+	for id in ids:
+		var p: Plugin = plugins[id]
+		if not p.health.is_empty():
+			out.append(JsonDoc.deep(p.health))
+	return out
 
 
 func _fail(p: Plugin, where: String, message: String) -> void:
@@ -755,7 +771,8 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "map_path", "map_space", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting"]:
+			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting",
+			"ui_health", "test_sent"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -1182,6 +1199,19 @@ class Bridge:
 		p.views[k] = PluginHost._norm_view(schema)
 		return true
 
+	## What this ruleset's creatures' tokens say of their health and what
+	## players see of it, {tags, resource, effects, players} (HealthShown):
+	## the Table filters each player's snapshot, document and view by it.
+	func ui_health(spec: Variant) -> Variant:
+		var p := _p()
+		if p == null:
+			return {"__error": "unloaded"}
+		var h: Variant = HealthShown.make(plugin_id, PluginHost._as_dict(spec) if spec is Dictionary else spec)
+		if h is String:
+			return {"__error": h}
+		p.health = h
+		return true
+
 	# --- map
 	static func _place(v: Variant) -> Variant:
 		if v is Array and (v as Array).size() == 2:
@@ -1378,6 +1408,19 @@ class Bridge:
 	func test_tick(seconds: Variant) -> bool:
 		_k().pending.tick(float(seconds))
 		return true
+
+	## What a screen is sent, for a test to read: a web screen's snapshot of the
+	## scene (WebScene), the document a Godot client holds (Protocol), and the
+	## rules' view's actors and log (Views), for a player (their id) or the DM ("").
+	func test_sent(player: String, scene: String) -> Dictionary:
+		var k := _k()
+		var gm := str(player) == ""
+		var sid := str(scene) if str(scene) != "" else k.state.encounter.active_scene_id
+		var health := k.health_policies()
+		var view := Views.project(k, _h(), str(player), Views.ROLE_GM if gm else Views.ROLE_PLAYER)
+		return {"scene": WebScene.build(k.state, sid, str(player), gm, health) if sid != "" else {},
+			"document": Protocol.client_document(k.state.encounter.doc, gm, health),
+			"actors": view.actors, "log": view.log}
 
 	func test_dispatch(action: String, ctx: Variant, answers: Variant) -> Variant:
 		return test_dispatch_of(plugin_id, action, ctx, answers)

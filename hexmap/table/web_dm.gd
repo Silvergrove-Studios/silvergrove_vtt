@@ -150,11 +150,13 @@ func set_rule(pid: String, key: String, value: Variant) -> String:
 		return "%s: not one of the choices" % str(item.title)
 	ctx.campaign.set_plugin_setting(pid, key, v)
 	ctx.reload_plugins()
-	# the host speaks for the rules loaded now
+	# the host speaks for the rules loaded now (and each screen's scene follows
+	# them: what players see of a monster's health)
 	if win.host != null:
 		win.host.plugins = ctx.host
 		win.host.kernel = ctx.kernel
 		win.host.refresh_views()
+		win.host.refresh_scenes()
 		win.host.refresh_dm()
 	ctx.campaign_changed.emit()
 	return ""
