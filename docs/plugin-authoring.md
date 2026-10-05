@@ -287,7 +287,15 @@ the viewer, and which *intent* a tap sends. Clients never run plugin
 code; a client that does not know a widget shows it as text, and a Table
 that does not know a view kind keeps it and never draws it (so a plugin
 written for a newer Table still loads; one older than a kind refuses it,
-so register a new kind with `pcall(hm.ui.register, …)`). The kinds:
+so register a new kind with `pcall(hm.ui.register, …)`).
+
+A schema reaches each screen once, by an id made from its contents; after
+that a screen is sent only what changed in the data it binds to (protocol 4,
+`hexmap/net/wire.gd`). To change a view, register it again: a schema with
+other contents (a sheet built otherwise for a table setting) reaches every
+screen once more. Keep what changes in the data, not in the schema — a
+schema built with this turn's numbers in it is a new tree, sent whole, each
+time it is registered. The kinds:
 
 - **sheet** — rendered on the owner's phone (and for the GM) for each
   actor that carries this plugin's data. Its data: `me` (player id),
@@ -795,7 +803,7 @@ taken off — the cast's own path and its checks (range, slots, the turn).
 Give no `cast` where the app doesn't cast (a level where the players tick
 their slots by hand): the preview is still shown.
 
-**The marks on the wire** (protocol 3; `hexmap/net/protocol.gd`):
+**The marks on the wire** (since protocol 3; `hexmap/net/protocol.gd`):
 
 | client → host | |
 |---|---|

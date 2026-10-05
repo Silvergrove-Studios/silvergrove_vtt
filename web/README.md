@@ -8,12 +8,16 @@ a browser on the computer that runs the game.
 
 Svelte 5, TypeScript, Vite. The host never runs this code: it serves
 `webclient.zip` (the build, at the project's root) and talks to the pages
-over its WebSocket (`src/lib/net.ts`, `src/lib/game.svelte.ts`).
+over its WebSocket (`src/lib/net.ts`, `src/lib/game.svelte.ts`). A view, a
+scene and the DM's state come whole once and then as what changed, each
+view schema once by an id made from its contents (`src/lib/wire.ts`, the
+host's `hexmap/net/wire.gd`): the page keeps the schemas, for a reload
+too, and says which it holds when it joins.
 
 ```sh
 npm ci
 npm run check   # types and Svelte
-npm test        # unit tests (grid, expressions, views, the book, picks, turns, rulers and templates)
+npm test        # unit tests (grid, expressions, views, the book, picks, turns, rulers and templates, the wire)
 npm run build   # dist/ → ../webclient.zip — commit it with the sources
 ```
 

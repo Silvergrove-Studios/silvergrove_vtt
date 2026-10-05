@@ -8,6 +8,7 @@
 import { Connection, PROTOCOL, type Msg } from './net';
 import { Waiting } from './waiting';
 import { TYPING_SHOWN_MS } from './typing';
+import { KINDS, Reader } from './wire';
 
 export type Dict = Record<string, any>;
 
@@ -75,6 +76,31 @@ const intentsWaiting = new Waiting<Answer>('i', 10000, () => {
 let joinMsg: Msg | null = null;
 let byName = '';
 const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// the views, scenes and DM states as they come — whole, or what changed — and
+// the view schemas this page holds (lib/wire.ts); those in use are kept for a
+// reload (a phone that dropped the page while in another app) in this tab
+const wire = new Reader();
+const KEPT_SCHEMAS = 'hexmap.schemas';
+try {
+  wire.restore(JSON.parse(sessionStorage.getItem(KEPT_SCHEMAS) ?? 'null'));
+} catch {
+  /* none kept, or private mode */
+}
+
+function keepSchemas(): void {
+  try {
+    const text = JSON.stringify(wire.keep());
+    // (a few hundred KB; past this a reload asks for them again)
+    if (text.length < 3_000_000) sessionStorage.setItem(KEPT_SCHEMAS, text);
+  } catch {
+    /* full, or private mode */
+  }
+}
+
+/** The join, saying which schemas this page holds: the table sends none of them again. */
+function joining(): Msg[] {
+  return joinMsg ? [{ ...joinMsg, have: wire.have() }] : [];
+}
 
 function stopTyping(from: string): void {
   clearTimeout(typingTimers.get(from));
@@ -128,7 +154,8 @@ export async function connect(role: 'player' | 'dm'): Promise<boolean> {
   const url = `ws://${location.hostname}:${game.config.ws_port}`;
   conn?.close();
   conn = new Connection(url);
-  conn.greeting = [hello()];
+  // hello, and the join once there is one (none after leaving, or a join turned down)
+  conn.greeting = () => [hello(), ...joining()];
   conn.onstatus = (s) => {
     game.status = s;
     // a player who was in stays on their screen while the page reconnects
@@ -149,15 +176,11 @@ export function join(opts: { name?: string; player?: string; token?: string }): 
   byName = opts.player && opts.name ? opts.name : '';
   game.joining = true;
   game.error = '';
-  if (conn) {
-    conn.greeting = [hello(), joinMsg];
-    conn.send(joinMsg);
-  }
+  for (const m of joining()) conn?.send(m);
 }
 
 export function leave(): void {
   joinMsg = null;
-  if (conn) conn.greeting = [hello()];
   game.joined = false;
   game.me = '';
   keepSession('');
@@ -172,6 +195,15 @@ export function leave(): void {
 }
 
 function handle(m: Msg): void {
+  // a view, a scene or the DM's state: whole once, then what changed, each
+  // schema once (lib/wire.ts) — made whole again here, as the screens read it
+  if (KINDS.includes(m.t)) {
+    const got = wire.read(m);
+    if (got.need) conn?.send({ t: 'need', kind: m.t });
+    if (got.added) keepSchemas();
+    if (!got.msg) return;
+    m = got.msg;
+  }
   switch (m.t) {
     case 'welcome': {
       const doc = (m.encounter ?? {}) as Dict;
@@ -283,9 +315,9 @@ function handle(m: Msg): void {
         // a join the table turned down: back to the join screen, saying why
         game.joining = false;
         game.joined = false;
+        // (and a reconnect says hello alone: the greeting has no join now)
         joinMsg = null;
         keepSession('');
-        if (conn) conn.greeting = [hello()];
       }
       game.error = String(m.why ?? 'The table refused');
       notice(game.error, 'error');

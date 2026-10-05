@@ -29,6 +29,13 @@ var _started_ms := 0
 var _pending_files := {}   # "pack/file" -> true
 var _maps_wanted := {}
 var _hello_name := ""
+## The view schemas this app holds, by id (Wire): kept from one connection to
+## the next, so joining again is not sent them again.
+static var schemas_kept: Dictionary = {}
+## The most kept: past it, the next join starts over.
+const SCHEMAS_KEPT_MAX := 64
+## Reads the views as they come: whole, or what changed (Wire).
+var _wire := Wire.Reader.new(schemas_kept)
 
 
 func _init(p_address: String, p_port: int, p_packs: PackLibrary, p_name := "") -> void:
@@ -61,7 +68,10 @@ func _send(msg: Dictionary) -> void:
 func join(p_player_id: String, p_role := "player", code := "") -> void:
 	player_id = p_player_id
 	role = p_role
-	var msg := {"t": "join", "player": p_player_id, "role": p_role}
+	if schemas_kept.size() > SCHEMAS_KEPT_MAX:
+		schemas_kept.clear()
+	# (the schemas this app holds: the table sends none of them again)
+	var msg := {"t": "join", "player": p_player_id, "role": p_role, "have": schemas_kept.keys()}
 	if code != "":
 		msg.code = code
 	_send(msg)
@@ -156,8 +166,12 @@ func _handle(msg: Dictionary) -> void:
 			joined_as.emit(player_id)
 			status.emit("Joined as " + (player_name() if role == "player" else ("a co-GM" if is_gm() else "a display")))
 		"view":
-			if msg.get("view") is Dictionary:
-				view = msg.view
+			# whole, or what changed since the last, its schemas from those held (Wire)
+			var got := _wire.read(msg)
+			if bool(got.get("need", false)):
+				_send({"t": "need", "kind": "view"})
+			if got.get("msg") is Dictionary and got.msg.get("view") is Dictionary:
+				view = got.msg.view
 				view_changed.emit()
 		"event":
 			if state != null and msg.get("ev") is Dictionary:
