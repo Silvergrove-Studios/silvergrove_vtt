@@ -138,14 +138,36 @@ hm.ui = {}
 function hm.ui.register(kind, schema)
 	call(host.ui_register, kind, schema)
 end
--- What this ruleset's creatures' tokens say of their health, and what players
--- see of it for a creature no player owns: { tags = { "bloodied", … } (the
--- marks its tokens carry), resource = "hp" (the pool its hit points are in),
--- effects = { "dead", … } (the effects that say it's dying or dead), players =
--- "exact" | "marks" | "none" }. The Table filters what each player's device
--- is sent by it; the DM sees everything. Call it as the plugin loads.
+-- What the players know of a creature no player owns: { health = { tags =
+-- { "bloodied", … } (the marks its tokens carry), resource = "hp" (the pool its
+-- hit points are in), effects = { "dead", … } (the effects that say it's dying
+-- or dead), players = "exact" | "marks" | "none" }, names = "shown" | "hidden",
+-- conditions = "shown" | "hidden" }. The Table filters what each player's
+-- device is sent by it; the DM sees everything. Call it as the plugin loads.
+function hm.ui.knowledge(spec)
+	call(host.ui_knowledge, spec)
+end
+-- The health part alone: { tags, resource, effects, players }.
 function hm.ui.health(spec)
 	call(host.ui_health, spec)
+end
+
+-- Words that name a creature, or tell of its conditions, marked so the Table
+-- shows each screen what it knows (Knowledge): the words the DM reads, and
+-- what a screen that doesn't know them reads instead ("a creature"; nothing,
+-- for its conditions). Put the result in any text — a log line, a roll's
+-- label, a card, an error — as the words themselves.
+hm.known = {}
+local MARK_A, MARK_S, MARK_E = "￹", "￺", "￻"
+-- text with its marks read as the DM reads them
+function hm.known.plain(text)
+	return (tostring(text or ""):gsub(MARK_A .. "(.-)" .. MARK_S .. ".-" .. MARK_E, "%1"))
+end
+function hm.known.name(actor_id, words, unknown)
+	return MARK_A .. hm.known.plain(words) .. MARK_S .. "name " .. tostring(actor_id) .. " " .. hm.known.plain(unknown or "a creature") .. MARK_E
+end
+function hm.known.conditions(actor_id, words, unknown)
+	return MARK_A .. hm.known.plain(words) .. MARK_S .. "cond " .. tostring(actor_id) .. " " .. hm.known.plain(unknown or "") .. MARK_E
 end
 
 -- ------------------------------------------------------------------ map --
@@ -531,8 +553,11 @@ function __run_test(index, helpers)
 	-- a creature from one of this plugin's benchmarks, placed on a scene at a "q,r" cell: its actor id
 	function h.improvise(benchmark, params, scene, at) return call(host.test_improvise, benchmark, params or {}, scene, at or "") end
 	-- what a screen is sent: { scene (a web screen's snapshot), document (a Godot client's),
-	-- actors, log (the rules' view) }, for a player (their id) or the DM (nil), of a scene
+	-- actors, log, prompts, waiting, rolls (the rules' view) }, for a player (their id) or
+	-- the DM (nil), of a scene, as the wire carries it (what the players know: Knowledge)
 	function h.sent(player, scene) return call(host.test_sent, player or "", scene or "") end
+	-- words (an error's, a card's) as a player's screen (their id) or the DM's (nil) reads them
+	function h.shown(text, player) return call(host.test_shown, tostring(text or ""), player or "") end
 	for k, v in pairs(helpers or {}) do h[k] = v end
 	return t.fn(h)
 end

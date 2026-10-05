@@ -44,15 +44,15 @@ static func summary(e: Encounter, audience := "gm") -> Dictionary:
 				if oc != "":
 					r.outcomes[oc] = int(r.outcomes.get(oc, 0)) + 1
 				r.best = maxf(float(r.best), float(entry.get("result", {}).get("total", 0)))
-				var lbl := str(entry.get("label", ""))
+				var lbl := Knowledge.plain(str(entry.get("label", "")))
 				if lbl != "":
 					r.labels[lbl] = int(r.labels.get(lbl, 0)) + 1
 			"note":
-				out.notes.append({"text": str(entry.get("text", "")), "audience": str(entry.get("audience", "all")), "by": str(entry.get("plugin", ""))})
+				out.notes.append({"text": Knowledge.plain(str(entry.get("text", ""))), "audience": str(entry.get("audience", "all")), "by": str(entry.get("plugin", ""))})
 			"handout":
 				out.handouts.append({"title": str(entry.get("title", "")), "text": str(entry.get("text", ""))})
 			"ruling":
-				out.rulings.append({"text": str(entry.get("text", "")), "rule": str(entry.get("rule", "")), "tags": Array(entry.get("tags", []))})
+				out.rulings.append({"text": Knowledge.plain(str(entry.get("text", ""))), "rule": str(entry.get("rule", "")), "tags": Array(entry.get("tags", []))})
 	for tid in e.tracks:
 		var tr: Dictionary = e.tracks[tid]
 		if bool(tr.get("done", false)) and Views.can_see(str(tr.get("audience", "all")), "", Views.ROLE_GM if audience == "gm" else Views.ROLE_DISPLAY):
@@ -60,7 +60,7 @@ static func summary(e: Encounter, audience := "gm") -> Dictionary:
 	for fid in e.effects:
 		var fx: Dictionary = e.effects[fid]
 		if Views.can_see(str(fx.get("audience", "all")), "", Views.ROLE_GM if audience == "gm" else Views.ROLE_DISPLAY):
-			out.effects_active.append("%s on %s" % [str(fx.get("label", fx.get("key", fid))), _ref_name(e, str(fx.get("on", "")))])
+			out.effects_active.append("%s on %s" % [Knowledge.plain(str(fx.get("label", fx.get("key", fid)))), _ref_name(e, str(fx.get("on", "")))])
 	var start := session_start(e)
 	if not start.is_empty():
 		out.changes = diff(start.snapshot, e.snapshot())

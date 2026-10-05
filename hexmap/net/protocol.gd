@@ -33,7 +33,8 @@ extends RefCounted
 ##                                            template, a spell's preview, a ping — one's own;
 ##                                            the DM may remove or clear anyone's. Never kept.
 ## host → client
-##   welcome  {version, encounter}            the document without its rules blocks
+##   welcome  {version, encounter}            the document without its rules blocks (a web
+##                                             client's: the table's name and players alone)
 ##   joined   {player, role}                  the join was accepted
 ##   event    {ev}                            a scene event applied; apply it too
 ##   view     {view}                          the client's projection (Views.project); the DM seeing
@@ -50,10 +51,15 @@ extends RefCounted
 ##   comp     {req, collection, entry | page}   what was asked for, under the viewer's audience
 ##   error    {why}                           then the host closes
 ##   pong     {}
-##   scene    {scene, players, clock, online, scenes?, preview?, preview_as?, preview_why?}
+##   scene    {scene, players, clock, online, scenes?, preview?, preview_as?, preview_why?, preview_marks?}
 ##                                             a web client's scene (WebScene), for it; the DM
-##                                             seeing as a player gets theirs and why each
-##                                             creature they don't see isn't there
+##                                             seeing as a player gets theirs, why each
+##                                             creature they don't see isn't there, and the
+##                                             marks on the map as that player is sent them
+##   seen_marks {as, marks}                   the DM seeing as a player: their marks again (one
+##                                             put, changed or gone)
+##   Every message reaches a screen with the rulesets' marked words put right
+##   for it (Knowledge): a creature's name, its conditions, as it may read them.
 ##   dm       {state}                          the DM's web screen: the campaign as it shows it
 ##   marks    {marks}                          every shared mark this client may see (on joining)
 ##   mark     {mark}                           one put or changed, with its owner's name and
@@ -104,17 +110,24 @@ static func hello(p_name: String) -> Dictionary:
 
 ## The document as a client holds it: without the rules blocks (those
 ## reach it projected, as a view) and with the plugin state emptied.
-## `health`: what the rulesets say players see of a creature's health
-## (HealthShown), for a player's document.
-static func welcome(encounter: Encounter, gm := false, health: Array = []) -> Dictionary:
-	return {"t": "welcome", "version": VERSION, "encounter": client_document(encounter.doc, gm, health)}
+## `known`: what the rulesets say the players know of a creature no player
+## owns (Knowledge), for a player's document.
+static func welcome(encounter: Encounter, gm := false, known: Array = []) -> Dictionary:
+	return {"t": "welcome", "version": VERSION, "encounter": client_document(encounter.doc, gm, known)}
+
+
+## A web screen's welcome: the table's name and its players (a returning one
+## taps their name). It holds no document: its scene comes as snapshots.
+static func welcome_web(encounter: Encounter) -> Dictionary:
+	return {"t": "welcome", "version": VERSION, "encounter": {"name": encounter.name, "players": JsonDoc.deep(encounter.players)}}
 
 
 ## With `gm` (a co-GM), the scene is sent whole: GM regions, every cell,
 ## the scene's triggers. The rules blocks still travel as a view. A
-## player's leaves out of a monster's tokens the marks of its health that
-## `health` keeps from the players (HealthShown).
-static func client_document(doc: Dictionary, gm := false, health: Array = []) -> Dictionary:
+## player's has of a monster's tokens what `known` says the players know
+## (Knowledge): the marks of its health and its conditions' tags they see,
+## and — its name kept from them — "a creature", labelled as they see it.
+static func client_document(doc: Dictionary, gm := false, known: Array = []) -> Dictionary:
 	var out: Dictionary = JsonDoc.deep(doc)
 	for k in RULES_BLOCKS:
 		if out.has(k):
@@ -131,10 +144,11 @@ static func client_document(doc: Dictionary, gm := false, health: Array = []) ->
 	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
 	for sc in out.get("scenes", []):
 		sc.erase("triggers")
-		if HealthShown.hides(health) and sc.get("tokens") is Array:
+		if Knowledge.hides(known) and sc.get("tokens") is Array:
+			var labels := Knowledge.player_labels(sc.tokens, actors, known)
 			var kept := []
 			for tk in sc.tokens:
-				kept.append(HealthShown.player_token(tk, actors, health) if tk is Dictionary else tk)
+				kept.append(Knowledge.player_token(tk, doc, known, str(labels.get(str(tk.get("id", "")), ""))) if tk is Dictionary else tk)
 			sc.tokens = kept
 		var regions: Dictionary = sc.get("regions", {})
 		for id in regions.keys():

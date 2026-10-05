@@ -86,9 +86,10 @@ class Plugin:
 	var views: Dictionary = {}
 	## improvisation benchmarks: name -> {label, params}
 	var improv: Dictionary = {}
-	## what its creatures' tokens say of their health, and what players see of
-	## it (hm.ui.health: HealthShown's declaration); {} for none
-	var health: Dictionary = {}
+	## what the players know of its creatures — their health, their names,
+	## their conditions (hm.ui.knowledge, hm.ui.health: Knowledge's
+	## declaration); {} for none
+	var knowledge: Dictionary = {}
 
 	func can(cap: String) -> bool:
 		return capabilities.has(cap)
@@ -399,16 +400,17 @@ func plugin(id: String) -> Plugin:
 	return plugins.get(id)
 
 
-## What each loaded ruleset says of its creatures' health (hm.ui.health), by
-## its id: the Table filters what players are sent by these (HealthShown).
-func health_policies() -> Array:
+## What each loaded ruleset says the players know of its creatures — their
+## health, names and conditions (hm.ui.knowledge) — by its id: the Table
+## filters what players are sent by these (Knowledge).
+func knowledge_policies() -> Array:
 	var out := []
 	var ids := plugins.keys()
 	ids.sort()
 	for id in ids:
 		var p: Plugin = plugins[id]
-		if not p.health.is_empty():
-			out.append(JsonDoc.deep(p.health))
+		if not p.knowledge.is_empty():
+			out.append(JsonDoc.deep(p.knowledge))
 	return out
 
 
@@ -773,7 +775,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_move", "map_cell", "map_cells", "map_token", "map_path", "map_space", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
 			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting",
-			"ui_health", "test_sent", "log_entry"]:
+			"ui_health", "ui_knowledge", "test_sent", "test_shown", "log_entry"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -1221,16 +1223,25 @@ class Bridge:
 		return true
 
 	## What this ruleset's creatures' tokens say of their health and what
-	## players see of it, {tags, resource, effects, players} (HealthShown):
-	## the Table filters each player's snapshot, document and view by it.
+	## players see of it, {tags, resource, effects, players}: the health part
+	## of what the players know (ui_knowledge).
 	func ui_health(spec: Variant) -> Variant:
+		if not (spec is Dictionary or spec is Array):
+			return {"__error": "hm.ui.health takes a table: {tags, resource, effects, players}"}
+		return ui_knowledge({"health": spec})
+
+	## What the players know of this ruleset's creatures, {health, names,
+	## conditions} (Knowledge): the Table filters each player's snapshot,
+	## document, view and every message by it. A part not given stays as it
+	## was declared before.
+	func ui_knowledge(spec: Variant) -> Variant:
 		var p := _p()
 		if p == null:
 			return {"__error": "unloaded"}
-		var h: Variant = HealthShown.make(plugin_id, PluginHost._as_dict(spec) if spec is Dictionary else spec)
-		if h is String:
-			return {"__error": h}
-		p.health = h
+		var k: Variant = Knowledge.make(plugin_id, spec, p.knowledge)
+		if k is String:
+			return {"__error": k}
+		p.knowledge = k
 		return true
 
 	# --- map
@@ -1435,16 +1446,27 @@ class Bridge:
 
 	## What a screen is sent, for a test to read: a web screen's snapshot of the
 	## scene (WebScene), the document a Godot client holds (Protocol), and the
-	## rules' view's actors and log (Views), for a player (their id) or the DM ("").
+	## rules' view — its actors, log, cards (`prompts`), what the table waits
+	## on (`waiting`), the rolls asked of the table (`rolls`) — for a player
+	## (their id) or the DM (""), as the wire carries it (Knowledge).
 	func test_sent(player: String, scene: String) -> Dictionary:
 		var k := _k()
 		var gm := str(player) == ""
 		var sid := str(scene) if str(scene) != "" else k.state.encounter.active_scene_id
-		var health := k.health_policies()
+		var known := k.knowledge_policies()
 		var view := Views.project(k, _h(), str(player), Views.ROLE_GM if gm else Views.ROLE_PLAYER)
-		return {"scene": WebScene.build(k.state, sid, str(player), gm, health) if sid != "" else {},
-			"document": Protocol.client_document(k.state.encounter.doc, gm, health),
-			"actors": view.actors, "log": view.log}
+		var out := {"scene": WebScene.build(k.state, sid, str(player), gm, known) if sid != "" else {},
+			"document": Protocol.client_document(k.state.encounter.doc, gm, known),
+			"actors": view.actors, "log": view.log, "prompts": view.prompts, "waiting": view.waiting, "rolls": view.rolls}
+		return Knowledge.render_value(out, Knowledge.knower(k.state.encounter.actors, known, gm), gm)
+
+	## Words as a screen reads them (a refusal's — without its chunk and line,
+	## as a refusal goes — or a card's), for a test: a player's (their id), or
+	## the DM's ("").
+	func test_shown(text: String, player: String) -> String:
+		var k := _k()
+		var gm := str(player) == ""
+		return Knowledge.render(PluginHost.plain_error(str(text)), Knowledge.knower(k.state.encounter.actors, k.knowledge_policies(), gm), gm)
 
 	func test_dispatch(action: String, ctx: Variant, answers: Variant) -> Variant:
 		return test_dispatch_of(plugin_id, action, ctx, answers)

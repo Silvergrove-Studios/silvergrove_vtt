@@ -510,7 +510,7 @@ func test_typing_is_said_not_kept() -> void:
 
 
 ## What players are sent of a monster's health, as its ruleset declares it
-## (hm.ui.health, HealthShown): its marks ("marks"), nothing ("none"), or its
+## (hm.ui.health, Knowledge): its marks ("marks"), nothing ("none"), or its
 ## hit points too ("exact"). The Table filters before anything is sent — a web
 ## screen's snapshot, a Godot client's document and the token events after it,
 ## the rules' view — the DM sees everything, and the party's own is the party's.
@@ -528,9 +528,9 @@ func test_monster_health_as_players_are_sent_it() -> void:
 			plugins.unload("t.health")
 		return plugins.load_source({"id": "t.health", "version": "1", "api": 1, "name": "Health", "capabilities": ["state"]}, [["main.lua",
 			"hexmap.ui.health({ tags = { 'bloodied', 'down', 'dead' }, resource = 'hp', effects = { 'dead' }, players = '%s' })" % mode]])
-	check(k.health_policies().is_empty(), "no ruleset, nothing declared: everyone is sent the marks, as before")
+	check(k.knowledge_policies().is_empty(), "no ruleset, nothing declared: everyone is sent the marks, as before")
 	check(declare.call("none") == "", "a ruleset declares what players see of its creatures' health")
-	check(k.health_policies().size() == 1 and str(k.health_policies()[0].players) == "none" and k.health_policies()[0].tags == ["bloodied", "down", "dead"], "read from the plugins loaded now: %s" % [k.health_policies()])
+	check(k.knowledge_policies().size() == 1 and str(k.knowledge_policies()[0].players) == "none" and k.knowledge_policies()[0].tags == ["bloodied", "down", "dead"], "read from the plugins loaded now: %s" % [k.knowledge_policies()])
 	check(plugins.load_source({"id": "t.bad", "version": "1", "api": 1, "name": "Bad"}, [["main.lua", "hexmap.ui.health({ players = 'some' })"]]) != "", "a mode it doesn't know is refused")
 	# a goblin no player owns beside Ana's fighter, both Bloodied; a person of the world the players see
 	var fighter := str(st.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Ana's fighter")[0].id)
@@ -554,7 +554,7 @@ func test_monster_health_as_players_are_sent_it() -> void:
 				if str(t.id) == id:
 					return t
 		return {}
-	var health := k.health_policies()
+	var health := k.knowledge_policies()
 	# none: a player's screens hold no mark of the goblin's; the DM's do; the party's own stays
 	var snap := WebScene.build(st, sid, ana, false, health)
 	check((tok.call(snap, "t_gob").tags as Array) == ["humanoid"], "none: Ana's snapshot has the goblin, not its Bloodied: %s" % [tok.call(snap, "t_gob").get("tags")])
@@ -568,9 +568,9 @@ func test_monster_health_as_players_are_sent_it() -> void:
 	check((doc_tok.call(st.encounter.doc, "t_gob").tags as Array).has("bloodied"), "and the Table's own document keeps it")
 	# a token event after it: a player's without the mark
 	var ev := {"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"tags": ["humanoid", "dead"]}}
-	var mine := HealthShown.player_event(ev, st.token(sid, "t_gob"), st.encounter.actors, health)
+	var mine := Knowledge.player_event(ev, st.token(sid, "t_gob"), st.encounter.doc, health)
 	check(mine.changes.tags == ["humanoid"] and ev.changes.tags == ["humanoid", "dead"], "a change of its marks, as a player's client is sent it: %s" % [mine.changes])
-	check(HealthShown.player_event({"t": "token.set", "scene": sid, "id": fighter, "changes": {"tags": ["down"]}}, st.token(sid, fighter), st.encounter.actors, health).changes.tags == ["down"], "her fighter's, whole")
+	check(Knowledge.player_event({"t": "token.set", "scene": sid, "id": fighter, "changes": {"tags": ["down"]}}, st.token(sid, fighter), st.encounter.doc, health).changes.tags == ["down"], "her fighter's, whole")
 	# the rules' view: a person of the world the players see, her pool and her death the DM's
 	var view := Views.project(k, plugins, ana, Views.ROLE_PLAYER)
 	check(view.actors.has("a_marta") and not (view.actors.a_marta.resources.get("t.health", {}) as Dictionary).has("hp"), "Marta is in Ana's view, not her hit points")
@@ -579,21 +579,21 @@ func test_monster_health_as_players_are_sent_it() -> void:
 	check((dm_view.actors.a_marta.resources["t.health"] as Dictionary).has("hp") and (dm_view.actors.a_marta.effects as Array).size() == 1, "the DM's view has both")
 	# marks: the marks, as before; no hit points
 	check(declare.call("marks") == "", "marks")
-	health = k.health_policies()
+	health = k.knowledge_policies()
 	snap = WebScene.build(st, sid, ana, false, health)
 	check((tok.call(snap, "t_gob").tags as Array).has("bloodied") and not tok.call(snap, "t_gob").has("hp"), "marks: the goblin's Bloodied, not its hit points")
 	view = Views.project(k, plugins, ana, Views.ROLE_PLAYER)
 	check(not (view.actors.a_marta.resources.get("t.health", {}) as Dictionary).has("hp") and (view.actors.a_marta.effects as Array).size() == 1, "Marta's death is told, her pool isn't")
 	# exact: and its hit points, on its token, for everyone
 	check(declare.call("exact") == "", "exact")
-	health = k.health_policies()
+	health = k.knowledge_policies()
 	snap = WebScene.build(st, sid, ana, false, health)
 	check(tok.call(snap, "t_gob").get("hp") == [3.0, 7.0] and (tok.call(snap, "t_gob").tags as Array).has("bloodied"), "exact: the goblin's 3 of 7 on its token, and its mark: %s" % [tok.call(snap, "t_gob").get("hp")])
 	check(not tok.call(snap, fighter).has("hp"), "not on the party's: their sheets say it")
 	check(tok.call(WebScene.build(st, sid, "", true, health), "t_gob").get("hp") == [3.0, 7.0], "the DM sees what the players see")
 	check((Views.project(k, plugins, ana, Views.ROLE_PLAYER).actors.a_marta.resources["t.health"] as Dictionary).has("hp"), "Marta's pool is sent")
 	plugins.unload("t.health")
-	check(k.health_policies().is_empty(), "unloaded, nothing is declared")
+	check(k.knowledge_policies().is_empty(), "unloaded, nothing is declared")
 
 
 ## Over the wire: a player's web screen and a Godot client get a monster's

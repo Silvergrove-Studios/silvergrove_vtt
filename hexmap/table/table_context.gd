@@ -126,8 +126,8 @@ func _load_plugins() -> void:
 		return
 	host = PluginHost.new(kernel)
 	host.plugin_failed.connect(func(id: String, where: String, msg: String) -> void:
-		plugin_log.append("%s: %s: %s" % [id, where, msg])
-		status.emit("%s: %s: %s" % [id, where, msg]))
+		plugin_log.append(Knowledge.plain("%s: %s: %s" % [id, where, msg]))
+		status.emit(Knowledge.plain("%s: %s: %s" % [id, where, msg])))
 	# the campaign's order and settings, when there is one
 	var order := []
 	if campaign != null:
@@ -497,7 +497,8 @@ func selected_element() -> Dictionary:
 
 
 func say(text: String) -> void:
-	status.emit(text)
+	# (the rulesets' words as the DM reads them: a creature's name whole)
+	status.emit(Knowledge.plain(text))
 
 
 ## A mark of the DM's from the Table, on the scene being looked at: its id
