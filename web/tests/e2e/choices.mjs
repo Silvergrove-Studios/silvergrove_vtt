@@ -38,6 +38,10 @@ let n = 0;
 async function open(url, viewport, name) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 1, hasTouch: viewport.width < 600 });
   const page = await ctx.newPage();
+  // (How this table runs comes up as a player joins a table: read, and put away)
+  await page.addLocatorHandler(page.getByRole('dialog', { name: 'How this table runs' }), async () => {
+    await page.getByRole('dialog', { name: 'How this table runs' }).getByRole('button', { name: 'Got it' }).click();
+  });
   page.on('pageerror', (e) => problems.push(`${name}: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() === 'error' && !/WebSocket/.test(m.text())) problems.push(`${name} console: ${m.text()}`);

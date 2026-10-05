@@ -381,7 +381,10 @@ func test_players_are_told_how_the_table_runs() -> void:
 	var summary := TableSettings.player_summary(TableSettings.build([{"id": "test.rules", "name": "T", "manifest": _manifest(), "values": {}}], {}))
 	var asked: Array = summary.answers.map(func(a: Dictionary) -> String: return str(a.question))
 	check(not asked.has("table") and summary.answers.filter(func(a: Dictionary) -> bool: return a.items.any(func(i: Dictionary) -> bool: return str(i.title) == "Ask the DM first")).is_empty(), "what only the DM notices isn't said to the players")
-	check(not summary.set and summary.title == "Automated", "a table set up before levels: Automated")
+	check(not summary.set and summary.title == "Automated" and not summary.pending, "a table set up before levels: Automated, nothing waiting (its players are told on joining)")
+	var waiting := TableSettings.player_summary(TableSettings.build([{"id": "test.rules", "name": "T", "manifest": _manifest(), "values": {}}], {"setup": "pending"}))
+	check(waiting.pending and not waiting.set, "a new table whose walkthrough waits: nothing to tell its players yet")
+	check(not bool(t.get("pending", true)), "this one's set up")
 	win.queue_free()
 	await tree.process_frame
 

@@ -18,7 +18,7 @@
   import TablePane from './TablePane.svelte';
   import HowTableRuns from './HowTableRuns.svelte';
   import MyPreferences from './MyPreferences.svelte';
-  import { summaryOf, summarySeenKey } from '../lib/tablesettings';
+  import { houseKey, runsReason, runsSeenOf, summaryOf, summarySeenKey } from '../lib/tablesettings';
   import { chatLog, comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
   import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { freshRolls } from '../lib/rolls';
@@ -94,35 +94,44 @@
   let menuOpen = $state(false);
   let leaving = $state(false);
   // how this table runs (the DM's level, the house rules): shown once on
-  // joining a table the DM has set up (again when its level changes), and
-  // from the ⋯ menu
+  // joining — a table the DM has set up, or a campaign from before levels —
+  // again when its level or its house rules change (saying which), and from
+  // the ⋯ menu
   const runs = $derived(summaryOf(game.view));
   let runsOpen = $state(false);
+  let runsWhy = $state<'' | 'new' | 'level' | 'house'>('');
   // what the table lets me choose for myself (my dice, my reactions asked, my
   // extras), from the ⋯ menu: My preferences
   const myPrefs = $derived(runs?.prefs ?? []);
   let prefsOpen = $state(false);
   let runsAsked = '';
   function runsKey(): string {
-    return runs ? summarySeenKey(runs.campaign || game.table, game.me, runs.level) : '';
+    return runs ? summarySeenKey(runs.campaign || game.table, game.me) : '';
   }
   $effect(() => {
-    if (!runs || !runs.set || !game.me || !game.joined) return;
+    if (!runs || runs.pending || !game.me || !game.joined) return;
     const key = runsKey();
-    if (runsAsked === key) return;
-    runsAsked = key;
-    let seen = false;
+    const now = `${key}|${runs.level}|${houseKey(runs.house_rules)}`;
+    if (runsAsked === now) return;
+    runsAsked = now;
+    let seen = null;
     try {
-      seen = localStorage.getItem(key) === '1';
+      seen = runsSeenOf(localStorage.getItem(key), localStorage.getItem(`${key}/${runs.level}`), runs);
     } catch {
       /* private mode: shown on each join */
     }
-    if (!seen) runsOpen = true;
+    const why = runsReason(runs, seen);
+    if (why) {
+      runsWhy = why;
+      runsOpen = true;
+    }
   });
   function runsSeen(): void {
     runsOpen = false;
+    runsWhy = '';
+    if (!runs) return;
     try {
-      localStorage.setItem(runsKey(), '1');
+      localStorage.setItem(runsKey(), JSON.stringify({ level: runs.level, house: houseKey(runs.house_rules) }));
     } catch {
       /* private mode */
     }
@@ -748,7 +757,7 @@
     <Lookup at={lookup} onclose={() => { lookup = null; lookingUp = false; }} />
   {/if}
   {#if runsOpen && runs && !showing && promptIndex < 0 && !leaving}
-    <HowTableRuns summary={runs} onclose={runsSeen} />
+    <HowTableRuns summary={runs} why={runsWhy} onclose={runsSeen} />
   {/if}
   {#if prefsOpen && !showing && promptIndex < 0 && !leaving}
     <MyPreferences prefs={myPrefs} onclose={() => (prefsOpen = false)} />

@@ -356,7 +356,11 @@ static func question_line(reg: Dictionary, question: String, values: Dictionary 
 
 
 ## What the players are told of how this table runs: the level in plain
-## words, where fights happen, the answers they notice, the house rules.
+## words, where fights happen, the answers they notice, the house rules;
+## whether the DM chose the level (`set`: a campaign from before levels runs
+## as Automated) and whether the table still waits on its walkthrough
+## (`pending`: nothing to tell a player yet). A player's screen shows it on
+## joining, and again when the level or the house rules change.
 static func player_summary(reg: Dictionary) -> Dictionary:
 	var level := str(reg.get("level", EXISTING_LEVEL))
 	var info: Dictionary = LEVEL_INFO.get(level, LEVEL_INFO[EXISTING_LEVEL])
@@ -376,7 +380,7 @@ static func player_summary(reg: Dictionary) -> Dictionary:
 		if bool(it.get("offered", false)):
 			prefs.append(JsonDoc.deep(it))
 	return {"level": level, "title": str(info.title), "tagline": str(info.tagline), "lines": (info.lines as Array).duplicate(),
-		"set": bool(reg.get("level_set", false)), "space": space, "space_title": str(SPACE_INFO.get(space, SPACE_INFO.maps).title),
+		"set": bool(reg.get("level_set", false)), "pending": bool(reg.get("pending", false)), "space": space, "space_title": str(SPACE_INFO.get(space, SPACE_INFO.maps).title),
 		"space_words": str(SPACE_INFO.get(space, SPACE_INFO.maps).words), "answers": answers, "house_rules": str(reg.get("house_rules", "")),
 		"prefs": prefs}
 

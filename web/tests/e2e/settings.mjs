@@ -9,7 +9,8 @@
 // before it does, and is cancelled; a setting changed by hand makes the table
 // "Customized", and its section's Reset puts it back. A player joins and is
 // shown How this table runs (Bookkeeping, the house rule), and finds it again
-// in the ⋯ menu. Screenshots of each step.
+// in the ⋯ menu; the DM changes the house rules and she is shown it again,
+// saying so. Screenshots of each step.
 //
 //   node tests/e2e/settings.mjs <host.json> <out dir>
 //
@@ -91,7 +92,7 @@ await step('the levels: Assisted offered, Bookkeeping picked', async () => {
 await step('the table’s questions: a line of each answer, one opened with Change', async () => {
   await walk.getByText('Step 3 of 5').waitFor({ timeout: 5000 });
   const outcomes = walk.getByRole('region', { name: 'What a roll does' });
-  expect((await outcomes.locator('.line').innerText()).includes('Apply damage to the target when an attack hits: Off'), 'Bookkeeping lands nothing by itself');
+  expect((await outcomes.locator('.line').innerText()).includes('Apply what an attack or a spell does: damage, healing, conditions and effects: Off'), 'Bookkeeping lands nothing by itself');
   const dice = walk.getByRole('region', { name: 'Dice' });
   expect((await dice.locator('.line').innerText()).includes('Players roll their own initiative: On'), 'players roll their own');
   await dice.getByRole('button', { name: 'Change' }).click();
@@ -128,14 +129,14 @@ await step('Table settings: as Bookkeeping has it; a switch says what it would c
   const settings = dm.getByRole('dialog', { name: 'Table settings' });
   await settings.waitFor({ timeout: 5000 });
   await settings.getByText('As Bookkeeping has it').waitFor({ timeout: 5000 });
-  expect((await settings.getByRole('checkbox', { name: 'Apply damage to the target when an attack hits' }).isChecked()) === false, 'nothing lands by itself');
+  expect((await settings.getByRole('checkbox', { name: 'Apply what an attack or a spell does: damage, healing, conditions and effects' }).isChecked()) === false, 'nothing lands by itself');
   expect((await settings.getByText('takes effect at the next fight').count()) >= 1, 'who rolls initiative waits for the next fight');
   await settings.getByRole('group', { name: 'Level' }).getByRole('button', { name: 'Automated' }).click();
   const preview = settings.getByRole('region', { name: 'What switching changes' });
   await preview.waitFor({ timeout: 5000 });
   const count = await preview.locator('.count').innerText();
   expect(/^\d+ settings change:/.test(count), `says how many change: ${count}`);
-  await preview.getByText('Apply damage to the target when an attack hits').waitFor({ timeout: 5000 });
+  await preview.getByText('Apply what an attack or a spell does: damage, healing, conditions and effects').waitFor({ timeout: 5000 });
   await shot(dm, 'dm_settings_switch_preview');
   await preview.getByRole('button', { name: 'Cancel' }).click();
   expect((await dm.evaluate(() => window.hexmap.game.dm.table.level)) === 'bookkeeping', 'cancelled: nothing changed');
@@ -177,6 +178,29 @@ await step('and finds it again in the ⋯ menu', async () => {
   await pia.getByRole('button', { name: 'More' }).waitFor({ timeout: 10000 });
   await pia.waitForTimeout(1500);
   expect((await pia.getByRole('dialog', { name: 'How this table runs' }).count()) === 0, 'shown once');
+});
+
+await step('the DM changes the house rules: Pia is shown how this table runs again, and why', async () => {
+  await dm.getByRole('button', { name: /^Table settings/ }).click();
+  const settings = dm.getByRole('dialog', { name: 'Table settings' });
+  await settings.waitFor({ timeout: 5000 });
+  const house = settings.locator('#house-rules');
+  await house.fill('Drinking a potion is a bonus action. Flanking gives advantage.');
+  await settings.getByRole('button', { name: 'Keep the house rules' }).click();
+  await dm.getByText('House rules kept').first().waitFor({ timeout: 5000 });
+  await settings.getByRole('button', { name: 'Done' }).click();
+  const runs = pia.getByRole('dialog', { name: 'How this table runs' });
+  await runs.waitFor({ timeout: 10000 });
+  await runs.getByText('The DM has changed the house rules.').waitFor({ timeout: 5000 });
+  await runs.getByText('Flanking gives advantage.', { exact: false }).waitFor({ timeout: 5000 });
+  await shot(pia, 'pia_house_rules_changed');
+  await runs.getByRole('button', { name: 'Got it' }).click();
+  await runs.waitFor({ state: 'detached', timeout: 5000 });
+  // seen as it is now: a reload doesn't show it again
+  await pia.reload();
+  await pia.getByRole('button', { name: 'More' }).waitFor({ timeout: 10000 });
+  await pia.waitForTimeout(1500);
+  expect((await pia.getByRole('dialog', { name: 'How this table runs' }).count()) === 0, 'shown once for the change');
 });
 
 for (const [, p] of pages) await p.context().close();

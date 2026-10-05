@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **How this table runs, again when it changes.** A player is shown how
+  the table runs as they join a campaign from before levels too (it runs
+  as Automated) — not one whose DM hasn't set it up yet — and again when
+  the DM changes the house rules (or the level), the card saying which. A
+  browser remembers what it last showed, table by table and player by
+  player.
 - **Suggest how to run it.** The package release dialog asks its author how
   they suggest a table runs their adventure — a level, where fights happen,
   a note — and the package carries it (package.json's `recommended`, which

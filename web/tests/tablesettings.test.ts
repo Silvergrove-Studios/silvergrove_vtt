@@ -3,6 +3,7 @@ import {
   badgeWords,
   changeWords,
   draftFor,
+  houseKey,
   levelChanges,
   noticeWords,
   ownAnswers,
@@ -11,12 +12,15 @@ import {
   prefWhenWords,
   questionLine,
   registryOf,
+  runsReason,
+  runsSeenOf,
   same,
   sectionReset,
   sections,
   summaryOf,
   summarySeenKey,
   valueWords,
+  type PlayerSummary,
   type Pref,
   type Registry,
   type Setting,
@@ -160,14 +164,34 @@ describe('how a table runs, as the DM’s screen works it out', () => {
     expect(draftFor(t, 'assisted', mine)).toMatchObject({ 'r/seconds': 30, 'r/damage': true, 'r/edition': '2014' });
   });
 
-  it('reads what the players are told, and keys their having seen it by table, player and level', () => {
+  it('reads what the players are told, and keys their having seen it by table and player', () => {
     expect(summaryOf({ table: { title: 'Bookkeeping', lines: ['a'], answers: [], house_rules: '' } })?.title).toBe('Bookkeeping');
     expect(summaryOf({})).toBeNull();
     expect(summaryOf({ table: { title: 'x' } })).toBeNull();
-    expect(summarySeenKey('c1', 'pl_1', 'bookkeeping')).toBe('hexmap.table-runs/c1/pl_1/bookkeeping');
-    expect(summarySeenKey('c1', 'pl_1', 'assisted')).not.toBe(summarySeenKey('c1', 'pl_1', 'bookkeeping'));
+    expect(summarySeenKey('c1', 'pl_1')).toBe('hexmap.table-runs/c1/pl_1');
+    expect(summarySeenKey('c1', 'pl_2')).not.toBe(summarySeenKey('c1', 'pl_1'));
     expect(noticeWords('players')).toBe('players notice');
     expect(noticeWords('')).toBe('');
+  });
+
+  it('shows how the table runs on joining, and again when its level or its house rules change', () => {
+    const t = { level: 'bookkeeping', title: 'Bookkeeping', tagline: '', lines: [], set: true, space: 'maps', space_title: '', space_words: '', answers: [], house_rules: 'No flanking.' } as PlayerSummary;
+    expect(runsReason(t, null)).toBe('new');
+    const seen = { level: 'bookkeeping', house: houseKey('No flanking.') };
+    expect(runsReason(t, seen)).toBe('');
+    expect(runsReason({ ...t, house_rules: '  No flanking.\n' }, seen)).toBe('');
+    expect(runsReason({ ...t, house_rules: 'No flanking. Potions as a bonus action.' }, seen)).toBe('house');
+    expect(runsReason({ ...t, level: 'automated' }, seen)).toBe('level');
+    // a campaign from before levels runs as Automated, and its players are told so
+    expect(runsReason({ ...t, set: false, level: 'automated', title: 'Automated' }, null)).toBe('new');
+    // a table still waiting on its DM's walkthrough has nothing to tell yet
+    expect(runsReason({ ...t, set: false, pending: true }, null)).toBe('');
+    expect(runsReason(null, null)).toBe('');
+    // what a browser kept: this way, or the older way (a "1" for the level, read as seen as it is now)
+    expect(runsSeenOf(JSON.stringify(seen), null, t)).toEqual(seen);
+    expect(runsSeenOf(null, '1', t)).toEqual({ level: 'bookkeeping', house: houseKey('No flanking.') });
+    expect(runsSeenOf('not json', null, t)).toBeNull();
+    expect(houseKey('a')).not.toBe(houseKey('b'));
   });
 });
 

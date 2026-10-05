@@ -1258,7 +1258,10 @@ where the setting fits:
   schema; one that doesn't is ignored, and `plugintest` says so.
 - **`x-notice`** — who notices a change: `dm`, `players` or
   `everyone`. The players' *How this table runs* lists the settings
-  they notice (`players`, `everyone`) with their values.
+  they notice (`players`, `everyone`) with their values. A player is
+  shown it as they join (a table its DM has set up, or a campaign from
+  before levels, which runs as Automated; not one whose walkthrough
+  waits), and again when the DM changes the level or the house rules.
 - **`x-next-fight`** — `true` when a change waits for the next fight
   (who rolls initiative): Table settings marks it.
 - **`x-per-fight`** — `true` when the DM may set it for one fight alone

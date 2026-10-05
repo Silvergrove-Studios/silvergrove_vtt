@@ -287,6 +287,8 @@ export interface PlayerSummary {
   tagline: string;
   lines: string[];
   set: boolean;
+  /** The DM's walkthrough not done yet: nothing to tell a player. */
+  pending?: boolean;
   space: string;
   space_title: string;
   space_words: string;
@@ -303,9 +305,50 @@ export function summaryOf(view: Dict): PlayerSummary | null {
   return t && typeof t === 'object' && typeof t.title === 'string' && Array.isArray(t.lines) ? (t as PlayerSummary) : null;
 }
 
-/** The key a browser keeps once a player has been shown how a table runs (shown again when the level changes). */
-export function summarySeenKey(table: string, player: string, level: string): string {
-  return `hexmap.table-runs/${table}/${player}/${level}`;
+/** The key a browser keeps, a table's and a player's, what it last showed
+ *  them of how the table runs (`RunsSeen`). The key before it kept a "1" a
+ *  level (`<key>/<level>`): read as seen, as the house rules are now. */
+export function summarySeenKey(table: string, player: string): string {
+  return `hexmap.table-runs/${table}/${player}`;
+}
+
+/** What a player was last shown of how a table runs: its level, and its house rules (houseKey). */
+export interface RunsSeen {
+  level: string;
+  house: string;
+}
+
+/** House rules as a browser remembers having shown them: a short hash of their words. */
+export function houseKey(text: string | null | undefined): string {
+  const s = String(text ?? '').trim();
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return `${s.length}:${(h >>> 0).toString(36)}`;
+}
+
+/** Why a player is shown how the table runs, as they join or as it changes:
+ *  "new" (never shown here: a table the DM set up, or a campaign from before
+ *  levels, which runs as Automated), "level" (the DM changed how much the
+ *  app does), "house" (the DM changed the house rules) — or "" (seen as it
+ *  is, or a table whose DM hasn't set it up yet: nothing to tell). */
+export function runsReason(summary: PlayerSummary | null, seen: RunsSeen | null): '' | 'new' | 'level' | 'house' {
+  if (!summary || summary.pending) return '';
+  if (!seen) return 'new';
+  if (seen.level !== summary.level) return 'level';
+  if (seen.house !== houseKey(summary.house_rules)) return 'house';
+  return '';
+}
+
+/** What a browser kept under summarySeenKey (`raw`), or — kept the older way,
+ *  a "1" for this level (`rawLevel`) — this level seen with these house rules. */
+export function runsSeenOf(raw: string | null, rawLevel: string | null, summary: PlayerSummary): RunsSeen | null {
+  try {
+    const v = raw ? JSON.parse(raw) : null;
+    if (v && typeof v === 'object' && typeof v.level === 'string' && typeof v.house === 'string') return { level: v.level, house: v.house };
+  } catch {
+    /* not ours */
+  }
+  return rawLevel === '1' ? { level: summary.level, house: houseKey(summary.house_rules) } : null;
 }
 
 /** The settings a fight may have of its own (x-per-fight), in Table settings' order. */
