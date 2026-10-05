@@ -17,12 +17,15 @@ const EXT := "campaignpkg"
 
 ## What a package says about itself, without instancing it:
 ## {ok, why, manifest, id, name, package_version, description, authors,
-##  license, requires, tested_with, bundles_rules, entries: n, cover}
+##  license, requires, tested_with, bundles_rules, entries: n, cover,
+##  recommended}
 ## `cover` is the file of its cover picture ("" for none): the manifest's
 ## `cover`, else a cover.png|jpg|webp|svg at the top of the package.
+## `recommended` is its author's suggestion of how a table runs it
+## (clean_recommended; {} for none).
 static func read(path: String) -> Dictionary:
 	var out := {"ok": false, "why": "", "manifest": {}, "id": "", "name": "", "package_version": "", "description": "",
-		"authors": [], "license": "", "requires": {}, "tested_with": {}, "bundles_rules": false, "entries": 0, "path": path, "cover": ""}
+		"authors": [], "license": "", "requires": {}, "tested_with": {}, "bundles_rules": false, "entries": 0, "path": path, "cover": "", "recommended": {}}
 	var zr := ZIPReader.new()
 	if zr.open(path) != OK:
 		out.why = "%s is not a package this build reads" % path.get_file()
@@ -60,11 +63,44 @@ static func read(path: String) -> Dictionary:
 				cover = "cover." + ext
 				break
 	out.cover = cover if COVER_TYPES.has(cover.get_extension().to_lower()) else ""
+	out.recommended = clean_recommended(m.get("recommended"))
 	out.ok = true
 	return out
 
 
 const COVER_TYPES := ["png", "jpg", "jpeg", "webp", "svg"]
+## How long an author's note on their suggestion may be.
+const NOTE_MAX := 400
+
+
+## An author's suggestion of how a table runs their adventure, as a package
+## carries it (`recommended` in package.json): {level ("bookkeeping" |
+## "rolling" | "assisted" | "automated"), space ("maps" | "mind" |
+## "per_fight"), answers ({"<plugin>/<key>": value}: a setting each, as the
+## walkthrough's answers are), note (why, in a sentence or two)} — each only
+## when it is there and of its kind; what a table knows of them is checked
+## when its walkthrough offers them (TableSettings.recommended_of). It is
+## only ever a suggestion. {} for none.
+static func clean_recommended(v: Variant) -> Dictionary:
+	if not (v is Dictionary):
+		return {}
+	var out := {}
+	for k in ["level", "space"]:
+		if (v as Dictionary).get(k) is String and str(v[k]) != "":
+			out[k] = str(v[k])
+	if v.get("answers") is Dictionary:
+		var answers := {}
+		for id in v.answers:
+			var a: Variant = v.answers[id]
+			if a is bool or a is int or a is float or a is String:
+				answers[str(id)] = a
+		if not answers.is_empty():
+			out.answers = answers
+	if v.get("note") is String and str(v.note).strip_edges() != "":
+		out.note = str(v.note).strip_edges().left(NOTE_MAX)
+	if not out.has("level") and not out.has("space") and not out.has("answers"):
+		return {}
+	return out
 
 
 ## A package's cover as an image, or null when it has none or it will not
@@ -185,6 +221,9 @@ static func instance(pkg_path: String, dest: String, p_name := "") -> Dictionary
 	c.doc.clock = {"session": 0, "day": int(c.clock.get("day", 1)), "minute": int(c.clock.get("minute", 0))}
 	c.doc.package = {"id": str(info.id), "version": str(info.package_version), "name": str(info.name),
 		"tested_with": JsonDoc.deep(info.tested_with)}
+	# its author's suggestion of how a table runs it: the walkthrough offers it
+	if not (info.recommended as Dictionary).is_empty():
+		c.doc.package.recommended = JsonDoc.deep(info.recommended)
 	if bool(info.bundles_rules):
 		c.doc.rules_dir = "rules"
 	var save_err := c.save(campaign_path)
@@ -224,7 +263,8 @@ static func strip_play(doc: Dictionary) -> void:
 ## opts: {id, package_version, authors, license, url, description,
 ## keep_players, plugin_dirs (where installed rulesets are),
 ## bundle_rules = false only for a package that deliberately leans on an
-## installed ruleset}.
+## installed ruleset, recommended (the author's suggestion of how a table
+## runs it: clean_recommended; else the campaign's `meta.recommended`)}.
 static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary = {}) -> Dictionary:
 	var out := {"ok": false, "why": "", "path": dest_path, "files": 0}
 	if campaign == null or campaign.path == "":
@@ -301,6 +341,10 @@ static func export_from(campaign: Campaign, dest_path: String, opts: Dictionary 
 		"changelog": opts.get("changelog", []),
 		"art": art,
 		"campaign": "campaign.json"}
+	# how its author suggests a table runs it (opts, else the campaign's meta.recommended)
+	var rec := clean_recommended(opts.get("recommended", campaign.doc.get("meta", {}).get("recommended", {}) if campaign.doc.get("meta") is Dictionary else {}))
+	if not rec.is_empty():
+		manifest.recommended = rec
 	var n := 0
 	# every file's SHA-256, written into package.json last: a package that
 	# was damaged (or altered) on its way to a DM is caught before it starts

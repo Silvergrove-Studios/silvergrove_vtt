@@ -19,6 +19,17 @@ extends RefCounted
 ## answers. Each write is one step of the Table's undo, kept in the
 ## campaign, with the rules loaded again so sheets and views follow it.
 ## Plugins go on reading their settings with `hm.settings.get`.
+##
+## A fight may run otherwise than the table (`x-per-fight` settings, the
+## DM's for that fight alone, kept on the prepared fight; and, where the
+## table leaves it to each fight, on a map or in the theatre of the mind),
+## and in the theatre of the mind a setting may be what it must be there
+## (`x-mind`: what can't be checked without positions — range, sight,
+## movement — off). The rules load with the fight's own while it runs
+## (TableContext.fight_rules); Table settings says what differs for it. A
+## campaign started from a package may carry its author's suggestion of a
+## level, where fights happen and answers (`recommended`, from the
+## package's manifest): the walkthrough offers it, nothing more.
 
 ## The levels, least the app does first.
 const LEVELS := ["bookkeeping", "rolling", "assisted", "automated"]
@@ -35,6 +46,10 @@ const LEVEL_QUESTIONS := ["dice", "outcomes", "checks", "knowledge", "prompting"
 const NOTICES := ["dm", "players", "everyone"]
 ## Where fights happen (`table.space`).
 const SPACES := ["maps", "mind", "per_fight"]
+## Where one fight happens (a prepared fight's `space`, its `live.space`).
+const FIGHT_SPACES := ["maps", "mind"]
+## How long an author's note on their suggestion may be.
+const NOTE_MAX := 400
 ## The setting types a screen can show (a choice, a switch, a number, words).
 const TYPES := ["string", "boolean", "integer", "number"]
 ## The campaign's `table` fields and what each may hold.
@@ -76,6 +91,11 @@ const SPACE_INFO := {
 	"maps": {"title": "On maps", "words": "Fights are played on battle maps, with tokens."},
 	"mind": {"title": "In the theatre of the mind", "words": "Fights are told, not drawn: no battle maps, the rolls all the same."},
 	"per_fight": {"title": "Each fight decides", "words": "Some fights on a map, some in the mind: chosen as each one starts."},
+}
+## One fight's place, as the screens say it.
+const FIGHT_SPACE_INFO := {
+	"maps": {"title": "On its map", "words": "On its battle map, with tokens."},
+	"mind": {"title": "In the theatre of the mind", "words": "No map: who's in the fight is a list, and range, sight and movement are yours to judge."},
 }
 
 const NOTICE_WORDS := {"dm": "You notice", "players": "Players notice", "everyone": "Everyone notices"}
@@ -120,7 +140,9 @@ static func mark_pending(c: Campaign) -> void:
 
 ## The loaded plugins as `build` takes them: [{id, name, manifest, values}],
 ## the values being the settings in force (defaults, then the campaign's).
-static func plugins_of(host: PluginHost) -> Array:
+## With the campaign `c`, the table's own (defaults, then the campaign's),
+## whatever a fight running now makes them (TableContext.fight_rules).
+static func plugins_of(host: PluginHost, c: Campaign = null) -> Array:
 	var out := []
 	if host == null:
 		return out
@@ -128,7 +150,14 @@ static func plugins_of(host: PluginHost) -> Array:
 	ids.sort()
 	for pid in ids:
 		var p: PluginHost.Plugin = host.plugins[pid]
-		out.append({"id": str(pid), "name": str(p.manifest.get("name", pid)), "manifest": p.manifest, "values": p.settings})
+		var values: Dictionary = p.settings
+		if c != null:
+			var dflt: Variant = p.manifest.get("settings", {}).get("defaults", {}) if p.manifest.get("settings") is Dictionary else {}
+			values = JsonDoc.deep(dflt) if dflt is Dictionary else {}
+			var own := c.plugin_settings(str(pid))
+			for k in own:
+				JsonDoc.set_at_path(values, str(k), own[k])
+		out.append({"id": str(pid), "name": str(p.manifest.get("name", pid)), "manifest": p.manifest, "values": values})
 	return out
 
 
@@ -213,6 +242,12 @@ static func item_of(pid: String, pname: String, key: String, d: Variant, default
 	var notice := str(d.get("x-notice", ""))
 	it.notice = notice if NOTICES.has(notice) else ""
 	it.next_fight = d.get("x-next-fight") == true
+	# the DM may set it for one fight alone; and what it is in the theatre of the mind
+	it.per_fight = d.get("x-per-fight") == true
+	if d.has("x-mind"):
+		var rm := check_value(it, d["x-mind"])
+		if str(rm[0]) == "":
+			it.mind = rm[1]
 	# each level's value, as the schema allows it (one it does not is left out)
 	var levels := {}
 	if d.get("x-levels") is Dictionary:
@@ -358,6 +393,17 @@ static func check_manifest(manifest: Dictionary) -> Array:
 			out.append("setting '%s': x-notice '%s' is not one of %s" % [key, str(d["x-notice"]), ", ".join(PackedStringArray(NOTICES))])
 		if d.has("x-next-fight") and not (d["x-next-fight"] is bool):
 			out.append("setting '%s': x-next-fight is true or false" % key)
+		if d.has("x-per-fight") and not (d["x-per-fight"] is bool):
+			out.append("setting '%s': x-per-fight is true or false" % key)
+		if d.has("x-per-fight") and d["x-per-fight"] == true and it.is_empty():
+			out.append("setting '%s': x-per-fight on a setting no screen shows (type '%s')" % [key, str(d.get("type", ""))])
+		if d.has("x-mind"):
+			if it.is_empty():
+				out.append("setting '%s': x-mind on a setting no screen shows (type '%s')" % [key, str(d.get("type", ""))])
+			else:
+				var rm := check_value(it, d["x-mind"])
+				if str(rm[0]) != "":
+					out.append("setting '%s': its x-mind value: %s" % [key, str(rm[0])])
 		if d.has("x-levels"):
 			if not (d["x-levels"] is Dictionary):
 				out.append("setting '%s': x-levels is an object of level → value" % key)
@@ -378,14 +424,145 @@ static func check_manifest(manifest: Dictionary) -> Array:
 
 ## The model over the open campaign and the rules loaded now, with whether
 ## a fight is running (a setting that waits for the next fight says so)
-## and the change the web screen's Undo would take back.
+## and the change the web screen's Undo would take back. Its values are the
+## table's; the fight in front of everybody, when one runs, is `this_fight`
+## — {id, name, space, space_title, settings (its own), differs} — and each
+## setting it makes otherwise says so (`fight_value`, `fight_words`,
+## `fight_why`: "fight", its own for this fight, or "mind", the theatre of
+## the mind's). An author's suggestion, for a campaign started from their
+## package, is `recommended` (recommended_of).
 func registry() -> Dictionary:
 	if ctx == null or ctx.campaign == null:
 		return {}
-	var reg := build(plugins_of(ctx.host), table_of(ctx.campaign))
+	var reg := build(plugins_of(ctx.host, ctx.campaign), table_of(ctx.campaign))
 	reg.fight = _fight_running()
 	reg.undo = str(_changes.back().label) if not _changes.is_empty() else ""
+	var fr := ctx.fight_rules()
+	if not fr.is_empty():
+		reg.this_fight = _this_fight(reg, fr)
+	var rec := recommended_of(ctx.campaign, reg)
+	if not rec.is_empty():
+		reg.recommended = rec
+	reg.fight_spaces = FIGHT_SPACES.map(func(s: String) -> Dictionary: return {"id": s, "title": str(FIGHT_SPACE_INFO[s].title), "words": str(FIGHT_SPACE_INFO[s].words)})
 	return reg
+
+
+## The fight running now, as Table settings says it: what it is, and each
+## setting it makes otherwise than the table, marked on the setting.
+func _this_fight(reg: Dictionary, fr: Dictionary) -> Dictionary:
+	var e := ctx.campaign.encounter_entry(str(fr.get("id", "")))
+	var own: Dictionary = fr.get("settings", {})
+	var mind := str(fr.get("space", "")) == Encounter.SPACE_MIND
+	var n := 0
+	for it in reg.get("settings", []):
+		var p: PluginHost.Plugin = ctx.host.plugins.get(str(it.plugin)) if ctx.host != null else null
+		if p == null:
+			continue
+		var now: Variant = JsonDoc.at_path(p.settings, str(it.key)) if str(it.key).contains("/") else p.settings.get(str(it.key), it.value)
+		if JsonDoc.same(now, it.value):
+			continue
+		it.fight_value = JsonDoc.deep(now)
+		it.fight_words = value_words(it, now)
+		it.fight_why = "mind" if mind and it.has("mind") and JsonDoc.same(it.mind, now) else "fight"
+		n += 1
+	var space := Encounter.SPACE_MIND if mind else "maps"
+	return {"id": str(fr.get("id", "")), "name": str(e.get("name", "")), "space": space, "space_title": str(FIGHT_SPACE_INFO[space].title),
+		"settings": JsonDoc.deep(own), "differs": n}
+
+
+# ---------------------------------------------------------------- a fight --
+
+## What Table settings says of the fight running now (`this_fight`): "This
+## fight (On the bridge, in the theatre of the mind) runs otherwise: 2
+## settings differ for it, and only while it runs." — or "" when none runs,
+## or it runs as the table does.
+static func this_fight_words(reg: Dictionary) -> String:
+	var f: Variant = reg.get("this_fight", {})
+	if not (f is Dictionary) or (f as Dictionary).is_empty():
+		return ""
+	var fname := str(f.get("name", "")) if str(f.get("name", "")) != "" else "the fight"
+	var mind := str(f.get("space", "")) == Encounter.SPACE_MIND
+	var n := int(f.get("differs", 0))
+	if n == 0:
+		return "This fight (%s) is in the theatre of the mind." % fname if mind else ""
+	return "This fight (%s%s) runs otherwise: %d setting%s for it, and only while it runs." % [fname, ", in the theatre of the mind" if mind else "", n, " differs" if n == 1 else "s differ"]
+
+
+## Why a setting is otherwise in this fight, in words ("" when it isn't).
+static func fight_why_words(it: Dictionary) -> String:
+	if not it.has("fight_value"):
+		return ""
+	return "this fight: %s (%s)" % [str(it.get("fight_words", "")), "the theatre of the mind: yours to judge" if str(it.get("fight_why", "")) == "mind" else "its own"]
+
+
+## Where a prepared fight is fought: the table's place (on maps, or in the
+## theatre of the mind), or — where the table leaves it to each fight —
+## `asked` (the DM's choice as it starts), else the fight's own (`space`),
+## else on its map when it has one.
+static func fight_space(c: Campaign, e: Dictionary, asked := "") -> String:
+	var table := str(table_of(c).get("space", "maps"))
+	if table == "mind":
+		return Encounter.SPACE_MIND
+	if table != "per_fight":
+		return "maps"
+	if FIGHT_SPACES.has(asked):
+		return asked
+	var own := str(e.get("space", ""))
+	if FIGHT_SPACES.has(own):
+		return own
+	return "maps" if str(e.get("map", "")) != "" else Encounter.SPACE_MIND
+
+
+## What an author suggests for a campaign started from their package (its
+## manifest's `recommended`, kept in the campaign's `package` block): {level,
+## space, answers ({"<plugin>/<key>": value}), note, by (the package), words
+## ("The author suggests Assisted, on maps.")} with only what this table
+## knows and each setting's schema allows; {} when it suggests nothing.
+static func recommended_of(c: Campaign, reg: Dictionary) -> Dictionary:
+	var pkg: Variant = c.doc.get("package", {}) if c != null else {}
+	if not (pkg is Dictionary):
+		return {}
+	var rec: Variant = pkg.get("recommended", {})
+	if not (rec is Dictionary) or (rec as Dictionary).is_empty():
+		return {}
+	var out := {}
+	if LEVELS.has(str(rec.get("level", ""))):
+		out.level = str(rec.level)
+	if SPACES.has(str(rec.get("space", ""))):
+		out.space = str(rec.space)
+	var answers := {}
+	if rec.get("answers") is Dictionary:
+		var items := {}
+		for it in reg.get("settings", []):
+			items[str(it.id)] = it
+		for id in rec.answers:
+			if items.has(str(id)):
+				var r := check_value(items[str(id)], rec.answers[id])
+				if str(r[0]) == "":
+					answers[str(id)] = r[1]
+	if not out.has("level") and not out.has("space") and answers.is_empty():
+		return {}
+	out.answers = answers
+	out.note = str(rec.get("note", "")).strip_edges().left(NOTE_MAX)
+	out.by = str(pkg.get("name", ""))
+	out.words = suggestion_words(out)
+	return out
+
+
+## An author's suggestion in a sentence: "The author suggests Assisted, on
+## maps." (with "and N settings of their own" when it answers some).
+static func suggestion_words(rec: Dictionary) -> String:
+	var bits := PackedStringArray()
+	if rec.has("level") and LEVEL_INFO.has(str(rec.level)):
+		bits.append(str(LEVEL_INFO[rec.level].title))
+	if rec.has("space") and SPACE_INFO.has(str(rec.space)):
+		var t := str(SPACE_INFO[rec.space].title)
+		bits.append(t.left(1).to_lower() + t.substr(1))
+	var n := (rec.get("answers", {}) as Dictionary).size() if rec.get("answers") is Dictionary else 0
+	var said := "The author suggests " + ", ".join(bits) if not bits.is_empty() else "The author suggests"
+	if n > 0:
+		said += ("," if not bits.is_empty() else "") + " %d setting%s of their own" % [n, "" if n == 1 else "s"]
+	return said + "."
 
 
 ## What the players are told, for the open campaign ({} with none), with
@@ -455,6 +632,95 @@ func set_table(changes: Dictionary) -> String:
 		return "nothing to change"
 	var label := "Where fights happen" if t.has("space") else "House rules"
 	return _write([], t, label)
+
+
+## A prepared fight's own, as one step of the Table's undo: where it is
+## fought (`space`: "maps", "mind", or "" for what the table says; it is
+## read as the fight starts) and its settings for that fight alone
+## (`settings`: {"<plugin>/<key>": value, or null to take one back} — only a
+## setting that says a fight may have its own: x-per-fight). The rules
+## follow at once when it is the fight running. "" or why not.
+func set_fight(enc_id: String, changes: Dictionary) -> String:
+	if ctx == null or ctx.campaign == null:
+		return "no campaign is open"
+	var e := ctx.campaign.encounter_entry(enc_id)
+	if e.is_empty():
+		return "no such fight"
+	var before := _fight_snapshot(e)
+	var after: Dictionary = JsonDoc.deep(before)
+	var label := ""
+	if changes.has("space"):
+		var sp: Variant = changes.space
+		if sp == null or str(sp) == "":
+			after.space = null
+		elif FIGHT_SPACES.has(str(sp)):
+			after.space = str(sp)
+		else:
+			return "on its map, or in the theatre of the mind"
+		label = "%s: %s" % [str(e.get("name", "The fight")), str(FIGHT_SPACE_INFO[str(sp)].title) if FIGHT_SPACES.has(str(sp)) else "as the table says"]
+	if changes.has("settings"):
+		if not (changes.settings is Dictionary):
+			return "which settings?"
+		var items := {}
+		for it in registry().get("settings", []):
+			items[str(it.id)] = it
+		var said := PackedStringArray()
+		for id in changes.settings:
+			var it: Dictionary = items.get(str(id), {})
+			if it.is_empty():
+				return "no setting '%s' here" % str(id)
+			if not bool(it.get("per_fight", false)):
+				return "%s is the table's, not one fight's" % str(it.title)
+			var v: Variant = changes.settings[id]
+			if v == null:
+				(after.settings as Dictionary).erase(str(id))
+				said.append("%s as the table has it" % str(it.title))
+				continue
+			var r := check_value(it, v)
+			if str(r[0]) != "":
+				return str(r[0])
+			after.settings[str(id)] = r[1]
+			said.append("%s: %s" % [str(it.title), value_words(it, r[1])])
+		label = "%s, this fight: %s" % [str(e.get("name", "The fight")), "; ".join(said)]
+	if label == "":
+		return "nothing to change"
+	if JsonDoc.same(before, after):
+		return ""
+	var me: WeakRef = weakref(self)
+	ctx.history.commit(label,
+		func() -> void:
+			var s: TableSettings = me.get_ref()
+			if s != null:
+				s._put_fight(enc_id, after),
+		func() -> void:
+			var s: TableSettings = me.get_ref()
+			if s != null:
+				s._put_fight(enc_id, before))
+	return ""
+
+
+func _fight_snapshot(e: Dictionary) -> Dictionary:
+	return {"space": str(e.space) if FIGHT_SPACES.has(str(e.get("space", ""))) else null,
+		"settings": JsonDoc.deep(e.settings) if e.get("settings") is Dictionary else {}}
+
+
+## Make a prepared fight hold `state` (a _fight_snapshot), and the rules
+## follow when it is the one running.
+func _put_fight(enc_id: String, state: Dictionary) -> void:
+	var e := ctx.campaign.encounter_entry(enc_id) if ctx.campaign != null else {}
+	if e.is_empty():
+		return
+	if state.space == null:
+		e.erase("space")
+	else:
+		e.space = str(state.space)
+	if (state.settings as Dictionary).is_empty():
+		e.erase("settings")
+	else:
+		e.settings = JsonDoc.deep(state.settings)
+	ctx.campaign.touch()
+	ctx.sync_fight_rules()
+	ctx.campaign_changed.emit()
 
 
 ## The walkthrough's answers, as one step: {space, level, settings

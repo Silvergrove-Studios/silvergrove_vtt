@@ -274,6 +274,11 @@ func load_source(manifest: Dictionary, sources: Array, dir := "") -> String:
 	# the campaign's settings for it, over the defaults
 	for k in settings_overrides.get(id, {}):
 		JsonDoc.set_at_path(p.settings, str(k), settings_overrides[id][k])
+	# a fight in the theatre of the mind: what a setting is there, over everything
+	if mind:
+		var there := mind_values(manifest)
+		for k in there:
+			p.settings[k] = JsonDoc.deep(there[k])
 	p.vm = LuaVm.new()
 	p.vm.instruction_budget = instruction_budget
 	p.vm.memory_budget = memory_budget
@@ -311,6 +316,36 @@ func load_source(manifest: Dictionary, sources: Array, dir := "") -> String:
 ## Settings a campaign gives plugins (id -> {path: value}), applied when
 ## each loads. Set before load_dir / load_all.
 var settings_overrides: Dictionary = {}
+## A fight in the theatre of the mind is running: each setting that says
+## what it is there (`x-mind` beside its schema: what a table can't check
+## without positions — range, sight, movement — off) has that value, over
+## the campaign's and the fight's own. Set before load_dir / load_all.
+var mind := false
+
+
+## What a manifest's settings are in the theatre of the mind: {key: the
+## `x-mind` value} for each that declares one.
+static func mind_values(manifest: Dictionary) -> Dictionary:
+	var out := {}
+	var settings: Variant = manifest.get("settings", {})
+	var schema: Variant = settings.get("schema", {}) if settings is Dictionary else {}
+	var props: Variant = schema.get("properties", {}) if schema is Dictionary else {}
+	if not (props is Dictionary):
+		return out
+	for k in props:
+		var d: Variant = props[k]
+		if not (d is Dictionary) or not (d as Dictionary).has("x-mind"):
+			continue
+		var v: Variant = d["x-mind"]
+		# (only a value of the setting's own type: a wrong one is plugintest's to report)
+		var fits := false
+		match str(d.get("type", "")):
+			"boolean": fits = v is bool
+			"string": fits = v is String
+			"integer", "number": fits = v is int or v is float
+		if fits:
+			out[str(k)] = JsonDoc.deep(v)
+	return out
 ## The campaign's plugin order: ids listed here get that order; the rest
 ## follow in load order.
 var load_order: Array = []
@@ -770,7 +805,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register",
 			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated",
 			"map_bands", "map_measure", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
-			"map_move", "map_cell", "map_cells", "map_token", "map_path", "map_space", "test_scene",
+			"map_move", "map_cell", "map_cells", "map_token", "map_path", "map_space", "map_mind", "map_mind_pos", "test_scene", "test_mind_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
 			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting",
 			"ui_health", "test_sent", "log_entry"]:
@@ -1317,6 +1352,20 @@ class Bridge:
 		var tk := _k().state.token(str(scene), str(id).trim_prefix("token:"))
 		return JsonDoc.deep(tk) if not tk.is_empty() else null
 
+	## Whether a scene ("" for the one the Table shows) is a fight in the
+	## theatre of the mind: no map, where its creatures stand meaning nothing.
+	func map_mind(scene: String) -> bool:
+		var sid := str(scene) if str(scene) != "" else scene_get()
+		return Encounter.is_mind(_k().state.encounter.scene(sid))
+
+	## Where a new creature on a scene in the theatre of the mind goes (far
+	## from the rest: Encounter.mind_pos), as [x, y]; the `n`th more of
+	## several put down at once counts past the others.
+	func map_mind_pos(scene: String, n: Variant = 0) -> Array:
+		var sid := str(scene) if str(scene) != "" else scene_get()
+		var p := Encounter.mind_pos(_k().state.encounter.scene(sid), int(n) if (n is int or n is float) else 0)
+		return [p.x, p.y]
+
 	# --- compendium
 	func comp_query(coll: String, opts: Variant) -> Dictionary:
 		return _k().comp.query(str(coll), PluginHost._as_dict(opts))
@@ -1372,6 +1421,26 @@ class Bridge:
 			a.packs = _k().comp.versions(plugin_id)
 		var why := _k().commit([{"t": "actor.add", "actor": a}], "Test actor")
 		return str(a.id) if why == "" else {"__error": why}
+
+	## A fight in the theatre of the mind for a plugin test: a scene with no
+	## map, shown (the active one), its tokens far apart as the Table puts
+	## them (Encounter.mind_pos): tokens = [{id, actor, name, owner, size, hidden}].
+	func test_mind_scene(tokens: Variant) -> Variant:
+		var k := _k()
+		var sc := Encounter.new_mind_scene("Test fight in the mind")
+		var events := [{"t": "scene.add", "scene": sc}]
+		var n := 0
+		for t in (tokens if tokens is Array else []):
+			if not (t is Dictionary):
+				continue
+			n += 1
+			var extra := {"id": str(t.get("id", JsonDoc.new_id("t"))), "actor": str(t.get("actor", "")), "size": int(t.get("size", 1)), "hidden": bool(t.get("hidden", false))}
+			if t.has("owner"):
+				extra.owner = str(t.owner)
+			events.append({"t": "token.add", "scene": sc.id, "token": Encounter.new_token(str(t.get("name", extra.id)), Vector2(Encounter.MIND_GAP * n, 0.0), extra)})
+		events.append({"t": "scene.activate", "id": sc.id})
+		var why := k.commit(events, "Test fight in the mind")
+		return str(sc.id) if why == "" else {"__error": why}
 
 	## A scene on a real map for a plugin test, with tokens placed by cell.
 	func test_scene(map_path: String, tokens: Variant) -> Variant:

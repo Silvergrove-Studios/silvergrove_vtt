@@ -84,8 +84,28 @@ func _ready() -> void:
 	draft.house_rules = str(table.get("house_rules", ""))
 	for it in reg.get("settings", []):
 		draft.values[str(it.id)] = JsonDoc.deep(it.value)
-	choose_level(TableSettings.NEW_LEVEL)
+	# an adventure's author may suggest how a table runs it: offered first, only a suggestion
+	var rec: Dictionary = reg.get("recommended", {})
+	if rec.has("space"):
+		draft.space = str(rec.space)
+	choose_level(str(rec.get("level", TableSettings.NEW_LEVEL)))
+	for id in rec.get("answers", {}):
+		draft.values[str(id)] = JsonDoc.deep(rec.answers[id])
 	_show()
+
+
+## What the author of the adventure suggests, in words ("" for none).
+func suggestion() -> String:
+	var rec: Dictionary = reg.get("recommended", {})
+	if rec.is_empty():
+		return ""
+	var by := str(rec.get("by", ""))
+	var said := str(rec.get("words", ""))
+	if by != "":
+		said = said.trim_suffix(".") + " for " + by + "."
+	if str(rec.get("note", "")) != "":
+		said += " " + str(rec.note)
+	return said + " It's only a suggestion: choose what suits your table."
 
 
 func _closed() -> void:
@@ -184,6 +204,14 @@ func _show() -> void:
 	for c in _body.get_children():
 		_body.remove_child(c)
 		c.queue_free()
+	# the adventure's author's suggestion, where it is chosen (the space and the level)
+	if step_name() in ["space", "level"] and suggestion() != "":
+		var sl := Label.new()
+		sl.name = "Suggestion"
+		sl.text = suggestion()
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl.custom_minimum_size.x = 600
+		_body.add_child(sl)
 	match step_name():
 		"space":
 			_say("Do your fights happen on maps with tokens, or in the theatre of the mind? (The rolls work either way.)")

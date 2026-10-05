@@ -722,6 +722,8 @@ it says. (Table tools, below.)
 | `hm.map.path(scene, a, b [, opts])` | the cheapest way from `a` to `b` cell by cell (six neighbours, or eight on squares), round the walls that stop movement (doors as they are; a diagonal never cuts a wall's corner): `{ok, cells, steps, cost, step_costs, step_lengths, length, diagonals, costly, space, why, through}`. Each cell entered costs 1, or what the ruleset says: `costs = {tag = n}` by the cell's tags — its regions' and its terrain's — the dearest that applies, and on top of it `extra = {tag = n}`, what each of its tags adds (swimming a cell more: `{water = 1}`, so difficult water is 2 + 1); `free = {tag, …}` ground of those kinds pays none of `costs` (boots that ignore ice: `{"ice"}`); these three read the cell's tags and its terrain's own name (the art's id without its pack: `"rubble"`); `cell_costs = {["q,r"] = n}`; `blocked = {"q,r", …}` can't be entered; `diagonals = "5-5-5" \| "5-10-5" \| "euclid"`; `size` the mover's space in cells across, as its token's `size` (a square of 2 by 2 for 2, three hexes on a hex grid; 3 by 3 or seven hexes for 3): the whole space goes the way — on the map, none of it blocked, no wall through it or crossed — its token on one of its cells: each step of the token takes the space along, or leaves it where it is and steps within it (a step into several cells at once costs the dearest of them; `space` is where it ends); `max` a cost to stop looking at. `length` is the same way at 1 a cell; `step_costs` what each step cost, `step_lengths` each at 1 a cell. Not `ok`: `why` is `"walls"`, `"narrow"` (a way only for something smaller), `"no room"` (the space can't be there), `"blocked"` (only through blocked cells: `through` lists those on the shortest), `"far"`, `"off the map"` or `"no map"`. A ruleset counting a creature's movement asks it in `token_moved` (from `p.from` to `p.to`) |
 | `hm.map.space(scene, at [, size, opts])` | `{cells, fits, why}` — the cells a creature `size` cells across (by default the token's own, when `at` is one) covers standing at `at`: its token's cell is one of them, the first way it fits (on the map, no wall through it, none of `opts.blocked`); `fits = false`, `why = "no room"` when none does |
 | `hm.map.token(scene, id)` / `hm.map.tokens(scene)` | a token (a bare id or `token:<id>`) / all of them |
+| `hm.map.mind([scene])` | whether a scene (nil: the one the Table shows) is a fight in the theatre of the mind: no map, where its creatures stand meaning nothing ([Fights in the theatre of the mind](#fights-in-the-theatre-of-the-mind)) |
+| `hm.map.mind_pos([scene, n])` | `{x, y}`: where a new creature on such a scene goes, far from the rest (the `n`th more of several put down at once) |
 | `hm.map.move(scene, token, to)` | `{events, entered, left, from, to, cells}` — nothing applied; the events move what is attached to the token too (tokens, and regions: below); the Table's own moves go through the kernel and the `token_moved` hooks |
 
 What a ruleset may put on the map, as events for `hm.commit`:
@@ -1087,7 +1089,9 @@ for this test; the defaults come back for the next), `t.dispatch(action, ctx, an
 are given to the action's prompts in order), `t.scene([map_path,
 tokens])` → a scene id over a real map (the examples' chapel by default)
 with `tokens = { { id=, actor=, x=, y= }, … }` placed by offset cell, for
-map tests, `t.improvise(benchmark, params, scene, "q,r")` → the actor id
+map tests, `t.mind_scene(tokens)` → a fight in the theatre of the mind,
+shown (no map; `tokens = { { id=, actor=, owner=, hidden= }, … }` put far
+apart as the Table puts them), `t.improvise(benchmark, params, scene, "q,r")` → the actor id
 of a creature from one of this plugin's benchmarks placed on the scene,
 and `t.manifest`, the plugin's manifest as data (for a test of its own
 settings' metadata).
@@ -1150,8 +1154,26 @@ where the setting fits:
   they notice (`players`, `everyone`) with their values.
 - **`x-next-fight`** — `true` when a change waits for the next fight
   (who rolls initiative): Table settings marks it.
+- **`x-per-fight`** — `true` when the DM may set it for one fight alone
+  (its own settings, kept on the prepared fight: what the fight checks,
+  whether the DM approves its outcomes, what the players see of its
+  creatures' health). Keep it to settings that are about how one fight
+  runs: a rules option, the sheets' shape or how characters are made would
+  change under the players between one fight and the next.
+- **`x-mind`** — what the setting is in a fight in the theatre of the
+  mind (a value that fits its schema), whatever the table and the fight
+  say: what can't be checked without positions — range, line of sight,
+  movement, an opportunity attack as a creature leaves reach — off.
 - The words are the schema's own: `title` and `description`, and an
   `enum`'s `enumNames`.
+
+A fight's own settings and the theatre of the mind's last only while that
+fight runs, and only while it is the one in front of everybody (its scene
+is the active one): the rules load again as it starts and ends, so
+`hm.settings.get` and the views built from settings follow, and Table
+settings says what differs for it ("this fight differs"). The order is:
+the manifest's defaults, the campaign's values, the fight's own, then (in
+the theatre of the mind) `x-mind`.
 
 The table's own answers live in the campaign's `table` block
 (docs/campaign-format.md): its `level`, where fights happen (`space`:
@@ -1163,9 +1185,45 @@ level (Assisted offered first), the questions, the rules options, a
 summary.
 
 `./run.sh plugintest` checks the metadata against the setting's schema
-(an unknown question, level or notice; a level value the schema refuses)
-and fails on what it finds. A test may read its plugin's manifest as data
+(an unknown question, level or notice; a level value or an `x-mind`
+value the schema refuses; `x-per-fight` that isn't true or false) and
+fails on what it finds. A test may read its plugin's manifest as data
 (`t.manifest`) to hold its own settings to a policy of its own.
+
+A campaign package may carry its author's suggestion of how a table runs
+it (`recommended` in package.json: a level, where fights happen, answers
+as `"<plugin>/<key>": value`, a note): the walkthrough on starting it says
+"The author suggests …" and offers it, the DM choosing otherwise if they
+like (docs/campaign-packages.md).
+
+### Fights in the theatre of the mind
+
+Where fights happen is the DM's (`table.space`: on maps, in the theatre
+of the mind, or each fight decides as it starts). A fight in the theatre
+of the mind is a scene with no map (`space: "mind"` on the scene): its
+tokens are only who is in the fight — the order, hidden or seen, their
+marks — each put far from the rest, so nothing the rules measure is near
+anything by itself. `hm.map.mind(scene)` says whether a scene is one
+(`scene` nil: the one the Table shows); `hm.map.mind_pos(scene, n)` is
+where a new creature on one goes, as `{x, y}` (the `n`th more of several
+put down at once). The screens show the creatures as a list ("Who's in
+the fight") where the map would be:
+
+- a creature pick (`pick = "token"`, several, darts) is made from the
+  list, as on a map; "No target: just roll" stays;
+- an area pick (`pick = "area"`) becomes a choice of creatures from the
+  list — "Who does your Fireball catch?" (the intent's `what` names it,
+  else its `label`) — and the intent goes with `ctx.target` the list of
+  tokens chosen and `ctx.caught = true`: the creatures the area catches,
+  as its caster says;
+- a place pick (`pick = "cell"`) has nowhere to be: it goes with no target.
+
+A ruleset reads range, sight, movement and reach there as the DM's to
+judge (declare `x-mind` for its checks), takes an area's creatures from
+`caught` (asking the caster, on a card, whom one around them catches when
+nothing named them), and keeps what that does from landing by itself:
+whom an area catches is the DM's to confirm where nothing has a place.
+A plugin test makes one with `t.mind_scene({ {id, actor, owner, hidden}, … })`.
 
 ## Conventions
 

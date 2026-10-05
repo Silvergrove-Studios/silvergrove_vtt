@@ -134,6 +134,20 @@ func _load_plugins() -> void:
 		order = campaign.plugin_order()
 		for pid in order:
 			host.settings_overrides[pid] = campaign.plugin_settings(pid)
+	# the fight in front of everybody: its own settings over the campaign's, and in the
+	# theatre of the mind what each setting is there (TableSettings: the DM's for a fight)
+	var fight := fight_rules()
+	_fight_key = JSON.stringify(fight)
+	host.mind = str(fight.get("space", "")) == Encounter.SPACE_MIND
+	var own: Dictionary = fight.get("settings", {})
+	for id in own:
+		var at := str(id).rfind("/")
+		if at <= 0:
+			continue
+		var pid := str(id).substr(0, at)
+		var over: Dictionary = (host.settings_overrides.get(pid, {}) as Dictionary).duplicate(true)
+		over[str(id).substr(at + 1)] = JsonDoc.deep(own[id])
+		host.settings_overrides[pid] = over
 	# a ruleset the campaign carries (a package's own copy) wins over an installed one
 	var dirs := plugin_dirs.duplicate()
 	if campaign != null and str(campaign.doc.get("rules_dir", "")) != "":
@@ -166,6 +180,47 @@ func load_campaign_packs() -> void:
 	kernel.comp.disabled = campaign.disabled_index()
 
 
+## The rules of the fight in front of everybody (the prepared fight whose
+## scene is the one the players see): {id, space ("maps" | "mind"),
+## settings ({"<plugin>/<key>": value}, its own for this fight)}; {} when no
+## fight is running there. The plugins load with them (_load_plugins).
+func fight_rules() -> Dictionary:
+	if campaign == null or state == null:
+		return {}
+	var shown := state.encounter.active_scene_id
+	if shown == "":
+		return {}
+	for e in campaign.encounters:
+		var live: Variant = e.get("live")
+		if not (live is Dictionary) or (live as Dictionary).is_empty() or str(live.get("scene", "")) != shown:
+			continue
+		var sc := state.encounter.scene(shown)
+		var own: Dictionary = e.get("settings", {}) if e.get("settings") is Dictionary else {}
+		return {"id": str(e.get("id", "")), "space": Encounter.SPACE_MIND if Encounter.is_mind(sc) else "maps", "settings": JsonDoc.deep(own)}
+	return {}
+
+
+## What the plugins were last loaded with of a fight's rules (fight_rules).
+var _fight_key := "{}"
+var _sync_asked := false
+
+
+func _sync_later() -> void:
+	_sync_asked = false
+	sync_fight_rules()
+
+
+## The rules loaded again when the fight in front of everybody has other
+## rules than they were loaded with (one started or ended, or brought into
+## view; the DM changed one of its own settings): a fight's own settings and
+## the theatre of the mind's last only while it runs. Whether they were.
+func sync_fight_rules() -> bool:
+	if host == null or JSON.stringify(fight_rules()) == _fight_key:
+		return false
+	reload_plugins()
+	return true
+
+
 ## Drop every loaded plugin and load what is under plugin_dirs now (a
 ## ruleset just installed); the sheets derive again.
 func reload_plugins() -> void:
@@ -180,6 +235,10 @@ func reload_plugins() -> void:
 
 
 func _on_changed(what: String, p_scene: String) -> void:
+	# another scene in front of everybody: its fight's rules (or none) once the change is done
+	if what == "active_scene" and not _sync_asked:
+		_sync_asked = true
+		_sync_later.call_deferred()
 	if what == "scenes" and state.encounter.scene(scene_id).is_empty():
 		scene_id = state.encounter.active_scene_id
 		if scene_id == "" and not state.encounter.scenes.is_empty():

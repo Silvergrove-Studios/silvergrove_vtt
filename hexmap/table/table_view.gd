@@ -68,9 +68,13 @@ func show_scene() -> void:
 		empty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_hint.theme_type_variation = "DimLabel"
 		empty_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		empty_hint.text = "No scene yet.\nShow a map from the Maps pane (or the Scene drop-down) —\nthe players see what you show."
 		add_child(empty_hint)
-	empty_hint.visible = ctx.scene_id == "" or ctx.state == null or ctx.encounter().scene(ctx.scene_id).is_empty()
+	var sc := ctx.encounter().scene(ctx.scene_id) if ctx.state != null and ctx.scene_id != "" else {}
+	# a fight in the theatre of the mind has no map to draw: who's in it is in Turns
+	var mind := Encounter.is_mind(sc)
+	empty_hint.text = ("A fight in the theatre of the mind: no map.\nWho's in it, and the order, are in Turns; the players' screens list them.\nRange, sight and movement are yours to judge."
+		if mind else "No scene yet.\nShow a map from the Maps pane (or the Scene drop-down) —\nthe players see what you show.")
+	empty_hint.visible = sc.is_empty() or mind
 
 
 func _on_zoom(z: float) -> void:

@@ -69,7 +69,8 @@ func resolve_maps(base_dir := "") -> PackedStringArray:
 		base_dir = encounter.base_dir()
 	for s in encounter.scenes:
 		var id := str(s.get("map", ""))
-		if maps.has(id):
+		# (a fight in the theatre of the mind has no map, and wants none)
+		if maps.has(id) or Encounter.is_mind(s):
 			continue
 		var p := str(s.get("map_path", ""))
 		if p == "":

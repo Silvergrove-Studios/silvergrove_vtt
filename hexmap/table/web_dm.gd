@@ -49,8 +49,11 @@ func state() -> Dictionary:
 		out.maps.append({"id": str(m.id), "name": str(m.get("name", "")), "role": str(m.get("role", "battle")), "scene": str(shown_maps.get(str(m.id), ""))})
 	for enc in c.encounters:
 		var live: Dictionary = enc.get("live", {}) if enc.get("live") is Dictionary else {}
+		# (where it's fought, when the table leaves it to each fight, and its own settings: TableSettings.set_fight)
 		out.encounters.append({"id": str(enc.id), "name": str(enc.get("name", "")), "map": str(enc.get("map", "")), "notes": str(enc.get("notes", "")),
-			"live": live.duplicate(true), "creatures": JsonDoc.deep(enc.get("creatures", [])), "light": str(enc.get("light", ""))})
+			"live": live.duplicate(true), "creatures": JsonDoc.deep(enc.get("creatures", [])), "light": str(enc.get("light", "")),
+			"space": str(enc.get("space", "")), "settings": JsonDoc.deep(enc.get("settings", {})) if enc.get("settings") is Dictionary else {},
+			"plays_in": TableSettings.fight_space(c, enc)})
 	for aid in e.actors:
 		var a: Dictionary = e.actors[aid]
 		var kind := str(a.get("kind", ""))
@@ -141,8 +144,13 @@ func op(intent: Dictionary) -> String:
 			return ctx.commands.activate_scene(str(intent.get("scene", "")))
 		"go_place":
 			return maps.go_to_place(str(intent.get("place", "")))
+		# (`space`: on its map or in the theatre of the mind, where the table leaves it to each fight)
 		"launch":
-			return maps.launch(str(intent.get("encounter", "")))
+			return maps.launch(str(intent.get("encounter", "")), true, str(intent.get("space", "")))
+		# a creature into the fight in the theatre of the mind: no token to put down
+		"fight_join":
+			return maps.join_fight({"collection": str(intent.get("collection", "creatures")), "id": str(intent.get("entry", "")),
+				"name": str(intent.get("name", intent.get("entry", "")))}, clampi(int(intent.get("count", 1)), 1, 20), bool(intent.get("hidden", false)))
 		"end_fight":
 			var fight := maps.live_fight()
 			return maps.return_from(fight) if fight != "" else "no fight is running"
@@ -225,11 +233,14 @@ func op(intent: Dictionary) -> String:
 		# fights the DM makes at the table (a playtest's DM could start only the
 		# adventure's own): a name and a battle map, creatures from the rules, then
 		# Start; its card on the screen is fight:<id>
+		# (one in the theatre of the mind needs no map: `map` "")
 		"new_fight":
 			var map_id := str(intent.get("map", ""))
-			if ctx.campaign.map_entry(map_id).is_empty():
+			if map_id != "" and ctx.campaign.map_entry(map_id).is_empty():
 				return "choose a map for the fight"
-			maps.new_encounter(str(intent.get("name", "")), map_id, _first_level(map_id), str(intent.get("id", "")))
+			if map_id == "" and str(TableSettings.table_of(ctx.campaign).get("space", "maps")) == "maps":
+				return "choose a map for the fight: this table's fights are on maps"
+			maps.new_encounter(str(intent.get("name", "")), map_id, _first_level(map_id) if map_id != "" else "", str(intent.get("id", "")))
 			return ""
 		"fight_set":
 			var fe := ctx.campaign.encounter_entry(str(intent.get("encounter", "")))
@@ -238,14 +249,28 @@ func op(intent: Dictionary) -> String:
 			# (checked before anything changes)
 			if intent.has("light") and str(intent.light) != "" and not Vision.LIGHT_LEVELS.has(str(intent.light)):
 				return "daylight, dim or dark"
+			# where it's fought and its own settings: one step of the Table's undo each
+			if intent.has("space") or intent.has("settings"):
+				var own := {}
+				for k in ["space", "settings"]:
+					if intent.has(k):
+						own[k] = intent[k]
+				var why_own := win.table_settings.set_fight(str(fe.id), own)
+				if why_own != "":
+					return why_own
 			for k in ["name", "notes"]:
 				if intent.has(k):
 					fe[k] = str(intent[k])
 			if intent.has("map"):
-				if ctx.campaign.map_entry(str(intent.map)).is_empty():
+				# (none: a fight in the theatre of the mind, where the table's fights may be)
+				if str(intent.map) == "" and str(TableSettings.table_of(ctx.campaign).get("space", "maps")) != "maps":
+					fe.map = ""
+					fe.level = ""
+				elif ctx.campaign.map_entry(str(intent.map)).is_empty():
 					return "no such map"
-				fe.map = str(intent.map)
-				fe.level = _first_level(str(intent.map))
+				else:
+					fe.map = str(intent.map)
+					fe.level = _first_level(str(intent.map))
 			# its light, given to the scene when it starts ("" for the map's own)
 			if intent.has("light"):
 				if str(intent.light) == "":

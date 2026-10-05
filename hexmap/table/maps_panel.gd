@@ -43,8 +43,16 @@ var _place_name: LineEdit
 var _place_kind: OptionButton
 var _place_target: OptionButton
 var _bound_encounter: Encounter
+## Where the selected fight is fought, where the table leaves it to each
+## fight (on its map, or in the theatre of the mind); its own settings.
+var _space_row: HBoxContainer
+var _space: OptionButton
+var _fight_settings: Button
 ## Set by the window: opens a file dialog and calls back with a map path.
 var pick_map_file: Callable
+## Set by the window: how the table runs (a fight's own place and settings
+## are changed through it, as steps of the Table's undo).
+var table_settings: TableSettings
 
 
 func _init(p_ctx: TableContext) -> void:
@@ -109,6 +117,25 @@ func _init(p_ctx: TableContext) -> void:
 			ctx.campaign.touch()
 			ctx.campaign_changed.emit())
 	box.add_child(erow)
+	# where the selected fight is fought (where the table leaves it to each fight), and its own settings
+	_space_row = HBoxContainer.new()
+	_space_row.name = "FightSpace"
+	var sl := Label.new()
+	sl.text = "Fought"
+	sl.theme_type_variation = "DimLabel"
+	_space_row.add_child(sl)
+	_space = OptionButton.new()
+	_space.name = "Space"
+	for s in TableSettings.FIGHT_SPACES:
+		_space.add_item(str(TableSettings.FIGHT_SPACE_INFO[s].title))
+		_space.set_item_metadata(_space.item_count - 1, str(s))
+	_space.tooltip_text = "This table leaves it to each fight: on its battle map, or in the theatre of the mind (no map)"
+	_space.item_selected.connect(func(i: int) -> void:
+		if table_settings != null and selected_enc != "":
+			ctx.say(table_settings.set_fight(selected_enc, {"space": str(_space.get_item_metadata(i))})))
+	_space_row.add_child(_space)
+	_fight_settings = _button(_space_row, "This fight's settings…", "What this fight checks, what you approve, what the players see of its creatures' health: for this fight alone", _fight_settings_dialog)
+	box.add_child(_space_row)
 	_creatures = VBoxContainer.new()
 	box.add_child(_creatures)
 	_search = LineEdit.new()
@@ -207,7 +234,8 @@ func refresh() -> void:
 	for e in ctx.campaign.encounters:
 		var mp := ctx.campaign.map_entry(str(e.get("map", "")))
 		var live: bool = e.has("live") and not (e.live as Dictionary).is_empty()
-		var i := _encs.add_item("%s  —  %s%s%s" % [str(e.get("name", "")), str(mp.get("name", "?")), ("  ● running" if live else ""),
+		var where := "in the theatre of the mind" if TableSettings.fight_space(ctx.campaign, e) == Encounter.SPACE_MIND else str(mp.get("name", "?"))
+		var i := _encs.add_item("%s  —  %s%s%s" % [str(e.get("name", "")), where, ("  ● running" if live else ""),
 			("  (played %d×)" % (e.played as Array).size()) if e.has("played") and not (e.played as Array).is_empty() else ""])
 		_encs.set_item_metadata(i, str(e.get("id", "")))
 		if str(e.get("id", "")) == selected_enc:
@@ -230,6 +258,19 @@ func _show_encounter() -> void:
 	if not e.is_empty() and _filter_widgets.is_empty():
 		_build_filters()
 	_enc_notes.editable = not e.is_empty()
+	# where it's fought: the DM's choice only where the table leaves it to each fight
+	_space_row.visible = not e.is_empty()
+	var per_fight := ctx.campaign != null and str(TableSettings.table_of(ctx.campaign).get("space", "maps")) == "per_fight"
+	_space.visible = per_fight
+	_space.get_parent().get_child(0).visible = per_fight
+	if not e.is_empty():
+		var where := TableSettings.fight_space(ctx.campaign, e)
+		for i in _space.item_count:
+			if str(_space.get_item_metadata(i)) == where:
+				_space.select(i)
+		_space.disabled = live
+		var own: Dictionary = e.get("settings", {}) if e.get("settings") is Dictionary else {}
+		_fight_settings.text = "This fight's settings…" if own.is_empty() else "This fight's settings (%d of its own)…" % own.size()
 	if e.is_empty():
 		_enc_notes.text = ""
 		return
@@ -642,6 +683,56 @@ func _new_encounter_dialog() -> void:
 	d.popup_centered()
 
 
+## The selected fight's own settings: each a ruleset lets a fight have
+## (x-per-fight) as the table has it, or its own for this fight alone — a
+## change a step of the Table's undo, the rules following at once while it
+## runs.
+func _fight_settings_dialog() -> void:
+	if table_settings == null or selected_enc == "":
+		return
+	var e := ctx.campaign.encounter_entry(selected_enc)
+	if e.is_empty():
+		return
+	var d := AcceptDialog.new()
+	d.name = "FightSettings"
+	d.title = "%s: this fight's settings" % str(e.get("name", "The fight"))
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	var lead := Label.new()
+	lead.text = "For this fight alone; the rest of the table runs as Table settings say."
+	lead.theme_type_variation = "DimLabel"
+	box.add_child(lead)
+	var eid := selected_enc
+	for it in table_settings.registry().get("settings", []):
+		if not bool(it.get("per_fight", false)):
+			continue
+		var own: Dictionary = e.get("settings", {}) if e.get("settings") is Dictionary else {}
+		var id := str(it.id)
+		var row := HBoxContainer.new()
+		row.name = "Fight_" + str(it.key)
+		var cb := CheckBox.new()
+		cb.text = str(it.title)
+		cb.button_pressed = own.has(id)
+		cb.tooltip_text = "Its own for this fight (the table's: %s)" % TableSettings.value_words(it, it.value)
+		cb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(cb)
+		var ctl := TableSettingsDialog.control_for(it, own.get(id, it.value), func(v: Variant) -> void:
+			if cb.button_pressed:
+				ctx.say(table_settings.set_fight(eid, {"settings": {id: v}})))
+		ctl.set("disabled", not own.has(id))
+		row.add_child(ctl)
+		cb.toggled.connect(func(on: bool) -> void:
+			ctl.set("disabled", not on)
+			ctx.say(table_settings.set_fight(eid, {"settings": {id: (it.value if not own.has(id) else own[id]) if on else null}})))
+		box.add_child(row)
+	d.add_child(box)
+	d.confirmed.connect(d.queue_free)
+	d.canceled.connect(d.queue_free)
+	d.close_requested.connect(d.queue_free)
+	add_child(d)
+	d.popup_centered()
+
+
 ## A prepared encounter record. Its id.
 func new_encounter(p_name: String, map_id: String, level_id: String, p_id := "") -> String:
 	# (the web DM screen names its new fight's id, to open its card at once)
@@ -811,13 +902,20 @@ func add_creature(enc_id: String, pick: Variant, count := 1, cell := "", hidden 
 ## the ruleset's entry action (hidden as the recipe says), the scene
 ## shown — or, not `show`n, staged: the Table looks at it while the
 ## players stay on the scene they had, until `go`. Remembers what it
-## made, for Return. "" or why.
-func launch(enc_id: String, show := true) -> String:
+## made, for Return. `space`: "maps" or "mind" (in the theatre of the
+## mind: no map), where the table leaves it to each fight; "" for what the
+## table and the fight say (TableSettings.fight_space). "" or why.
+func launch(enc_id: String, show := true, space := "") -> String:
 	var e := ctx.campaign.encounter_entry(enc_id) if ctx.campaign != null else {}
 	if e.is_empty():
 		return "pick a prepared encounter"
 	if e.has("live") and not (e.live as Dictionary).is_empty():
 		return "'%s' is already running" % str(e.name)
+	var where := TableSettings.fight_space(ctx.campaign, e, space)
+	if where == Encounter.SPACE_MIND:
+		return _launch_mind(enc_id, e, show)
+	if str(e.get("map", "")) == "":
+		return "'%s' has no map: choose the map it's on, or run it in the theatre of the mind (Table settings: where fights happen)" % str(e.get("name", "The fight"))
 	var m := load_map(str(e.get("map", "")))
 	if m == null:
 		return "the encounter's map could not be loaded"
@@ -889,16 +987,130 @@ func launch(enc_id: String, show := true) -> String:
 	if why_party != "":
 		problems.append(why_party)
 	# (with no scene active before, the kernel shows the first one: nothing to stage behind)
-	e.live = {"scene": str(scene.id), "actors": made, "previous": previous, "staged": ctx.encounter().active_scene_id != str(scene.id)}
+	e.live = {"scene": str(scene.id), "actors": made, "previous": previous, "staged": ctx.encounter().active_scene_id != str(scene.id), "space": "maps"}
+	return _started(enc_id, e, problems)
+
+
+## A fight begun (on a map or in the mind): played this session, the
+## window told, the rules loaded with the fight's own (TableContext). "" or
+## what went wrong placing its creatures.
+func _started(enc_id: String, e: Dictionary, problems: PackedStringArray) -> String:
 	if not e.has("played") or not (e.played is Array):
 		e.played = []
 	(e.played as Array).append(int(ctx.encounter().clock.get("session", 0)))
 	ctx.campaign.touch()
 	ctx.campaign_changed.emit()
+	ctx.sync_fight_rules()
 	fight_started.emit(enc_id)
 	if not problems.is_empty():
 		return "Launched with problems: " + "; ".join(problems)
 	return ""
+
+
+## A fight in the theatre of the mind: a scene with no map (no map is
+## needed), its creatures placed through the ruleset's entry action as on
+## a map but far apart (where they stand means nothing: Encounter.mind_pos),
+## the party with them; shown, or staged. Remembers what it made, for Return.
+func _launch_mind(enc_id: String, e: Dictionary, show: bool) -> String:
+	if show and bool(ctx.encounter().turns.get("running", false)):
+		ctx.commands.stop_turns()
+	if not bool(ctx.encounter().turns.get("running", false)):
+		ctx.commands.clear_turns()
+	var previous := ctx.encounter().active_scene_id
+	var scene := Encounter.new_mind_scene(str(e.get("name", "")))
+	var why := ctx.commands.add_scene(scene, show)
+	if why != "":
+		return why
+	ctx.set_scene(str(scene.id))
+	var problems := PackedStringArray()
+	var made := []
+	for c in e.get("creatures", []):
+		var r := _join(str(scene.id), {"collection": str(c.get("collection", "")), "id": str(c.get("entry", "")), "name": str(c.get("name", ""))}, int(c.get("count", 1)), bool(c.get("hidden", true)))
+		made.append_array(r.made)
+		if str(r.why) != "":
+			problems.append(str(r.why))
+	var why_party := mind_party(str(scene.id))
+	if why_party != "":
+		problems.append(why_party)
+	e.live = {"scene": str(scene.id), "actors": made, "previous": previous, "staged": ctx.encounter().active_scene_id != str(scene.id), "space": Encounter.SPACE_MIND}
+	return _started(enc_id, e, problems)
+
+
+## Creatures from the compendium into a scene in the theatre of the mind
+## (`pick`: {collection, id, name}), `count` of them, each far from the rest
+## (no token to put down: the fight's list has them): {made: [actor ids], why}.
+func _join(scene_id: String, pick: Dictionary, count: int, hidden: bool) -> Dictionary:
+	var out := {"made": [], "why": ""}
+	var acts := _entry_actions()
+	var coll := str(pick.get("collection", ""))
+	if not acts.has(coll):
+		out.why = "no ruleset places %s" % coll
+		return out
+	var record := ctx.kernel.comp.entry_for(coll, str(pick.get("id", "")), true)
+	if record.is_empty():
+		out.why = "no entry %s" % str(pick.get("id", ""))
+		return out
+	var act: Dictionary = acts[coll]
+	for n in clampi(count, 1, 20):
+		var before := ctx.encounter().actors.keys()
+		var at := Encounter.mind_pos(ctx.encounter().scene(scene_id))
+		var args := {"entry": record, "collection": coll, "scene": scene_id, "x": at.x, "y": at.y, "count": 1, "hidden": hidden}
+		if str(pick.get("name", "")) != "" and str(pick.get("name", "")) != str(record.get("name", "")):
+			args.name = str(pick.name)
+		var pc := ctx.host.dispatch(act.plugin, act.action, args)
+		if pc.status == PluginHost.PluginCall.ERROR:
+			out.why = "%s: %s" % [str(pick.get("name", "")), pc.error]
+			break
+		ctx.kernel.pending.drive(pc, act.plugin)
+		for aid in ctx.encounter().actors.keys():
+			if not before.has(aid):
+				(out.made as Array).append(str(aid))
+	return out
+
+
+## The party in a fight in the theatre of the mind: a token for every
+## player character and companion not already in it, owned by its player,
+## each far from the rest. "" or why.
+func mind_party(scene_id: String) -> String:
+	var enc := ctx.encounter()
+	var here := {}
+	for tk in ctx.state.tokens(scene_id):
+		if str(tk.get("actor", "")) != "":
+			here[str(tk.actor)] = true
+	var ids := enc.actors.keys()
+	ids.sort_custom(func(a: String, b: String) -> bool: return str(enc.actors[a].get("name", a)).naturalnocasecmp_to(str(enc.actors[b].get("name", b))) < 0)
+	var events := []
+	var n := 0
+	for aid in ids:
+		var a: Dictionary = enc.actors[aid]
+		if not (str(a.get("kind", "")) in ["pc", "companion"]) or here.has(str(aid)):
+			continue
+		events.append({"t": "token.add", "scene": scene_id, "token": party_token(str(aid), a, Encounter.mind_pos(enc.scene(scene_id), n))})
+		n += 1
+	if events.is_empty():
+		return ""
+	return ctx.commands.run_all(events, "The party")
+
+
+## A creature brought into the fight in the theatre of the mind that is
+## running (the DM's Add to the fight: no token to put down), `count` of
+## them; they go with the fight's own when it ends. "" or why.
+func join_fight(pick: Dictionary, count := 1, hidden := true) -> String:
+	var eid := live_fight()
+	var e := ctx.campaign.encounter_entry(eid) if eid != "" else {}
+	if e.is_empty():
+		return "no fight is running"
+	var sid := str((e.live as Dictionary).get("scene", ""))
+	if not Encounter.is_mind(ctx.encounter().scene(sid)):
+		return "the fight is on a map: put the creature on it from its card"
+	var r := _join(sid, pick, count, hidden)
+	if not (r.made as Array).is_empty():
+		var made: Array = (e.live as Dictionary).get("actors", []) if (e.live as Dictionary).get("actors") is Array else []
+		made.append_array(r.made)
+		e.live.actors = made
+		ctx.campaign.touch()
+		ctx.campaign_changed.emit()
+	return str(r.why)
 
 
 ## The party on a fight's map: a token for every player character and
@@ -927,25 +1139,7 @@ func place_party(scene_id: String, m: HexMap, e: Dictionary) -> String:
 			continue
 		var cell := _free_cell(grid, start, taken)
 		taken[cell] = true
-		var owner := str(a.get("owner", ""))
-		var color := str(enc.player(owner).get("color", "#4f9cf6")) if owner != "" else "#4f9cf6"
-		var words := str(a.get("name", "?")).split(" ", false)
-		var label := (words[0].left(1) + (words[1].left(1) if words.size() > 1 else words[0].substr(1, 1))).to_upper() if not words.is_empty() else "?"
-		var extra := {"actor": str(aid), "label": label, "color": color, "hidden": false, "vision": {"radius": 6}}
-		if owner != "":
-			extra.owner = owner
-		# what the character's own token says (art, size, sight) wins; its sight
-		# over the default, not instead of it (a ruleset's darkvision alone,
-		# {dark_radius, units}, left the token with no radius: blind)
-		var own: Variant = a.get("token", {})
-		if own is Dictionary:
-			for k in ["art", "size", "color", "label", "vision"]:
-				if (own as Dictionary).has(k) and own[k] != null and str(own[k]) != "":
-					if k == "vision" and own[k] is Dictionary:
-						(extra.vision as Dictionary).merge(JsonDoc.deep(own[k]), true)
-					else:
-						extra[k] = JsonDoc.deep(own[k])
-		events.append({"t": "token.add", "scene": scene_id, "token": Encounter.new_token(str(a.get("name", "")), grid.cell_center(cell), extra)})
+		events.append({"t": "token.add", "scene": scene_id, "token": party_token(str(aid), a, grid.cell_center(cell))})
 	if events.is_empty():
 		return ""
 	var why := ctx.commands.run_all(events, "The party arrives")
@@ -953,6 +1147,31 @@ func place_party(scene_id: String, m: HexMap, e: Dictionary) -> String:
 	if why == "":
 		ctx.commands.explore_from(scene_id, events.map(func(ev: Dictionary) -> Dictionary: return ctx.state.token(scene_id, str(ev.token.id))))
 	return why
+
+
+## A party member's token for a fight: owned by its player, in their colour,
+## labelled by its initials; what the character's own token says (art,
+## size, sight) wins — its sight over the default, not instead of it (a
+## ruleset's darkvision alone, {dark_radius, units}, left a token with no
+## radius: blind).
+func party_token(aid: String, a: Dictionary, pos: Vector2) -> Dictionary:
+	var enc := ctx.encounter()
+	var owner := str(a.get("owner", ""))
+	var color := str(enc.player(owner).get("color", "#4f9cf6")) if owner != "" else "#4f9cf6"
+	var words := str(a.get("name", "?")).split(" ", false)
+	var label := (words[0].left(1) + (words[1].left(1) if words.size() > 1 else words[0].substr(1, 1))).to_upper() if not words.is_empty() else "?"
+	var extra := {"actor": aid, "label": label, "color": color, "hidden": false, "vision": {"radius": 6}}
+	if owner != "":
+		extra.owner = owner
+	var own: Variant = a.get("token", {})
+	if own is Dictionary:
+		for k in ["art", "size", "color", "label", "vision"]:
+			if (own as Dictionary).has(k) and own[k] != null and str(own[k]) != "":
+				if k == "vision" and own[k] is Dictionary:
+					(extra.vision as Dictionary).merge(JsonDoc.deep(own[k]), true)
+				else:
+					extra[k] = JsonDoc.deep(own[k])
+	return Encounter.new_token(str(a.get("name", "")), pos, extra)
 
 
 ## The cells no creature is put on, {axial cell: true}: under a prop that
@@ -1020,6 +1239,7 @@ func go(enc_id: String) -> String:
 	ctx.set_scene(sid)
 	ctx.campaign.touch()
 	ctx.campaign_changed.emit()
+	ctx.sync_fight_rules()
 	return ""
 
 
@@ -1071,6 +1291,8 @@ func return_from(enc_id: String) -> String:
 	e.erase("live")
 	ctx.campaign.touch()
 	ctx.campaign_changed.emit()
+	# (the fight's own settings, and the theatre of the mind's, end with it)
+	ctx.sync_fight_rules()
 	fight_ended.emit(enc_id)
 	return ""
 

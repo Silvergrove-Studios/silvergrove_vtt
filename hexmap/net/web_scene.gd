@@ -65,6 +65,9 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	if gm:
 		out.light_set = str(sc.get("light", "")) if Vision.LIGHT_LEVELS.has(str(sc.get("light", ""))) else ""
 		out.map_light = str(state.level_for(scene_id).get("light", ""))
+	# a fight in the theatre of the mind: no map to draw; the screens list who's in it
+	if Encounter.is_mind(sc):
+		out.space = Encounter.SPACE_MIND
 	return out
 
 

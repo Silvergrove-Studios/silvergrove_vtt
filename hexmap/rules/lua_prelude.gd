@@ -194,6 +194,10 @@ function hm.map.highlight(scene, cells, color, label)
 end
 function hm.map.token(scene, id) return call(host.map_token, scene, id) end
 function hm.map.tokens(scene) return call(host.map_token, scene, "") end
+-- a fight in the theatre of the mind (scene nil: the one the Table shows): no map, and
+-- where its creatures stand means nothing; where a new creature on one goes, as {x, y}
+function hm.map.mind(scene) return call(host.map_mind, scene or "") end
+function hm.map.mind_pos(scene, n) return call(host.map_mind_pos, scene or "", n or 0) end
 
 -- ----------------------------------------------------------- compendium --
 -- Content packs, indexed on the Table: query a page at a time, never the
@@ -528,6 +532,8 @@ function __run_test(index, helpers)
 	function h.setting(key, value) return call(host.test_setting, key, value) end
 	-- a scene over a map file (the examples' chapel by default), with tokens = { {id, actor, x, y}, … }
 	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end
+	-- a fight in the theatre of the mind, shown: no map, tokens = { {id, actor, name, owner, hidden}, … } far apart
+	function h.mind_scene(tokens) return call(host.test_mind_scene, tokens or {}) end
 	-- a creature from one of this plugin's benchmarks, placed on a scene at a "q,r" cell: its actor id
 	function h.improvise(benchmark, params, scene, at) return call(host.test_improvise, benchmark, params or {}, scene, at or "") end
 	-- what a screen is sent: { scene (a web screen's snapshot), document (a Godot client's),
