@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **A ruler's walk priced as a move.** A ruleset says what ground of a
+  kind costs to walk (`hm.map.measure`'s `costs`: difficult ground at
+  double, by a region's tags or the art's), and a ruler's walk pays it on
+  any map with dear ground on the way — rubble on an open field, no walls
+  at all: "20 ft straight, 25 ft to walk round". A player's walk is priced
+  only by the ground they are shown: a region kept to the DM prices nothing
+  of theirs, and the DM's own ruler reaches them as the distance alone
+  where such ground priced or turned its walk. A ruler is measured again
+  when a region changes.
 - **A creature's initiative kept with its rolls.** A ruleset that keeps its
   creatures' rolls from the players says so (`hm.ui.knowledge`'s `rolls`),
   and the turn order a player is sent leaves out their labels there (their

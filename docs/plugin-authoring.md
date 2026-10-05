@@ -779,15 +779,19 @@ last band is what lies beyond the rest. Bands are pure data: nothing
 in Hexmap knows what "close" means.
 
 ```lua
-hm.map.measure({ diagonals = hm.settings.get("diagonals", "5-5-5") })
+hm.map.measure({ diagonals = hm.settings.get("diagonals", "5-5-5"), costs = { difficult = 2 } })
 ```
 Says how the table's rulers count diagonals on a square grid —
 `"5-5-5"` (every square one cell), `"5-10-5"` (every second diagonal two)
 or `"euclid"` (as the crow flies) — as this game's moves do (pass the same
-to `hm.map.path`). Read at load time: a setting changed reloads the
-plugins, so the rulers follow it. With several rulesets the first by id
-rules; with none, every square is one cell. Hexes are hex steps whatever
-it says. (Table tools, below.)
+to `hm.map.path`), and what ground of a kind costs to walk: `costs`, by a
+cell's tags as `hm.map.path` takes them (difficult ground at double), so
+a ruler's walk is priced as a move over it is — "30 ft straight, 45 ft
+to walk round" across rubble on a map with no walls at all. Read at load
+time: a setting changed reloads the plugins, so the rulers follow it.
+With several rulesets the first by id rules; with none, every square is
+one cell and no ground is dearer. Hexes are hex steps whatever it says.
+(Table tools, below.)
 
 | call | returns |
 |---|---|
@@ -901,9 +905,13 @@ counted cell to cell by the map's scale (`grid.distance` of
 `grid.units`) and the diagonal rule above, point to point on a map that
 draws no grid; its `walk`, when it is longer than the ground alone would
 make it ("30 ft straight, 45 ft to walk round"), is `hm.map.path` round
-the walls and doors as they are — a player's only over the ground their
-party has explored (measuring into the dark says nothing of what is
-there), and the DM's to a player only where they know all of its way.
+the walls and doors as they are and over ground priced by the rulers'
+`costs` (above) — worked out on any map with walls or dear ground; a
+player's only over the ground their party has explored (measuring into
+the dark says nothing of what is there) and priced only by what they are
+shown of it (a region kept to the DM prices nothing for them), and the
+DM's to a player only where they know all of its way and nothing kept
+from them priced or turned it.
 
 Limits: a screen sends a held mark at most ten times a second; the Table
 takes one screen's marks at most every 40 ms (the newest of each waits

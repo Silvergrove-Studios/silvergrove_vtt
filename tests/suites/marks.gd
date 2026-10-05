@@ -108,6 +108,76 @@ func test_walk_round_a_wall() -> void:
 	check(not Measure.ruler(k.map, st, sid, across, "pl_1").has("no_way"), "but never to a player: the walls they haven't seen are the DM's")
 
 
+## The walk priced as the rules price a move (hm.map.measure's `costs`):
+## difficult ground at double — a region's, or the art's rubble — on a map
+## with no walls at all; a player's priced only by the ground they are
+## shown, and the DM's walk theirs only where nothing kept from them priced
+## it; a ruler measured again when the ground changes.
+func test_walk_over_rough_ground() -> void:
+	var parts := _walled_kernel()
+	var k: RulesKernel = parts[0]
+	var sid: String = parts[1]
+	var st := k.state
+	var g := st.map_for(sid).grid
+	st.map_for(sid).level(0).walls.clear()
+	var across := [g.cell_center(Vector2i(3, 2)), g.cell_center(Vector2i(7, 2))]
+	# a band of rubble down x = 5, the map's whole height: no way round it
+	var band := []
+	for y in 10:
+		band.append(Vector2i(5, y))
+	k.commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_rubble", band, ["difficult"])}], "Rubble")
+	var plain := Measure.ruler(k.map, st, sid, across)
+	check(not plain.has("walk") and str(plain.words) == "20 ft", "with no price from the rules, rough ground is ground: %s" % plain.words)
+	k.map.register_measure("t.rules", {"diagonals": "5-5-5", "costs": {"difficult": 2}})
+	check(k.map.measure_rule().get("costs", {}) == {"difficult": 2.0}, "the rulers' rule carries the price: %s" % [k.map.measure_rule()])
+	var rough := Measure.ruler(k.map, st, sid, across)
+	check(str(rough.words) == "20 ft straight, 25 ft to walk round" and not rough.has("secret"), "over the rubble, a map with no walls: one square at double (%s)" % rough.words)
+	var beside := Measure.ruler(k.map, st, sid, [g.cell_center(Vector2i(6, 2)), g.cell_center(Vector2i(9, 4))])
+	check(not beside.has("walk") and str(beside.words) == "15 ft", "nothing dear on the way: the distance alone (%s)" % beside.words)
+	# a gap in the band: the walk goes round it if that's cheaper, and says so
+	k.commit([{"t": "region.set", "scene": sid, "id": "r_rubble", "changes": {"cells": band.filter(func(c: Vector2i) -> bool: return c.y != 3).map(func(c: Vector2i) -> String: return HexMap.cell_key(c))}}], "A way through")
+	check(str(Measure.ruler(k.map, st, sid, across).words) == "20 ft", "a gap a square aside: the walk through it is no longer than the ground (%s)" % Measure.ruler(k.map, st, sid, across).words)
+	k.commit([{"t": "region.remove", "scene": sid, "id": "r_rubble"}], "Cleared")
+	# the art's rubble (terrain tagged difficult), once the Table has the art it draws with
+	var lvl := st.level_for(sid)
+	for y in 10:
+		lvl.terrain[HexMap.cell_key(Vector2i(5, y))] = {"t": "dungeons_and_castles:rubble", "v": 0, "rot": 0, "z": 0}
+	check(not Measure.ruler(k.map, st, sid, across).has("walk"), "with no art, terrain has no tags")
+	var art := PackLibrary.new()
+	art.reload()
+	k.map.art = art
+	check(str(Measure.ruler(k.map, st, sid, across).words) == "20 ft straight, 25 ft to walk round", "the pack's rubble is difficult: priced the same (%s)" % Measure.ruler(k.map, st, sid, across).words)
+	lvl.terrain.clear()
+	# ground the DM keeps from the players: priced for the DM, not for a player
+	k.commit([{"t": "region.add", "scene": sid, "region": MapQuery.region("r_quag", band, ["difficult"], {"audience": "gm"})}], "A hidden quag")
+	var dm := Measure.ruler(k.map, st, sid, across, "gm")
+	check(str(dm.words) == "20 ft straight, 25 ft to walk round" and bool(dm.get("secret", false)), "the DM's walk over it, marked as the DM's (%s)" % [dm])
+	check(str(Measure.ruler(k.map, st, sid, across, "pl_1").words) == "20 ft", "a player's own ruler: the quag isn't theirs to know")
+	# the Table's marks: the DM's ruler reaches a player as the distance alone
+	st.apply({"t": "player.add", "player": {"id": "pl_1", "name": "Ana", "color": "#4f9cf6"}})
+	var host := HostSession.new(st, PackLibrary.new())
+	host.kernel = k
+	host.marks.bind(st, k.map)
+	check(host.marks.put("gm", {"id": "dm-ruler-quag", "kind": "ruler", "scene": sid, "points": [[3.5, 2.5], [7.5, 2.5]]}, {"name": "DM", "color": "#ffffff"}, true) == "", "the DM measures across the quag")
+	var m: Dictionary = host.marks.marks["dm-ruler-quag"]
+	check(str(m.measure.words) == "20 ft straight, 25 ft to walk round" and bool(m.get("_walk_secret", false)) and not (m.measure as Dictionary).has("secret"), "the DM's own: the walk, kept as the DM's (%s)" % [m.measure])
+	var to_ana := host._mark_for({"player": "pl_1", "role": Views.ROLE_PLAYER, "joined": true}, m)
+	check(str(to_ana.measure.words) == "20 ft" and not to_ana.has("_walk_secret"), "Ana sees the distance alone: %s" % [to_ana.get("measure")])
+	# the quag shown to everyone: the walk is theirs too, the ruler measured again as it changed
+	k.commit([{"t": "region.set", "scene": sid, "id": "r_quag", "changes": {"audience": "all"}}], "The quag shown")
+	m = host.marks.marks["dm-ruler-quag"]
+	check(not m.has("_walk_secret") and str(host._mark_for({"player": "pl_1", "role": Views.ROLE_PLAYER, "joined": true}, m).measure.words) == "20 ft straight, 25 ft to walk round",
+		"once shown, Ana's screen says the walk too (%s)" % [m.measure])
+	k.commit([{"t": "region.remove", "scene": sid, "id": "r_quag"}], "Gone")
+	check(str(host.marks.marks["dm-ruler-quag"].measure.words) == "20 ft", "the ground plain again: the ruler is measured again (%s)" % host.marks.marks["dm-ruler-quag"].measure.words)
+	host.marks.bind(null, null)
+	# a price the rulers can't use is no price
+	k.map.measure_rules.clear()
+	k.map.register_measure("t.odd", {"costs": {"difficult": 1, "mud": "a lot", "bog": -2, "": 3}})
+	check(not k.map.measure_rule().has("costs"), "a cost of 1, words, less than nothing or no tag: none kept (%s)" % [k.map.measure_rule()])
+	k.map.measure_rules.clear()
+
+
 ## A template mark's cells, as the rules lay them (MapQuery.template through
 ## Measure.template_spec) — the same cases the web screens' own test lays
 ## (web/tests/template.test.ts), so a preview covers what its cast would.
@@ -157,10 +227,11 @@ func test_measure_rule_from_a_ruleset() -> void:
 	var host := PluginHost.new(k)
 	var why := host.load_source({"id": "t.measure", "version": "1", "api": 1, "name": "Measure"}, [["main.lua", """
 		local hm = hexmap
-		hm.map.measure({ diagonals = "5-10-5" })
+		hm.map.measure({ diagonals = "5-10-5", costs = { difficult = 2 } })
 	"""]])
 	check(why == "", "the plugin loads: %s" % why)
 	check(str(k.map.measure_rule().diagonals) == "5-10-5", "a ruleset says how the rulers count diagonals: %s" % [k.map.measure_rule()])
+	check(float(k.map.measure_rule().get("costs", {}).get("difficult", 0)) == 2.0, "and what difficult ground costs to walk: %s" % [k.map.measure_rule()])
 	host.unload("t.measure")
 	check(str(k.map.measure_rule().diagonals) == "5-5-5", "and its say goes with it")
 	k.map.register_measure("t.odd", {"diagonals": "7-14-7"})
