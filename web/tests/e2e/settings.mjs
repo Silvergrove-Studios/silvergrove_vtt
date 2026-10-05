@@ -91,7 +91,7 @@ await step('the levels: Assisted offered, Bookkeeping picked', async () => {
 await step('the table’s questions: a line of each answer, one opened with Change', async () => {
   await walk.getByText('Step 3 of 5').waitFor({ timeout: 5000 });
   const outcomes = walk.getByRole('region', { name: 'What a roll does' });
-  expect((await outcomes.locator('.line').innerText()).includes('Apply damage to the target when an attack hits: Off'), 'Bookkeeping lands nothing by itself');
+  expect((await outcomes.locator('.line').innerText()).includes('Apply what an attack or a spell does: damage, healing, conditions and effects: Off'), 'Bookkeeping lands nothing by itself');
   const dice = walk.getByRole('region', { name: 'Dice' });
   expect((await dice.locator('.line').innerText()).includes('Players roll their own initiative: On'), 'players roll their own');
   await dice.getByRole('button', { name: 'Change' }).click();
@@ -128,14 +128,14 @@ await step('Table settings: as Bookkeeping has it; a switch says what it would c
   const settings = dm.getByRole('dialog', { name: 'Table settings' });
   await settings.waitFor({ timeout: 5000 });
   await settings.getByText('As Bookkeeping has it').waitFor({ timeout: 5000 });
-  expect((await settings.getByRole('checkbox', { name: 'Apply damage to the target when an attack hits' }).isChecked()) === false, 'nothing lands by itself');
+  expect((await settings.getByRole('checkbox', { name: 'Apply what an attack or a spell does: damage, healing, conditions and effects' }).isChecked()) === false, 'nothing lands by itself');
   expect((await settings.getByText('takes effect at the next fight').count()) >= 1, 'who rolls initiative waits for the next fight');
   await settings.getByRole('group', { name: 'Level' }).getByRole('button', { name: 'Automated' }).click();
   const preview = settings.getByRole('region', { name: 'What switching changes' });
   await preview.waitFor({ timeout: 5000 });
   const count = await preview.locator('.count').innerText();
   expect(/^\d+ settings change:/.test(count), `says how many change: ${count}`);
-  await preview.getByText('Apply damage to the target when an attack hits').waitFor({ timeout: 5000 });
+  await preview.getByText('Apply what an attack or a spell does: damage, healing, conditions and effects').waitFor({ timeout: 5000 });
   await shot(dm, 'dm_settings_switch_preview');
   await preview.getByRole('button', { name: 'Cancel' }).click();
   expect((await dm.evaluate(() => window.hexmap.game.dm.table.level)) === 'bookkeeping', 'cancelled: nothing changed');
