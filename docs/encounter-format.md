@@ -291,10 +291,10 @@ below puts rules in the map or numbers on tokens; it puts them in
                                                 "stress": { "kind": "track", "max": 6, "marked": 2, "extra": 0, "crossed": [], "recharge": "rest" } } } },
   "state": { "ext": { "sample": { "gm_pool": 4 } } },
   "log": [ { "id": "r_1a2b", "kind": "roll", "label": "Strike", "actor": "a_hero", "audience": "all",
-             "spec": { "expr": "1d20", "parts": [ … ] }, "draw": { "seed": 425830988, "index": 0, "count": 1 },
+             "spec": { "expr": "1d20", "parts": [ … ] }, "draw": { "index": 0, "count": 1 },
              "result": { "total": 18, "outcome": "success", "dice": [ … ], "groups": { … }, "parts": [ … ], "modifier": 3 } },
            { "id": "n_9", "kind": "note", "text": "…", "audience": "gm" } ],
-  "rng": { "seed": 425830988, "index": 1 },
+  "rng": { "key": "9f3c…64 hex digits…", "index": 1 },
   "campaign": { "id": "c_9b1e…", "path": "reach.campaign", "ext": { "sample": { "luck": 2 } } },
   "checkpoints": [ { "id": "cp_1a2b", "name": "Session 3 start", "when": "2026-09-21T19:00:00", "seq": 12, "snapshot": { …the document without its checkpoints… } } ],
   …scenes, turns, players, notes, meta, ext…
@@ -339,10 +339,18 @@ below puts rules in the map or numbers on tokens; it puts them in
   do, undo}`: the events applied and those that put them back), kept by the
   kernel for every step committed with `reason.roll` naming the entry and
   sent to no screen (docs/plugin-authoring.md, *The log*).
-- **rng**: the dice stream. `Dice.face(seed, index, sides)` is a pure
-  function, so a roll records `{seed, index, count}` and moving `index`
-  past it is part of applying the `log.add`; a replay reads the recorded
-  faces and lands on the same index.
+- **rng**: the dice stream. `key` is 256 random bits (hex) that never
+  leave the Table: each face is a keyed hash of its place in the stream
+  (`Dice.face(key, index, sides)`, HMAC-SHA-256), so no number of rolls a
+  player sees tells them another — a hidden one, or the next. It is a pure
+  function, so a roll records where it drew, `{index, count}` (never what
+  the stream is), and moving `index` past it is part of applying the
+  `log.add`; a replay reads the recorded faces and lands on the same index
+  (an undone roll rolled again comes up the same). No screen is sent a
+  roll's `draw`. A known `seed` (a number) in place of the key is a public
+  stream for tests and `--seed` runs; a document read from a file with one
+  (saved before the dice had a key, when every roll carried the seed to
+  every player) gets a key of its own.
 - **turns** (version 2 fields, beside the version 1 ones): `strategy`
   is the *shape* — `ordered` (an order stepped with Next, rounds) or
   `focus` (a holder that moves; no order, no rounds); `plugin` names the

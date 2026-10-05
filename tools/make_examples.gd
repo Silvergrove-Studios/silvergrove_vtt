@@ -37,6 +37,8 @@ func _save_encounter(e: Encounter, path: String) -> void:
 	e.doc.meta.created = "2026-09-19T00:00:00"
 	e.doc.meta.modified = "2026-09-19T00:00:00"
 	e.doc.meta.author = "Silvergrove Studios"
+	# (no dice stream in a file everyone has: each table that opens it makes its own)
+	e.doc.rng = {"index": 0}
 	var err := e.save(path)
 	print(path, " ", "ok" if err == OK else error_string(err))
 

@@ -1145,7 +1145,7 @@ func apply(ev: Dictionary) -> Dictionary:
 			# A roll entry says where in the dice stream it was drawn: the
 			# stream moves past it, and back again when it is removed.
 			if entry.kind == "roll" and entry.has("draw"):
-				inv.rng_index = int(doc.rng.index)
+				inv.rng_index = int(doc.rng.get("index", 0))
 				doc.rng.index = int(entry.draw.index) + int(entry.draw.count)
 			what = "log"
 		"log.set":

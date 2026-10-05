@@ -6,9 +6,16 @@ extends RefCounted
 ## kept/dropped/rerolled flags, per-group totals and the grand total, so
 ## a client can show the dice and a plugin can classify the outcome.
 ##
-## Randomness is a deterministic stream: face(seed, index, sides) is a
-## pure function, so a roll records where it drew from ({seed, index,
-## count}) and a replay reads the same faces instead of rolling again.
+## Randomness is a deterministic stream: face(stream, index, sides) is a
+## pure function, so a roll records where in the stream it drew from
+## ({index, count}: never what the stream is) and a replay reads the same
+## faces instead of rolling again (an undone roll rolled again comes up the
+## same). In play the stream is a secret key: 256 random bits (`rng.key`,
+## hex) that never leave the Table, each face a keyed hash of its place
+## (HMAC-SHA-256) — so no number of rolls a player sees tells them another
+## roll, a hidden one, or the next. A known seed (`rng.seed`, a number: a
+## test's, a `--seed` run's) is a public stream (splitmix64), there to be
+## predictable; a document that comes with one gets a key (Encounter).
 ## A roll may also be satisfied by faces typed in from real dice.
 ##
 ## Expression grammar (whitespace ignored):
@@ -31,16 +38,80 @@ static func _ushr(x: int, n: int) -> int:
 	return (x >> n) & ((1 << (64 - n)) - 1)
 
 
-## The face (1..sides) at position `index` of the stream seeded `seed`.
-## splitmix64 over (seed, index): any position without stepping.
-static func face(seed: int, index: int, sides: int) -> int:
+## A new secret stream: 256 random bits from the system's own source, as hex.
+static func new_key() -> String:
+	return _crypto_of().generate_random_bytes(32).hex_encode()
+
+
+## Whether `v` is a stream's key (64 hex digits).
+static func is_key(v: Variant) -> bool:
+	return v is String and _HEX64.search(v) != null
+
+
+static var _HEX64 := RegEx.create_from_string("^[0-9a-f]{64}$")
+
+
+## The stream an encounter's `rng` block names: its key, or (a known seed) the
+## number. One with neither is given a key here, so no roll is ever drawn
+## from a stream anyone could know.
+static func stream_of(rng: Dictionary) -> Variant:
+	if is_key(rng.get("key")):
+		return str(rng.key)
+	if rng.get("seed") is int or rng.get("seed") is float:
+		return int(rng.seed)
+	rng.key = new_key()
+	return str(rng.key)
+
+
+## The face (1..sides) at position `index` of a stream: a key's (hex), the
+## keyed hash of the index; a known seed's (a number), splitmix64 over (seed,
+## index). Any position without stepping.
+static func face(stream: Variant, index: int, sides: int) -> int:
 	if sides <= 0:
 		return 0
-	var z := seed + index * -7046029254386353131
+	if stream is String:
+		return _keyed_face(str(stream), index, sides)
+	var z := int(stream) + index * -7046029254386353131
 	z = (z ^ _ushr(z, 30)) * -4658895280553007687
 	z = (z ^ _ushr(z, 27)) * -7723592293110705685
 	z = z ^ _ushr(z, 31)
 	return int(_ushr(z, 33) % sides) + 1
+
+
+static var _crypto: Crypto = null
+static var _keys: Dictionary = {}   # hex -> its bytes, the few streams in use
+const _SPAN := 1 << 48
+
+
+static func _crypto_of() -> Crypto:
+	if _crypto == null:
+		_crypto = Crypto.new()
+	return _crypto
+
+
+## HMAC-SHA-256 of the index under the key: five 48-bit numbers, the first
+## that falls within a whole number of `sides` (no face more likely than
+## another) taken.
+static func _keyed_face(key_hex: String, index: int, sides: int) -> int:
+	var key: PackedByteArray = _keys.get(key_hex, PackedByteArray())
+	if key.is_empty():
+		key = key_hex.hex_decode()
+		if _keys.size() >= 8:
+			_keys.clear()
+		_keys[key_hex] = key
+	var msg := PackedByteArray()
+	msg.resize(8)
+	msg.encode_s64(0, index)
+	var mac := _crypto_of().hmac_digest(HashingContext.HASH_SHA256, key, msg)
+	var limit := _SPAN - (_SPAN % sides)
+	for c in 5:
+		var v := 0
+		for b in 6:
+			v = (v << 8) | int(mac[c * 6 + b])
+		if v < limit:
+			return v % sides + 1
+	# (all five past the last whole span: about never)
+	return int(mac.decode_u32(28)) % sides + 1
 
 
 # --------------------------------------------------------------- parsing --
@@ -133,14 +204,15 @@ static func parse(expr: String) -> Dictionary:
 
 # --------------------------------------------------------------- rolling --
 
-## Roll a spec drawing from the stream at (seed, index). `spec` is a
+## Roll a spec drawing from a stream (face's: a key, or a known seed) at
+## `index`. `spec` is a
 ## String expression or {expr, named: {name: expr}, parts: [typed parts],
 ## kind, visibility, faces: {group: [faces…]} for typed-in dice, meta}.
 ## Result: {ok, error, expr, kind, visibility, total, dice: [...],
-## groups: {name: {expr, total, faces}}, parts, modifier, draw: {seed,
-## index, count}} — `dice` entries are {group, sides, face, kept,
+## groups: {name: {expr, total, faces}}, parts, modifier, draw: {index,
+## count}} — `dice` entries are {group, sides, face, kept,
 ## rerolled, exploded}.
-static func roll(spec: Variant, seed: int, index: int) -> Dictionary:
+static func roll(spec: Variant, seed: Variant, index: int) -> Dictionary:
 	var s: Dictionary = {"expr": spec} if spec is String else spec
 	var groups := {}
 	if str(s.get("expr", "")) != "":
@@ -151,7 +223,7 @@ static func roll(spec: Variant, seed: int, index: int) -> Dictionary:
 		return {"ok": false, "error": "nothing to roll"}
 	var typed: Dictionary = s.get("faces", {})
 	var result := {"ok": true, "error": "", "kind": str(s.get("kind", "check")), "visibility": str(s.get("visibility", "all")),
-		"total": 0.0, "dice": [], "groups": {}, "parts": [], "modifier": 0.0, "draw": {"seed": seed, "index": index, "count": 0}, "meta": JsonDoc.deep(s.get("meta", {}))}
+		"total": 0.0, "dice": [], "groups": {}, "parts": [], "modifier": 0.0, "draw": {"index": index, "count": 0}, "meta": JsonDoc.deep(s.get("meta", {}))}
 	var cursor := index
 	var names := groups.keys()
 	names.sort()
@@ -270,7 +342,7 @@ class PendingRoll:
 		spec.named[name] = expr
 		return ""
 
-	func resolve(seed: int, index: int) -> Dictionary:
+	func resolve(seed: Variant, index: int) -> Dictionary:
 		resolved = Dice.roll(spec, seed, index)
 		resolved.contributions = JsonDoc.deep(contributions)
 		return resolved

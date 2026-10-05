@@ -153,14 +153,26 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 ## DM may do with it (a ruling on a roll, an outcome to apply) and the
 ## rulesets' notes on it (a monster's hit points before and after) — is the
 ## GM's alone; what its roll `caused` (the steps it set off, and what undoes
-## them) is the rulesets' own and reaches no screen.
+## them) is the rulesets' own and reaches no screen; nor does where in the
+## dice stream a roll drew (`draw`: a log from before had the stream's seed in
+## it, which told every die before and after).
 static func log_entry_for(entry: Dictionary, role: String) -> Dictionary:
 	var out: Dictionary = {}
 	for k in entry:
-		if k == "caused" or (k == "dm" and role != ROLE_GM):
+		if k == "caused" or k == "draw" or (k == "dm" and role != ROLE_GM):
 			continue
 		out[k] = JsonDoc.deep(entry[k])
-	return out
+	return sans_draw(out)
+
+
+## A roll's entry (or result) without where in the dice stream it drew, in
+## place: the entry's `draw`, and its result's (a log from before kept one
+## there too). The entry, for chaining.
+static func sans_draw(entry: Dictionary) -> Dictionary:
+	entry.erase("draw")
+	if entry.get("result") is Dictionary:
+		(entry.result as Dictionary).erase("draw")
+	return entry
 
 
 ## The data a plugin's sheet schema binds to, for one projected actor.

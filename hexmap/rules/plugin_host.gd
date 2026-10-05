@@ -981,7 +981,7 @@ class Bridge:
 		var entry: Dictionary = st.encounter.log[st._log_index(str(id))]
 		if str(entry.get("audience", "all")).begins_with("private:"):
 			return null
-		return JsonDoc.deep(entry)
+		return Views.sans_draw(JsonDoc.deep(entry))
 
 	func setting(key: String) -> Variant:
 		return JsonDoc.at_path(_p().settings, str(key))
@@ -1103,7 +1103,7 @@ class Bridge:
 		var entry := k.roll(s, PluginHost._as_dict(ctx), label, {"by": plugin_id})
 		if entry.is_empty():
 			return {"__error": k.last_veto}
-		return entry
+		return Views.sans_draw(JsonDoc.deep(entry))
 
 	func dice_parse(expr: String) -> Dictionary:
 		return Dice.parse(str(expr))
@@ -1257,7 +1257,7 @@ class Bridge:
 	func roll_resolve(id: String) -> Variant:
 		var k := _k()
 		var entry := k.pending.resolve(str(id))
-		return entry if not entry.is_empty() else {"__error": k.last_veto}
+		return Views.sans_draw(JsonDoc.deep(entry)) if not entry.is_empty() else {"__error": k.last_veto}
 
 	func roll_pending() -> Array:
 		var out := []
