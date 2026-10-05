@@ -1265,10 +1265,11 @@ func _update_title() -> void:
 func _update_menus() -> void:
 	var h := ctx.history
 	var i := edit_menu.get_item_index(M_UNDO)
-	edit_menu.set_item_text(i, "Undo %s" % h.undo_label() if h.can_undo() else "Undo")
+	# (a step's label as the DM reads it: a ruleset's words, a creature named whole)
+	edit_menu.set_item_text(i, "Undo %s" % Knowledge.plain(h.undo_label()) if h.can_undo() else "Undo")
 	edit_menu.set_item_disabled(i, not h.can_undo())
 	i = edit_menu.get_item_index(M_REDO)
-	edit_menu.set_item_text(i, "Redo %s" % h.redo_label() if h.can_redo() else "Redo")
+	edit_menu.set_item_text(i, "Redo %s" % Knowledge.plain(h.redo_label()) if h.can_redo() else "Redo")
 	edit_menu.set_item_disabled(i, not h.can_redo())
 	var scene_menu := _menu("Scene")
 	if scene_menu != null:

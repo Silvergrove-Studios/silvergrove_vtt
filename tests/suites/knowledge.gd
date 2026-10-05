@@ -212,6 +212,7 @@ func test_names_kept_from_players() -> void:
 	check(str(view.actors.a_fighter.name) == "Ana's fighter", "her own, by name")
 	var dm_view := Views.project(k, plugins, "", Views.ROLE_GM)
 	check(str(dm_view.actors.a_gob.name) == "Goblin" and (dm_view.actors.a_gob.effects as Array).size() == 1, "the DM's view: Goblin, Frightened")
+	check(dm_view.actors.a_gob.get("name_known") == false and not dm_view.actors.a_fighter.has("name_known"), "and that the players don't know its name (the party's: nothing to say)")
 	# a ruleset's words naming it, and a roll it made at her fighter
 	check(plugins.dispatch("t.known", "hit", {"gm": true}).status != PluginHost.PluginCall.ERROR, "the goblin hits")
 	view = Views.project(k, plugins, ANA, Views.ROLE_PLAYER)
@@ -231,6 +232,7 @@ func test_names_kept_from_players() -> void:
 	check(_note(view, "hits") == "The Goblin hits Ana's fighter.", "the line said before names it now; its Frightened still kept: %s" % _note(view, "hits"))
 	check(str(_roll(view).get("who", "")) == "Goblin", "and its roll")
 	check((view.actors.a_gob.effects as Array).is_empty(), "its conditions are another thing: still kept")
+	check(Views.project(k, plugins, "", Views.ROLE_GM).actors.a_gob.get("name_known") == true, "the DM's view: its name known")
 	check(WebScene.build(st, sid, "", true, known).tokens.filter(func(t: Dictionary) -> bool: return str(t.id) == "t_gob")[0].name_known == true, "the DM's screen: its name known (to keep it again)")
 	# names shown: nothing kept
 	check(_load(plugins, _rules("shown", "shown")) == "", "names and conditions shown")

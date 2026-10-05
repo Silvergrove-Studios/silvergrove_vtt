@@ -158,7 +158,7 @@ end
 -- for its conditions). Put the result in any text — a log line, a roll's
 -- label, a card, an error — as the words themselves.
 hm.known = {}
-local MARK_A, MARK_S, MARK_E = "￹", "￺", "￻"
+local MARK_A, MARK_S, MARK_E = "\uFFF9", "\uFFFA", "\uFFFB"
 -- text with its marks read as the DM reads them
 function hm.known.plain(text)
 	return (tostring(text or ""):gsub(MARK_A .. "(.-)" .. MARK_S .. ".-" .. MARK_E, "%1"))

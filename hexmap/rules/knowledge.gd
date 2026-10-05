@@ -51,15 +51,15 @@ extends RefCounted
 const MODES := ["exact", "marks", "none"]
 const SHOWN := ["shown", "hidden"]
 ## The mark's three characters: anchor, separator, terminator.
-const ANCHOR := "￹"
-const SEP := "￺"
-const END := "￻"
+const ANCHOR := "\uFFF9"
+const SEP := "\uFFFA"
+const END := "\uFFFB"
 ## What a creature is called where its name is kept from a screen.
 const UNKNOWN := "a creature"
 const UNKNOWN_START := "A creature"
 ## What a creature's token is labelled there, alone on the scene.
 const UNKNOWN_LABEL := "?"
-static var _MARK := RegEx.create_from_string("￹([^￹￺￻]*)￺([^￹￺￻]*)￻")
+static var _MARK := RegEx.create_from_string("\uFFF9([^\uFFF9\uFFFA\uFFFB]*)\uFFFA([^\uFFF9\uFFFA\uFFFB]*)\uFFFB")
 
 
 # ------------------------------------------------------------ declaring --
@@ -524,6 +524,12 @@ static func render_json(text: String, knows: Callable, gm := false) -> String:
 ## them. The rulesets' own schemas and actions are never marked: passed by.
 static func for_viewer(out: Dictionary, actors: Dictionary, policies: Array, gm: bool) -> Dictionary:
 	var knows := knower(actors, policies, gm)
+	# the DM's: whether the players know each creature's name, where names are kept
+	if gm and names_hidden(policies) and out.get("actors") is Dictionary:
+		for aid in out.actors:
+			var a: Dictionary = actors.get(aid, {})
+			if unowned_actor(a) and out.actors[aid] is Dictionary:
+				out.actors[aid].name_known = name_known(a, policies)
 	for key in ["log", "chat_history"]:
 		if out.get(key) is Array:
 			for entry in out[key]:

@@ -9,15 +9,21 @@
 
   let { actor }: { actor: string } = $props();
 
-  // (the DM's scene says, of a creature no player owns, whether the players know its name)
+  // (the DM's view and scene say, of a creature no player owns, whether the
+  // players know its name; its token on the scene, the label they see it by)
   const tok = $derived(((game.scene.tokens as Dict[]) ?? []).find((t) => String(t.actor ?? '') === actor && typeof t.name_known === 'boolean'));
+  const known = $derived.by((): boolean | null => {
+    const a = ((game.view.actors ?? {}) as Dict)[actor];
+    if (a && typeof a.name_known === 'boolean') return a.name_known;
+    return tok ? tok.name_known === true : null;
+  });
   const label = $derived(String(tok?.player_label ?? ''));
 </script>
 
-{#if tok}
+{#if known !== null}
   <div class="known" role="group" aria-label="Its name, to the players">
-    {#if tok.name_known === false}
-      <span class="dim">To the players: a creature{label && label !== '?' ? ` (${label})` : ''}</span>
+    {#if known === false}
+      <span class="dim">To the players: a creature{label && label !== '?' && !tok?.hidden ? ` (${label})` : ''}</span>
       <button type="button" class="quiet" onclick={() => dmOp('reveal_names', { actors: [actor], known: true })}>Reveal its name</button>
     {:else}
       <span class="dim">The players know its name</span>
