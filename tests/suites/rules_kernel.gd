@@ -204,6 +204,17 @@ func test_effects() -> void:
 	check(derived.speed == 3.0 and derived.hp_max == 30.0, "plain numbers: multiply and an expr with the effect's value: %s %s" % [derived.speed, derived.hp_max])
 	check(derived.defence.total == 20.0 and derived.defence.parts.size() == 4, "typed: add, upgrade (delta) and override (delta) keep the parts summing to the total: %s" % [derived.defence])
 	check(derived.defence.parts[1].source == "x1" and derived.defence.parts[1].label == "Shaken", "a change's part names its effect")
+	# an override is the number it sets, whichever order the effects come in:
+	# a Speed of 0 beside a bonus to speed, a defence set beside a bonus
+	for order in [[0, 1], [1, 0]]:
+		var fxs := [
+			{"id": "y1", "key": "held", "changes": [{"path": "speed", "mode": "override", "value": 0}, {"path": "defence", "mode": "override", "value": 13}]},
+			{"id": "y2", "key": "quick", "changes": [{"path": "speed", "mode": "add", "value": 2}, {"path": "defence", "mode": "add", "value": 5, "type": "status"}]},
+		]
+		var d2 := {"defence": TypedNumber.make([{"label": "base", "type": "base", "value": 10}]), "speed": 6.0}
+		Effects.apply_changes(d2, [fxs[order[0]], fxs[order[1]]], {}, {"status": "best"})
+		check(d2.speed == 0.0, "an override after an add, whichever came first (%s): %s" % [order, d2.speed])
+		check(d2.defence.total == 13.0, "a typed number set beside a bonus is what it was set to (%s): %s" % [order, d2.defence])
 
 
 # ------------------------------------------------------------ resources --

@@ -113,5 +113,14 @@ cancelled, a setting changed by hand ("Customized") and its section's
 Reset. A player joins and is shown How this table runs, and finds it again
 in the ⋯ menu.
 
+`tests/e2e/overrides.mjs <host.json> <out>` (host with `--party --wizard
+--seed 12`): the DM's hand on anything. In the chapel fight the DM opens a
+goblin's Adjust tab and sets its AC to 17: the tab and its stat block say
+"AC 17 · 15 computed, set by the DM", the log says so to the DM alone, and
+the other goblins keep 15; a goblin's hit on Sela puts a Shield card on
+Ana's phone, she casts it and her reaction is spent, and the DM gives it
+back from Sela's Adjust tab (said to everyone); on her turn her Fire Bolt at
+the goblin is rolled against AC 17 (the DM's log says so; Ana's doesn't).
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).

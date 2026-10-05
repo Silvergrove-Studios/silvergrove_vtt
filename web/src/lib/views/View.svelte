@@ -17,7 +17,7 @@
   import { markdown } from '../markdown';
   import { assetArt } from '../art';
   import { actedWords } from '../acted';
-  import { breakdown, fillIntent, num, putValue, shown, signedOf, textOf, timeLeft, valueOf, withOptions, type Dict, clone } from './viewlib';
+  import { breakdown, fillIntent, num, putValue, shown, shownTabs, signedOf, textOf, timeLeft, valueOf, withOptions, type Dict, clone } from './viewlib';
   import { Expr, truthy } from '../expr';
   import { resolve } from './fieldcheck';
   import { game } from '../game.svelte';
@@ -238,19 +238,28 @@
       {#each (n.children as any[]) ?? [] as child}<View node={child} {ctx} depth={depth + 1} />{/each}
     </section>
   {:else if type === 'tabs'}
-    {@const tabs = ((n.tabs as Dict[]) ?? []).filter((t) => t && typeof t === 'object')}
-    <div class="tabs">
-      <div class="tabbar" role="tablist">
-        {#each tabs as t, i}
-          <button type="button" role="tab" aria-selected={tab === i} class:on={tab === i} onclick={() => (tab = i)}>{t.title ?? 'Tab'}</button>
-        {/each}
+    <!-- (a tab's `if` leaves it out for this viewer: the DM's Adjust tab; one
+         tab left is drawn without a bar of one) -->
+    {@const tabs = shownTabs(n, ctx)}
+    {@const cur = tab < tabs.length ? tab : 0}
+    {#if tabs.length === 1}
+      <div class="tabpage">
+        {#each (tabs[0].children as any[]) ?? [] as child}<View node={child} {ctx} depth={depth + 2} />{/each}
       </div>
-      {#if tabs[tab]}
-        <div class="tabpage" role="tabpanel">
-          {#each (tabs[tab].children as any[]) ?? [] as child}<View node={child} {ctx} depth={depth + 2} />{/each}
+    {:else}
+      <div class="tabs">
+        <div class="tabbar" role="tablist">
+          {#each tabs as t, i}
+            <button type="button" role="tab" aria-selected={cur === i} class:on={cur === i} onclick={() => (tab = i)}>{t.title ?? 'Tab'}</button>
+          {/each}
         </div>
-      {/if}
-    </div>
+        {#if tabs[cur]}
+          <div class="tabpage" role="tabpanel">
+            {#each (tabs[cur].children as any[]) ?? [] as child}<View node={child} {ctx} depth={depth + 2} />{/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
   {:else if type === 'text'}
     {@const s = textOf(valueOf(n, ctx, 'text'))}
     {#if n.rich}

@@ -65,6 +65,20 @@
   tools"); a journey in a real browser (`web/tests/e2e/tools.mjs`) has a
   preview off its caster's turn, a ruler between two players' screens and
   the DM's ping.
+- **The DM can change anything, at any time.** For a ruleset that gives the
+  DM a hand on every number and turn (the owner: "even in the high
+  automation mode, the DM should be able to override anything at any
+  time"), the host now: draws a tab of a sheet only for the viewers its
+  `if` allows (the DM's Adjust tab; a player's own when the table lets
+  them), and a sheet left with one tab without a bar of one; ends a turn
+  the DM said a creature loses as soon as it begins (`data.skip` in the
+  turns: what starts a turn still starts, then the next turn begins, in
+  one step); and applies the effects' changes that set a number after
+  those that add to it, whatever order the effects came in, so a number
+  an effect sets is that number. A journey in a real browser
+  (`web/tests/e2e/overrides.mjs`): the DM sets a goblin's AC on its
+  Adjust tab and a player's attack meets it; the DM gives a wizard back
+  the reaction her Shield spent.
 
 - **Creatures a spell makes are creatures.** A ruleset can give a spell's
   familiar, steed, animated dead or conjured beast an actor and a token of

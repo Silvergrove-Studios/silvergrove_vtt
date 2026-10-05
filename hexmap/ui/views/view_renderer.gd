@@ -275,10 +275,15 @@ func _build(node: Variant, ctx: Dictionary, depth: int) -> Control:
 			tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			for tab in n.get("tabs", []):
+				# a tab's `if` leaves it out for this viewer (the DM's Adjust tab)
+				if not (tab is Dictionary) or (tab.has("if") and not Expr.truthy(Expr.evaluate(str(tab["if"]), ctx))):
+					continue
 				var page := VBoxContainer.new()
 				page.name = str(tab.get("title", "Tab"))
 				_children(tab, ctx, depth + 1, page)
 				tabs.add_child(page)
+			# one tab left: no bar of one
+			tabs.tabs_visible = tabs.get_child_count() != 1
 			return tabs
 		"text":
 			var s := _text(value_of(n, ctx, "text"))

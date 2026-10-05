@@ -161,11 +161,24 @@ static func expire(state: EncounterState, trigger: Dictionary) -> Array:
 ## effect); `multiply` and `override` append the delta as a part, so the
 ## parts still sum to the total; on a plain number they do arithmetic.
 ## `expr` is evaluated with {actor, derived, effect, value}.
+##
+## Overrides come last, whatever order the effects are in: a number an
+## effect sets is that number, not that number and whatever another effect
+## happens to add after it (a Speed of 0 that "can't increase"; a DM's "AC
+## set to 13" beside a spell's +5). The rest go in the effects' order.
 static func apply_changes(derived: Dictionary, effects: Array, ctx: Dictionary = {}, policy: Dictionary = {}) -> void:
+	_apply_pass(derived, effects, ctx, policy, false)
+	_apply_pass(derived, effects, ctx, policy, true)
+
+
+## One pass of apply_changes: the overrides, or everything else.
+static func _apply_pass(derived: Dictionary, effects: Array, ctx: Dictionary, policy: Dictionary, overrides: bool) -> void:
 	for fx in effects:
 		for ch in fx.get("changes", []):
 			var path := str(ch.get("path", ""))
 			if path == "":
+				continue
+			if (str(ch.get("mode", "add")) == "override") != overrides:
 				continue
 			var amount: float
 			if ch.has("expr"):

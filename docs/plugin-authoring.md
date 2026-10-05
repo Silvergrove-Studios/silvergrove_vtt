@@ -117,7 +117,10 @@ plugin's data is `view.ext[hm.id]` — with overlays merged in),
 `effects` (on the actor and on its tokens), `resources` (name → record,
 this plugin's), `tokens`, and `state` (the encounter's plugin state). Effects' `changes` are applied
 by the kernel to what derive returns, and typed numbers are re-totalled
-under the policy.
+under the policy. Changes that `override` come after all the others,
+whatever order the effects are in: a number an effect sets is that
+number (a Speed of 0 beside a bonus to speed is 0); the rest go in the
+effects' order.
 
 ```lua
 hm.on("before_roll", function(p) … return p end)
@@ -315,7 +318,10 @@ so register a new kind with `pcall(hm.ui.register, …)`). The kinds:
 
 Values: `text` (literal), `bind` (a JSON pointer, `"/derived/evade"`),
 `expr` (an Expr over the data, `"'Level ' .. @ext.level"`). A node with
-`if = "<expr>"` is hidden when it is false. A `text` node with
+`if = "<expr>"` is hidden when it is false; so is a tab of a `tabs` node
+(the DM's own tab on a sheet: `{ title = "Adjust", ["if"] = "@role ==
+'gm'", children = {…} }`), and a `tabs` node left with one tab is drawn
+without a bar of one. A `text` node with
 `rich = true` renders rules text as the SRDs write it — `**bold**`,
 `*italic*`, `# headings`, `- ` bullets, paragraphs.
 
@@ -482,6 +488,7 @@ picks a strategy in the Turns panel; `hm.turns.start(scene, id)`,
 | `hm.turns.set_focus(holder, by)` | move the focus (`"gm"`, `"token:id"`, `"actor:id"`); `focus_changed` may veto |
 | `hm.turns.request(player, ref)` / `hm.turns.deny(ref)` | a Player's request for the focus |
 | `hm.turns.counters(ref)` | this turn's budgets for a participant |
+| `{ t = "turns.set", changes = { ["data/skip/<token>"] = true } }` | that token loses its next turn: when it comes, the turn begins (its `turn_start` hooks run, what ends then ends) and ends at once, and the next one begins, in the same step; the mark goes as it's used (`false` takes it back). A group's slot goes by when every member is marked |
 | `hm.turns.consume(ref, counter, n)` | a `turns.set` event spending from a budget, or nil when there is not enough |
 | `hm.turns.reorder(order)`, `hm.turns.insert(entry [, index])`, `hm.turns.remove(entry)` | the ordered shape's order itself: a delay, a ready action, a late arrival, a departure. Entries are token ids or `group:<id>`; the participant whose turn it is stays current. `remove` of one member of a group's slot takes it out of the group (the others keep the slot; an emptied group leaves the order) |
 | `hm.turns.group(id, tokens, label)`, `hm.turns.ungroup(id)` | several tokens on one slot: the order holds `group:<id>`, `turns.data.groups[id]` holds the members, and each member gets its own `turn_start` / `turn_end` (payload `group = id`), budgets and expiries when the slot comes round. A group survives a restart |
