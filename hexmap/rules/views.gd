@@ -59,7 +59,9 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 				if str(kind).begins_with("entry:"):
 					out.cards[str(kind).substr(6)] = {"plugin": pid, "schema": p.views[kind]}
 			out.actions[pid] = JsonDoc.deep(p.actions)
-	# actors
+	# actors (a creature no player owns shows a player of its health what the
+	# rulesets say: HealthShown)
+	var health := kernel.health_policies() if role != ROLE_GM else []
 	var ids := e.actors.keys()
 	ids.sort()
 	for aid in ids:
@@ -78,6 +80,8 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 				effects.append(JsonDoc.deep(fx))
 		pa.effects = effects
 		pa.resources = _resources(kernel, str(aid))
+		if not health.is_empty() and not mine and str(a.get("owner", "")) == "" and str(a.get("kind", "")) != "pc":
+			HealthShown.filter_actor(pa, health)
 		pa.tokens = []
 		for sc in e.scenes:
 			for tk in sc.tokens:

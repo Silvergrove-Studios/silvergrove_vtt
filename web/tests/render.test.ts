@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Grid } from '../src/lib/grid';
-import { DEAD_APART, DEAD_SIZE, FAN_SIZE, OBJECT_APART, drawnAsThing, isDead, isObject, layout, tokenAt, underDiscs } from '../src/lib/map/render';
+import { DEAD_APART, DEAD_SIZE, FAN_SIZE, OBJECT_APART, drawnAsThing, hpWords, isDead, isObject, layout, tokenAt, underDiscs } from '../src/lib/map/render';
 
 describe('the map, as it is drawn', () => {
   const grid = new Grid({ columns: 10, rows: 8 });
@@ -82,5 +82,16 @@ describe('the map, as it is drawn', () => {
     expect(underDiscs(box, [{ x: 3, y: 3, r: 0.4 }])).toBe(false);
     expect(underDiscs(box, [{ x: 5.3, y: 2.1, r: 0.35 }])).toBe(true);
     expect(underDiscs(box, [])).toBe(false);
+  });
+
+  // (the DM's "What players see of a monster's health": exactly, its token
+  // carries its hit points from the host; otherwise it carries none)
+  it('says a creature\'s hit points under its token where the table shows them', () => {
+    expect(hpWords({ id: 'g', hp: [7, 15] })).toBe('7/15');
+    expect(hpWords({ id: 'g', hp: [0, 15], tags: ['dead'] })).toBe('0/15');
+    expect(hpWords({ id: 'g', hp: [-2.4, 15] })).toBe('0/15');
+    expect(hpWords({ id: 'g' })).toBe('');
+    expect(hpWords({ id: 'g', hp: [7] })).toBe('');
+    expect(hpWords({ id: 'g', hp: 'lots' })).toBe('');
   });
 });

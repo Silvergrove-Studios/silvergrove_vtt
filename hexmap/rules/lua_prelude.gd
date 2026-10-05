@@ -138,6 +138,15 @@ hm.ui = {}
 function hm.ui.register(kind, schema)
 	call(host.ui_register, kind, schema)
 end
+-- What this ruleset's creatures' tokens say of their health, and what players
+-- see of it for a creature no player owns: { tags = { "bloodied", … } (the
+-- marks its tokens carry), resource = "hp" (the pool its hit points are in),
+-- effects = { "dead", … } (the effects that say it's dying or dead), players =
+-- "exact" | "marks" | "none" }. The Table filters what each player's device
+-- is sent by it; the DM sees everything. Call it as the plugin loads.
+function hm.ui.health(spec)
+	call(host.ui_health, spec)
+end
 
 -- ------------------------------------------------------------------ map --
 -- Questions to the map, and the few things a ruleset may put on it. A
@@ -506,6 +515,9 @@ function __run_test(index, helpers)
 	function h.scene(map_path, tokens) return call(host.test_scene, map_path or "res://examples/ruined_chapel.hexmap", tokens or {}) end
 	-- a creature from one of this plugin's benchmarks, placed on a scene at a "q,r" cell: its actor id
 	function h.improvise(benchmark, params, scene, at) return call(host.test_improvise, benchmark, params or {}, scene, at or "") end
+	-- what a screen is sent: { scene (a web screen's snapshot), document (a Godot client's),
+	-- actors, log (the rules' view) }, for a player (their id) or the DM (nil), of a scene
+	function h.sent(player, scene) return call(host.test_sent, player or "", scene or "") end
 	for k, v in pairs(helpers or {}) do h[k] = v end
 	return t.fn(h)
 end

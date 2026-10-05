@@ -56,6 +56,15 @@ player's token picture through the crop window, on her sheet, the DM's
 card and the fight's map; a picture in her journal shared with another
 player; a picture in the DM's notes.
 
+`tests/e2e/bookkeeping.mjs <host.json> <out>` (host with `--party
+--wizard`): how much the rules do is the DM's. The DM sets the table's
+sheets to Bookkeeping in the settings, and Ana's sheet follows at once: a
+By hand tab, no Cast, Sela's spell slots counters she ticks herself (the
+table hears of it), a condition a tap and a note. In the chapel fight the
+DM wounds a goblin on its stat block, its Bloodied mark on her map; the DM
+says the players see nothing of a monster's health and the mark leaves her
+map, the DM's keeping it; at Exact its hit points show under it on both.
+
 `tests/e2e/things.mjs <host.json> <out>` (host with `--party`): things
 a caster moves. The DM gives Wren Dancing Lights; in the chapel fight, on
 her turn, Ana casts it at a space on her phone, and her sheet says how the

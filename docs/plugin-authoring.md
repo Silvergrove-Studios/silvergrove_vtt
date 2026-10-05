@@ -468,6 +468,40 @@ GM-only except the paths marked `all`, and is listed to players only when
 encounter `state` is shown to everyone: keep secrets on GM-only actors
 or in `gm`-audience records.
 
+**A creature's health.** What players see of the health of a creature no
+player owns is often the DM's to decide. Declare it as the plugin loads
+(a setting changed loads the plugin again, so read it from a setting):
+
+```lua
+hm.ui.health({ tags = { "bloodied", "down", "dead" }, resource = "hp",
+  effects = { "dead", "dying" }, players = hm.settings.get("monster_health", "marks") })
+```
+
+`tags` are the marks its tokens carry for it (the maps draw `bloodied`,
+`down` and `dead`), `resource` the pool its hit points are kept in,
+`effects` the keys that say it is dying or dead. `players`: `"marks"` (as
+without a declaration), `"none"` (no mark on its tokens, its pool and those
+effects not in a player's view, for a creature listed to players), or
+`"exact"` (its marks, and its hit points on its tokens — `hp: [current,
+max]` in a web screen's scene, drawn under the disc — for every screen).
+The Table filters before anything is sent: a web screen's scene, a Godot
+client's document and the token events after it, the rules' view. The DM
+sees everything; a token or actor with an owner is the party's own. A
+Table from before it has no `hm.ui.health`: guard the call (`if
+hm.ui.health then … end`). A test reads what a screen is sent with
+`t.sent(player, scene)`, for a player (their id) or the DM (`nil`):
+`{scene, document, actors, log}` (a web screen's scene, a Godot client's
+document, the rules' view's actors and log).
+
+**Picks.** A button's intent with `pick = "token" | "cell" | "area"` asks
+the map first; the rest of its keys say what the pick may take and are
+dropped before it goes: `picks` (how many creatures), `each` (`"dart"`:
+one creature may have several), `dead` (it takes the dead), `area` (the
+shape), `friendly` (the party listed first), `range` (feet, or a list of
+which the farthest counts: those farther are listed with why), `sight =
+false` (its creature needn't be seen: the dark is no bar) and `walls =
+false` (nor is a wall: where the table doesn't check line of sight).
+
 ### Turns
 
 ```lua
@@ -1085,7 +1119,8 @@ and fails on what it finds. A test may read its plugin's manifest as data
   resources and state are where they live.
 - What everyone may see of a creature's state goes on its tokens as
   tags the maps draw: `bloodied` (a red ring and mark), `down` (the
-  token darkened), `dead` (darkened and crossed out). A token named with
+  token darkened), `dead` (darkened and crossed out); what players see of
+  them is the plugin's to declare (`hm.ui.health`). A token named with
   a number ("Goblin Warrior 2") shows it after its label ("G2"), and the
   unnumbered one of the set shows "G1".
 - Effects that last rounds or turns (`duration.kind` `rounds`,

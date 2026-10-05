@@ -509,6 +509,166 @@ func test_typing_is_said_not_kept() -> void:
 	host.stop()
 
 
+## What players are sent of a monster's health, as its ruleset declares it
+## (hm.ui.health, HealthShown): its marks ("marks"), nothing ("none"), or its
+## hit points too ("exact"). The Table filters before anything is sent — a web
+## screen's snapshot, a Godot client's document and the token events after it,
+## the rules' view — the DM sees everything, and the party's own is the party's.
+func test_monster_health_as_players_are_sent_it() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var ana := "pl_fe0170c1"
+	var k := RulesKernel.new(st)
+	var plugins := PluginHost.new(k)
+	var declare := func(mode: String) -> String:
+		if plugins.plugins.has("t.health"):
+			plugins.unload("t.health")
+		return plugins.load_source({"id": "t.health", "version": "1", "api": 1, "name": "Health", "capabilities": ["state"]}, [["main.lua",
+			"hexmap.ui.health({ tags = { 'bloodied', 'down', 'dead' }, resource = 'hp', effects = { 'dead' }, players = '%s' })" % mode]])
+	check(k.health_policies().is_empty(), "no ruleset, nothing declared: everyone is sent the marks, as before")
+	check(declare.call("none") == "", "a ruleset declares what players see of its creatures' health")
+	check(k.health_policies().size() == 1 and str(k.health_policies()[0].players) == "none" and k.health_policies()[0].tags == ["bloodied", "down", "dead"], "read from the plugins loaded now: %s" % [k.health_policies()])
+	check(plugins.load_source({"id": "t.bad", "version": "1", "api": 1, "name": "Bad"}, [["main.lua", "hexmap.ui.health({ players = 'some' })"]]) != "", "a mode it doesn't know is refused")
+	# a goblin no player owns beside Ana's fighter, both Bloodied; a person of the world the players see
+	var fighter := str(st.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Ana's fighter")[0].id)
+	check(k.commit([
+		{"t": "actor.add", "actor": {"id": "a_gob", "kind": "npc", "name": "Goblin"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Goblin", Vector2(4.5, 6.6), {"id": "t_gob", "actor": "a_gob", "hidden": false, "tags": ["humanoid", "bloodied"]})},
+		{"t": "token.set", "scene": sid, "id": fighter, "changes": {"tags": ["bloodied"]}},
+		Resources.set_event("actor:a_gob", "t.health", "hp", Resources.pool(3, 7)),
+		{"t": "actor.add", "actor": {"id": "a_marta", "kind": "npc", "name": "Marta", "audience": {"visible": "all"}}},
+		Resources.set_event("actor:a_marta", "t.health", "hp", Resources.pool(0, 4)),
+		{"t": "effect.apply", "effect": {"id": "e_dead", "on": "actor:a_marta", "plugin": "t.health", "key": "dead", "label": "Dead", "stack": "none", "changes": [], "duration": {"kind": "until_cleared"}}},
+	], "setup") == "", "set up")
+	var tok := func(snap: Dictionary, id: String) -> Dictionary:
+		for t in snap.get("tokens", []):
+			if str(t.id) == id:
+				return t
+		return {}
+	var doc_tok := func(doc: Dictionary, id: String) -> Dictionary:
+		for sc in doc.get("scenes", []):
+			for t in sc.get("tokens", []):
+				if str(t.id) == id:
+					return t
+		return {}
+	var health := k.health_policies()
+	# none: a player's screens hold no mark of the goblin's; the DM's do; the party's own stays
+	var snap := WebScene.build(st, sid, ana, false, health)
+	check((tok.call(snap, "t_gob").tags as Array) == ["humanoid"], "none: Ana's snapshot has the goblin, not its Bloodied: %s" % [tok.call(snap, "t_gob").get("tags")])
+	check((tok.call(snap, fighter).tags as Array).has("bloodied"), "her fighter's own Bloodied, the party's to see")
+	check(not tok.call(snap, "t_gob").has("hp"), "no hit points")
+	check((tok.call(WebScene.build(st, sid, "", true, health), "t_gob").tags as Array).has("bloodied"), "the DM's snapshot has it")
+	check((tok.call(WebScene.build(st, sid, ana, false), "t_gob").tags as Array).has("bloodied"), "(with nothing declared, as before)")
+	var doc := Protocol.client_document(st.encounter.doc, false, health)
+	check((doc_tok.call(doc, "t_gob").tags as Array) == ["humanoid"] and (doc_tok.call(doc, fighter).tags as Array).has("bloodied"), "a Godot player's document: the goblin's mark gone, her fighter's kept")
+	check((doc_tok.call(Protocol.client_document(st.encounter.doc, true, health), "t_gob").tags as Array).has("bloodied"), "a co-GM's whole")
+	check((doc_tok.call(st.encounter.doc, "t_gob").tags as Array).has("bloodied"), "and the Table's own document keeps it")
+	# a token event after it: a player's without the mark
+	var ev := {"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"tags": ["humanoid", "dead"]}}
+	var mine := HealthShown.player_event(ev, st.token(sid, "t_gob"), st.encounter.actors, health)
+	check(mine.changes.tags == ["humanoid"] and ev.changes.tags == ["humanoid", "dead"], "a change of its marks, as a player's client is sent it: %s" % [mine.changes])
+	check(HealthShown.player_event({"t": "token.set", "scene": sid, "id": fighter, "changes": {"tags": ["down"]}}, st.token(sid, fighter), st.encounter.actors, health).changes.tags == ["down"], "her fighter's, whole")
+	# the rules' view: a person of the world the players see, her pool and her death the DM's
+	var view := Views.project(k, plugins, ana, Views.ROLE_PLAYER)
+	check(view.actors.has("a_marta") and not (view.actors.a_marta.resources.get("t.health", {}) as Dictionary).has("hp"), "Marta is in Ana's view, not her hit points")
+	check(not (view.actors.a_marta.effects as Array).any(func(fx: Dictionary) -> bool: return str(fx.key) == "dead"), "nor her death")
+	var dm_view := Views.project(k, plugins, "", Views.ROLE_GM)
+	check((dm_view.actors.a_marta.resources["t.health"] as Dictionary).has("hp") and (dm_view.actors.a_marta.effects as Array).size() == 1, "the DM's view has both")
+	# marks: the marks, as before; no hit points
+	check(declare.call("marks") == "", "marks")
+	health = k.health_policies()
+	snap = WebScene.build(st, sid, ana, false, health)
+	check((tok.call(snap, "t_gob").tags as Array).has("bloodied") and not tok.call(snap, "t_gob").has("hp"), "marks: the goblin's Bloodied, not its hit points")
+	view = Views.project(k, plugins, ana, Views.ROLE_PLAYER)
+	check(not (view.actors.a_marta.resources.get("t.health", {}) as Dictionary).has("hp") and (view.actors.a_marta.effects as Array).size() == 1, "Marta's death is told, her pool isn't")
+	# exact: and its hit points, on its token, for everyone
+	check(declare.call("exact") == "", "exact")
+	health = k.health_policies()
+	snap = WebScene.build(st, sid, ana, false, health)
+	check(tok.call(snap, "t_gob").get("hp") == [3.0, 7.0] and (tok.call(snap, "t_gob").tags as Array).has("bloodied"), "exact: the goblin's 3 of 7 on its token, and its mark: %s" % [tok.call(snap, "t_gob").get("hp")])
+	check(not tok.call(snap, fighter).has("hp"), "not on the party's: their sheets say it")
+	check(tok.call(WebScene.build(st, sid, "", true, health), "t_gob").get("hp") == [3.0, 7.0], "the DM sees what the players see")
+	check((Views.project(k, plugins, ana, Views.ROLE_PLAYER).actors.a_marta.resources["t.health"] as Dictionary).has("hp"), "Marta's pool is sent")
+	plugins.unload("t.health")
+	check(k.health_policies().is_empty(), "unloaded, nothing is declared")
+
+
+## Over the wire: a player's web screen and a Godot client get a monster's
+## marks as its ruleset declares; the DM's screen all of them; the rules
+## loaded again with another answer, every screen's scene follows at once.
+func test_monster_health_over_the_wire() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	var declare := func(mode: String) -> String:
+		if plugins.plugins.has("t.health"):
+			plugins.unload("t.health")
+		return plugins.load_source({"id": "t.health", "version": "1", "api": 1, "name": "Health", "capabilities": ["state"]}, [["main.lua",
+			"hexmap.ui.health({ tags = { 'bloodied', 'down', 'dead' }, resource = 'hp', players = '%s' })" % mode]])
+	check(declare.call("none") == "", "declared: none")
+	kernel.commit([{"t": "actor.add", "actor": {"id": "a_gob", "kind": "npc", "name": "Goblin"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Goblin", Vector2(4.5, 6.6), {"id": "t_gob", "actor": "a_gob", "hidden": false, "tags": ["bloodied"]})}], "a goblin")
+	var host := HostSession.new(st, PackLibrary.new())
+	host.kernel = kernel
+	host.plugins = plugins
+	host.dm_token = "sesame"
+	host.dm_state_source = func() -> Dictionary: return {}
+	check(host.start(0, false, 0) == OK, "hosting")
+	var seat := func(hello: Dictionary, join: Dictionary) -> WebClient:
+		var w := WebClient.new(host.port)
+		_pump(host, [w], func() -> bool: return w.open())
+		w.send(hello)
+		w.send(join)
+		_pump(host, [w], func() -> bool: return not w.last("joined").is_empty())
+		return w
+	var ana: WebClient = seat.call({"t": "hello", "version": Protocol.VERSION, "name": "phone", "web": true}, {"t": "join", "role": "player", "name": "Ana"})
+	var ben: WebClient = seat.call({"t": "hello", "version": Protocol.VERSION, "name": "godot"}, {"t": "join", "role": "player", "player": "pl_393eb25a"})
+	var dm: WebClient = seat.call({"t": "hello", "version": Protocol.VERSION, "name": "dm", "web": true}, {"t": "join", "role": "dm", "token": "sesame"})
+	var all := [ana, ben, dm]
+	_pump(host, all, func() -> bool: return not ana.last("scene").is_empty() and not dm.last("scene").is_empty())
+	var tags_in := func(msg: Dictionary) -> Array:
+		for t in msg.get("scene", {}).get("tokens", []):
+			if str(t.id) == "t_gob":
+				return t.get("tags", [])
+		return ["(not there)"]
+	check(tags_in.call(ana.last("scene")) == [], "Ana's web screen: the goblin, no mark")
+	check(tags_in.call(dm.last("scene")) == ["bloodied"], "the DM's: its mark")
+	var welcome_tags := func(w: WebClient) -> Array:
+		for sc in w.last("welcome").get("encounter", {}).get("scenes", []):
+			for t in sc.get("tokens", []):
+				if str(t.id) == "t_gob":
+					return t.get("tags", [])
+		return ["(not there)"]
+	check(welcome_tags.call(ben) == [], "Ben's Godot client's document: no mark")
+	# it drops: Ben's client's event without the mark, the DM's screen with it
+	var before := ben.count("event")
+	kernel.commit([{"t": "token.set", "scene": sid, "id": "t_gob", "changes": {"tags": ["down"]}}], "down")
+	check(_pump(host, all, func() -> bool: return ben.count("event") > before and tags_in.call(dm.last("scene")) == ["down"]), "the change reaches the screens")
+	check(ben.last("event").ev.changes.tags == [], "Ben's client is told the change without the mark: %s" % [ben.last("event").ev])
+	check(tags_in.call(ana.last("scene")) == [], "Ana's screen: still none")
+	# the views refreshed, the rules saying the same of health: no scene sent again
+	host.refresh_views()
+	var settled := ben.count("welcome")
+	var views := ana.count("view")
+	check(_pump(host, all, func() -> bool: return ana.count("view") > views), "the views sent again")
+	check(ben.count("welcome") == settled, "the rules saying the same of health: no document sent again")
+	# the rules loaded again with marks (the Table refreshes the views after any
+	# reload, whichever screen changed a setting): every screen's scene follows
+	check(declare.call("marks") == "", "declared: marks")
+	var welcomes := ben.count("welcome")
+	host.refresh_views()
+	check(_pump(host, all, func() -> bool: return tags_in.call(ana.last("scene")) == ["down"] and ben.count("welcome") > welcomes), "Ana's screen shows the mark now, and Ben's client is sent the document again")
+	check(welcome_tags.call(ben) == ["down"], "with the mark: %s" % [welcome_tags.call(ben)])
+	host.stop()
+
+
 ## The DM screen's Next says the turn it showed (`from`): in a playtest a
 ## player's End turn and the DM's Next a few seconds apart took two turns.
 func test_dm_next_names_the_turn_it_ends() -> void:

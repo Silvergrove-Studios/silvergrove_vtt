@@ -19,6 +19,7 @@ import {
   pickEach,
   pickNeedsSight,
   pickRange,
+  pickStoppedByWalls,
   pickTarget,
   pickWords,
   pickables,
@@ -335,6 +336,32 @@ describe('picking a target', () => {
     // with none it may take, the words say to look beside each name
     expect(pickWords(haste, [yuki, marcus], { sight, grid: sq })).toBe('Cast: tap a creature on the map');
     expect(pickWords({ ...haste, friendly: false }, [yuki, marcus], { sight, grid: sq })).toBe(NONE_TO_CHOOSE);
+  });
+
+  // (the DM's checks: a table that doesn't check line of sight or range sends
+  // picks with `sight: false, walls: false` and no `range`: nothing is barred
+  // for them, and what's dead still is)
+  it('bars nothing for a wall, the dark or the distance where the table checks neither', () => {
+    const sq = new Grid({ shape: 'square', columns: 30, rows: 30, distance: 5, units: 'ft' });
+    const at = (q: number, r: number) => [sq.center({ q, r }).x, sq.center({ q, r }).y];
+    const yuki = { id: 'yu', name: 'Yuki', label: 'YU', actor: 'yuki', owner: 'pl_a', pos: at(1, 1) };
+    const marcus = { id: 'mv', name: 'Marcus Vell', label: 'MV', actor: 'marcus', owner: 'pl_b', pos: at(4, 1) };
+    const priya = { id: 'pr', name: 'Priya', label: 'PR', actor: 'priya', owner: 'pl_c', pos: at(1, 3) };
+    const far = { id: 'sam', name: 'Sam', label: 'SA', actor: 'sam', owner: 'pl_d', pos: at(1, 29) };
+    const fallen = { id: 'g1', name: 'Goblin Warrior', label: 'GW1', actor: 'a_g1', pos: at(2, 1), tags: ['dead'] };
+    const sight = (p: { x: number; y: number }) => (p.x > 3 && p.y < 3 ? 'walls' : p.y > 3 && p.y < 5 ? 'dark' : 'seen') as 'seen' | 'dark' | 'walls';
+    const haste = { kind: 'action', pick: 'token', friendly: true, label: 'Cast', sight: false, walls: false, ctx: { actor: 'yuki', spell: 'haste' } };
+    expect(pickStoppedByWalls(haste)).toBe(false);
+    expect(pickStoppedByWalls({})).toBe(true);
+    expect(pickChoices([yuki, marcus, priya, far, fallen], haste, { sight, grid: sq }).map((c) => [c.name, c.why])).toEqual([
+      ['Yuki', ''],
+      ['Priya', ''],
+      ['Marcus Vell', ''],
+      ['Sam', ''],
+      ['Goblin Warrior', WHY_DEAD],
+    ]);
+    // and the flag goes no further than the pick
+    expect(withTarget(haste, 'token:mv', 's1')).toEqual({ kind: 'action', ctx: { actor: 'yuki', spell: 'haste', target: 'token:mv', scene: 's1' } });
   });
 
   // the fog as the table sent it: in sight; in the line of sight but dark (navy); out of it (black)

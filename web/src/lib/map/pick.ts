@@ -129,6 +129,13 @@ export function pickNeedsSight(payload: Dict): boolean {
   return payload.sight !== false;
 }
 
+/** Whether a wall between stops a pick's creature: always, unless the
+ *  ruleset says the table doesn't check line of sight (`walls: false`: the
+ *  DM's to judge). */
+export function pickStoppedByWalls(payload: Dict): boolean {
+  return payload.walls !== false;
+}
+
 /** How far apart two tokens are, in the map's units (feet on a battle map),
  *  as the rules count it: for two of one space the grid's steps (a square's
  *  diagonal is a step), for a bigger one the gap between their edges in
@@ -147,7 +154,7 @@ export function feetBetween(grid: Grid, a: Dict, b: Dict): number {
 /** The intent as it goes, without what only the pick needed. */
 function sendable(payload: Dict): Dict {
   const out = clone(payload);
-  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead', 'friendly', 'range', 'sight']) delete out[k];
+  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead', 'friendly', 'range', 'sight', 'walls']) delete out[k];
   if (!out.ctx || typeof out.ctx !== 'object') out.ctx = {};
   return out;
 }
@@ -292,14 +299,16 @@ function candidates(tokens: Dict[], payload: Dict, gm: boolean): Dict[] {
 
 /** Why a creature can't be the pick's, or '': dead (unless the pick brings
  *  back the dead); a wall between it and the picker (the SRD's total cover:
- *  "can't be targeted directly"); too dark to see, for a pick that needs its
- *  creature seen; out of the pick's range. */
+ *  "can't be targeted directly"), unless the table doesn't check line of
+ *  sight; too dark to see, for a pick that needs its creature seen; out of
+ *  the pick's range (none, where the table doesn't check range: the ruleset
+ *  sends no `range`). */
 export function whyNot(t: Dict, from: Dict | undefined, payload: Dict, opts: PickOpts = {}): string {
   if (isDead(t) && !takesDead(payload)) return WHY_DEAD;
   if (from && t === from) return '';
   const look = opts.sight ?? (opts.sees ? (p: Vec) => (opts.sees!(p) ? 'seen' : 'walls') : undefined);
   const s = look ? look(tokenPos(t)) : 'seen';
-  if (s === 'walls') return WHY_WALL;
+  if (s === 'walls' && pickStoppedByWalls(payload)) return WHY_WALL;
   if (s === 'dark' && pickNeedsSight(payload)) return WHY_DARK;
   const range = pickRange(payload);
   if (range > 0 && from && opts.grid) {

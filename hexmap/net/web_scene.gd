@@ -25,7 +25,11 @@ extends RefCounted
 ## A player sees the rest of the party wherever they are (a playtest's
 ## player saw a friend's token vanish through a doorway, and took it for a
 ## dropped connection); everything else only in their characters' sight.
-static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool) -> Dictionary:
+## `health`: what the rulesets say players see of a creature's health
+## (HealthShown): a monster's marks left out for a player where they see
+## nothing of it, and its hit points (`hp`: [current, max]) on its token for
+## everyone where they see them exactly.
+static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool, health: Array = []) -> Dictionary:
 	var e := state.encounter
 	var sc := e.scene(scene_id)
 	if sc.is_empty():
@@ -40,7 +44,7 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	for tk in state.tokens(scene_id):
 		if not gm and not shows(state, tk, player_id, fog, sight.polygons):
 			continue
-		var out := token_out(state, tk, gm)
+		var out := token_out(state, tk, gm, health)
 		out.label = str(labels.get(str(tk.id), out.get("label", "")))
 		tokens.append(out)
 	var lvl := state.effective_level(scene_id)
@@ -122,11 +126,20 @@ static func _eyes(state: EncounterState, scene_id: String, player_id: String, gm
 
 ## A token as a web client draws it; the DM also learns whether it is
 ## hidden. An object also brings its own light, which it is drawn glowing in.
-static func token_out(state: EncounterState, tk: Dictionary, gm: bool) -> Dictionary:
+## A creature no player owns shows of its health what `health` says
+## (HealthShown): its marks left out of a player's, its hit points on
+## everyone's where they're shown exactly.
+static func token_out(state: EncounterState, tk: Dictionary, gm: bool, health: Array = []) -> Dictionary:
 	var out := {}
 	for k in ["id", "name", "pos", "size", "color", "label", "art", "owner", "actor", "rot", "tags", "elevation"]:
 		if tk.has(k) and tk[k] != null:
 			out[k] = JsonDoc.deep(tk[k])
+	if not health.is_empty() and HealthShown.unowned(tk, state.encounter.actors):
+		if not gm and out.get("tags") is Array:
+			out.tags = HealthShown.player_tags(out.tags, health)
+		var hp := HealthShown.shown_hp(state.encounter.resources, str(tk.get("actor", "")), health)
+		if not hp.is_empty():
+			out.hp = hp
 	if Encounter.is_object(tk) and tk.get("light") is Dictionary and not (tk.light as Dictionary).is_empty():
 		out.light = JsonDoc.deep(tk.light)
 	if gm:

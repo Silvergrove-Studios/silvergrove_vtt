@@ -97,6 +97,10 @@ var _scenes_dirty := false
 var _dm_dirty := false
 var _last_dm_ms := 0
 var _last_scene_ms := 0
+## What the rules said players see of a creature's health when the views
+## were last refreshed (HealthShown's policies): another answer sends the
+## scenes again.
+var _health_was: Array = []
 
 ## Colours given to players who join by name, in turn. None is red: red is
 ## the creatures' (a playtest's player in red read as a goblin).
@@ -119,6 +123,7 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 		return err
 	port = _server.get_local_port()
 	_listening = true
+	_health_was = _health()
 	cogm_code = "%04d" % (randi() % 10000)
 	state.applied.connect(_on_applied)
 	if marks.state != state:
@@ -184,7 +189,7 @@ func set_state(p_state: EncounterState) -> void:
 			marks.bind(state, kernel.map if kernel != null else null)
 		_sight.clear()
 		for c in _clients:
-			_send(c, Protocol.welcome(state.encounter, _is_gm(c)))
+			_send(c, Protocol.welcome(state.encounter, _is_gm(c), _health()))
 			if c.joined:
 				_send_marks(c)
 		_scenes_dirty = true
@@ -193,6 +198,24 @@ func set_state(p_state: EncounterState) -> void:
 
 func _is_gm(c: Dictionary) -> bool:
 	return c.role == Views.ROLE_COGM or c.role == Views.ROLE_DM
+
+
+## What the rulesets loaded now say players see of a creature's health
+## (HealthShown): each player's snapshot, document and token events follow it.
+func _health() -> Array:
+	return kernel.health_policies() if kernel != null else []
+
+
+## What each screen holds of the scene, sent again as the rules loaded now
+## would have it — a web screen's snapshot, a Godot player's document (a
+## monster's marks, shown or kept from the players: HealthShown). The rules
+## loaded again saying otherwise of a monster's health do it (refresh_views).
+func refresh_scenes() -> void:
+	_scenes_dirty = true
+	_health_was = _health()
+	for c in _clients:
+		if c.hello and not _is_gm(c) and not bool(c.web):
+			_send(c, Protocol.welcome(state.encounter, false, _health()))
 
 
 ## Is the client on this machine (the DM's own browser)?
@@ -380,11 +403,21 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		# the whole document changed under everyone: start them over
 		for c in _clients:
 			if c.hello:
-				_send(c, Protocol.welcome(state.encounter, _is_gm(c)))
+				_send(c, Protocol.welcome(state.encounter, _is_gm(c), _health()))
 		_views_dirty = true
 		return
 	if Protocol.SCENE_EVENTS.has(t):
-		_broadcast(Protocol.event(ev))
+		if (t == "token.add" or t == "token.set") and HealthShown.hides(_health()):
+			# a monster's marks of its health as each may see them (HealthShown): the DM's
+			# whole, a player's without what the players see nothing of
+			var tid := str(ev.token.get("id", "")) if t == "token.add" and ev.get("token") is Dictionary else str(ev.get("id", ""))
+			var now := state.token(str(ev.get("scene", "")), tid)
+			var mine := Protocol.event(HealthShown.player_event(ev, now, state.encounter.actors, _health()))
+			for c in _clients:
+				if c.hello and not bool(c.web):
+					_send(c, Protocol.event(ev) if _is_gm(c) else mine)
+		else:
+			_broadcast(Protocol.event(ev))
 		# a note on the map shown to the players (or hidden again): their
 		# devices get the map again, with it (or without it)
 		if t == "element.set" and str(ev.get("ref", "")).begins_with("notes:"):
@@ -400,6 +433,9 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 				if c.hello and not _is_gm(c) and not bool(c.web):
 					_send(c, Protocol.event(msg))
 	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t) or t.begins_with("token.") or t == "checkpoint.restore":
+		_scenes_dirty = true
+	# a creature's hit points, on its token where the players see them exactly
+	if t == "resource.set" and HealthShown.exact(_health()):
 		_scenes_dirty = true
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
@@ -514,9 +550,13 @@ func preview_chat(pid: String) -> Dictionary:
 
 
 ## Something the views draw on changed outside the encounter (the
-## campaign's journal): every client's view is sent again.
+## campaign's journal, the rules loaded again): every client's view is sent
+## again — and when the rules now say otherwise of what players see of a
+## monster's health, every screen's scene too, however they were reloaded.
 func refresh_views() -> void:
 	_views_dirty = true
+	if not JsonDoc.same(_health(), _health_was):
+		refresh_scenes()
 
 
 func _send_view(c: Dictionary) -> void:
@@ -525,13 +565,14 @@ func _send_view(c: Dictionary) -> void:
 
 
 ## A web client's scene: the one the players see (the DM's: the one they
-## chose), whole, as they may see it.
+## chose), whole, as they may see it (a monster's health too: HealthShown).
 func _send_scene(c: Dictionary) -> void:
 	var e := state.encounter
 	var sid := str(c.get("scene", ""))
 	if sid == "" or e.scene(sid).is_empty() or not _is_gm(c):
 		sid = e.active_scene_id
-	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c)) if sid != "" else {},
+	var health := _health()
+	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c), health) if sid != "" else {},
 		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
 	if not (msg.scene as Dictionary).is_empty():
 		msg.scene.role = str(map_role.call(str(msg.scene.get("map", "")))) if map_role.is_valid() else ""
@@ -543,7 +584,7 @@ func _send_scene(c: Dictionary) -> void:
 		# seeing as a player: that player's snapshot of the scene, as their screen has it
 		var who := str(c.get("see_as", ""))
 		if who != "" and sid != "" and not e.player(who).is_empty():
-			msg.preview = WebScene.build(state, sid, who, false)
+			msg.preview = WebScene.build(state, sid, who, false, health)
 			msg.preview_as = who
 			# and why each creature they don't see isn't there: hidden, dark or walls
 			msg.preview_why = WebScene.unseen(state, sid, who)
@@ -575,7 +616,7 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 				return
 			c.hello = true
 			c.name = str(msg.get("name", ""))
-			_send(c, Protocol.welcome(state.encounter))
+			_send(c, Protocol.welcome(state.encounter, false, _health()))
 		"join":
 			var pid := str(msg.get("player", ""))
 			var role := str(msg.get("role", Views.ROLE_PLAYER))

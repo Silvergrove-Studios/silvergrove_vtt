@@ -85,6 +85,14 @@ func unregister_ruleset(id: String) -> void:
 	rederive_all()
 
 
+## What the loaded rulesets say of their creatures' health and what players
+## see of it (hm.ui.health: HealthShown), from the plugins over this kernel
+## now (a reload's, after a Rules setting changed); [] with none.
+func health_policies() -> Array:
+	var host: PluginHost = plugin_host.get_ref() if plugin_host != null else null
+	return host.health_policies() if host != null else []
+
+
 ## Everything a trigger ends: effects and regions alike.
 func expire(trigger: Dictionary) -> Array:
 	var out := Effects.expire(state, trigger)
