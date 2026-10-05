@@ -185,7 +185,17 @@ func commit(events: Array, label: String, reason: Dictionary = {}, audience := E
 	var everyone := [false]
 	_collect(events, touched, everyone)   # effects about to be removed are still here
 	_committing = true
+	# a step a roll set off is kept on the roll's entry, in the same undo step
+	var roll := str(reason.get("roll", ""))
+	var keep := roll != "" and state._log_has(roll)
+	var since := log.seq
+	if keep:
+		log.begin_group()
 	var why := log.record_all(events, label, reason, audience)
+	if why == "" and keep:
+		_keep_caused(roll, since, label, reason)
+	if keep:
+		log.end_group(label)
 	_committing = false
 	if why != "":
 		return why
@@ -206,6 +216,33 @@ func commit(events: Array, label: String, reason: Dictionary = {}, audience := E
 	_due_triggers.append_array(Triggers.due(state, events))
 	_run_due_triggers()
 	return ""
+
+
+## What a roll set off, kept with it: a step committed with `reason.roll`
+## naming a log entry is added to that entry's `caused` — its label, who
+## committed it, the events it applied (`do`, with what went with them: the
+## tokens and creatures an effect took along) and the events that put them
+## back (`undo`, last first). A ruleset reads it (`hm.log_entry`) to correct
+## the roll long after, in a later session's file too, with changes of its
+## own: the log keeps what happened and what the DM changed. The DM's screens
+## never receive it (Views.project); players never see a log entry's notes.
+func _keep_caused(roll_id: String, since: int, label: String, reason: Dictionary) -> void:
+	var steps := []
+	var i := log.entries.size() - 1
+	while i >= 0 and int(log.entries[i].seq) >= since:
+		steps.push_front(log.entries[i])
+		i -= 1
+	if steps.is_empty():
+		return
+	var done := []
+	var undo := []
+	for e in steps:
+		done.append(JsonDoc.deep(e.ev))
+		undo.push_front(JsonDoc.deep(e.inv))
+	var entry: Dictionary = state.encounter.log[state._log_index(roll_id)]
+	var list: Array = JsonDoc.deep(entry.caused) if entry.get("caused") is Array else []
+	list.append({"label": label, "by": str(reason.get("by", "")), "do": done, "undo": undo})
+	log.record({"t": "log.set", "id": roll_id, "changes": {"caused": list}}, label, {"by": "kernel"}, "gm")
 
 
 func _run_due_triggers() -> void:
@@ -406,14 +443,19 @@ func roll(spec: Variant, ctx: Dictionary = {}, label := "Roll", reason: Dictiona
 	if not result.ok:
 		last_veto = result.error
 		return {}
-	var after := hooks.run_sync("after_roll", {"spec": s, "result": result, "ctx": ctx})
-	result = after.result
 	# (ids are random: thousands of rolls in one log can meet one already there)
 	var rid := JsonDoc.new_id("r")
 	while state._log_has(rid):
 		rid = JsonDoc.new_id("r")
+	# (`id`: the entry the roll will be; `dm`: what the DM may do with it and the
+	# rulesets' notes on it, each under its plugin's id — the entry keeps it, for
+	# the DM's eyes alone)
+	var after := hooks.run_sync("after_roll", {"spec": s, "result": result, "ctx": ctx, "id": rid, "dm": {}})
+	result = after.result
 	var entry := {"id": rid, "kind": "roll", "label": label, "spec": s, "result": result, "draw": result.draw,
 		"actor": str(ctx.get("actor", "")), "audience": str(result.get("visibility", "all"))}
+	if after.get("dm") is Dictionary and not (after.dm as Dictionary).is_empty():
+		entry.dm = JsonDoc.deep(after.dm)
 	var why := log.record({"t": "log.add", "entry": entry}, label, reason, str(entry.audience))
 	if why != "":
 		last_veto = why

@@ -562,6 +562,21 @@ func test_targets_picked_on_the_table() -> void:
 	check(PluginHost.check_target(st, sid, "token", "token:nope", true) != "" and PluginHost.check_target(st, sid, "token", "actor:a_gob", true) != "", "no such token; not a token")
 	check(PluginHost.check_target(st, sid, "cell", "3,3", false) == "" and PluginHost.check_target(st, sid, "cell", "300,3", false) != "" and PluginHost.check_target(st, sid, "cell", "x", false) != "", "cells in and out of bounds")
 	check(PluginHost.check_target(st, sid, "area", {"shape": "circle", "at": "3,3", "direction": 0}, false) == "" and PluginHost.check_target(st, sid, "area", {"at": "token:" + gob_tk, "direction": 0}, false) != "" and PluginHost.check_target(st, sid, "area", "3,3", false) != "", "an area's origin is checked like a cell or a token")
+	# the Table's log: the newest lines, with the DM's buttons a ruleset keeps on them;
+	# pressed, the button's action runs as the DM's
+	check(ctx.kernel.commit([{"t": "log.add", "entry": {"id": "r_rest", "kind": "roll", "label": "Strike", "result": {"total": 14, "outcome": "hit"}, "audience": "all",
+		"dm": {"sample.ordered": {"actions": [{"id": "rest", "label": "Rest instead", "intent": {"kind": "action", "plugin": "sample.ordered", "action": "rest", "ctx": {}}}]}}}}], "A roll") == "", "a roll with a button of the DM's")
+	table.rules.refresh()
+	await tree.process_frame
+	var rest_btn: Button = null
+	for b in table.rules._recent.find_children("*", "Button", true, false):
+		if (b as Button).text == "Rest instead":
+			rest_btn = b
+	check(rest_btn != null, "the Rules pane's log shows it")
+	var lines_before: int = ctx.encounter().log.size()
+	if rest_btn != null:
+		rest_btn.pressed.emit()
+	check(ctx.encounter().log.size() > lines_before and str(ctx.encounter().log.back().get("text", "")) == "The party rests.", "pressed: its action ran")
 	table.queue_free()
 	await tree.process_frame
 

@@ -18,6 +18,9 @@ var _gm: VBoxContainer
 var _target: OptionButton
 var _renderers: Array = []
 var _log: Label
+var _recent: VBoxContainer
+## How many of the newest log lines the pane shows.
+const RECENT := 12
 
 
 func _init(p_ctx: TableContext) -> void:
@@ -80,6 +83,14 @@ func _init(p_ctx: TableContext) -> void:
 	box.add_child(ph)
 	_prompts = VBoxContainer.new()
 	box.add_child(_prompts)
+	# the newest rolls and lines, with what the DM may do with them (a ruling
+	# on a roll, an outcome waiting to be applied)
+	var lh := Label.new()
+	lh.text = "Log"
+	lh.theme_type_variation = "HeaderLabel"
+	box.add_child(lh)
+	_recent = VBoxContainer.new()
+	box.add_child(_recent)
 	_gm = VBoxContainer.new()
 	_gm.add_theme_constant_override("separation", 8)
 	box.add_child(_gm)
@@ -135,7 +146,7 @@ func refresh() -> void:
 	if ctx.state == null or ctx.kernel == null:
 		return
 	_renderers.clear()
-	for c in _actions.get_children() + _prompts.get_children() + _gm.get_children():
+	for c in _actions.get_children() + _prompts.get_children() + _gm.get_children() + _recent.get_children():
 		c.get_parent().remove_child(c)
 		c.queue_free()
 	var host := ctx.host
@@ -222,6 +233,22 @@ func refresh() -> void:
 		r.render({"type": "prompt", "bind": "/rec"}, {"rec": rec})
 		_renderers.append(r)
 		_prompts.add_child(row)
+	# the log's newest lines, as the GM reads them (with the DM's actions on them)
+	var lines := []
+	for entry in ctx.encounter().log:
+		if str(entry.get("kind", "")) in ["roll", "note", "ruling"]:
+			lines.append(Views.log_entry_for(entry, Views.ROLE_GM))
+	if lines.is_empty():
+		var l := Label.new()
+		l.text = "Nothing rolled yet."
+		l.theme_type_variation = "DimLabel"
+		_recent.add_child(l)
+	else:
+		var r := ViewRenderer.new()
+		r.intent.connect(_gm_intent)
+		_recent.add_child(r)
+		r.render({"type": "log", "bind": "/log", "limit": RECENT}, {"log": lines.slice(maxi(0, lines.size() - RECENT))})
+		_renderers.append(r)
 	# GM views
 	if host != null:
 		var projection := Views.project(ctx.kernel, host, "", Views.ROLE_GM)

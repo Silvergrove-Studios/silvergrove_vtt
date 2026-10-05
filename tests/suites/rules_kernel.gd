@@ -334,6 +334,56 @@ func test_event_log() -> void:
 	check(JsonDoc.sans_modified(fresh.encounter.to_json()) == JsonDoc.sans_modified(st.encounter.to_json()), "…and reproduces the document, undo and restore included")
 
 
+## A log entry's `dm` block (what the DM may do with it: a ruling on a roll)
+## and what its roll `caused`: given by after_roll, changed by `log.set`
+## (only those two), kept by the kernel for every step committed with
+## reason.roll, undone with the step; the DM's screens get the dm block and
+## nobody's get what it caused.
+func test_log_dm_and_what_a_roll_caused() -> void:
+	var st := _state()
+	var k := RulesKernel.new(st)
+	k.commit([{"t": "actor.add", "actor": {"id": "a_gob", "kind": "npc", "name": "Goblin"}},
+		Resources.set_event("actor:a_gob", "sample", "hp", Resources.pool(8, 8, "rest"))], "Goblin")
+	k.hooks.on("after_roll", func(p: Dictionary) -> Dictionary:
+		p.dm["sample"] = {"actions": [{"id": "miss", "label": "Call it a miss", "intent": {"kind": "action", "plugin": "sample", "action": "rule", "ctx": {"how": "miss"}}}]}
+		return p, "sample")
+	var r := k.roll("1d8", {"actor": "a_gob", "kind": "damage"}, "Damage")
+	var entry: Dictionary = st.encounter.log[0]
+	check(entry.dm.sample.actions[0].label == "Call it a miss", "after_roll gave the roll its dm block: %s" % [entry.get("dm")])
+	# a step the roll set off, kept on it in the same undo step
+	var depth := k.log.undo_depth()
+	check(k.commit([Resources.set_event("actor:a_gob", "sample", "hp", Resources.pool(3, 8, "rest")),
+		{"t": "effect.apply", "effect": {"id": "e_hurt", "on": "actor:a_gob", "plugin": "sample", "key": "hurt", "label": "Hurt", "duration": {"kind": "until_cleared"}}}],
+		"Damage", {"by": "sample", "roll": r.id}) == "", "a step with reason.roll commits")
+	check(k.log.undo_depth() == depth + 1, "…as one undo step, what it caused with it")
+	var caused: Array = st.encounter.log[0].get("caused", [])
+	check(caused.size() == 1 and caused[0].label == "Damage" and caused[0].by == "sample", "the roll keeps what it caused: %s" % [caused])
+	check(caused[0].do.size() == 2 and caused[0].do[0].t == "resource.set" and caused[0].do[1].t == "effect.apply", "…the events it applied")
+	check(caused[0].undo.size() == 2 and caused[0].undo[0].t == "effect.remove" and caused[0].undo[1].record.current == 8, "…and what puts them back, last first: %s" % [caused[0].undo])
+	check(k.commit([{"t": "effect.remove", "id": "e_hurt"}], "Healed", {"by": "sample"}) == "" and st.encounter.log[0].caused.size() == 1, "a step that names no roll isn't kept")
+	k.log.undo()
+	k.log.undo()
+	check(not st.encounter.log[0].has("caused") and Resources.get_record(st, "actor:a_gob", "sample", "hp").current == 8, "undone, the step and its keeping go together")
+	# log.set: the dm block and what was caused, nothing else
+	check(st.validate({"t": "log.set", "id": r.id, "changes": {"result/total": 99}}).contains("dm block"), "what was rolled isn't settable")
+	check(st.validate({"t": "log.set", "id": r.id, "changes": {"text": "x"}}).contains("dm block"), "nor any other field")
+	check(st.validate({"t": "log.set", "id": "r_nope", "changes": {"dm/x": 1}}).contains("no log entry"), "an entry that isn't there")
+	check(k.commit([{"t": "log.set", "id": r.id, "changes": {"dm/sample/ruled": "miss", "dm/sample/actions": []}}], "Ruled") == "", "a log.set by paths")
+	check(st.encounter.log[0].dm.sample.ruled == "miss" and st.encounter.log[0].dm.sample.actions == [] and st.encounter.log[0].result.total == r.result.total, "…changes the dm block and not the roll")
+	k.log.undo()
+	check(not st.encounter.log[0].dm.sample.has("ruled") and st.encounter.log[0].dm.sample.actions.size() == 1, "…and is undone")
+	# who receives what
+	k.commit([Resources.set_event("actor:a_gob", "sample", "hp", Resources.pool(5, 8, "rest"))], "Damage", {"by": "sample", "roll": r.id})
+	var gm := Views.project(k, null, "", Views.ROLE_GM)
+	var pl := Views.project(k, null, "pl_1", Views.ROLE_PLAYER)
+	check(gm.log[0].has("dm") and not gm.log[0].has("caused"), "the DM's screen gets the dm block, not what the roll caused")
+	check(not pl.log[0].has("dm") and not pl.log[0].has("caused") and pl.log[0].result.total == r.result.total, "a player's gets neither, the roll as it was")
+	# a session's rolls are banked bare
+	var c := Campaign.create("Log notes")
+	c.bank(st.encounter)
+	check(c.chat_log.size() == 1 and not c.chat_log[0].has("dm") and not c.chat_log[0].has("caused"), "the campaign keeps the roll without its notes")
+
+
 # ----------------------------------------------------------- the kernel --
 
 func test_kernel_end_to_end() -> void:

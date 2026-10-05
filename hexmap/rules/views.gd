@@ -129,13 +129,27 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 			out.rolls.append(JsonDoc.deep(rec))
 	for entry in e.log:
 		if can_see(str(entry.get("audience", "all")), player_id, role):
-			out.log.append(JsonDoc.deep(entry))
+			out.log.append(log_entry_for(entry, role))
 	# status views
 	if host != null:
 		for pid in plugin_ids:
 			var p: PluginHost.Plugin = host.plugins[pid]
 			if p.views.has("status"):
 				out.status.append({"plugin": pid, "schema": p.views["status"], "data": status_data(kernel, out, pid, player_id, role)})
+	return out
+
+
+## A log entry as a viewer with `role` receives it. Its `dm` block — what the
+## DM may do with it (a ruling on a roll, an outcome to apply) and the
+## rulesets' notes on it (a monster's hit points before and after) — is the
+## GM's alone; what its roll `caused` (the steps it set off, and what undoes
+## them) is the rulesets' own and reaches no screen.
+static func log_entry_for(entry: Dictionary, role: String) -> Dictionary:
+	var out: Dictionary = {}
+	for k in entry:
+		if k == "caused" or (k == "dm" and role != ROLE_GM):
+			continue
+		out[k] = JsonDoc.deep(entry[k])
 	return out
 
 

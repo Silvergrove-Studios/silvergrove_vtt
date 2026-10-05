@@ -190,6 +190,62 @@ func test_plugin_isolation_and_gates() -> void:
 	check(k.roll("1d6", {}, "y").result.has("total"), "the kernel is fine after all that")
 
 
+## The log from the Lua side: a roll given the DM's buttons by after_roll,
+## read back with what it caused, a plugin's own part of an entry's dm block
+## changed by hm.log_set and nobody else's, never what players said among
+## themselves.
+func test_plugin_log_entries() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var k := _kernel()
+	var host := PluginHost.new(k)
+	check(_load(host, """
+		local hm = hexmap
+		hm.on("after_roll", function(p)
+			if p.ctx.kind == "damage" then
+				p.dm[hm.id] = { actions = { { id = "halve", label = "Halve it", intent = { kind = "action", plugin = hm.id, action = "rule", ctx = { how = "halve" } } } } }
+			end
+			return p
+		end)
+		hm.actions.register("hurt", { run = function(ctx)
+			local r = hm.dice.roll({ expr = "1d6" }, { kind = "damage", actor = ctx.actor }, "Damage")
+			hm.commit({ hm.resources.set("actor:" .. ctx.actor, "hp", hm.resources.pool(2, 9, "rest")) }, "Damage", { roll = r.id })
+			hm.commit(hm.log_set(r.id, { ["rule/dealt"] = 7, applied = { "a_1" } }), "Noted")
+			local e = hm.log_entry(r.id)
+			return { id = r.id, label = e.dm[hm.id].actions[1].label, dealt = e.dm[hm.id].rule.dealt, caused = #e.caused,
+				was = e.caused[1].undo[1].record.current, total = e.result.total, none = hm.log_entry("r_nope") == nil }
+		end })
+		hm.actions.register("theirs", { run = function(ctx)
+			hm.commit({ { t = "log.set", id = ctx.id, changes = { ["dm/t.other/x"] = 1 } } }, "x")
+		end })
+		hm.actions.register("rewrite", { run = function(ctx)
+			hm.commit({ { t = "log.set", id = ctx.id, changes = { ["result/total"] = 20 } } }, "x")
+		end })
+		hm.actions.register("peek", { run = function(ctx) return { seen = hm.log_entry(ctx.id) ~= nil } end })
+	""") == "", "the plugin loads")
+	check(_load(host, """
+		hexmap.actions.register("note", { run = function(ctx) hexmap.commit(hexmap.log_set(ctx.id, { x = 1 }), "x") end })
+	""", {"id": "t.mute", "version": "1", "api": 1, "name": "mute", "capabilities": ["actions"]}) == "", "a plugin without the log capability loads")
+	k.commit([{"t": "actor.add", "actor": {"id": "a_1", "name": "One"}}, Resources.set_event("actor:a_1", "t.one", "hp", Resources.pool(9, 9, "rest"))], "One")
+	var pc := host.dispatch("t.one", "hurt", {"actor": "a_1"})
+	check(pc.status == PluginHost.PluginCall.OK, "it ran: " + pc.error)
+	if pc.status != PluginHost.PluginCall.OK:
+		return
+	check(pc.value.label == "Halve it" and pc.value.dealt == 7.0, "after_roll's dm block and hm.log_set's change, read back: %s" % [pc.value])
+	check(pc.value.caused == 1.0 and pc.value.was == 9.0 and pc.value.none == true, "what the roll caused, with what undoes it; no entry, nil: %s" % [pc.value])
+	var id := str(pc.value.id)
+	pc = host.dispatch("t.one", "theirs", {"id": id})
+	check(pc.status == PluginHost.PluginCall.ERROR and pc.error.contains("dm/t.one"), "another plugin's part of the dm block isn't this one's to change: " + pc.error)
+	pc = host.dispatch("t.one", "rewrite", {"id": id})
+	check(pc.status == PluginHost.PluginCall.ERROR, "nor is what was rolled: " + pc.error)
+	pc = host.dispatch("t.mute", "note", {"id": id})
+	check(pc.status == PluginHost.PluginCall.ERROR and pc.error.contains("log"), "log.set needs the log capability: " + pc.error)
+	k.commit([{"t": "log.add", "entry": {"id": "m_1", "kind": "chat", "from": "pl_1", "text": "psst", "audience": "private:pl_1,pl_2"}}], "Chat")
+	pc = host.dispatch("t.one", "peek", {"id": "m_1"})
+	check(pc.status == PluginHost.PluginCall.OK and pc.value.seen == false, "what players say among themselves is theirs, not the rules'")
+
+
 func test_plugin_ordering_between_plugins() -> void:
 	if not PluginHost.available():
 		skip("no Lua runtime in this build")

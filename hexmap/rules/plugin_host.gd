@@ -755,7 +755,8 @@ func _host_table(p: Plugin) -> Dictionary:
 			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "map_path", "map_space", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
-			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting"]:
+			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting",
+			"log_entry"]:
 		t[m] = Callable(br, m)
 	return t
 
@@ -876,6 +877,14 @@ class Bridge:
 		for ev in evs:
 			if str(ev.get("t", "")) == "ext.set" and not p.can("state"):
 				return {"__error": "ext.set needs the 'state' capability"}
+			if str(ev.get("t", "")) == "log.set":
+				# a plugin writes in its own part of an entry's dm block, and nowhere else
+				if not p.can("log"):
+					return {"__error": "log.set needs the 'log' capability"}
+				var mine := "dm/" + plugin_id
+				for k in PluginHost._as_dict(ev.get("changes", {})):
+					if str(k) != mine and not str(k).begins_with(mine + "/"):
+						return {"__error": "log.set: a plugin changes only %s on a log entry, not '%s'" % [mine, str(k)]}
 		var r: Dictionary = PluginHost._as_dict(reason)
 		r.by = plugin_id
 		var why := _k().commit(evs, label if label != "" else plugin_id, r)
@@ -904,6 +913,18 @@ class Bridge:
 			return {"__error": "hm.log needs the 'log' capability"}
 		var why := _k().commit([{"t": "log.add", "entry": {"id": JsonDoc.new_id("n"), "kind": "note", "text": text, "audience": audience, "plugin": plugin_id}}], "Note", {"by": plugin_id}, audience)
 		return true if why == "" else {"__error": why}
+
+	## A log entry by id — a roll with its result, the `dm` block the
+	## rulesets keep on it, what it `caused` — or nil. Not what players
+	## say among themselves (a `private:` audience): that is theirs.
+	func log_entry(id: String) -> Variant:
+		var st := _k().state
+		if not st._log_has(str(id)):
+			return null
+		var entry: Dictionary = st.encounter.log[st._log_index(str(id))]
+		if str(entry.get("audience", "all")).begins_with("private:"):
+			return null
+		return JsonDoc.deep(entry)
 
 	func setting(key: String) -> Variant:
 		return JsonDoc.at_path(_p().settings, str(key))

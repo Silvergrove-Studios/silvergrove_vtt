@@ -126,6 +126,32 @@ func test_view_renderer_widgets() -> void:
 	await tree.process_frame
 
 
+## The log's lines with the DM's buttons on them: a ruleset's, from its part
+## of an entry's dm block (only the GM's projection carries it); each sends
+## its intent. A player's line has none.
+func test_the_log_draws_the_dms_buttons() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var sent := []
+	r.intent.connect(func(i: Dictionary) -> void: sent.append(i))
+	var miss := {"kind": "action", "plugin": "srd5e", "action": "ruling", "ctx": {"roll": "r_1", "how": "miss"}}
+	r.render({"type": "log", "bind": "/log"}, {"log": [
+		{"id": "r_1", "kind": "roll", "label": "Scimitar", "result": {"total": 23, "outcome": "hit"},
+			"dm": {"srd5e": {"rule": {"kind": "attack"}, "actions": [{"id": "miss", "label": "Call it a miss", "hint": "Heals it back", "intent": miss},
+				{"id": "bad", "label": "No intent"}]}}},
+		{"id": "r_2", "kind": "roll", "label": "Shortbow", "result": {"total": 9, "outcome": "miss"}}]})
+	await tree.process_frame
+	var b := _find(r, "Button", "Call it a miss") as Button
+	check(b != null and b.tooltip_text == "Heals it back", "the DM's button under its line, its hint as tooltip")
+	check(_find(r, "Button", "No intent") == null, "nothing without an intent")
+	check(_count(r, "Button") == 1, "the other line has none: %d" % _count(r, "Button"))
+	b.pressed.emit()
+	check(sent.size() == 1 and sent[0] == miss, "pressed, it sends its intent: %s" % [sent])
+	check(ViewRenderer.dm_actions({"dm": {"b.rules": {"actions": [{"label": "B", "intent": {}}]}, "a.rules": {"actions": [{"label": "A", "intent": {}}]}}}).map(func(a: Dictionary) -> String: return str(a.label)) == ["A", "B"], "every ruleset's, in their order")
+	r.queue_free()
+	await tree.process_frame
+
+
 func _all(root: Node, cls: String) -> Array:
 	var out := []
 	if root.get_class() == cls:

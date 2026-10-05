@@ -707,7 +707,39 @@ func _log(n: Dictionary, ctx: Dictionary) -> Control:
 				_:
 					l.text = JSON.stringify(e)
 			box.add_child(l)
+			# what the DM may do with it (a ruling on a roll, an outcome to apply):
+			# only the GM's projection carries an entry's dm block
+			var acts := dm_actions(e)
+			if not acts.is_empty():
+				var row := HFlowContainer.new()
+				for a in acts:
+					var b := Button.new()
+					b.text = str(a.get("label", "?"))
+					b.tooltip_text = str(a.get("hint", ""))
+					var tpl: Dictionary = a.intent
+					b.pressed.connect(func() -> void: intent.emit(JsonDoc.deep(tpl)))
+					row.add_child(b)
+				box.add_child(row)
 	return box
+
+
+## The DM's buttons on a log entry, from each plugin's part of its `dm`
+## block: [{id, label, hint, intent}], in the plugins' order.
+static func dm_actions(entry: Dictionary) -> Array:
+	var out := []
+	var dm: Variant = entry.get("dm")
+	if not (dm is Dictionary):
+		return out
+	var plugins: Array = (dm as Dictionary).keys()
+	plugins.sort()
+	for pid in plugins:
+		var block: Variant = dm[pid]
+		if not (block is Dictionary) or not (block.get("actions") is Array):
+			continue
+		for a in block.actions:
+			if a is Dictionary and a.get("intent") is Dictionary and str(a.get("label", "")) != "":
+				out.append(a)
+	return out
 
 
 # ------------------------------------------------------------- pickers --
