@@ -58,6 +58,11 @@ func _run(dir: String) -> int:
 	var meta := TableSettings.check_manifest(manifest)
 	for problem in meta:
 		print("  FAIL table settings: %s" % problem)
+	# and its players' preferences (what x-when names, each default)
+	var pref_problems := PlayerPrefs.check_manifest(manifest)
+	for problem in pref_problems:
+		print("  FAIL preferences: %s" % problem)
+	meta.append_array(pref_problems)
 	var entries := 0
 	for coll in host.kernel.comp.collections():
 		entries += host.kernel.comp.count(str(coll))

@@ -16,11 +16,13 @@
     levelChanges,
     levelTitle,
     noticeWords,
+    prefWhenWords,
     registryOf,
     sectionReset,
     sections,
     valueWords,
     type Level,
+    type Pref,
     type Setting,
   } from '../lib/tablesettings';
 
@@ -62,6 +64,21 @@
 
   function nextFightWords(): string {
     return reg?.fight ? 'waits for the next fight' : 'takes effect at the next fight';
+  }
+
+  // the players' own choices: the preferences a search leaves (by their words or a player's name)
+  const prefsShown = $derived.by(() => {
+    const all = reg?.prefs ?? [];
+    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return all;
+    const names = (reg?.players ?? []).map((p) => p.name).join(' ');
+    return all.filter((p) => words.every((w) => `${p.title} ${p.description} players preferences ${names}`.toLowerCase().includes(w)));
+  });
+  const offeredPrefs = $derived(prefsShown.filter((p) => p.offered));
+
+  function setPref(player: string, name: string, p: Pref, value: unknown): void {
+    dmOp('player_pref', { player, plugin: p.plugin, key: p.key, value });
+    notice(`${name}: ${p.title}, ${valueWords(p, value)}`);
   }
 </script>
 
@@ -205,6 +222,53 @@
     {:else}
       <p class="dim">No setting says “{search}”.</p>
     {/each}
+    {#if prefsShown.length}
+      <!-- what each player chose for themselves, where the table lets them: theirs from
+           their ⋯ menu (My preferences), and yours to change -->
+      <section aria-labelledby="q-prefs" data-testid="players-prefs">
+        <header>
+          <div class="what">
+            <h3 id="q-prefs">Players’ preferences</h3>
+            <span class="dim small">What each player chooses for themselves, where the table lets them: from their ⋯ menu (My preferences), and yours to change.</span>
+          </div>
+        </header>
+        {#if !offeredPrefs.length}
+          <p class="dim small">The players choose none of these at this table now.</p>
+        {:else if !(reg.players ?? []).length}
+          <p class="dim small">No player has joined yet.</p>
+        {/if}
+        <ul>
+          {#each offeredPrefs.length ? (reg.players ?? []) : [] as pl (pl.id)}
+            {#each offeredPrefs as p (p.id)}
+              {@const v = pl.values?.[p.id] ?? p.default}
+              <li>
+                <div class="what">
+                  <span class="title">{pl.name}: {p.title}</span>
+                  <span class="dim small">{pl.own?.[p.id] ? 'Their choice' : 'As the table has it, until they choose'}</span>
+                </div>
+                <div class="control">
+                  {#if Array.isArray(p.enum)}
+                    <select aria-label={`${pl.name}: ${p.title}`} value={JSON.stringify(v)} onchange={(e) => setPref(pl.id, pl.name, p, JSON.parse((e.currentTarget as HTMLSelectElement).value))}>
+                      {#each p.enum as c, i (JSON.stringify(c))}
+                        <option value={JSON.stringify(c)}>{(p.labels ?? [])[i] ?? String(c)}</option>
+                      {/each}
+                    </select>
+                  {:else if p.type === 'boolean'}
+                    <label class="switch">
+                      <input type="checkbox" aria-label={`${pl.name}: ${p.title}`} checked={v === true} onchange={(e) => setPref(pl.id, pl.name, p, (e.currentTarget as HTMLInputElement).checked)} />
+                      <span>{v === true ? 'On' : 'Off'}</span>
+                    </label>
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          {/each}
+          {#each prefsShown.filter((p) => !p.offered) as p (p.id)}
+            <li class="kept"><span class="dim small">{p.title}: not the players’ to choose now.{prefWhenWords(p) ? ` To let them: ${prefWhenWords(p)}.` : ''}</span></li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
   {/if}
   {#snippet actions()}
     <button type="button" class="accent" onclick={onclose}>Done</button>

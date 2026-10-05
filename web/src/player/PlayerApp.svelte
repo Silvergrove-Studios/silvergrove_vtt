@@ -17,6 +17,7 @@
   import Journal from './Journal.svelte';
   import TablePane from './TablePane.svelte';
   import HowTableRuns from './HowTableRuns.svelte';
+  import MyPreferences from './MyPreferences.svelte';
   import { summaryOf, summarySeenKey } from '../lib/tablesettings';
   import { chatLog, comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
   import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
@@ -95,6 +96,10 @@
   // from the ⋯ menu
   const runs = $derived(summaryOf(game.view));
   let runsOpen = $state(false);
+  // what the table lets me choose for myself (my dice, my reactions asked, my
+  // extras), from the ⋯ menu: My preferences
+  const myPrefs = $derived(runs?.prefs ?? []);
+  let prefsOpen = $state(false);
   let runsAsked = '';
   function runsKey(): string {
     return runs ? summarySeenKey(runs.campaign || game.table, game.me, runs.level) : '';
@@ -568,10 +573,11 @@
              playtest's stray click by the map landed on it, a browser's bare
              "OK" took it, and the player was out of the table -->
         <div class="moremenu" bind:this={moreMenu}>
-          <button type="button" class="quiet morebtn" aria-label="More" title="More: how this table runs, leave the table" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>⋯</button>
+          <button type="button" class="quiet morebtn" aria-label="More" title="More: how this table runs, my preferences, leave the table" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>⋯</button>
           {#if menuOpen}
             <div class="menu" role="menu">
               {#if runs}<button type="button" role="menuitem" class="quiet" onclick={() => ((menuOpen = false), (runsOpen = true))}>How this table runs</button>{/if}
+              {#if myPrefs.length}<button type="button" role="menuitem" class="quiet" onclick={() => ((menuOpen = false), (prefsOpen = true))}>My preferences</button>{/if}
               <button type="button" role="menuitem" class="quiet" onclick={() => ((menuOpen = false), (leaving = true))}>Leave the table…</button>
             </div>
           {/if}
@@ -712,6 +718,9 @@
   {/if}
   {#if runsOpen && runs && !showing && promptIndex < 0 && !leaving}
     <HowTableRuns summary={runs} onclose={runsSeen} />
+  {/if}
+  {#if prefsOpen && !showing && promptIndex < 0 && !leaving}
+    <MyPreferences prefs={myPrefs} onclose={() => (prefsOpen = false)} />
   {/if}
   {#if leaving}
     <Modal title="Leave the table?" onclose={() => (leaving = false)}>

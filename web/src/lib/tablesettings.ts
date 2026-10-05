@@ -47,6 +47,37 @@ export interface Setting {
   differs: boolean;
 }
 
+/** What a player may choose for themselves (a ruleset's `preferences`), as the
+ *  table offers it: hexmap/rules/player_prefs.gd's items. */
+export interface Pref {
+  id: string;
+  plugin: string;
+  plugin_name: string;
+  key: string;
+  title: string;
+  description: string;
+  type: 'string' | 'boolean' | 'integer' | 'number';
+  enum?: unknown[];
+  labels?: string[];
+  minimum?: number;
+  maximum?: number;
+  default: unknown;
+  /** The table lets players choose it now (its `x-when` holds). */
+  offered: boolean;
+  /** The settings that would offer it, in words. */
+  when: { key: string; title: string; value: string }[];
+}
+
+/** One player's preferences, as the DM's Table settings lists them. */
+export interface PlayerPrefs {
+  id: string;
+  name: string;
+  /** "<plugin>/<key>" → the value in force. */
+  values: Record<string, unknown>;
+  /** "<plugin>/<key>" → true where the player chose it themselves. */
+  own: Record<string, boolean>;
+}
+
 export interface Registry {
   level: Level;
   level_set: boolean;
@@ -64,6 +95,9 @@ export interface Registry {
   undo?: string;
   new_level?: Level;
   existing_level?: Level;
+  /** What players may choose for themselves, and each player's choices. */
+  prefs?: Pref[];
+  players?: PlayerPrefs[];
 }
 
 export interface Change {
@@ -103,7 +137,7 @@ export function questionTitle(reg: Registry | null, id: string): string {
 }
 
 /** A value as the screens say it: a choice's label, On or Off, a number. */
-export function valueWords(s: Setting, v: unknown): string {
+export function valueWords(s: { enum?: unknown[]; labels?: string[]; type: string }, v: unknown): string {
   if (Array.isArray(s.enum)) {
     const i = s.enum.findIndex((c) => same(c, v));
     if (i >= 0) return String((s.labels ?? s.enum)[i] ?? v);
@@ -222,6 +256,8 @@ export interface PlayerSummary {
   house_rules: string;
   /** The campaign's id (what a browser remembers having shown it for). */
   campaign?: string;
+  /** What the table lets each player choose for themselves now. */
+  prefs?: Pref[];
 }
 
 export function summaryOf(view: Dict): PlayerSummary | null {
@@ -232,4 +268,25 @@ export function summaryOf(view: Dict): PlayerSummary | null {
 /** The key a browser keeps once a player has been shown how a table runs (shown again when the level changes). */
 export function summarySeenKey(table: string, player: string, level: string): string {
   return `hexmap.table-runs/${table}/${player}/${level}`;
+}
+
+/** A player's preference in force, from their record (the scene's
+ *  `players`: `prefs` by plugin id): their own choice, else its default. */
+export function prefValue(players: Dict[], me: string, p: Pref): unknown {
+  const rec = (players ?? []).find((x) => x && String(x.id) === me);
+  const mine = rec?.prefs?.[p.plugin];
+  if (mine && typeof mine === 'object' && !Array.isArray(mine) && p.key in mine) return mine[p.key];
+  return p.default;
+}
+
+/** Whether a player chose a preference themselves (rather than the table's default). */
+export function prefOwn(players: Dict[], me: string, p: Pref): boolean {
+  const rec = (players ?? []).find((x) => x && String(x.id) === me);
+  const mine = rec?.prefs?.[p.plugin];
+  return !!mine && typeof mine === 'object' && !Array.isArray(mine) && p.key in mine;
+}
+
+/** What would let players choose a preference the table keeps for now: "Players' dice: Each player chooses". */
+export function prefWhenWords(p: Pref): string {
+  return (p.when ?? []).map((w) => `${w.title}: ${w.value}`).join(', ');
 }

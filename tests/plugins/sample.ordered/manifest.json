@@ -17,5 +17,12 @@
         "x-question": "outcomes", "x-levels": {"bookkeeping": 0, "rolling": 0, "assisted": 2, "automated": 2}, "x-notice": "everyone"}}},
     "defaults": {"critical_on": 20, "armour_reduces": 2}
   },
+  "preferences": {
+    "schema": {"type": "object", "properties": {
+      "armour": {"type": "string", "enum": ["ask", "always", "never"], "title": "My armour when I'm hit",
+        "enumNames": ["Ask me each time", "Always mark a slot", "Never: I'd rather keep it"],
+        "x-when": {"armour_reduces": [1, 2, 3, 4, 5]}}}},
+    "defaults": {"armour": "ask"}
+  },
   "tests": true
 }

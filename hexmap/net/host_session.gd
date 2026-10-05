@@ -852,6 +852,17 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			_dm_dirty = true
 			_scenes_dirty = true
 			return why_dm
+		"prefs":
+			# a player's own preferences ({plugin, key, value}), within what the DM
+			# allows (PlayerPrefs); the DM changes anyone's in Table settings
+			if gm:
+				return "a player's preferences are changed in Table settings"
+			var why_p := PlayerPrefs.change(state.encounter, plugins, pid, str(intent.get("plugin", "")), str(intent.get("key", "")), intent.get("value"), pid,
+				func(events: Array, label: String, reason: Dictionary) -> String: return kernel.commit(events, label, reason))
+			if why_p == "":
+				# (the DM's Table settings lists each player's choices)
+				_dm_dirty = true
+			return why_p
 		"note":
 			# a player's own notes: theirs to write, keep private or share
 			if gm:
