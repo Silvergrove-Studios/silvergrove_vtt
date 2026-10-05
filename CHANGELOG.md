@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Whether a call may wait, told to the ruleset.** `hm.may_wait()` says
+  whether the code running now may wait on a card: an action, a hook that
+  waits (a turn's steps, `after_move`, a card's answer) may; a hook the
+  Table runs straight through (the clock's, a rest's, a session's or a
+  scene's, `token_moved`, `region_entered`/`left`, a roll's own hooks, a
+  plugin's own `hm.hooks.run`) may not — a card there would refuse the
+  step. Each call runs in a thread of its own, so a thread that can yield
+  was no guide: a ruleset asks this instead, and makes no roll of a
+  person's, and opens no card it would wait on, where it may not.
+
 - **A level switch says what the prepared fights keep.** Switching the
   table's level, the preview says, under what changes, each prepared
   fight's own values that will still win over the level while it runs

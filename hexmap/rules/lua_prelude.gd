@@ -337,6 +337,16 @@ function hm.prompt(to, form, opts)
 	return coroutine.yield(plain({ kind = "prompt", to = to, form = form, opts = opts or {} }))
 end
 
+-- Whether the code running now may wait on a card (hm.prompt): an action, a
+-- hook that waits (a turn's steps, after_move, a card's answer) may; a hook the
+-- Table runs straight through (the clock's, a rest's, a session's, token_moved,
+-- a roll's, a plugin's own hm.hooks.run) may not — a card there refuses the step.
+-- Each call from the Table runs in a thread of its own, told as it starts.
+local straight_threads = setmetatable({}, { __mode = "k" })
+function hm.may_wait()
+	return straight_threads[coroutine.running()] == nil
+end
+
 -- Ask several players the same question at once; resumes with
 -- { [player] = answer } once every one has answered or timed out.
 function hm.prompt_all(players, form, opts)
@@ -502,7 +512,8 @@ function __derive(view)
 	return plain(out)
 end
 
-function __run_hook(hook, payload)
+function __run_hook(hook, payload, may_wait)
+	if may_wait == false then straight_threads[coroutine.running()] = true end
 	local list = handlers[hook]
 	if list == nil then return payload end
 	for _, fn in ipairs(list) do
