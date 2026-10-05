@@ -29,6 +29,7 @@ adventure. `hexmap/encounter/campaign.gd` reads and writes it.
                "imported": [ { "id": "some.supplement", "path": "packs/some.supplement", "plugin": "srd5e", "session": 3, "at": "…", "entries": 41 } ] },
   "package": { "id": "sunken-reach", "version": "1.2.0", "name": "The Sunken Reach", "tested_with": { … } },
   "rules_dir": "rules",
+  "table": { "level": "assisted", "space": "maps", "house_rules": "Drinking a potion is a bonus action." },
   "players": [ { "id": "pl_a1", "name": "Ana", "color": "#4f9cf6" } ],
   "actors": { "a_hero": { …actor, without derived… } },
   "resources": { "actor:a_hero": { "sample.ordered": { "hp": { "kind": "pool", "current": 6, "max": 10, "recharge": "rest" } } } },
@@ -80,6 +81,19 @@ party is), `sessions` and `runtime`. Every other field is as before.
   (a package carries the rules it was tested with under `rules/`). They
   load for this campaign and win over an installed ruleset of the same
   id, so a campaign plays the rules it came with.
+- `table`: how this table runs, the DM's answers (`TableSettings`;
+  docs/plugin-authoring.md "Table settings"). `level` is how much the
+  app does — `bookkeeping`, `rolling`, `assisted` or `automated`; picking
+  one writes each ruleset setting's value for it into `plugins[].settings`
+  as one undoable change, and the table is *Customized* once a setting
+  differs from its level's. `space` is where fights happen (`maps`,
+  `mind` for the theatre of the mind, `per_fight`); `house_rules` is the
+  DM's own words, which the players read in *How this table runs*.
+  `setup: "pending"` marks a campaign whose walkthrough is not done yet
+  (made with New campaign, or started from a package); the DM's screens
+  offer it until it is. A campaign from before has no `table`: it runs
+  as Automated (`TableSettings.EXISTING_LEVEL`), its settings as they
+  were.
 - `players`: the group. A session's encounter gets them on start and
   gives back any it added.
 - `actors`: the persistent ones — player characters, companions,

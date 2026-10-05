@@ -13,6 +13,9 @@ signal campaign_changed
 signal status(text: String)
 ## A pick on the map began or ended (`pick` is set or empty).
 signal pick_changed
+## The rules were loaded again (a setting changed, a ruleset installed):
+## whatever holds the plugins or the kernel takes the new ones.
+signal rules_reloaded
 
 var app: App
 var state: EncounterState
@@ -163,6 +166,7 @@ func reload_plugins() -> void:
 	_load_plugins()
 	kernel.rederive_all()
 	kernel.pending.close_orphans()
+	rules_reloaded.emit()
 	encounter_changed.emit()
 
 

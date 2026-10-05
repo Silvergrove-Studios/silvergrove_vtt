@@ -77,11 +77,14 @@ func state() -> Dictionary:
 				out.party_views.append({"plugin": str(pid), "schema": p.views[kind], "data": Views.status_data(ctx.kernel, projection, str(pid), "", Views.ROLE_GM)})
 		out.cards = EntryCard.cards_of(ctx.host)
 		out.rules = rules_settings()
+	# how the table runs: the level, the questions, every setting (TableSettings)
+	out.table = win.table_settings.registry()
 	return out
 
 
 ## Each loaded ruleset's settings, as its manifest declares them, with the
-## campaign's values over the defaults: the DM's *Rules settings*.
+## campaign's values over the defaults, by ruleset (the DM's screen draws
+## Table settings from `state().table`, TableSettings' model, instead).
 func rules_settings() -> Array:
 	var out := []
 	var ctx := win.ctx
@@ -116,48 +119,11 @@ func rules_settings() -> Array:
 
 
 ## A ruleset setting from the DM's screen: checked against the plugin's
-## schema, kept in the campaign, the rules loaded again with it (a view
-## built from a setting shows the new one), every screen sent afresh.
+## schema, kept in the campaign (one step of the Table's undo), the rules
+## loaded again with it (a view built from a setting shows the new one),
+## every screen sent afresh (TableSettings).
 func set_rule(pid: String, key: String, value: Variant) -> String:
-	var ctx := win.ctx
-	if ctx.host == null or not ctx.host.plugins.has(pid):
-		return "no ruleset '%s' here" % pid
-	var item := {}
-	for group in rules_settings():
-		if str(group.plugin) == pid:
-			for it in group.settings:
-				if str(it.key) == key:
-					item = it
-	if item.is_empty():
-		return "'%s' has no setting '%s'" % [pid, key]
-	var v: Variant = value
-	match str(item.type):
-		"boolean":
-			if not (v is bool):
-				return "%s: on or off" % str(item.title)
-		"integer", "number":
-			if not (v is float or v is int):
-				return "%s: a number" % str(item.title)
-			if str(item.type) == "integer":
-				v = int(v)
-			if item.has("minimum") and float(v) < float(item.minimum):
-				return "%s: at least %s" % [str(item.title), str(item.minimum)]
-			if item.has("maximum") and float(v) > float(item.maximum):
-				return "%s: at most %s" % [str(item.title), str(item.maximum)]
-		_:
-			v = str(v)
-	if item.has("enum") and not (item.enum as Array).has(v):
-		return "%s: not one of the choices" % str(item.title)
-	ctx.campaign.set_plugin_setting(pid, key, v)
-	ctx.reload_plugins()
-	# the host speaks for the rules loaded now
-	if win.host != null:
-		win.host.plugins = ctx.host
-		win.host.kernel = ctx.kernel
-		win.host.refresh_views()
-		win.host.refresh_dm()
-	ctx.campaign_changed.emit()
-	return ""
+	return win.table_settings.set_setting(pid, key, value)
 
 
 # -------------------------------------------------------------------- ops --
@@ -324,6 +290,30 @@ func op(intent: Dictionary) -> String:
 			return _folder(intent)
 		"rules_setting":
 			return set_rule(str(intent.get("plugin", "")), str(intent.get("key", "")), intent.get("value"))
+		# Table settings: a level (every setting it names, as one step), a section
+		# back to the level, the table's own (where fights happen, house rules),
+		# the walkthrough's answers, and the newest change taken back
+		"table_level":
+			return win.table_settings.set_level(str(intent.get("level", "")))
+		"table_reset":
+			return win.table_settings.reset_question(str(intent.get("question", "")))
+		"table_set":
+			var changes := {}
+			for k in ["space", "house_rules"]:
+				if intent.has(k):
+					changes[k] = intent[k]
+			return win.table_settings.set_table(changes)
+		"table_setup":
+			var answers := {}
+			for k in ["level", "space", "house_rules", "settings"]:
+				if intent.has(k):
+					answers[k] = intent[k]
+			var done := win.table_settings.finish_setup(answers)
+			if done == "":
+				win.walkthrough_done(true)
+			return done
+		"table_undo":
+			return win.table_settings.undo_last()
 		"session":
 			if str(intent.get("do", "")) == "start":
 				return ctx.start_session()

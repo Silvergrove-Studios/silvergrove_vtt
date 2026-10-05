@@ -93,13 +93,13 @@ async function who(page, name, species, background, klass) {
 const dm = await open(info.dm, { width: 1440, height: 900 }, 'dm');
 const lia = await open(info.player, { width: 390, height: 844 }, 'lia');
 
-// (a playtest's DM found Rules settings just before the players came, and a
+// (a playtest's DM found the rules' settings just before the players came, and a
 // character is made by the rules as they are when it's made)
 await step('the DM’s first step, before anyone makes a character: the table’s rules', async () => {
   const guide = dm.locator('.guide');
   await guide.getByText(/^Before you invite players/).waitFor({ timeout: 10000 });
   await guide.getByRole('button', { name: 'Choose the rules' }).click();
-  const settings = dm.getByRole('dialog', { name: 'Rules settings' });
+  const settings = dm.getByRole('dialog', { name: 'Table settings' });
   await settings.waitFor({ timeout: 5000 });
   await shot(dm, 'dm_rules_first');
   await settings.getByRole('button', { name: 'Done' }).click();
@@ -242,8 +242,8 @@ await step('her sheet’s spells: only what a druid 1 may prepare', async () => 
   await shot(lia, 'lia_inventory');
 });
 
-await step('the DM plays rolled scores: Rules settings', async () => {
-  await dm.getByRole('button', { name: 'Rules settings' }).click();
+await step('the DM plays rolled scores: Table settings', async () => {
+  await dm.getByRole('button', { name: /^Table settings/ }).click();
   await dm.getByText('How players make their ability scores').waitFor({ timeout: 5000 });
   await dm.getByRole('combobox', { name: 'How players make their ability scores' }).selectOption({ label: 'Rolled (4d6, the highest three, six times)' });
   await dm.waitForTimeout(800);
@@ -283,7 +283,7 @@ await step('a player rolls: the table rolls once, the DM sees it', async () => {
 
 const ari = await open(info.player, { width: 390, height: 844 }, 'ari');
 await step('the standard array: each number given once', async () => {
-  await dm.getByRole('button', { name: 'Rules settings' }).click();
+  await dm.getByRole('button', { name: /^Table settings/ }).click();
   await dm.getByRole('combobox', { name: 'How players make their ability scores' }).selectOption({ label: 'The standard array (15, 14, 13, 12, 10, 8)' });
   await dm.waitForTimeout(800);
   await dm.getByRole('button', { name: 'Close' }).first().click();
@@ -334,8 +334,8 @@ await step('Ari the cleric: her skills said as her background’s, a Thaumaturge
 
 // (the owner: the DM picks milestones or experience in the campaign's settings,
 // and "really ideally the dm would trigger level ups": the player takes theirs)
-await step('levels are the DM’s: milestones in Rules settings, Give a level, Rolf takes his', async () => {
-  await dm.getByRole('button', { name: 'Rules settings' }).click();
+await step('levels are the DM’s: milestones in Table settings, Give a level, Rolf takes his', async () => {
+  await dm.getByRole('button', { name: /^Table settings/ }).click();
   await dm.getByRole('combobox', { name: 'How characters gain levels' }).selectOption({ label: 'Milestones: the DM gives the party a level when the story has earned it' });
   await dm.waitForTimeout(800);
   await dm.getByRole('button', { name: 'Close' }).first().click();

@@ -15,7 +15,9 @@
   import Card from './Card.svelte';
   import Invite from './Invite.svelte';
   import Modal from '../common/Modal.svelte';
-  import RulesSettings from './RulesSettings.svelte';
+  import TableSettings from './TableSettings.svelte';
+  import Walkthrough from './Walkthrough.svelte';
+  import { badgeWords, levelTitle, registryOf } from '../lib/tablesettings';
   import FightBar from './FightBar.svelte';
   import FightPanel from './FightPanel.svelte';
   import Waiting from '../common/Waiting.svelte';
@@ -39,6 +41,10 @@
   let side = $state<'party' | 'chat' | 'fight'>('party');
   let inviting = $state(false);
   let rulesOpen = $state(false);
+  // the walkthrough, for a campaign never set up: it opens by itself once a
+  // page, and Not now leaves it a press away (Set up this table)
+  let walking = $state(false);
+  let walkPutOff = $state(false);
   let bookOpen = $state(false);
   let selected = $state('');
   let pick = $state<Dict | null>(null);
@@ -209,11 +215,26 @@
     }
   }
   const hasRules = $derived(((dm.rules as Dict[]) ?? []).some((g) => g && Array.isArray(g.settings) && g.settings.length > 0));
+  // how this table runs (TableSettings): the level, the questions, every setting
+  const table = $derived(registryOf(dm));
+  $effect(() => {
+    if (table?.pending && !walkPutOff && !walking) walking = true;
+    // set up meanwhile (on the Table): the walkthrough goes
+    if (!table?.pending && walking) walking = false;
+  });
+  function walkDone(seeAll: boolean): void {
+    walking = false;
+    rulesDone();
+    if (seeAll) rulesOpen = true;
+  }
 
   const guide = $derived.by((): { key: string; text: string; button?: string; act?: () => void; gotIt?: () => void } | null => {
     if (!dm.campaign || fight) return null;
-    if (hasRules && !seenRules() && !people.some((a) => a.kind === 'pc'))
-      return { key: 'rules', text: 'Before you invite players: choose your table’s rules (Rules settings) — how characters are made, and the optional rules. A character is made by the rules as they are when it’s made.', button: 'Choose the rules', act: openRules, gotIt: rulesDone };
+    if (table?.pending)
+      return { key: 'setup', text: 'Before you invite players: say how this table runs — where fights happen, how much the app does, and the rules you play by. A character is made by the rules as they are when it’s made.', button: 'Set up this table', act: () => ((walkPutOff = false), (walking = true)) };
+    // (a table set up with the walkthrough chose its rules there)
+    if (hasRules && !seenRules() && !people.some((a) => a.kind === 'pc') && !table?.level_set)
+      return { key: 'rules', text: 'Before you invite players: choose your table’s rules (Table settings) — how characters are made, and the optional rules. A character is made by the rules as they are when it’s made.', button: 'Choose the rules', act: openRules, gotIt: rulesDone };
     if (game.players.every((p) => !online.has(String(p.id))))
       return { key: 'invite', text: 'Invite your players: they scan a code with their phone, or open an address. Nothing to install.', button: 'Invite players', act: () => (inviting = true) };
     if (!session.open) return { key: 'session', text: 'Start the session when everyone is here: what happens is kept as the session’s.', button: `Start session ${Number(session.n ?? 0) + 1}`, act: () => dmOp('session', { do: 'start' }) };
@@ -473,8 +494,10 @@
         {:else}
           <span class="dim saved">Saved</span>
         {/if}
-        {#if ((dm.rules as Dict[]) ?? []).length}
-          <button type="button" class="quiet" title="How the rules are played at this table: how characters are made, optional rules" onclick={openRules}>Rules settings</button>
+        {#if table?.pending}
+          <button type="button" class="accent" title="Where fights happen, how much the app does, the table's questions and rules" onclick={() => ((walkPutOff = false), (walking = true))}>Set up this table</button>
+        {:else if table}
+          <button type="button" class="quiet" title={`How this table runs: ${badgeWords(table)}`} onclick={openRules}>Table settings <span class="levelchip" class:custom={table.customized}>{levelTitle(table, table.level)}{table.customized ? ' · Customized' : ''}</span></button>
         {/if}
       </div>
       <div class="players">
@@ -675,7 +698,8 @@
     </div>
   </main>
   {#if inviting}<Invite onclose={() => (inviting = false)} />{/if}
-  {#if rulesOpen}<RulesSettings onclose={() => (rulesOpen = false)} />{/if}
+  {#if rulesOpen}<TableSettings onclose={() => (rulesOpen = false)} />{/if}
+  {#if walking && !rulesOpen}<Walkthrough onclose={() => ((walking = false), (walkPutOff = true))} ondone={walkDone} />{/if}
   {#if ending}
     <Modal title="End the session?" onclose={() => (ending = false)}>
       <p class="ask">What happened is kept as its recap; the next session starts from here.</p>
@@ -697,6 +721,19 @@
 {/if}
 
 <style>
+  /* the table's level beside Table settings, the accent once it's customized */
+  .levelchip {
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .levelchip.custom {
+    color: var(--accent);
+    border-color: var(--accent-soft);
+  }
   .lightsel {
     display: flex;
     align-items: center;

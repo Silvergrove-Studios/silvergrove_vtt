@@ -54,6 +54,10 @@ var dm_handler: Callable = Callable()
 var dm_state_source: Callable = Callable()
 ## () -> Array: the chat banked from sessions before (the campaign's).
 var chat_source: Callable = Callable()
+## () -> Dictionary: how the table runs, as the players are told it (the
+## level in plain words, where fights happen, the answers they notice, the
+## house rules: TableSettings.player_summary). Every view carries it.
+var table_source: Callable = Callable()
 ## (map_id: String) -> String: what the campaign has a map as, "battle" or
 ## "regional" ("" when it doesn't say): a web scene says it as `role`, and
 ## on the region a player's spell is cast with no target to tap.
@@ -422,6 +426,8 @@ func projection(c: Dictionary) -> Dictionary:
 	var who := str(c.get("see_as", ""))
 	if _is_gm(c) and who != "" and not state.encounter.player(who).is_empty():
 		out.preview_chat = preview_chat(who)
+	if table_source.is_valid():
+		out.table = table_source.call()
 	out.journal = []
 	if journal_source.is_valid():
 		for entry in journal_source.call():

@@ -10,7 +10,11 @@
   "capabilities": ["state", "prompts", "log", "actions", "effects", "resources", "dice"],
   "policy": {"status": "best", "circumstance": "best"},
   "settings": {
-    "schema": {"type": "object", "properties": {"critical_on": {"type": "integer", "minimum": 1, "maximum": 20}, "armour_reduces": {"type": "integer"}}},
+    "schema": {"type": "object", "properties": {
+      "critical_on": {"type": "integer", "minimum": 1, "maximum": 20, "title": "Natural roll that is a critical",
+        "x-question": "rules", "x-notice": "everyone"},
+      "armour_reduces": {"type": "integer", "title": "What a marked armour slot takes off a hit",
+        "x-question": "outcomes", "x-levels": {"bookkeeping": 0, "rolling": 0, "assisted": 2, "automated": 2}, "x-notice": "everyone"}}},
     "defaults": {"critical_on": 20, "armour_reduces": 2}
   },
   "tests": true

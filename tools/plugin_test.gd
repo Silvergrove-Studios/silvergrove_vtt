@@ -53,6 +53,11 @@ func _run(dir: String) -> int:
 		print("FAIL load %s: %s" % [dir, why])
 		return 1
 	var id := str(manifest.get("id", host.plugins.keys()[0]))
+	# its table settings' metadata (x-question, x-levels, x-notice, x-next-fight):
+	# what the DM's Table settings and a level read
+	var meta := TableSettings.check_manifest(manifest)
+	for problem in meta:
+		print("  FAIL table settings: %s" % problem)
 	var entries := 0
 	for coll in host.kernel.comp.collections():
 		entries += host.kernel.comp.count(str(coll))
@@ -60,5 +65,6 @@ func _run(dir: String) -> int:
 	t0 = Time.get_ticks_msec()
 	# (HEXMAP_TEST_FILTER: only the tests whose names contain it, while working on some)
 	var r := host.run_tests(id, func(line: String) -> void: print(line), OS.get_environment("HEXMAP_TEST_FILTER"))
-	print("%d checks, %d failed, %d ms" % [r.count, r.fails, Time.get_ticks_msec() - t0])
-	return int(r.fails)
+	var settings_n := TableSettings.properties_of(manifest).size()
+	print("%d checks, %d failed, %d ms" % [r.count + settings_n, r.fails + meta.size(), Time.get_ticks_msec() - t0])
+	return int(r.fails) + meta.size()

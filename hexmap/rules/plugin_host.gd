@@ -649,7 +649,8 @@ func run_tests(id: String, say: Callable = func(_l: String) -> void: pass, filte
 		_test_counts = [0, 0]
 		_test_failures = []
 		var settings_before: Dictionary = JsonDoc.deep(p.settings)
-		var c := p.vm.call_function("__run_test", [i + 1, {}])
+		# (`t.manifest`: the plugin's manifest as data, for a test of its own metadata)
+		var c := p.vm.call_function("__run_test", [i + 1, {"manifest": p.manifest}])
 		p.settings = settings_before
 		if c.status != LuaVm.Call.OK:
 			_test_failures.append("the test %s: %s" % ["yielded — tests may not prompt; use t.dispatch(action, ctx, answers)" if c.status == LuaVm.Call.YIELD else "failed", c.error])

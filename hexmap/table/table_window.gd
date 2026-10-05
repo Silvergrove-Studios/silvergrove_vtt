@@ -58,6 +58,13 @@ var _banner_hidden := false
 ## The DM's web screen (WebDm) and the token its address carries.
 var web_dm: WebDm
 var _dm_token := ""
+## How this table runs: the level, the questions, every ruleset's settings
+## (TableSettings), and the windows that show them.
+var table_settings: TableSettings
+var _walkthrough: TableWalkthrough
+var _settings_dialog: TableSettingsDialog
+## The DM's web screen waits for the walkthrough (it would offer its own).
+var _dm_screen_waits := false
 var _campaign_label: Label
 var _session_label: Label
 var _session_button: Button
@@ -103,7 +110,8 @@ enum { M_NEW, M_OPEN, M_SAVE, M_SAVE_AS, M_ADD_SCENE, M_HOME, M_QUIT,
 	V_GRID, V_WALLS, V_LIGHTS, V_NOTES, V_TOKENS, V_FOG, V_HIDDEN, V_FIT, V_100, V_DOCK, V_SCALE_UP, V_SCALE_DOWN, V_LOOKUP, V_WORLD, V_FIGHT, V_PREP, V_RUNNING, V_DM_SCREEN,
 	S_SHOW, S_RENAME, S_REMOVE, S_FOG, S_RESET_FOG, N_HOST,
 	T_FREE, T_DM, T_ORDERED, T_START, T_NEXT, T_PREV, T_END,
-	H_SHORTCUTS, H_ABOUT }
+	H_SHORTCUTS, H_ABOUT,
+	M_TABLE_SETTINGS }
 
 
 func _ready() -> void:
@@ -112,6 +120,15 @@ func _ready() -> void:
 	ctx.app = app
 	_dm_token = "%08x%08x" % [randi(), randi()]
 	web_dm = WebDm.new(self)
+	table_settings = TableSettings.new(ctx)
+	# rules loaded again (a setting, a level, a ruleset installed): the table
+	# hosted speaks for the new ones, and every screen hears of it
+	ctx.rules_reloaded.connect(func() -> void:
+		if host != null:
+			host.plugins = ctx.host
+			host.kernel = ctx.kernel
+			host.refresh_views()
+			host.refresh_dm())
 	# a dialog closing (a native file dialog above all, on macOS) can leave the
 	# Table's window not the key window: it then ignores clicks and hover until
 	# the app menu is used (playtest 1). Every dialog hands focus back.
@@ -320,6 +337,9 @@ func _build_ui() -> void:
 		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.zip ; Ruleset zips"])
 		fd.file_selected.connect(then)
 		fd.popup_centered_ratio(0.7)
+	rules.table_settings = table_settings
+	rules.open_table_settings = open_table_settings
+	rules.open_walkthrough = open_walkthrough
 	maps.pick_map_file = func(then: Callable) -> void:
 		var fd := _file_dialog(FileDialog.FILE_MODE_OPEN_FILE, ["*.hexmap ; Hex maps", "*.json ; Map JSON"])
 		fd.file_selected.connect(then)
@@ -747,6 +767,8 @@ func _build_menus() -> MenuBar:
 	_item(file, "Duplicate this campaign…", M_DUPLICATE)
 	_item(file, "Export as a package…", M_EXPORT_PACKAGE)
 	_item(file, "Update from its package…", M_REVIEW_UPDATE)
+	file.add_separator()
+	_item(file, "Table settings…", M_TABLE_SETTINGS)
 	file.add_separator()
 	_item(file, "Save campaign", M_SAVE, KEY_S, true)
 	_item(file, "Save campaign as…", M_SAVE_AS, KEY_S, true, true)
@@ -1280,6 +1302,10 @@ func _update_menus() -> void:
 		else:
 			fm.set_item_text(at, "Update from its package (%s available)…" % str(newer.package_version))
 		fm.set_item_disabled(at, newer.is_empty())
+		# how the table runs is the open campaign's
+		var ts_at := fm.get_item_index(M_TABLE_SETTINGS)
+		if ts_at >= 0:
+			fm.set_item_disabled(ts_at, ctx.campaign == null)
 	_native_menus.sync_all()
 	_update_title()
 
@@ -1339,6 +1365,7 @@ func _on_menu(id: int) -> void:
 		M_EXPORT_PACKAGE: _export_package_dialog()
 		M_DUPLICATE: _duplicate_dialog()
 		M_REVIEW_UPDATE: _review_update()
+		M_TABLE_SETTINGS: open_table_settings()
 		M_RECAP: _recap_dialog()
 		M_CHECKPOINT:
 			# a restore point: the whole table as it is now, to come back to in one step
@@ -1453,6 +1480,8 @@ func _set_hosting(on: bool) -> void:
 		host.dm_handler = func(intent: Dictionary) -> String: return web_dm.op(intent)
 		host.dm_state_source = func() -> Dictionary: return web_dm.state()
 		host.chat_source = func() -> Array: return ctx.campaign.chat_log if ctx.campaign != null else []
+		# how this table runs, as the players are told it
+		host.table_source = func() -> Dictionary: return table_settings.players_summary()
 		# which maps are the region: a scene there has no battle map to pick a target on
 		host.map_role = func(mid: String) -> String: return str(ctx.campaign.map_entry(mid).get("role", "")) if ctx.campaign != null else ""
 		# pictures from the screens: a token's, a journal's, kept in the campaign's uploads
@@ -1653,6 +1682,8 @@ func _new_campaign_dialog() -> void:
 	_guard_unsaved(func() -> void:
 		_prompt("New campaign", "Name", "New campaign", func(v: String) -> void:
 			var c := Campaign.create(v if v.strip_edges() != "" else "Untitled campaign")
+			# how the table runs is the DM's to say: the walkthrough opens with it
+			TableSettings.mark_pending(c)
 			var fd := _file_dialog(FileDialog.FILE_MODE_SAVE_FILE, ["*.campaign ; Campaigns"])
 			# a campaign is a folder of its own: its maps, its content and its rules live beside it
 			var home := App.campaigns_dir(app.prefs).path_join(c.name)
@@ -1808,7 +1839,10 @@ static func free_campaign_name(dir: String, wanted: String) -> String:
 	return v
 
 
-func _start_package(path: String, info: Dictionary, p_name: String) -> void:
+## Start a package as a campaign of one's own, and open it. `walkthrough`:
+## the DM says how the table runs as it opens (a harness that only hosts
+## the adventure leaves it as a campaign from before levels: Automated).
+func _start_package(path: String, info: Dictionary, p_name: String, walkthrough := true) -> void:
 	var v := p_name.strip_edges() if p_name.strip_edges() != "" else str(info.name)
 	var dest := App.campaigns_dir(app.prefs).path_join(v)
 	if DirAccess.dir_exists_absolute(dest):
@@ -1818,6 +1852,11 @@ func _start_package(path: String, info: Dictionary, p_name: String) -> void:
 	if not r.ok:
 		_info("Could not start it: " + str(r.why))
 		return
+	if walkthrough:
+		var started := Campaign.load_file(str(r.path))
+		if started != null:
+			TableSettings.mark_pending(started)
+			started.save()
 	_open_campaign_path(str(r.path))
 	ctx.say("'%s' is yours now, in %s. The package is untouched." % [str(r.name), ProjectSettings.globalize_path(dest)])
 
@@ -1994,6 +2033,8 @@ func set_token_art(actor_id: String, ref: String) -> String:
 
 ## Make a campaign the live document.
 func _open_campaign(c: Campaign) -> void:
+	# (the last campaign's walkthrough or settings window goes with it)
+	_close_table_windows()
 	var warn := ctx.open_campaign(c)
 	if ctx.state.encounter.changed.is_connected(_on_encounter_changed):
 		ctx.state.encounter.changed.disconnect(_on_encounter_changed)
@@ -2029,17 +2070,97 @@ func _open_campaign(c: Campaign) -> void:
 	# the table is there to be joined: host at once, unless the DM turned that off
 	if host == null and bool(app.prefs.get("auto_host", true)) and not App.no_auto_host:
 		_set_hosting(true)
-	# the DM's own screen, in the browser, as the game opens
+	# the DM's own screen, in the browser, as the game opens; a campaign just
+	# made is set up first (the walkthrough), and the screen opens after it
 	_full_table = false
-	if host != null and host.web != null and not App.no_browser and bool(app.prefs.get("open_dm_screen", true)):
-		open_dm_screen()
+	_dm_screen_waits = TableSettings.pending(c)
+	if not _dm_screen_waits:
+		_open_dm_screen_if_wanted()
 	ctx.say("Campaign '%s' open: %d players, %d characters, session %d" % [c.name, c.players.size(), c.actors.size(), int(c.clock.get("session", 0))])
 	set_mode("fight" if not _live_fight().is_empty() else "world")
 	_update_menus()
+	if _dm_screen_waits:
+		open_walkthrough()
+
+
+func _open_dm_screen_if_wanted() -> void:
+	if host != null and host.web != null and not App.no_browser and bool(app.prefs.get("open_dm_screen", true)):
+		open_dm_screen()
+
+
+# =========================================================== table settings ==
+
+## The walkthrough for a campaign not yet set up: where fights happen, a
+## level, the questions, the rules options, a summary.
+func open_walkthrough() -> void:
+	if ctx.campaign == null:
+		return
+	if _walkthrough != null and is_instance_valid(_walkthrough):
+		_walkthrough.grab_focus()
+		return
+	_walkthrough = TableWalkthrough.new(table_settings)
+	_walkthrough.finished.connect(func(see_all: bool) -> void:
+		walkthrough_done()
+		ctx.say("The table is set up: %s. Change any of it in File → Table settings." % str(TableSettings.LEVEL_INFO[TableSettings.level_of(ctx.campaign)].title))
+		if see_all:
+			open_table_settings())
+	_walkthrough.closed.connect(func() -> void:
+		_walkthrough = null
+		_after_walkthrough())
+	add_child(_walkthrough)
+	_walkthrough.popup_centered_clamped(Vector2i(760, 640), 0.9)
+
+
+## The walkthrough is done (here, or `on_web`, on the DM's web screen): its
+## window goes, and the DM's screen opens if it waited for it (done on the
+## web, the DM is on it already).
+func walkthrough_done(on_web := false) -> void:
+	if _walkthrough != null and is_instance_valid(_walkthrough):
+		var w := _walkthrough
+		_walkthrough = null
+		w.hide()
+		w.queue_free()
+	if on_web:
+		_dm_screen_waits = false
+	_after_walkthrough()
+
+
+## The walkthrough and Table settings windows, closed (another campaign
+## opens, or none): nothing of the last campaign's is left on screen.
+func _close_table_windows() -> void:
+	_dm_screen_waits = false
+	for w in [_walkthrough, _settings_dialog]:
+		if w != null and is_instance_valid(w):
+			w.hide()
+			w.queue_free()
+	_walkthrough = null
+	_settings_dialog = null
+
+
+func _after_walkthrough() -> void:
+	if _dm_screen_waits:
+		_dm_screen_waits = false
+		_open_dm_screen_if_wanted()
+
+
+## Table settings: the level, every setting by the question it answers.
+func open_table_settings() -> void:
+	if ctx.campaign == null:
+		_info("Open a campaign first: table settings are the campaign's.")
+		return
+	if _settings_dialog != null and is_instance_valid(_settings_dialog):
+		_settings_dialog.refresh()
+		_settings_dialog.grab_focus()
+		return
+	_settings_dialog = TableSettingsDialog.new(table_settings)
+	_settings_dialog.closed.connect(func() -> void: _settings_dialog = null)
+	add_child(_settings_dialog)
+	_settings_dialog.popup_centered_clamped(Vector2i(760, 720), 0.9)
 
 
 func _close_campaign() -> void:
 	_guard_unsaved(func() -> void:
+		_close_table_windows()
 		if host != null:
 			_set_hosting(false)
 		ctx.campaign = null

@@ -40,7 +40,7 @@ npm run e2e -- /tmp/host.json /tmp/journey
 `tests/e2e/maker.mjs <host.json> <out>` walks the character maker
 (host a package whose ruleset has one): a druid by point buy on a phone,
 the connection dropped and the page reloaded half way, skills, equipment,
-spells and a spell's card, then the DM's *Rules settings* switching to
+spells and a spell's card, then the DM's *Table settings* switching to
 rolled scores and to the standard array; a Thaumaturge acolyte cleric by
 the array, whose skills say they're her background's, and whose level 2
 (the DM's, at a milestone) asks for the spell her prepared list grows by.
@@ -90,6 +90,17 @@ a Shield card on Ana's phone at once, its seconds counting down, while
 Ben's screen and the DM's say whom the fight waits on; she casts it, the
 attack misses, and her level 1 slot and her reaction are spent; the next
 round the DM goes on without waiting for her answer.
+
+`tests/e2e/settings.mjs <host.json> <out>` (host with `--walkthrough`:
+the campaign as a DM starting it has it, not yet set up): how the table
+runs. The walkthrough opens by itself on the DM's screen — on maps,
+Assisted offered and Bookkeeping picked, the table's questions each with a
+line of its answer (one opened with Change), the rules options and a house
+rule, a summary that says Bookkeeping; then Table settings: "As Bookkeeping
+has it", a switch to Automated that says what it would change and is
+cancelled, a setting changed by hand ("Customized") and its section's
+Reset. A player joins and is shown How this table runs, and finds it again
+in the ⋯ menu.
 
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).

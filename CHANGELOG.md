@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Table settings: how much the app does is the DM's to say.** A DM
+  picks one of four levels — *Bookkeeping* (a shared sheet and tracker:
+  players tick their own, the DM types damage in), *Rolling help*
+  (actions roll, nothing is applied), *Assisted* (the app proposes, the
+  DM approves) or *Automated* (the app runs the rules) — and then answers
+  the table's questions: where fights happen, dice, what a roll does,
+  rules checks, what players know, what the app asks and how long it
+  waits, the rules options. A ruleset says beside each setting which
+  question it answers, its value under each level, who notices a change
+  and whether it waits for the next fight (`x-question`, `x-levels`,
+  `x-notice`, `x-next-fight`; docs/plugin-authoring.md); picking a level
+  writes them all as one undoable change, and the table shows
+  *Customized* once anything differs from its level. A new campaign, and
+  one started from a package, opens with a walkthrough (on maps or in the
+  theatre of the mind; four cards, Assisted offered; the questions, each
+  with a line of its answer; the rules options; a summary), on the Table
+  and on the DM's screen. *Table settings* replaces Rules settings on the
+  DM's screen, and is on the Table too (File → Table settings…, the Rules
+  pane): sections by question, each with *Reset to* its level, a level
+  switch that says what it will change before it does, settings that
+  wait for the next fight marked, a search, the house rules, and Undo.
+  Players are shown *How this table runs* (the level in plain words, the
+  answers they notice, the house rules) once on joining a table set up
+  this way, and any time from the ⋯ menu. A campaign from before runs as
+  Automated, unchanged. `plugintest` checks a ruleset's table-settings
+  metadata; `web_host.gd --walkthrough` hosts a campaign not yet set up;
+  a journey in a real browser (`web/tests/e2e/settings.mjs`).
+
 - **Creatures a spell makes are creatures.** A ruleset can give a spell's
   familiar, steed, animated dead or conjured beast an actor and a token of
   its caster's player's: a target, a tab of its own in the player's
