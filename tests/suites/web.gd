@@ -653,10 +653,17 @@ func test_monster_health_over_the_wire() -> void:
 	check(_pump(host, all, func() -> bool: return ben.count("event") > before and tags_in.call(dm.last("scene")) == ["down"]), "the change reaches the screens")
 	check(ben.last("event").ev.changes.tags == [], "Ben's client is told the change without the mark: %s" % [ben.last("event").ev])
 	check(tags_in.call(ana.last("scene")) == [], "Ana's screen: still none")
-	# the rules loaded again with marks: every screen's scene follows at once
+	# the views refreshed, the rules saying the same of health: no scene sent again
+	host.refresh_views()
+	var settled := ben.count("welcome")
+	var views := ana.count("view")
+	check(_pump(host, all, func() -> bool: return ana.count("view") > views), "the views sent again")
+	check(ben.count("welcome") == settled, "the rules saying the same of health: no document sent again")
+	# the rules loaded again with marks (the Table refreshes the views after any
+	# reload, whichever screen changed a setting): every screen's scene follows
 	check(declare.call("marks") == "", "declared: marks")
 	var welcomes := ben.count("welcome")
-	host.refresh_scenes()
+	host.refresh_views()
 	check(_pump(host, all, func() -> bool: return tags_in.call(ana.last("scene")) == ["down"] and ben.count("welcome") > welcomes), "Ana's screen shows the mark now, and Ben's client is sent the document again")
 	check(welcome_tags.call(ben) == ["down"], "with the mark: %s" % [welcome_tags.call(ben)])
 	host.stop()

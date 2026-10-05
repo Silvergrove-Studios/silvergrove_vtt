@@ -78,6 +78,10 @@ var _scenes_dirty := false
 var _dm_dirty := false
 var _last_dm_ms := 0
 var _last_scene_ms := 0
+## What the rules said players see of a creature's health when the views
+## were last refreshed (HealthShown's policies): another answer sends the
+## scenes again.
+var _health_was: Array = []
 
 ## Colours given to players who join by name, in turn. None is red: red is
 ## the creatures' (a playtest's player in red read as a goblin).
@@ -100,6 +104,7 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 		return err
 	port = _server.get_local_port()
 	_listening = true
+	_health_was = _health()
 	cogm_code = "%04d" % (randi() % 10000)
 	state.applied.connect(_on_applied)
 	if web_port >= 0:
@@ -169,12 +174,13 @@ func _health() -> Array:
 	return kernel.health_policies() if kernel != null else []
 
 
-## The rules were loaded again (a Rules setting changed): what each screen
-## holds of the scene is sent again, as the rules loaded now would have it — a
-## web screen's snapshot, a Godot player's document (a monster's marks, shown
-## or kept from the players: HealthShown).
+## What each screen holds of the scene, sent again as the rules loaded now
+## would have it — a web screen's snapshot, a Godot player's document (a
+## monster's marks, shown or kept from the players: HealthShown). The rules
+## loaded again saying otherwise of a monster's health do it (refresh_views).
 func refresh_scenes() -> void:
 	_scenes_dirty = true
+	_health_was = _health()
 	for c in _clients:
 		if c.hello and not _is_gm(c) and not bool(c.web):
 			_send(c, Protocol.welcome(state.encounter, false, _health()))
@@ -497,9 +503,13 @@ func preview_chat(pid: String) -> Dictionary:
 
 
 ## Something the views draw on changed outside the encounter (the
-## campaign's journal): every client's view is sent again.
+## campaign's journal, the rules loaded again): every client's view is sent
+## again — and when the rules now say otherwise of what players see of a
+## monster's health, every screen's scene too, however they were reloaded.
 func refresh_views() -> void:
 	_views_dirty = true
+	if not JsonDoc.same(_health(), _health_was):
+		refresh_scenes()
 
 
 func _send_view(c: Dictionary) -> void:
