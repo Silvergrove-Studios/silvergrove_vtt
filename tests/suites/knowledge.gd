@@ -260,6 +260,47 @@ end })
 	host.stop()
 
 
+## Dice a screen sends with an intent (a d20's face, `faces`) reach the
+## ruleset, but never the claim that they come from a plugin test (`__test`):
+## a ruleset that takes faces only from the DM or a test, where the app rolls
+## a player's dice, rolls a player's screen's itself.
+func test_a_screen_cannot_vouch_for_its_dice() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, """
+local hm = hexmap
+hm.actions.register('check', { label = 'Check', target = '', run = function(ctx)
+	local faces = (ctx.gm or ctx.__test == true) and ctx.faces or nil
+	local r = hm.dice.roll({ expr = '1d20', faces = faces and { main = faces } or nil }, { actor = 'a_fighter' }, 'Check')
+	hm.log('faces sent ' .. tostring(ctx.faces ~= nil) .. ', taken ' .. tostring(faces ~= nil) .. ', a test ' .. tostring(ctx.__test), 'all')
+	return true
+end })
+""") == "", "loaded: a ruleset that takes dice only from the DM or a test")
+	_setup(kernel, sid)
+	var host := HostSession.new(st, PackLibrary.new())
+	host.kernel = kernel
+	host.plugins = plugins
+	host.dm_token = "sesame"
+	host.dm_state_source = func() -> Dictionary: return {}
+	check(host.start(0, false, 0) == OK, "hosting")
+	var ana := Web.WebClient.new(host.port)
+	_pump(host, [ana], func() -> bool: return ana.open())
+	ana.send({"t": "hello", "version": Protocol.VERSION, "name": "phone", "web": true})
+	ana.send({"t": "join", "role": "player", "player": ANA})
+	check(_pump(host, [ana], func() -> bool: return not ana.last("joined").is_empty()), "Ana joined")
+	ana.send({"t": "intent", "intent": {"kind": "action", "plugin": "t.known", "action": "check", "ctx": {"actor": "a_fighter", "faces": [20], "__test": true}}, "req": "d1"})
+	check(_pump(host, [ana], func() -> bool: return _note(ana.last("view").get("view", {}), "faces sent") != ""), "her check ran")
+	var said := _note(ana.last("view").get("view", {}), "faces sent")
+	check(said == "faces sent true, taken false, a test nil", "her screen's 20 reached the rules, its claim to be a test didn't: %s" % said)
+	check(_roll(ana.last("view").get("view", {})).get("spec", {}).get("faces") == null, "the roll made with the app's dice")
+	host.stop()
+
+
 ## Names hidden: a creature no player owns is "a creature" on a player's
 ## screens, "?" alone or numbered among those they see (the DM's hidden ones
 ## not counted), until the DM reveals it; the party's and things keep theirs;

@@ -2,11 +2,12 @@
 // own preference, in a real browser. The DM sets the table to real dice:
 // Ana's attack asks her phone for her d20 and then her damage dice, each box
 // checked, and the chat marks both rolls "rolled at the table". The DM sets
-// the creatures' dice to real dice too: in the chapel fight a goblin's attack
-// on Wren asks the DM's screen for its d20 and its damage. Then the
-// creatures' rolls go out of sight: a goblin hits Wren, and Ben's screen
-// says so — "it hits, N slashing damage" — with no roll of the goblin's and
-// no number but the damage. Last, the table lets each player choose: Ana
+// the creatures' dice to real dice too, in the open: in the chapel fight a
+// goblin's attack on Wren asks the DM's screen for its d20 and its damage, and
+// Ben sees the roll; behind the DM's screen, the same typed hit reaches Ben as
+// words alone. Then the creatures' rolls go out of sight: a goblin hits Wren,
+// and Ben's screen says so — "it hits, N slashing damage" — with no roll of
+// the goblin's and no number but the damage. Last, the table lets each player choose: Ana
 // takes her own dice from her ⋯ menu (My preferences), the DM's Table
 // settings shows it as hers, her next roll asks; she goes back to the app's
 // dice, and the next one rolls at once. Screenshots of each step go to the
@@ -345,28 +346,35 @@ async function swing(goblin, attack) {
   await banner.getByRole('button', { name: 'Done' }).click();
 }
 
-ok = ok && (await step('the DM rolls the creatures’ dice by hand: a goblin’s attack on Wren asks the DM’s screen for its d20, then its damage', async () => {
-  await setRule("Your creatures' dice", 'Real dice: you roll them and type what came up');
+// A goblin's attack on Wren whose dice the DM types: its card asks the DM's
+// screen for the d20 (an 18), then the damage (a 1: Wren takes 1 + 2, and has
+// hit points for both of these and the out-of-sight hit after). A goblin whose
+// action is spent asks nothing: the next one, or the next round. The roll's
+// entry, as the DM's log has it.
+async function dmTypesAGoblinsHit(label) {
   const before = await wren();
   const card = diceCard(dm, 'Your dice');
   let asked = false;
-  for (const g of goblins) {
-    await swing(g, /^Scimitar\./);
-    if (await card.waitFor({ timeout: 4000 }).then(() => true, () => false)) {
-      asked = true;
-      break;
+  for (let round = 0; round < 3 && !asked; round++) {
+    for (const g of goblins) {
+      await swing(g, /^Scimitar\./);
+      if (await card.waitFor({ timeout: 4000 }).then(() => true, () => false)) {
+        asked = true;
+        break;
+      }
     }
+    if (!asked) await nextRound();
   }
   expect(asked, 'no goblin’s attack asked the DM for its dice');
   await card.getByText(/Scimitar → Wren: roll the d20 \+ 4/).first().waitFor({ timeout: 5000 });
   const words = await card.innerText();
   expect(/^Goblin.*'s Scimitar → Wren/m.test(words), `the DM's card names the goblin and whom it's at: ${words}`);
   await typeDice(card, [18]);
-  await shot(dm, 'dm_goblin_d20');
+  await shot(dm, `dm_goblin_d20_${label}`);
   await card.getByRole('button', { name: /^Done/ }).click();
   const dmg = diceCard(dm, 'Your dice');
   await dmg.getByText(/damage/).first().waitFor({ timeout: 8000 });
-  const sides = await typeDice(dmg, [4]);
+  const sides = await typeDice(dmg, [1]);
   expect(sides.length === 1 && sides[0] === 6, `the scimitar's d6: ${sides}`);
   await dmg.getByRole('button', { name: /^Done/ }).click();
   await dmg.waitFor({ state: 'detached', timeout: 8000 });
@@ -376,12 +384,33 @@ ok = ok && (await step('the DM rolls the creatures’ dice by hand: a goblin’s
     return (g.view.actors?.[t.actor]?.resources?.srd5e?.hp?.current ?? hp) < hp;
   }, before.hp, { timeout: 8000 });
   const after = await wren();
-  expect(before.hp - after.hp === 4 + 2, `Wren took ${before.hp - after.hp}, not the 4 + 2 the DM typed`);
+  expect(before.hp - after.hp === 1 + 2, `Wren took ${before.hp - after.hp}, not the 1 + 2 the DM typed`);
   const hit = await newestRoll(dm, '^Scimitar$');
   expect(hit && hit.spec?.typed_by === 'gm' && hit.result?.dice?.[0]?.face === 18, `the goblin's roll as the DM typed it: ${JSON.stringify(hit?.spec)}`);
+  return hit;
+}
+
+ok = ok && (await step('the DM rolls the creatures’ dice by hand, in the open: a goblin’s attack on Wren asks the DM’s screen for its d20, then its damage, and the players see it', async () => {
+  await setRule("Your creatures' dice", 'Your real dice, in the open: you type what came up, and the players see it');
+  const hit = await dmTypesAGoblinsHit('open');
+  expect(hit.audience === 'all', `in the open: everyone's (${hit.audience})`);
   // the players see it, rolled at the table
   await ben.waitForFunction((id) => (window.hexmap.game.view.log ?? []).some((e) => e.id === id && e.spec?.typed === true), hit.id, { timeout: 8000 });
   await shot(ben, 'ben_sees_the_dms_roll');
+}));
+
+ok = ok && (await step('the DM’s real dice behind the screen: the DM types a goblin’s hit, and Ben’s screen hears it with no roll and no number but the damage', async () => {
+  await setRule("Your creatures' dice", 'Your real dice, behind your screen: you type what came up, and the players hear what happened');
+  const said = 'attacks Wren with its Scimitar: it hits, 3 slashing damage.';
+  const heard = () => ben.evaluate((w) => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'note' && String(e.text ?? '').includes(w)).length, said);
+  const before = await heard();
+  const hit = await dmTypesAGoblinsHit('behind');
+  expect(hit.audience === 'gm', `behind the screen: the DM's alone (${hit.audience})`);
+  await ben.waitForFunction(([w, n]) => (window.hexmap.game.view.log ?? []).filter((e) => e.kind === 'note' && String(e.text ?? '').includes(w)).length > n, [said, before], { timeout: 8000 });
+  expect(!(await ben.evaluate((id) => (window.hexmap.game.view.log ?? []).some((e) => e.id === id), hit.id)), 'the DM’s roll reached Ben’s screen');
+  await ben.getByRole('tab', { name: /Chat/ }).click().catch(() => {});
+  await ben.getByText(said).first().waitFor({ timeout: 5000 });
+  await shot(ben, 'ben_hears_the_dms_hit');
 }));
 
 ok = ok && (await step('the creatures’ rolls out of sight: a goblin hits Wren, and Ben’s screen says so with no roll and no number but the damage', async () => {

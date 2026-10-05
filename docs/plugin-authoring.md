@@ -187,7 +187,11 @@ host stamps two keys on every context before `run` sees it: `ctx.player`
 co-GM did) and `ctx.gm` (`true` for the Table and its co-GMs). They come
 from the connection, never from the wire, so an action may trust them —
 for a target the sender does not own, check `ctx.gm` or that
-`ctx.player` owns the acting actor.
+`ctx.player` owns the acting actor. Keys beginning `__` are the host's
+alone: a screen's intent never carries them (the host drops them), and a
+plugin test's dispatch carries `ctx.__test = true` — so an action can take
+what only a test may give (dice faces where the app rolls a player's dice)
+and refuse the same from a screen.
 
 **Targets.** `target` says what the action aims at and how the target is
 chosen: `"actor"` / `"ref"` (from a list of the actors on the scene),
@@ -1169,7 +1173,8 @@ Each test runs on a fresh scratch encounter with a fixed dice seed.
 `t.pref(player, key, value)` (a player's preference, the player added to
 the table if new), `t.commit(events, label)`, `t.setting(key, value)` (a campaign setting
 for this test; the defaults come back for the next), `t.dispatch(action, ctx, answers)` (answers
-are given to the action's prompts in order), `t.scene([map_path,
+are given to the action's prompts in order; its ctx carries `__test = true`
+unless it says `__test = false`, as a screen's would), `t.scene([map_path,
 tokens])` → a scene id over a real map (the examples' chapel by default)
 with `tokens = { { id=, actor=, x=, y= }, … }` placed by offset cell, for
 map tests, `t.mind_scene(tokens)` → a fight in the theatre of the mind,

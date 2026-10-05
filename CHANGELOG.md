@@ -14,6 +14,12 @@
 - The Table's own panes (the Rules pane's cards and log, a sheet, the DM's
   views, the journal) read a ruleset's marked words as the DM reads them:
   they showed the marks.
+- **A screen's dice can't pass for a test's.** Keys beginning `__` are the
+  host's: a screen's intent never carries them, and a plugin test's
+  dispatch carries `ctx.__test` (`__test = false` dispatches as a screen
+  would) — so a ruleset can take the dice faces an intent brings only from
+  where they may come (the DM, a player who rolls real dice, a test) and
+  roll a screen's itself (docs/plugin-authoring.md).
 
 - **Fights in the theatre of the mind.** Where fights happen is the DM's —
   on maps, in the theatre of the mind, or each fight its own — and a fight
