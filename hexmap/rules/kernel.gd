@@ -473,10 +473,14 @@ func roll(spec: Variant, ctx: Dictionary = {}, label := "Roll", reason: Dictiona
 	if not s.has("policy"):
 		s.policy = policy()
 	var rng: Dictionary = state.encounter.doc.rng
-	var result := Dice.roll(s, int(rng.seed), int(rng.index))
+	var result := Dice.roll(s, Dice.stream_of(rng), int(rng.get("index", 0)))
 	if not result.ok:
 		last_veto = result.error
 		return {}
+	# where in the stream it drew is the entry's alone (the log moves the stream
+	# by it, and back on an undo): never in what a ruleset is handed
+	var draw: Dictionary = result.draw
+	result.erase("draw")
 	# (ids are random: thousands of rolls in one log can meet one already there)
 	var rid := JsonDoc.new_id("r")
 	while state._log_has(rid):
@@ -486,7 +490,7 @@ func roll(spec: Variant, ctx: Dictionary = {}, label := "Roll", reason: Dictiona
 	# the DM's eyes alone)
 	var after := hooks.run_sync("after_roll", {"spec": s, "result": result, "ctx": ctx, "id": rid, "dm": {}})
 	result = after.result
-	var entry := {"id": rid, "kind": "roll", "label": label, "spec": s, "result": result, "draw": result.draw,
+	var entry := {"id": rid, "kind": "roll", "label": label, "spec": s, "result": result, "draw": draw,
 		"actor": str(ctx.get("actor", "")), "audience": str(result.get("visibility", "all"))}
 	# the creature it was rolled at (an attack's, its damage's): a screen says
 	# whom, by the name it knows (Knowledge.name_roll)

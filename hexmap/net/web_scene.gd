@@ -31,8 +31,10 @@ extends RefCounted
 ## everyone where they see them exactly; its name — "a creature" to a player
 ## until the DM reveals it, labelled "?" (or a number, of several), the DM's
 ## told the label the players see it by (`player_label`) and whether they
-## know its name (`name_known`); its conditions.
-static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool, known: Array = []) -> Dictionary:
+## know its name (`name_known`); its conditions; and — its name unknown — no
+## tag that says its kind, and its art as `art_of` makes it (an address that
+## says nothing: the host's; none without it).
+static func build(state: EncounterState, scene_id: String, player_id: String, gm: bool, known: Array = [], art_of: Callable = Callable()) -> Dictionary:
 	var e := state.encounter
 	var sc := e.scene(scene_id)
 	if sc.is_empty():
@@ -40,15 +42,16 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	var fog := state.fog_enabled(scene_id)
 	var eyes := _eyes(state, scene_id, player_id, gm)
 	var sight: Dictionary = Vision.of(state, scene_id, eyes) if (fog or gm) else {"polygons": [], "cells": [], "los": [], "dark": []}
-	# labels worked out over every token, the hidden ones too: a player sees
-	# the GW2 the DM calls out, whatever else they can't see — but a creature
-	# whose name the players don't know, "?" or a number of the ones they see
-	var labels := TokenLabels.of_scene(state.tokens(scene_id), state)
-	var unnamed := Knowledge.player_labels(state.tokens(scene_id), e.actors, known)
+	# what this screen is shown, and the labels worked out over only that: a
+	# number never tells a player of a creature they don't see (GW2 with no GW1
+	# on their screen said there was one) — the DM's over every token
+	var shown: Array = state.tokens(scene_id) if gm else state.tokens(scene_id).filter(func(tk: Dictionary) -> bool: return shows(state, tk, player_id, fog, sight.polygons))
+	var labels := TokenLabels.of_scene(shown, state)
+	var unnamed := Knowledge.player_labels(shown, e.actors, known)
 	var tokens := []
-	for tk in state.tokens(scene_id):
-		if not gm and not shows(state, tk, player_id, fog, sight.polygons):
-			continue
+	var seen := {}
+	for tk in shown:
+		seen[str(tk.id)] = true
 		var out := token_out(state, tk, gm, known)
 		out.label = str(labels.get(str(tk.id), out.get("label", "")))
 		if unnamed.has(str(tk.id)):
@@ -57,26 +60,26 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 				out.name_known = false
 			else:
 				Knowledge.unname(out, str(unnamed[str(tk.id)]))
+				Knowledge.unart(out, art_of)
 		elif gm and Knowledge.names_hidden(known) and Knowledge.unowned(tk, e.actors) and not Encounter.is_object(tk):
 			# its name revealed to the players: the DM may keep it again
 			out.name_known = true
 		tokens.append(out)
 	var lvl := state.effective_level(scene_id)
-	var regions := {}
-	for id in sc.get("regions", {}):
-		var r: Dictionary = sc.regions[id]
-		if gm or str(r.get("audience", "all")) != "gm":
-			regions[id] = JsonDoc.deep(r)
+	# (a player's: none the DM keeps, none round a token their screen doesn't show)
+	var regions: Dictionary = JsonDoc.deep(sc.get("regions", {})) if gm else Protocol.player_regions(sc, seen)
 	var light := state.light_level(scene_id)
 	var out := {"id": str(sc.id), "name": str(sc.get("name", "")), "map": str(sc.get("map", "")), "level": str(sc.get("level", "")),
 		"active": e.active_scene_id == scene_id, "fog": fog, "light": light, "darkness": Vision.darkness(light, gm),
-		"overrides": JsonDoc.deep(sc.get("overrides", {})), "tokens": tokens,
+		"overrides": JsonDoc.deep(sc.get("overrides", {})) if gm else Protocol.player_overrides(sc.get("overrides", {}), state.level_for(scene_id)), "tokens": tokens,
 		"explored": state.explored(scene_id).keys() if fog else [],
 		"visible": (sight.polygons as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
 		"los": (sight.los as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)) if light == "dark" else [],
 		"dark_sight": (sight.dark as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
 		"lights": lights(state, scene_id, lvl, tokens), "regions": regions,
-		"turns": JsonDoc.deep(e.turns) if gm else Knowledge.player_turns(e.turns, e.doc, known)}
+		# (the order as they see it: only the creatures on their screen — of an
+		# order on another scene, nothing)
+		"turns": JsonDoc.deep(e.turns) if gm else Knowledge.player_turns(e.turns, e.doc, known, seen if turns_here(e, scene_id) else {})}
 	if gm:
 		out.light_set = str(sc.get("light", "")) if Vision.LIGHT_LEVELS.has(str(sc.get("light", ""))) else ""
 		out.map_light = str(state.level_for(scene_id).get("light", ""))
@@ -84,6 +87,29 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	if Encounter.is_mind(sc):
 		out.space = Encounter.SPACE_MIND
 	return out
+
+
+## The tokens of a scene a viewer's screen is sent, {id: true}: a player's
+## (`player_id`, shows); a display's (`display`, no player: what every
+## player's characters see). Every screen that isn't the DM's is sent only
+## these — on the map, in the order, in what the table waits on.
+static func seen(state: EncounterState, scene_id: String, player_id: String, display := false) -> Dictionary:
+	var out := {}
+	if state.encounter.scene(scene_id).is_empty():
+		return out
+	var fog := state.fog_enabled(scene_id)
+	var polys: Array = Vision.of(state, scene_id, _eyes(state, scene_id, player_id, display and player_id == "")).polygons if fog else []
+	for tk in state.tokens(scene_id):
+		if shows(state, tk, player_id, fog, polys):
+			out[str(tk.get("id", ""))] = true
+	return out
+
+
+## Whether the turn order is the one of this scene (an order on no scene, from
+## before orders said theirs, is the scene the players see).
+static func turns_here(e: Encounter, scene_id: String) -> bool:
+	var sid := str(e.turns.get("scene", "")) if e.turns.get("scene") != null else ""
+	return sid == scene_id or (sid == "" and scene_id == e.active_scene_id)
 
 
 ## Whether a player's screen shows a token (`polys`: what their characters
@@ -157,7 +183,7 @@ static func token_out(state: EncounterState, tk: Dictionary, gm: bool, known: Ar
 		if not gm and out.get("tags") is Array:
 			var a: Dictionary = state.encounter.actors.get(str(tk.actor), {})
 			var fx := Knowledge.condition_keys(state.encounter.effects, tk, known) if not Knowledge.conditions_known(a, known) else {}
-			out.tags = Knowledge.player_tags(out.tags, known, fx)
+			out.tags = Knowledge.player_tags(out.tags, known, fx, Knowledge.nameless(tk, state.encounter.actors, known))
 		var hp := Knowledge.shown_hp(state.encounter.resources, str(tk.get("actor", "")), known)
 		if not hp.is_empty():
 			out.hp = hp

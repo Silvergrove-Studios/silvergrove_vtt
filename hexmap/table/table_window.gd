@@ -600,7 +600,7 @@ func _toggle_session() -> void:
 		ctx.say(why if why != "" else "Session %d started" % int(ctx.encounter().clock.get("session", 0)))
 	else:
 		_confirm("End session %d? The recap is kept, the journal stamped and the campaign saved." % n, func() -> void:
-			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all") if ctx.campaign_is_live() else "")
+			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all", ctx.kernel.knowledge_policies() if ctx.kernel != null else []) if ctx.campaign_is_live() else "")
 			ctx.say(str(r.get("error", "")) if str(r.get("error", "")) != "" else "Session %d ended" % n))
 	_update_session_bar()
 	_update_banner()
@@ -1592,6 +1592,11 @@ func _set_hosting(on: bool) -> void:
 		host.dm_handler = func(intent: Dictionary) -> String: return web_dm.op(intent)
 		host.dm_state_source = func() -> Dictionary: return web_dm.state()
 		host.chat_source = func() -> Array: return ctx.campaign.chat_log if ctx.campaign != null else []
+		# the seats players' devices have taken: the campaign's, from one session to the next
+		host.seats_source = func() -> Variant: return ctx.campaign.seats() if ctx.campaign != null else null
+		host.seats_changed = func() -> void:
+			if ctx.campaign != null:
+				ctx.campaign.touch()
 		# how this table runs, as the players are told it
 		host.table_source = func() -> Dictionary: return table_settings.players_summary()
 		# which maps are the region: a scene there has no battle map to pick a target on
@@ -1778,6 +1783,7 @@ func _refresh_online() -> void:
 	_refresh_running()
 	players.online.clear()
 	players.cogm_code = host.cogm_code if host != null else ""
+	players.free_seat = host.free_seat if host != null else Callable()
 	players.cogm_count = host.cogm_count() if host != null else 0
 	if host != null:
 		for p in host.connected_players():
@@ -2348,7 +2354,7 @@ func _recap_dialog() -> void:
 	form.build([{"key": "who", "label": "For", "type": "enum", "options": ["the players", "the GM"]}], {"who": "the players"})
 	_form_dialog("Session recap", form, func(v: Dictionary) -> void:
 		var audience := "gm" if str(v.who) == "the GM" else "all"
-		var md := Recap.markdown(ctx.encounter(), audience)
+		var md := Recap.markdown(ctx.encounter(), audience, ctx.kernel.knowledge_policies() if ctx.kernel != null else [])
 		var d := AcceptDialog.new()
 		d.title = "Recap"
 		d.min_size = Vector2i(560, 480)

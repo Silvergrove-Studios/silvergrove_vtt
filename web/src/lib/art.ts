@@ -84,6 +84,8 @@ export function pictureUrl(ref: string): string {
   if (isUpload(ref)) return uploadUrl(ref);
   const a = asset('pictures', ref);
   const parts = splitRef(ref);
+  // (a picture is at the address the table sent with it: it serves none by its name)
+  if (a && typeof a.url === 'string' && a.url) return a.url;
   return a && parts && a.texture ? artUrl(parts[0], String(a.texture)) : '';
 }
 
@@ -126,6 +128,8 @@ export function assetArt(collection: string, ref: string): { img: HTMLImageEleme
   const a = asset(collection, ref);
   const parts = splitRef(ref);
   if (!a || !parts || !a.texture) return { img: null, url: '' };
-  const url = artUrl(parts[0], String(a.texture));
+  // (a token's art, a picture: at the address the table sent with it — a
+  // creature's whose name this screen doesn't know is one that names nothing)
+  const url = typeof a.url === 'string' && a.url ? a.url : artUrl(parts[0], String(a.texture));
   return { img: image(url), url };
 }

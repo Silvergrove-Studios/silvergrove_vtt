@@ -312,8 +312,22 @@ func query_for(coll: String, opts: Dictionary, gm: bool) -> Dictionary:
 			seen.append(slim)
 	var total := seen.size()
 	var start := (page - 1) * per
+	# the facets counted over what they may see (the DM's entries would tell
+	# their kinds and numbers)
+	var facets := {}
+	var all: Dictionary = _entries.get(coll, {})
+	for field in o.get("facets", []):
+		var counts := {}
+		for e in seen:
+			var full: Dictionary = all.get(str(e.get("id", "")), {})
+			var v: Variant = JsonDoc.at_path(full, str(field)) if str(field).contains("/") else full.get(str(field))
+			for item in (v if v is Array else [v]):
+				if item != null:
+					var sv := str(item) if not (item is float) else str(JsonDoc.sorted(item))
+					counts[sv] = int(counts.get(sv, 0)) + 1
+		facets[str(field)] = counts
 	return {"total": total, "page": page, "per_page": per, "pages": int(ceil(float(total) / per)) if total > 0 else 0,
-		"entries": seen.slice(start, mini(total, start + per)), "facets": r.facets}
+		"entries": seen.slice(start, mini(total, start + per)), "facets": facets}
 
 
 ## An entry as a client sees it, or {} when there is none for them.

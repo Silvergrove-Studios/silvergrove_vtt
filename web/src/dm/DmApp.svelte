@@ -462,6 +462,14 @@
     return !tags.includes('place');
   }
 
+  // A player's seat freed: the next device to join as them takes it (a new
+  // phone, a borrowed one); until then only the device that took it joins as them
+  let freeing = $state<Dict | null>(null);
+  function freeSeat(): void {
+    if (freeing) dmOp('free_seat', { player: String(freeing.id) });
+    freeing = null;
+  }
+
   // End the session asks in the table's own words (never the browser's bare OK)
   let ending = $state(false);
   function endSession(): void {
@@ -528,9 +536,16 @@
       </div>
       <div class="players">
         {#each game.players as p (p.id)}
-          <span class="chip" title={online.has(String(p.id)) ? `${p.name} is here` : `${p.name} is not connected`}>
-            <span class="dot" class:on={online.has(String(p.id))} style:background={online.has(String(p.id)) ? String(p.color ?? '') : undefined}></span>{p.name}
-          </span>
+          {#if game.seats.includes(String(p.id))}
+            <!-- a seat a device has taken: only it joins as them, until the DM frees it -->
+            <button type="button" class="chip" title={`${online.has(String(p.id)) ? `${p.name} is here` : `${p.name} is not connected`}; their seat is their device's — tap to free it`} onclick={() => (freeing = p)}>
+              <span class="dot" class:on={online.has(String(p.id))} style:background={online.has(String(p.id)) ? String(p.color ?? '') : undefined}></span>{p.name}
+            </button>
+          {:else}
+            <span class="chip" title={online.has(String(p.id)) ? `${p.name} is here` : `${p.name} is not connected`}>
+              <span class="dot" class:on={online.has(String(p.id))} style:background={online.has(String(p.id)) ? String(p.color ?? '') : undefined}></span>{p.name}
+            </span>
+          {/if}
         {/each}
         <button type="button" class="accent" onclick={() => (inviting = true)}>Invite players</button>
       </div>
@@ -755,6 +770,15 @@
   {#if inviting}<Invite onclose={() => (inviting = false)} />{/if}
   {#if rulesOpen}<TableSettings onclose={() => (rulesOpen = false)} />{/if}
   {#if walking && !rulesOpen}<Walkthrough onclose={() => ((walking = false), (walkPutOff = true))} ondone={walkDone} />{/if}
+  {#if freeing}
+    <Modal title={`Free ${String(freeing.name ?? 'their')}'s seat?`} onclose={() => (freeing = null)}>
+      <p class="ask">Only the device that took it joins as {String(freeing.name ?? 'them')} now. Freed, the next device to join as them takes it: a new phone, or theirs again.</p>
+      {#snippet actions()}
+        <button type="button" class="quiet" onclick={() => (freeing = null)}>Keep it</button>
+        <button type="button" class="danger" onclick={freeSeat}>Free the seat</button>
+      {/snippet}
+    </Modal>
+  {/if}
   {#if ending}
     <Modal title="End the session?" onclose={() => (ending = false)}>
       <p class="ask">What happened is kept as its recap; the next session starts from here.</p>

@@ -49,6 +49,16 @@ describe('turns', () => {
       ['Wren', 'Movement 15 of 30 ft'],
     ]);
   });
+  // (the table sends a player no part of the order of a creature they don't
+  // see: on its turn nobody is up for them, and their header says what it
+  // says while the DM narrates — never "Round 2" with nobody, which told
+  // them a creature they couldn't see was acting)
+  it('reads the turn of a creature this screen is not sent as the DM’s', () => {
+    const turns = { mode: 'ordered', running: true, order: ['g1', 't1'], turn: -1, round: 2 };
+    expect(turnSummary({ turns, tokens }, 'pl_a')).toEqual({ text: "The DM's turn (round 2)", mine: false });
+    // nor does an entry it was sent but cannot draw (a creature out of its sight) say more
+    expect(turnSummary({ turns: { ...turns, order: ['gx', 't1'], turn: 0 }, tokens }, 'pl_a')).toEqual({ text: "The DM's turn (round 2)", mine: false });
+  });
   it('knows a group acts together', () => {
     const turns = { mode: 'ordered', running: true, order: ['group:gob', 't1'], turn: 0, data: { groups: { gob: { tokens: ['g1', 'g2'] } } } };
     expect(currentTurnTokens(turns, tokens)).toEqual(['g1', 'g2']);

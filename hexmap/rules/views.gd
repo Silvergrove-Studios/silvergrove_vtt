@@ -42,11 +42,17 @@ static func can_see(audience: String, player_id: String, role: String) -> bool:
 
 
 ## The projection for one client. `host` may be null (no plugins loaded).
-static func project(kernel: RulesKernel, host: PluginHost, player_id: String, role := ROLE_PLAYER) -> Dictionary:
+## `seen`: the tokens of the scene the players see that this viewer's screen
+## is sent ({id: true}, WebScene.seen; the host knows it already), worked out
+## here when not given — the order, what the table waits on and a creature's
+## tokens are told only of those.
+static func project(kernel: RulesKernel, host: PluginHost, player_id: String, role := ROLE_PLAYER, seen: Variant = null) -> Dictionary:
 	var st := kernel.state
 	var e := st.encounter
 	var out := {"player": player_id, "role": role, "seq": kernel.log.seq, "turns": JsonDoc.deep(e.turns), "clock": JsonDoc.deep(e.clock),
 		"actors": {}, "status": [], "tracks": [], "prompts": [], "waiting": [], "rolls": [], "log": [], "actions": {}, "plugins": [], "cards": {}}
+	if role != ROLE_GM and not (seen is Dictionary):
+		seen = WebScene.seen(st, e.active_scene_id, player_id, role == ROLE_DISPLAY)
 	var plugin_ids := []
 	if host != null:
 		plugin_ids = host.plugins.keys()
@@ -62,9 +68,11 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 	# actors (a creature no player owns shows a player what the rulesets say
 	# the players know of it — its health, its name, its conditions: Knowledge)
 	var known := kernel.knowledge_policies()
-	# (the order as a player is sent it: a creature's initiative left out where its rolls are the DM's)
+	# (the order as a player is sent it: only the creatures they see — of an order
+	# on a scene they don't see, nothing — a creature's initiative left out where
+	# its rolls are the DM's: Knowledge)
 	if role != ROLE_GM:
-		out.turns = Knowledge.player_turns(e.turns, e.doc, known)
+		out.turns = Knowledge.player_turns(e.turns, e.doc, known, seen if WebScene.turns_here(e, e.active_scene_id) else {})
 	var health := known if role != ROLE_GM else []
 	var ids := e.actors.keys()
 	ids.sort()
@@ -87,7 +95,8 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 		pa.tokens = []
 		for sc in e.scenes:
 			for tk in sc.tokens:
-				if str(tk.get("actor", "")) == str(aid) and (role == ROLE_GM or not bool(tk.get("hidden", false))):
+				# (a player's: those on their screen, not one on a scene they don't see)
+				if str(tk.get("actor", "")) == str(aid) and (role == ROLE_GM or mine or (seen as Dictionary).has(str(tk.id))):
 					pa.tokens.append({"id": str(tk.id), "scene": str(sc.id), "name": str(tk.get("name", ""))})
 		if not health.is_empty() and not mine and Knowledge.unowned_actor(a):
 			Knowledge.filter_actor(pa, a, health)
@@ -96,7 +105,7 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 				var p: PluginHost.Plugin = host.plugins[pid]
 				# a ruleset's sheet is for the actors that carry its data
 				if p.views.has("sheet") and a.get("ext", {}).has(pid):
-					pa.sheets.append({"plugin": pid, "schema": p.views["sheet"], "data": sheet_data(kernel, pa, pid, player_id, role)})
+					pa.sheets.append({"plugin": pid, "schema": p.views["sheet"], "data": sheet_data(kernel, pa, pid, player_id, role, out.turns)})
 		out.actors[str(aid)] = pa
 	# tracks, prompts, rolls, log
 	var tids := e.tracks.keys()
@@ -126,8 +135,10 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 		# (Ilvara)"), whose it is, and its time; the question itself stays theirs.
 		# A card the turns wait on (a roll as a turn ends or starts: TurnRunner)
 		# is listed whatever it says, `turn` marking it: the turn shows it waits.
+		# Not one of a creature they don't see (a hidden one's opportunity
+		# attack): to them the table isn't waiting on anything
 		var turn := turn_cards.has(str(pr))
-		if str(rec.get("public", "")) != "" or turn:
+		if (str(rec.get("public", "")) != "" or turn) and (role == ROLE_GM or _shown_actor(e, str(rec.get("actor", "")), seen)):
 			var to := str(rec.get("to", "gm"))
 			var w := {"id": str(pr), "to": to, "who": "the DM" if to == "gm" else str(e.player(to).get("name", "a player")),
 				"what": str(rec.get("public", "")) if str(rec.get("public", "")) != "" else "the turn", "urgent": bool(rec.get("urgent", false)), "deadline": float(rec.get("deadline", 0))}
@@ -159,22 +170,49 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 	return Knowledge.for_viewer(out, e.actors, known, role == ROLE_GM)
 
 
+## Whether a screen that sees `seen` (the tokens of the scene the players see
+## it is sent) may know of an actor: none named, the party's, or a creature
+## with a token on it.
+static func _shown_actor(e: Encounter, actor_id: String, seen: Variant) -> bool:
+	if actor_id == "":
+		return true
+	var a := e.actor(actor_id)
+	if a.is_empty() or not Knowledge.unowned_actor(a):
+		return true
+	for tk in e.scene(e.active_scene_id).get("tokens", []):
+		if str(tk.get("actor", "")) == actor_id and seen is Dictionary and (seen as Dictionary).has(str(tk.get("id", ""))):
+			return true
+	return false
+
+
 ## A log entry as a viewer with `role` receives it. Its `dm` block — what the
 ## DM may do with it (a ruling on a roll, an outcome to apply) and the
 ## rulesets' notes on it (a monster's hit points before and after) — is the
 ## GM's alone; what its roll `caused` (the steps it set off, and what undoes
-## them) is the rulesets' own and reaches no screen.
+## them) is the rulesets' own and reaches no screen; nor does where in the
+## dice stream a roll drew (`draw`: a log from before had the stream's seed in
+## it, which told every die before and after).
 static func log_entry_for(entry: Dictionary, role: String) -> Dictionary:
 	var out: Dictionary = {}
 	for k in entry:
-		if k == "caused" or (k == "dm" and role != ROLE_GM):
+		if k == "caused" or k == "draw" or (k == "dm" and role != ROLE_GM):
 			continue
 		out[k] = JsonDoc.deep(entry[k])
-	return out
+	return sans_draw(out)
+
+
+## A roll's entry (or result) without where in the dice stream it drew, in
+## place: the entry's `draw`, and its result's (a log from before kept one
+## there too). The entry, for chaining.
+static func sans_draw(entry: Dictionary) -> Dictionary:
+	entry.erase("draw")
+	if entry.get("result") is Dictionary:
+		(entry.result as Dictionary).erase("draw")
+	return entry
 
 
 ## The data a plugin's sheet schema binds to, for one projected actor.
-static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, player_id: String, role: String) -> Dictionary:
+static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, player_id: String, role: String, turns: Variant = null) -> Dictionary:
 	var res := {}
 	for name in pa.get("resources", {}).get(plugin, {}):
 		res[name] = pa.resources[plugin][name]
@@ -191,7 +229,7 @@ static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, play
 	return {"me": player_id, "role": role, "actor": {"id": pa.id, "name": pa.name, "owner": pa.owner, "kind": pa.kind, "mine": pa.mine},
 		"ext": JsonDoc.deep(pa.get("ext", {}).get(plugin, {})), "derived": JsonDoc.deep(pa.get("derived", {}).get(plugin, {})),
 		"resources": res, "effects": effects, "effect_keys": keys, "tokens": pa.get("tokens", []),
-		"turns": JsonDoc.deep(kernel.state.encounter.turns) if role == ROLE_GM else Knowledge.player_turns(kernel.state.encounter.turns, kernel.state.encounter.doc, kernel.knowledge_policies()),
+		"turns": JsonDoc.deep(turns) if turns is Dictionary else (JsonDoc.deep(kernel.state.encounter.turns) if role == ROLE_GM else Knowledge.player_turns(kernel.state.encounter.turns, kernel.state.encounter.doc, kernel.knowledge_policies())),
 		"clock": JsonDoc.deep(kernel.state.encounter.clock),
 		"state": plugin_state(kernel, plugin, role), "party": party_of(kernel, str(pa.id))}
 

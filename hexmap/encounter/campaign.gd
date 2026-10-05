@@ -214,6 +214,9 @@ func runtime_encounter() -> Encounter:
 	if doc.get("runtime") is Dictionary and not (doc.runtime as Dictionary).is_empty():
 		var err := []
 		e = Encounter.from_json(JsonDoc.stringify(doc.runtime), err)
+		# (one saved before the dice had a key: a key of its own now)
+		if e != null:
+			e.own_dice()
 	if e == null:
 		e = Encounter.create(name)
 		var st := EncounterState.new(e)
@@ -312,6 +315,15 @@ func clear_plugin_setting(pid: String, key: String) -> void:
 			return
 
 
+## The seats players' devices have taken at this campaign's table, live:
+## {player id: the device's secret, hashed} (HostSession: only that device
+## joins as them, until the DM frees the seat). Never in a package.
+func seats() -> Dictionary:
+	if not (doc.get("seats") is Dictionary):
+		doc.seats = {}
+	return doc.seats
+
+
 func touch() -> void:
 	dirty = true
 	doc.meta.modified = JsonDoc.now()
@@ -384,9 +396,10 @@ func bank(e: Encounter, encounter_path := "") -> Dictionary:
 		if str(entry.get("kind", "")) in ["chat", "roll"] and not have.has(str(entry.get("id", ""))):
 			var m: Dictionary = JsonDoc.deep(entry)
 			# (the session's rulings are made: a roll banked keeps what was rolled, not
-			# the DM's actions on it nor what it set off)
+			# the DM's actions on it nor what it set off, nor where the dice came from)
 			m.erase("dm")
 			m.erase("caused")
+			Views.sans_draw(m)
 			m.session = session
 			chat_log.append(m)
 	if chat_log.size() > CHAT_KEPT:

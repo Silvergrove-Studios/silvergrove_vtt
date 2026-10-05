@@ -48,7 +48,8 @@ static func create(p_name: String) -> Encounter:
 		"pending": {"prompts": {}, "rolls": {}},
 		"clock": DEFAULT_CLOCK.duplicate(),
 		"log": [],
-		"rng": {"seed": int(randi()) & 0x7fffffff, "index": 0},
+		# the dice: a secret stream of the Table's own (Dice: never sent anywhere)
+		"rng": {"key": Dice.new_key(), "index": 0},
 		# the campaign this session belongs to ({id, path}) and the
 		# campaign-scoped plugin state carried in and banked back out
 		"campaign": {"id": "", "path": "", "ext": {}},
@@ -385,6 +386,12 @@ func restore_snapshot(snap: Dictionary) -> Dictionary:
 		if not SNAPSHOT_SKIPS.has(str(k)):
 			doc[k] = JsonDoc.deep(snap[k])
 	_upgrade(VERSION)
+	# (a checkpoint from before the dice had a key brings back no known seed: the
+	# key the table has now stays)
+	var had: Variant = (before.rng as Dictionary).get("key") if before.get("rng") is Dictionary else null
+	if Dice.is_key(had) and not Dice.is_key(doc.rng.get("key")):
+		(doc.rng as Dictionary).erase("seed")
+		doc.rng.key = had
 	return before
 
 
@@ -458,8 +465,11 @@ func _upgrade(_from_version: int) -> void:
 	for k in DEFAULT_CLOCK:
 		if not doc["clock"].has(k):
 			doc["clock"][k] = DEFAULT_CLOCK[k]
+	# the dice: a secret stream of the Table's own (Dice), or a known seed (a
+	# test's: own_dice gives a document read from a file a key in its place).
+	# (A client's copy holds none, `{}`: one is made if it is ever rolled from.)
 	if not (doc.get("rng") is Dictionary):
-		doc["rng"] = {"seed": int(randi()) & 0x7fffffff, "index": 0}
+		doc["rng"] = {"key": Dice.new_key(), "index": 0}
 	if not (doc.get("campaign") is Dictionary):
 		doc["campaign"] = {}
 	for k in ["id", "path"]:
@@ -595,7 +605,21 @@ static func load_file(p_path: String, error: Array = []) -> Encounter:
 	var e := from_json(FileAccess.get_file_as_string(real), error)
 	if e != null:
 		e.path = p_path
+		e.own_dice()
 	return e
+
+
+## A document read from a file to play: a known seed in it (one saved before
+## the dice had a key — every player was sent it, with every roll, and could
+## work out every die from it) gives way to a key of the Table's own, where
+## the stream had got to kept. True when it did.
+func own_dice() -> bool:
+	var rng: Dictionary = doc.rng
+	if Dice.is_key(rng.get("key")):
+		return false
+	rng.erase("seed")
+	rng.key = Dice.new_key()
+	return true
 
 
 ## The directory scene `map_path`s are relative to: beside the file, or

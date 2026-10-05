@@ -1,8 +1,11 @@
 class_name TokenLabels
 extends RefCounted
-## What each token on a scene says on the map, worked out over all of them —
-## the hidden ones too, so the DM's screen and every player's number alike
-## (a player whose view hides GW1 still sees GW2, as the DM calls it out).
+## What each token on a scene says on the map, worked out over the tokens a
+## screen is shown: the DM's over all of them, a player's over only those
+## their screen shows (WebScene; a Godot player's client over the tokens it
+## holds) — a number never tells a player of a creature they can't see (GW2
+## with no GW1 on their screen said there was one). Where some players see
+## more than others, their numbers can differ from each other's and the DM's.
 ##
 ## A creature (an actor's token with no owner) whose label is empty or its
 ## name's first letter says its name's initials, the trailing number left

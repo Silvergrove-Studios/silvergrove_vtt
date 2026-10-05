@@ -134,8 +134,14 @@ maps are drawn with (an adventure brings its pictures in a pack of its
 own; a DM's own pictures, added from a file on a card, go into a pack the
 Table makes for the campaign, `pictures_<campaign>`, whose licence is
 unknown until the DM says it — so it does not go into a package until
-then). The Table sends the packs that hold pictures to the phones with the
-map art; a pack whose version changed is fetched again.
+then). A player's screen is sent a pack's pictures only as the DM shows
+them to that player (a handout, this session's or in their journal), and a
+pack's token art only for the tokens their screen shows; the art of a
+creature whose name the players don't know by an id that names nothing.
+Neither is served by its file name: each comes with an address of its own
+(`url`, `/pic/<key>.<ext>` on the web side) that only those sent it know;
+the map art (terrain, props, walls, lights) is at `/art/<pack>/<file>`. A
+pack whose version changed is fetched again.
 
 ## Placeholder art
 

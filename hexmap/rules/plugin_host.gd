@@ -560,16 +560,18 @@ const AREA_SHAPES := ["circle", "cone", "line"]
 ## one with statistics: Encounter.is_target), a cell in bounds, or an area
 ## whose origin is one of those (or an object: something its caster moves
 ## may be where an area starts). "" when it is, else why not.
-static func check_target(state: EncounterState, scene_id: String, kind: String, target: Variant, gm: bool, origin := false) -> String:
+static func check_target(state: EncounterState, scene_id: String, kind: String, target: Variant, gm: bool, origin := false, sees: Callable = Callable()) -> String:
 	match kind:
 		"token":
 			if not (target is String) or not (target as String).begins_with("token:"):
 				return "this action wants a token as its target"
 			var tk := state.token(scene_id, (target as String).substr(6))
+			# a player is told the same of one that isn't there and one their screen
+			# doesn't show (hidden, or beyond their sight: `sees`) — never which
+			if not gm and (tk.is_empty() or bool(tk.get("hidden", false)) or (sees.is_valid() and not bool(sees.call(tk)))):
+				return "you cannot see that"
 			if tk.is_empty():
 				return "no such token on this scene"
-			if not gm and bool(tk.get("hidden", false)):
-				return "you cannot see that"
 			if not origin and not Encounter.is_target(tk):
 				return "%s is a thing, not a creature: choose the creature" % str(tk.get("name", "that"))
 		"cell":
@@ -582,7 +584,7 @@ static func check_target(state: EncounterState, scene_id: String, kind: String, 
 			if not (target is Dictionary):
 				return "this action wants an area as its target"
 			var at: Variant = (target as Dictionary).get("at", "")
-			var why := check_target(state, scene_id, "token" if (at is String and (at as String).begins_with("token:")) else "cell", at, gm, true)
+			var why := check_target(state, scene_id, "token" if (at is String and (at as String).begins_with("token:")) else "cell", at, gm, true, sees)
 			if why != "":
 				return why
 			if not (target.get("direction", 0) is float or target.get("direction", 0) is int):
@@ -981,7 +983,7 @@ class Bridge:
 		var entry: Dictionary = st.encounter.log[st._log_index(str(id))]
 		if str(entry.get("audience", "all")).begins_with("private:"):
 			return null
-		return JsonDoc.deep(entry)
+		return Views.sans_draw(JsonDoc.deep(entry))
 
 	func setting(key: String) -> Variant:
 		return JsonDoc.at_path(_p().settings, str(key))
@@ -1103,7 +1105,7 @@ class Bridge:
 		var entry := k.roll(s, PluginHost._as_dict(ctx), label, {"by": plugin_id})
 		if entry.is_empty():
 			return {"__error": k.last_veto}
-		return entry
+		return Views.sans_draw(JsonDoc.deep(entry))
 
 	func dice_parse(expr: String) -> Dictionary:
 		return Dice.parse(str(expr))
@@ -1257,7 +1259,7 @@ class Bridge:
 	func roll_resolve(id: String) -> Variant:
 		var k := _k()
 		var entry := k.pending.resolve(str(id))
-		return entry if not entry.is_empty() else {"__error": k.last_veto}
+		return Views.sans_draw(JsonDoc.deep(entry)) if not entry.is_empty() else {"__error": k.last_veto}
 
 	func roll_pending() -> Array:
 		var out := []
@@ -1552,9 +1554,10 @@ class Bridge:
 		var gm := str(player) == ""
 		var sid := str(scene) if str(scene) != "" else k.state.encounter.active_scene_id
 		var known := k.knowledge_policies()
-		var view := Views.project(k, _h(), str(player), Views.ROLE_GM if gm else Views.ROLE_PLAYER)
+		var seen := WebScene.seen(k.state, sid, str(player)) if not gm else {}
+		var view := Views.project(k, _h(), str(player), Views.ROLE_GM if gm else Views.ROLE_PLAYER, null if gm else seen)
 		var out := {"scene": WebScene.build(k.state, sid, str(player), gm, known) if sid != "" else {},
-			"document": Protocol.client_document(k.state.encounter.doc, gm, known),
+			"document": Protocol.client_document(k.state.encounter.doc, true, known) if gm else Protocol.player_document(k.state, sid, str(player), seen, known),
 			"actors": view.actors, "log": view.log, "prompts": view.prompts, "waiting": view.waiting, "rolls": view.rolls}
 		return Knowledge.render_value(out, Knowledge.knower(k.state.encounter.actors, known, gm), gm)
 

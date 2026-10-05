@@ -3,8 +3,11 @@ extends RefCounted
 ## The web clients' side door: a small HTTP server beside the Table's
 ## WebSocket. It serves the web clients themselves (the player's screen at
 ## `/`, the DM's at `/dm` — one page, the path decides), the art they draw
-## with (`/art/<pack>/<file>`, the packs the Table holds), the maps' own
-## files (`/mapfile/<map id>/<file>`, a backdrop), the pictures the table
+## with (`/art/<pack>/<file>`, the packs the Table holds: never a pack's
+## pictures or token art by name, only at `/pic/<cap>.<ext>`, an address a
+## screen is sent with what it may see), the maps' own
+## files (`/mapfile/<map id>/<key>/<file>`, a backdrop: the key comes with
+## the map, to those who may have it), the pictures the table
 ## uploaded (`/upload/<id>.webp`, a token's, a journal's: by an address only
 ## those shown them know), and `/config.json` (where the WebSocket is). Players open it from any phone or computer on the
 ## network: nothing to install. Only GET and HEAD; nothing outside those
@@ -36,6 +39,10 @@ var map_file_source: Callable = Callable()
 var config_source: Callable = Callable()
 ## (id: String) -> PackedByteArray: an uploaded picture's WebP, or empty.
 var upload_source: Callable = Callable()
+## (cap: String) -> PackedByteArray: a picture (or a token's art) by the
+## address it was handed out with, /pic/<cap>.<ext>, or empty.
+var pic_source: Callable = Callable()
+static var _CAP := RegEx.create_from_string("^[0-9a-f]{32}$")
 var _server := TCPServer.new()
 var _conns: Array = []
 var _zip: ZIPReader = null
@@ -148,12 +155,23 @@ func respond(head: String) -> PackedByteArray:
 		type = _type(file)
 		cache = "max-age=3600"
 	elif path.begins_with("/mapfile/"):
+		# /mapfile/<map id>/<key>/<file>: the key is the map's, sent with it to those
+		# who may have it (an address nobody else can make)
 		var rest := path.substr(9)
 		var mid := rest.get_slice("/", 0)
-		var file := rest.substr(mid.length() + 1)
-		if mid != "" and file != "" and map_file_source.is_valid():
-			body = map_file_source.call(mid, file)
+		var key := rest.get_slice("/", 1)
+		var file := rest.substr(mid.length() + key.length() + 2)
+		if mid != "" and key != "" and file != "" and map_file_source.is_valid():
+			body = map_file_source.call(mid, file, key)
 		type = _type(file)
+		cache = "max-age=3600"
+	elif path.begins_with("/pic/"):
+		# a picture, a token's art: by an address only those who may see it are sent
+		var name := path.substr(5)
+		var cap := name.get_basename()
+		if not name.contains("/") and _CAP.search(cap) != null and pic_source.is_valid():
+			body = pic_source.call(cap)
+		type = _type(name)
 		cache = "max-age=3600"
 	elif path.begins_with("/upload/"):
 		var id := path.substr(8).trim_suffix(".webp")

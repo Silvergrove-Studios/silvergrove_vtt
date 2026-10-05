@@ -40,6 +40,8 @@ export const game = $state({
   viewAt: 0,
   scene: {} as Dict,
   scenes: [] as Dict[],
+  /** The DM's: the players whose seat a device has taken (the DM may free one). */
+  seats: [] as string[],
   // the DM seeing as a player: that player's snapshot of the scene, and who
   preview: null as Dict | null,
   previewAs: '',
@@ -51,6 +53,8 @@ export const game = $state({
   previewMarks: null as Record<string, Dict> | null,
   clock: {} as Dict,
   maps: {} as Record<string, Dict>,
+  /** Each map's key, sent with it: what its own files (a backdrop) are fetched by. */
+  mapKeys: {} as Record<string, string>,
   packs: {} as Record<string, Dict>,
   dm: {} as Dict,
   notices: [] as { id: number; text: string; kind: 'info' | 'error' }[],
@@ -173,10 +177,35 @@ export async function connect(role: 'player' | 'dm'): Promise<boolean> {
   return true;
 }
 
+/** This browser's own secret: the seat it takes at a table is its, and only it
+ *  joins as that player again (until the DM frees the seat). Kept for good;
+ *  made once. */
+export function deviceKey(): string {
+  try {
+    const kept = localStorage.getItem('hexmap.device');
+    if (kept && /^[0-9a-f]{32}$/.test(kept)) return kept;
+  } catch {
+    /* private mode: this page's own, below */
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const made = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  try {
+    localStorage.setItem('hexmap.device', made);
+  } catch {
+    /* private mode */
+  }
+  return made;
+}
+
+let pageDevice = '';
+
 /** Join: a player by name (a new name is a new player) or by id; the DM with the token.
- * By id with a name too, a table that no longer has that id is joined by the name. */
+ * By id with a name too, a table that no longer has that id is joined by the name.
+ * A player's join says which device it is (deviceKey): their seat is its. */
 export function join(opts: { name?: string; player?: string; token?: string }): void {
-  joinMsg = game.role === 'dm' ? { t: 'join', role: 'dm', token: opts.token ?? '' } : { t: 'join', role: 'player', player: opts.player ?? '', name: opts.name ?? '' };
+  pageDevice ||= deviceKey();
+  joinMsg = game.role === 'dm' ? { t: 'join', role: 'dm', token: opts.token ?? '' } : { t: 'join', role: 'player', player: opts.player ?? '', name: opts.name ?? '', device: pageDevice };
   byName = opts.player && opts.name ? opts.name : '';
   game.joining = true;
   game.error = '';
@@ -248,6 +277,8 @@ function handle(m: Msg): void {
       game.online = (m.online as string[]) ?? [];
       game.clock = (m.clock as Dict) ?? {};
       if (m.scenes) game.scenes = m.scenes as Dict[];
+      // (the DM's: whose seats a device has taken)
+      if (m.seats) game.seats = (m.seats as string[]).map(String);
       game.preview = (m.preview as Dict) ?? null;
       game.previewAs = String(m.preview_as ?? '');
       game.previewWhy = (m.preview_why as Record<string, string>) ?? {};
@@ -282,8 +313,10 @@ function handle(m: Msg): void {
       }
       break;
     case 'map': {
+      // (sent again where what this screen may see of it changed: a door found)
       const doc = (m.doc as Dict) ?? {};
       game.maps[String(m.id)] = doc;
+      game.mapKeys[String(m.id)] = String(m.key ?? '');
       // a map shown later (a fight's) may draw with packs this screen has not had yet
       if (Object.keys(doc.packs ?? {}).some((p) => !game.packs[p])) conn?.send({ t: 'need', kind: 'packs' });
       break;
@@ -361,6 +394,12 @@ export function marksById(list: unknown): Record<string, Dict> {
 /** For tests: the socket drops as a phone's does (in another app, a Wi-Fi blip); the page reconnects by itself. */
 export function dropConnection(): void {
   conn?.ws?.close();
+}
+
+/** A map's own file (a backdrop), at the address its key opens (the table
+ *  serves it to no one who hasn't been sent the map). */
+export function mapFileUrl(mid: string, file: string): string {
+  return `/mapfile/${encodeURIComponent(mid)}/${encodeURIComponent(game.mapKeys[mid] ?? '')}/${encodeURIComponent(file)}`;
 }
 
 export function wantMap(id: string): void {

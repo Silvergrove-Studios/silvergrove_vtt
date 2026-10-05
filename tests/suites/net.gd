@@ -2,6 +2,17 @@ extends TestCase
 ## Networking: protocol, discovery, sessions.
 
 
+## The document a player's Godot client holds, as the table would send it
+## now (Protocol.player_document), read as the client reads it.
+static func _player_doc(st: EncounterState, pid: String, known: Array = []) -> String:
+	var sid := st.encounter.active_scene_id
+	var doc := Protocol.player_document(st, sid, pid, WebScene.seen(st, sid, pid), known)
+	var e := Encounter.from_json(JsonDoc.stringify(doc))
+	# (a client that has applied an event has a `modified` stamp: compared blank)
+	e.doc.meta["modified"] = ""
+	return JsonDoc.sans_modified(e.to_json())
+
+
 ## Pump host and client until `done` says so, or give up.
 func _pump(host: HostSession, clients: Array, done: Callable, max_ms := 4000) -> bool:
 	var t0 := Time.get_ticks_msec()
@@ -106,8 +117,9 @@ func test_host_and_net_session() -> void:
 	var closed := []
 	client.closed.connect(func(r: String) -> void: closed.append(r))
 	check(client.connect_to_host() == OK, "client connects")
-	check(_pump(host, [client], func() -> bool: return client.state != null and client.maps_ready()), "welcome and maps arrive")
-	check(client.state.encounter.name == "Chapel Ambush" and client.state.maps.size() == 1 and client.state.map_for(client.scene_id()).name == "Ruined Chapel", "the client has the encounter and its map")
+	check(_pump(host, [client], func() -> bool: return client.state != null), "the welcome arrives")
+	check(client.state.encounter.name == "Chapel Ambush" and client.state.encounter.players.size() == 2 and client.state.encounter.scenes.is_empty() and client.state.maps.is_empty(),
+		"before it is anyone: the table's name and its players, nothing of the scene")
 	check(host.client_count() == 1 and host.connected_players().is_empty(), "connected, not yet joined")
 	var ana: Dictionary = e.players[0]
 	var sid := e.active_scene_id
@@ -119,6 +131,8 @@ func test_host_and_net_session() -> void:
 	client.join(str(ana.id))
 	check(_pump(host, [client], func() -> bool: return client.joined), "joined as Ana")
 	check(joined == [str(ana.id)] and host.connected_players() == [str(ana.id)], "the host says so too")
+	check(_pump(host, [client], func() -> bool: return client.maps_ready() and client.state.maps.size() == 1), "her document and its map arrive")
+	check(client.state.map_for(client.scene_id()).name == "Ruined Chapel" and client.state.encounter.scenes.size() == 1, "the scene she is shown, and its map")
 	# The example is ordered-not-running: the client refuses locally with the reason, nothing is sent.
 	check(client.request(mv) == "The fight hasn't started: wait for initiative" and applied.is_empty(), "pre-checked locally")
 	cmds.set_turn_mode("free")
@@ -126,10 +140,10 @@ func test_host_and_net_session() -> void:
 	check(client.request(mv) == "", "in free mode the request goes out")
 	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) == Vector2(1.5, 1.5)), "applied at the host and echoed back")
 	check(applied == [str(ana.id)] and history.undo_label() == "Player move" and Vision.token_pos(st.token(sid, fighter.id)) == Vector2(1.5, 1.5), "the host applied it through the table's commands, undoably")
-	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(st.encounter.doc))), "the client holds the host's document minus its rules blocks")
+	check(_pump(host, [client], func() -> bool: return JsonDoc.sans_modified(client.state.encounter.to_json()) == _player_doc(st, str(ana.id))), "the client holds what her screen shows of the host's document")
 	history.undo()
 	check(_pump(host, [client], func() -> bool: return Vision.token_pos(client.state.token(sid, fighter.id)) != Vector2(1.5, 1.5)), "the DM's undo reaches the client")
-	check(JsonDoc.sans_modified(client.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(st.encounter.doc))), "still the same after undo")
+	check(_pump(host, [client], func() -> bool: return JsonDoc.sans_modified(client.state.encounter.to_json()) == _player_doc(st, str(ana.id))), "still the same after undo")
 	# her device works out her sight itself: the same as the table's, in the
 	# scene's light and with darkvision in feet (protocol 3)
 	var same_sight := func() -> bool:
@@ -365,7 +379,7 @@ func test_table_hosts_player_joins() -> void:
 	table.ctx.commands.start_turns(sid)
 	check(pump.call(func() -> bool: return player.session.state.effective(sid, "walls", door).state == "open" and player.session.state.encounter.turns.running), "door and turns reached the player")
 	check(player._turn.text.begins_with("Your turn: Ana's fighter"), "the player's bar says it is her turn")
-	check(JsonDoc.sans_modified(player.session.state.encounter.to_json()) == JsonDoc.sans_modified(JsonDoc.stringify(Protocol.client_document(table.ctx.state.encounter.doc))), "the scene is identical across the wire")
+	check(pump.call(func() -> bool: return JsonDoc.sans_modified(player.session.state.encounter.to_json()) == _player_doc(table.ctx.state, player.session.player_id)), "the scene is identical across the wire, as her screen shows it")
 	# Leaving and stopping.
 	player._leave()
 	check(pump.call(func() -> bool: return table.players.online.is_empty()), "the table sees her leave")

@@ -27,9 +27,21 @@ var plugins: PluginHost
 ## or why not. The Table hands in its commands so history sees it.
 var apply_request: Callable
 var port := 0
-## What a co-GM must give to join: shown on the Table, four digits, new
-## for every hosting. "" refuses co-GMs.
+## What a co-GM must give to join: shown on the Table, ten letters and digits
+## (new_cogm_code), new for every hosting; wrong ones from one place wait
+## longer each time (_cogm_try). "" refuses co-GMs.
 var cogm_code := ""
+const COGM_ALPHABET := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+## Wrong codes from one place let by before the waiting starts (a typo or two).
+const COGM_FREE_TRIES := 2
+var _cogm_tries: Dictionary = {}   # where from -> {n, until}
+## () -> Dictionary: the seats players' devices have taken, {player id: the
+## device's secret, hashed}, live (the campaign keeps them: a phone that
+## took a seat last session has it still), with `seats_changed` called after
+## a change. Without them, this hosting keeps its own.
+var seats_source: Callable = Callable()
+var seats_changed: Callable = Callable()
+var _own_seats: Dictionary = {}
 var announcer := Discovery.Announcer.new()
 ## What the campaign has shared before this session (its journal's
 ## handouts): each client's view carries the entries it may see, so a
@@ -87,6 +99,7 @@ var _mark_sent_ms: Dictionary = {}   # id -> when last sent
 var _mark_pending: Dictionary = {}   # id -> true: changed since, waiting its turn
 var _marks_recheck := false          # the scene changed: who sees which mark, again
 var _sight: Dictionary = {}          # "player|scene" -> what their characters see (cleared on change)
+var _mark_areas: Dictionary = {}     # mark id -> {sig, cells}: a template's cells (_mark_cells)
 ## How much of the sessions before a view carries (the newest).
 const CHAT_HISTORY_SENT := 400
 var _server := TCPServer.new()
@@ -104,6 +117,14 @@ var _known_was: Array = []
 ## A Godot player's document is to be sent again (a creature's name revealed,
 ## the creatures the players don't know numbered afresh): at the next poll.
 var _docs_dirty := false
+## What the players may see of a map changed (a prop revealed, a door found):
+## the maps players hold are sent again at the next poll (_push_player_maps).
+var _maps_dirty := false
+## The maps as players are sent them, by "map|scene|godot": made once a change.
+var _player_maps: Dictionary = {}
+## This hosting's own secret, for the addresses that are leave to fetch
+## something (_cap): never sent.
+var _secret := Crypto.new().generate_random_bytes(32)
 
 ## Colours given to players who join by name, in turn. None is red: red is
 ## the creatures' (a playtest's player in red read as a goblin).
@@ -127,7 +148,7 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 	port = _server.get_local_port()
 	_listening = true
 	_known_was = _known()
-	cogm_code = "%04d" % (randi() % 10000)
+	cogm_code = new_cogm_code()
 	state.applied.connect(_on_applied)
 	if marks.state != state:
 		marks.bind(state, kernel.map if kernel != null else null)
@@ -135,13 +156,18 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 	marks.removed.connect(_on_mark_removed)
 	if web_port >= 0:
 		web = WebServer.new()
+		# the maps' art by its name; a picture or a token's art never so — only
+		# by the address a screen is sent with what it may have (/pic: _art_caps)
 		web.art_source = func(pack: String, file: String) -> PackedByteArray:
-			if packs == null or packs.pack_dir(pack) == "" or not packs.pack_files(pack).has(file):
+			if packs == null or packs.pack_dir(pack) == "" or not packs.pack_files(pack).has(file) or _restricted_files(pack).has(file):
 				return PackedByteArray()
 			return FileAccess.get_file_as_bytes(packs.pack_dir(pack).path_join(file))
-		web.map_file_source = func(mid: String, file: String) -> PackedByteArray:
+		web.pic_source = func(cap: String) -> PackedByteArray:
+			return _pic_bytes(cap)
+		# (a map's own files by an address only those sent the map know: its key)
+		web.map_file_source = func(mid: String, file: String, key: String) -> PackedByteArray:
 			var m: HexMap = state.maps.get(mid)
-			return m.asset_bytes(file) if m != null and m.asset_refs().has(file) else PackedByteArray()
+			return m.asset_bytes(file) if m != null and key == _cap("map", mid) and m.asset_refs().has(file) else PackedByteArray()
 		web.config_source = func() -> Dictionary:
 			return {"ws_port": port, "name": announcer.name, "protocol": Protocol.VERSION}
 		web.upload_source = func(id: String) -> PackedByteArray:
@@ -216,13 +242,36 @@ func _knows_for(c: Dictionary) -> Callable:
 
 
 ## The document a screen is sent as it says hello, joins, or the encounter
-## changes under it: a Godot client's to hold, as it may (Protocol.welcome); a
-## web screen's only the table's name and its players — it draws from its
-## snapshots, never a document (it was sent every token, the hidden too).
+## changes under it: a co-GM's whole (Protocol.welcome); a Godot player's or
+## a display's only what their screen shows (Protocol.player_document: the
+## scene the players see, the tokens they see — kept in step after by
+## _sync_player); a web screen's, and any screen's before it has joined, only
+## the table's name and its players (a web screen draws from its snapshots,
+## never a document).
 func _welcome(c: Dictionary) -> Dictionary:
-	if bool(c.get("web", false)):
+	if bool(c.get("web", false)) or not bool(c.get("joined", false)):
 		return Protocol.welcome_web(state.encounter)
-	return Protocol.welcome(state.encounter, _is_gm(c), _known())
+	if _is_gm(c):
+		return Protocol.welcome(state.encounter, true, _known())
+	var sid := state.encounter.active_scene_id
+	var seen := _seen_by(c)
+	var known := _known()
+	var doc := Protocol.player_document(state, sid, _viewer(c), seen, known, _opaque_art)
+	# (what it holds now: the tokens and the order, kept in step from here)
+	var held := {}
+	for tk in (doc.scenes[0].tokens if not (doc.scenes as Array).is_empty() else []):
+		held[str(tk.id)] = tk
+	c["held"] = {"scene": sid, "tokens": held, "turns": JsonDoc.deep(doc.turns),
+		"overrides": JsonDoc.deep(doc.scenes[0].overrides) if not (doc.scenes as Array).is_empty() else {},
+		"regions": JsonDoc.deep(doc.scenes[0].regions) if not (doc.scenes as Array).is_empty() else {}}
+	c["doc_due"] = false
+	return Protocol.player_welcome(doc)
+
+
+## Whose eyes a screen that isn't a DM's sees by: its player's, or (a
+## display's) "" — every player's.
+func _viewer(c: Dictionary) -> String:
+	return str(c.player) if c.role == Views.ROLE_PLAYER else ""
 
 
 ## What each screen holds of the scene, sent again as the rules loaded now
@@ -240,8 +289,79 @@ func refresh_scenes() -> void:
 func _send_docs() -> void:
 	_docs_dirty = false
 	for c in _clients:
-		if c.hello and not _is_gm(c) and not bool(c.web):
-			_send(c, Protocol.welcome(state.encounter, false, _known()))
+		if c.hello and c.joined and not _is_gm(c) and not bool(c.web):
+			_send(c, _welcome(c))
+
+
+## A Godot player's (or a display's) client kept in step with what its screen
+## shows, as the web's snapshots are: a new document where the players are
+## shown another scene (or the DM said so: `doc_due`); else the tokens it
+## holds and the order as they are now for it — a token come into its sight
+## added, one gone from it (hidden, out of sight, gone) removed, one changed
+## sent as what changed, the order whole where it changed.
+func _sync_player(c: Dictionary) -> void:
+	var held: Dictionary = c.get("held", {})
+	var sid := state.encounter.active_scene_id
+	if bool(c.get("doc_due", false)) or held.is_empty() or str(held.get("scene", "")) != sid:
+		_send(c, _welcome(c))
+		_ensure_art(c, (c.held.tokens as Dictionary).values())
+		return
+	var now := Protocol.player_tokens(state, sid, _viewer(c), _seen_by(c), _known(), _opaque_art)
+	# (a creature come into its sight with art it wasn't sent: its packs again, first)
+	_ensure_art(c, now.values())
+	var had: Dictionary = held.tokens
+	for id in had.keys():
+		if not now.has(id):
+			_send(c, Protocol.event({"t": "token.remove", "scene": sid, "id": str(id)}))
+	var at := 0
+	for id in now:
+		if not had.has(id):
+			_send(c, Protocol.event({"t": "token.add", "scene": sid, "token": now[id], "index": at}))
+		elif not JsonDoc.same(had[id], now[id]):
+			var changes := {}
+			for k in now[id]:
+				if not JsonDoc.same((had[id] as Dictionary).get(k), now[id][k]):
+					changes[k] = now[id][k]
+			for k in had[id]:
+				if not (now[id] as Dictionary).has(k):
+					changes[k] = null
+			_send(c, Protocol.event({"t": "token.set", "scene": sid, "id": str(id), "changes": changes}))
+		at += 1
+	held.tokens = now
+	var turns := _turns_for(c)
+	if not JsonDoc.same(turns, held.get("turns", {})):
+		var whole: Dictionary = turns.duplicate()
+		for k in held.get("turns", {}):
+			if not turns.has(k):
+				whole[k] = null
+		_send(c, Protocol.event({"t": "turns.set", "changes": whole}))
+		held.turns = turns
+	# the scene's overrides of its map's elements, as the players may know them
+	# (a door opened, a secret one found, a light lit: Protocol.player_overrides)
+	var ovs := Protocol.player_overrides(state.encounter.scene(sid).get("overrides", {}), state.level_for(sid))
+	var had_ov: Dictionary = held.get("overrides", {})
+	for ref in had_ov.keys() + ovs.keys():
+		var was: Dictionary = had_ov.get(ref, {})
+		var now_ov: Dictionary = ovs.get(ref, {})
+		if JsonDoc.same(was, now_ov):
+			continue
+		var changes: Dictionary = now_ov.duplicate(true)
+		for k in was:
+			if not now_ov.has(k):
+				changes[k] = null
+		_send(c, Protocol.event({"t": "element.set", "scene": sid, "ref": str(ref), "changes": changes}))
+	held.overrides = ovs
+	# its regions as it may see them (none the DM keeps, none round a token it
+	# doesn't see: Protocol.player_regions) — one changed sent whole again
+	var regs := Protocol.player_regions(state.encounter.scene(sid), _seen_by(c))
+	var had_r: Dictionary = held.get("regions", {})
+	for rid in had_r:
+		if not regs.has(rid) or not JsonDoc.same(had_r[rid], regs[rid]):
+			_send(c, Protocol.event({"t": "region.remove", "scene": sid, "id": str(rid)}))
+	for rid in regs:
+		if not had_r.has(rid) or not JsonDoc.same(had_r[rid], regs[rid]):
+			_send(c, Protocol.event({"t": "region.add", "scene": sid, "region": regs[rid]}))
+	held.regions = regs
 
 
 ## Is the client on this machine (the DM's own browser)?
@@ -358,13 +478,19 @@ func poll(delta := 0.0) -> void:
 	# the players don't know numbered afresh), once however many changes did it
 	if _docs_dirty:
 		_send_docs()
-	# web clients get the scene whole, a few times a second at most
+	# the maps players hold, where what they may see of them changed
+	if _maps_dirty:
+		_push_player_maps()
+	# web clients get the scene whole, a few times a second at most (a Godot
+	# player's what changed of what its screen shows)
 	if _scenes_dirty and Time.get_ticks_msec() - _last_scene_ms >= 50:
 		_scenes_dirty = false
 		_last_scene_ms = Time.get_ticks_msec()
 		for c in _clients:
 			if c.joined and bool(c.web):
 				_send_scene(c)
+			elif c.joined and not _is_gm(c):
+				_sync_player(c)
 	# (and the DM's screen its campaign state, as often)
 	if _dm_dirty and Time.get_ticks_msec() - _last_dm_ms >= 150:
 		_dm_dirty = false
@@ -447,69 +573,100 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 		_views_dirty = true
 		return
 	var known := _known()
-	if Protocol.SCENE_EVENTS.has(t):
-		if (t == "token.add" or t == "token.set") and Knowledge.hides(known):
-			# a monster as each may see it (Knowledge): the DM's whole, a player's
-			# without what the players don't know — its health's marks, its
-			# conditions' tags, its name (and the label they know it by)
-			var sid := str(ev.get("scene", ""))
-			var tid := str(ev.token.get("id", "")) if t == "token.add" and ev.get("token") is Dictionary else str(ev.get("id", ""))
-			var now := state.token(sid, tid)
-			var labels := Knowledge.player_labels(state.tokens(sid), state.encounter.actors, known)
-			var mine := Protocol.event(Knowledge.player_event(ev, now, state.encounter.doc, known, str(labels.get(tid, ""))))
-			for c in _clients:
-				if c.hello and not bool(c.web):
-					_send(c, Protocol.event(ev) if _is_gm(c) else mine)
-			# one come, hidden or shown: the others the players don't know are numbered afresh
-			var ch: Variant = ev.get("changes")
-			if Knowledge.names_hidden(known) and (t == "token.add" or (ch is Dictionary and ((ch as Dictionary).has("hidden") or (ch as Dictionary).has("actor") or (ch as Dictionary).has("owner")))):
-				_docs_dirty = true
-		elif t == "turns.set" and Knowledge.rolls_hidden(known):
-			# the order as a player may see it: a creature's initiative left out
-			# where its rolls are the DM's (Knowledge)
-			var theirs := Protocol.event(Knowledge.player_turns_event(ev, state.encounter.doc, known))
-			for c in _clients:
-				if c.hello and not bool(c.web):
-					_send(c, Protocol.event(ev) if _is_gm(c) else theirs)
-		else:
-			_broadcast(Protocol.event(ev))
-		if t == "token.remove" and Knowledge.names_hidden(known):
-			_docs_dirty = true
-		# a note on the map shown to the players (or hidden again): their
-		# devices get the map again, with it (or without it)
-		if t == "element.set" and str(ev.get("ref", "")).begins_with("notes:"):
-			var mid := str(state.encounter.scene(str(ev.get("scene", ""))).get("map", ""))
-			for c in _clients:
-				if c.hello and not _is_gm(c) and not bool(c.web) and state.maps.has(mid):
-					_send(c, _map_msg(c, mid))
-	elif Protocol.AUDIENCE_EVENTS.has(t):
-		# co-GMs hold the scene whole: every region and cell event as it is
-		_broadcast(Protocol.event(ev), true)
-		for msg in _audience_events(ev, inv):
-			for c in _clients:
-				if c.hello and not _is_gm(c) and not bool(c.web):
-					_send(c, Protocol.event(msg))
+	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t):
+		# a co-GM's client holds the scene whole: every event as it is. A player's
+		# (a display's) only what its screen shows: its tokens and the order kept
+		# in step at the next poll (_sync_player), the rest as far as it is about
+		# the scene it holds (_player_events). (Web screens get snapshots.)
+		for c in _clients:
+			if not c.hello or bool(c.web):
+				continue
+			if _is_gm(c) and c.joined:
+				_send(c, Protocol.event(ev))
+				continue
+			for out in _player_events(c, ev, inv):
+				_send(c, Protocol.event(out))
+		# what the players may see of a map changed (a note or a prop shown or
+		# hidden again, a secret door found), or another scene shown: the maps
+		# players hold, again as they may have them (_push_player_maps)
+		if t in ["element.set", "scene.activate", "scene.set", "scene.add", "scene.remove"]:
+			_maps_dirty = true
 	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t) or t.begins_with("token.") or t == "checkpoint.restore":
 		_scenes_dirty = true
 	# a creature's hit points, on its token where the players see them exactly
 	if t == "resource.set" and Knowledge.exact(known):
 		_scenes_dirty = true
 	# a creature's name revealed (or kept again), or who it is or whose: every
-	# screen's scene and a Godot player's document follow (its name, the labels);
+	# screen's scene and a Godot player's tokens follow (its name, the labels);
 	# an effect on a creature whose conditions the players don't know: its tags
 	if Knowledge.hides(known) and (t in ["actor.add", "actor.remove"] or (t == "actor.set" and _names_whom(ev)) or (t.begins_with("effect.") and Knowledge.conditions_hidden(known))):
 		_scenes_dirty = true
-		_docs_dirty = true
 	if t == "turns.set" or not Protocol.SCENE_EVENTS.has(t):
 		_views_dirty = true
 		# the DM's screen draws the party (hit points, conditions) from its state too
 		_dm_dirty = true
-	# a picture shown: phones that lack its pack (one added since they joined) fetch it
+	# a picture shown: the screens it was shown to are sent it now (their packs as
+	# they may have them: pack_listing_for), a phone fetches what it lacks
 	if t == "log.add" and str(ev.get("entry", {}).get("image", "")) != "":
-		var listing := pack_listing()
 		for c in _clients:
-			if c.hello:
-				_send(c, {"t": "packs", "packs": listing})
+			if c.joined:
+				_send(c, {"t": "packs", "packs": pack_listing_for(c)})
+
+
+## A scene event as a player's (a display's) Godot client is sent it: only
+## what is about the scene it holds, as far as its screen shows it. Its
+## tokens and the order are not sent as they come — _sync_player keeps them
+## in step with what it sees; a scene come or gone, or the players shown
+## another, brings it a new document at the next poll (`doc_due`); a scene's
+## own fields but its triggers and a ruleset's data; the table's name, its
+## players (not a seat's secret), its clock; regions and cells as far as the
+## players are shown them; nothing a ruleset keeps on the encounter or the
+## campaign. Before it has joined, only who the players are.
+func _player_events(c: Dictionary, ev: Dictionary, inv: Dictionary) -> Array:
+	var t := str(ev.get("t", ""))
+	if t in ["player.add", "player.remove", "player.set"]:
+		var out: Dictionary = JsonDoc.deep(ev)
+		if out.get("player") is Dictionary:
+			(out.player as Dictionary).erase("seat")
+		if out.get("changes") is Dictionary:
+			(out.changes as Dictionary).erase("seat")
+			if (out.changes as Dictionary).is_empty():
+				return []
+		return [out]
+	if not bool(c.get("joined", false)):
+		return []
+	var sid := str(c.get("held", {}).get("scene", ""))
+	match t:
+		"token.add", "token.set", "token.remove", "turns.set":
+			return []
+		"scene.activate", "scene.add", "scene.remove":
+			if t == "scene.activate" or bool(ev.get("activate", false)) or str(ev.get("id", "")) == sid or state.encounter.active_scene_id != sid:
+				c["doc_due"] = true
+			return []
+		"scene.set":
+			if str(ev.get("id", "")) != sid or not (ev.get("changes") is Dictionary):
+				return []
+			var ch := {}
+			for k in ev.changes:
+				var root := str(k).get_slice("/", 0)
+				if root != "id" and Protocol.PLAYER_SCENE_KEYS.has(root):
+					ch[k] = JsonDoc.deep(ev.changes[k])
+			return [] if ch.is_empty() else [{"t": "scene.set", "id": sid, "changes": ch}]
+		"encounter.set":
+			if ev.get("changes") is Dictionary and (ev.changes as Dictionary).has("name"):
+				return [{"t": "encounter.set", "changes": {"name": str(ev.changes.name)}}]
+			return []
+		"clock.set":
+			return [ev]
+		# (what a map's elements are to the players: kept in step, as they may know it)
+		"element.set":
+			return []
+		"fog.set", "fog.reveal", "fog.hide":
+			return [ev] if str(ev.get("scene", "")) == sid else []
+	# (its regions kept in step as it may see them: _sync_player; its cells as shown)
+	if t in ["cell.set", "ext.set"] and str(ev.get("scene", "")) == sid:
+		return _audience_events(ev, inv)
+	return []
 
 
 ## Whether an actor's change touches who it is to the players: its name, its
@@ -570,10 +727,17 @@ func projection(c: Dictionary) -> Dictionary:
 		return {}
 	var pid := "" if _is_gm(c) else str(c.player)
 	var role := Views.ROLE_GM if _is_gm(c) else (str(c.role) if c.role != "" else Views.ROLE_PLAYER)
-	var out := Views.project(kernel, plugins, pid, role)
+	var out := Views.project(kernel, plugins, pid, role, null if _is_gm(c) else _seen_by(c))
 	out.notes = PlayerNotes.for_viewer(notes_source.call(), pid, role) if notes_source.is_valid() else []
-	# what can be looked up (the web screens search across these)
+	# what can be looked up (the web screens search across these): a player's
+	# without those a ruleset says are the DM's (its creatures' stat blocks)
 	out.collections = kernel.comp.collections()
+	if not _is_gm(c):
+		var dms := Knowledge.dm_collections(_known())
+		out.collections = (out.collections as Array).filter(func(x: Variant) -> bool: return not dms.has(str(x)))
+		for coll in (out.get("cards", {}) as Dictionary).keys():
+			if dms.has(str(coll)):
+				out.cards.erase(coll)
 	out.chat_history = _chat_history(func(aud: String) -> bool: return Views.can_see(aud, pid, role))
 	var known := _known()
 	Knowledge.for_viewer({"chat_history": out.chat_history}, state.encounter.actors, known, _is_gm(c))
@@ -656,15 +820,20 @@ func _send_scene(c: Dictionary) -> void:
 	if sid == "" or e.scene(sid).is_empty() or not _is_gm(c):
 		sid = e.active_scene_id
 	var known := _known()
-	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c), known) if sid != "" else {},
-		"players": JsonDoc.deep(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
+	var msg := {"t": "scene", "scene": WebScene.build(state, sid, str(c.player), _is_gm(c), known, Callable() if _is_gm(c) else _opaque_art) if sid != "" else {},
+		"players": Protocol.public_players(e.players), "clock": JsonDoc.deep(e.clock), "online": connected_players()}
 	if not (msg.scene as Dictionary).is_empty():
+		# (a creature come into its sight with art it wasn't sent: its packs first)
+		if not _is_gm(c):
+			_ensure_art(c, msg.scene.get("tokens", []))
 		msg.scene.role = str(map_role.call(str(msg.scene.get("map", "")))) if map_role.is_valid() else ""
 		# how the table's rulers count (the rules' diagonal rule): a screen counts the
 		# straight distance itself as a ruler is dragged; the walk comes from here
 		msg.scene.measure = kernel.map.measure_rule() if kernel != null else {"diagonals": "5-5-5"}
 	if _is_gm(c):
 		msg.scenes = e.scenes.map(func(s: Dictionary) -> Dictionary: return {"id": str(s.id), "name": str(s.get("name", "")), "map": str(s.get("map", "")), "active": str(s.id) == e.active_scene_id})
+		# whose seats a device has taken (the DM may free one)
+		msg.seats = e.players.map(func(p: Dictionary) -> String: return str(p.get("id", ""))).filter(func(pid: String) -> bool: return seat_taken(pid))
 		# seeing as a player: that player's snapshot of the scene, as their screen has it
 		var who := str(c.get("see_as", ""))
 		if who != "" and sid != "" and not e.player(who).is_empty():
@@ -737,9 +906,18 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 			if role == Views.ROLE_DM and (dm_token == "" or str(msg.get("token", "")) != dm_token or not is_local_address((c.peer as WebSocketPeer).get_connected_host())):
 				_send(c, Protocol.error("the DM's screen opens from the Table on this computer"))
 				return
-			if role == Views.ROLE_COGM and (cogm_code == "" or str(msg.get("code", "")) != cogm_code):
-				_send(c, Protocol.error("co-GMs join with the code shown on the table"))
-				return
+			if role == Views.ROLE_COGM:
+				var why_c := _cogm_try(c, str(msg.get("code", "")))
+				if why_c != "":
+					_send(c, Protocol.error(why_c))
+					return
+			# a player's seat is the device's that took it (the secret it keeps:
+			# `device`), until the DM frees it
+			if role == Views.ROLE_PLAYER:
+				var why_s := _take_seat(c, pid, str(msg.get("device", "")))
+				if why_s != "":
+					_send(c, Protocol.error(why_s))
+					return
 			if role != Views.ROLE_PLAYER:
 				pid = ""
 			if c.player != "":
@@ -758,6 +936,13 @@ func _handle(c: Dictionary, msg: Dictionary) -> void:
 					for mid in state.maps:
 						_send(c, _map_msg(c, str(mid)))
 			_send(c, {"t": "joined", "player": pid, "role": role, "name": _player_name(pid) if pid != "" else ""})
+			# a Godot player's (a display's) document, now that it is someone: what
+			# its screen shows (it had only the table's name and its players); and a
+			# Godot client's packs, as it may have them (it asked before it was anyone)
+			if not bool(c.web) and not _is_gm(c):
+				_send(c, _welcome(c))
+			if not bool(c.web):
+				_send(c, {"t": "packs", "packs": pack_listing_for(c)})
 			_send_view(c)
 			if bool(c.web):
 				_send_scene(c)
@@ -880,7 +1065,9 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			var unaimed := bool(ctx.get("no_target", false)) and (ctx.get("target") == null or str(ctx.get("target")) == "")
 			if kind in ["token", "cell", "area"] and not unaimed:
 				var sc := str(ctx.get("scene", state.encounter.active_scene_id))
-				var why_t := PluginHost.check_target(state, sc, kind, ctx.get("target"), gm)
+				# (a player's pick: one their screen shows, on the scene the players see)
+				var sees := func(tk: Dictionary) -> bool: return sc == state.encounter.active_scene_id and _seen_by(c).has(str(tk.get("id", "")))
+				var why_t := PluginHost.check_target(state, sc, kind, ctx.get("target"), gm, false, Callable() if gm else sees)
 				if why_t != "":
 					return why_t
 				ctx = ctx.duplicate()
@@ -891,6 +1078,12 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 			for k in ctx.keys():
 				if str(k).begins_with("__"):
 					ctx.erase(k)
+			# a turn a player's screen names ({round, turn}: a sheet's End turn) is its
+			# place in the order as they were sent it, without what they don't see:
+			# the Table's own place, for the rules (Knowledge.table_turn)
+			if not gm and ctx.has("round") and (ctx.get("turn") is int or ctx.get("turn") is float):
+				var e := state.encounter
+				ctx.turn = Knowledge.table_turn(e.turns, e.doc, _known(), _seen_by(c) if WebScene.turns_here(e, e.active_scene_id) else {}, int(ctx.turn))
 			ctx.player = "" if gm else pid
 			ctx.gm = gm
 			var pc := plugins.dispatch(plugin, action, ctx)
@@ -960,6 +1153,9 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				# (and their chat, which comes with the view)
 				_send_view(c)
 				return ""
+			if str(intent.get("op", "")) == "free_seat":
+				# a player's seat freed: the next device to join as them takes it
+				return free_seat(str(intent.get("player", "")))
 			if not dm_handler.is_valid():
 				return "no DM operations here"
 			var why_dm := str(dm_handler.call(intent))
@@ -1009,6 +1205,89 @@ func _handle_intent(c: Dictionary, intent: Dictionary) -> String:
 				log.emit("%s brought %s" % [_player_name(pid), str(actor.name)])
 			return why
 	return "unknown intent '%s'" % str(intent.get("kind", ""))
+
+
+## Whether a co-GM's code is the table's, a few wrong ones from one place
+## let by and then each next try waited for longer (COGM_FREE_TRIES, then a
+## second, two, four… up to a minute): "" or why not.
+func _cogm_try(c: Dictionary, typed: String) -> String:
+	var from := (c.peer as WebSocketPeer).get_connected_host()
+	var now := Time.get_ticks_msec()
+	var t: Dictionary = _cogm_tries.get(from, {"n": 0, "until": 0})
+	if now < int(t.until):
+		return "too many wrong codes: try again in %d s" % ceili((int(t.until) - now) / 1000.0)
+	if cogm_code != "" and _plain_code(typed) == _plain_code(cogm_code):
+		_cogm_tries.erase(from)
+		return ""
+	t.n = int(t.n) + 1
+	if int(t.n) > COGM_FREE_TRIES:
+		t.until = now + mini(60000, 1000 << mini(6, int(t.n) - COGM_FREE_TRIES - 1))
+	_cogm_tries[from] = t
+	return "co-GMs join with the code shown on the table"
+
+
+## A code as typed, any case, with or without its dash and spaces.
+static func _plain_code(s: String) -> String:
+	return s.to_upper().replace("-", "").replace(" ", "").strip_edges()
+
+
+## A new code for co-GMs: ten letters and digits no one misreads (no I, O, 0,
+## 1), about fifty bits — "HK7QM-4XWPD" — new for every hosting.
+static func new_cogm_code() -> String:
+	var bytes := Crypto.new().generate_random_bytes(10)
+	var out := ""
+	for i in bytes.size():
+		if i == 5:
+			out += "-"
+		out += COGM_ALPHABET[int(bytes[i]) % COGM_ALPHABET.length()]
+	return out
+
+
+## A player's seat taken by a device (its secret, `device`; one the
+## connection makes when it sends none): the first device to join as a
+## player has their seat, and joins again as them; another is refused until
+## the DM frees the seat (free_seat). "" or why not.
+func _take_seat(c: Dictionary, pid: String, device: String) -> String:
+	if device.strip_edges() == "":
+		if str(c.get("own_device", "")) == "":
+			c["own_device"] = Crypto.new().generate_random_bytes(16).hex_encode()
+		device = str(c.own_device)
+	var seats := _seats()
+	var mine := device.left(200).sha256_text()
+	var held := str(seats.get(pid, ""))
+	if held == mine:
+		return ""
+	if held != "":
+		return "%s's seat is taken by another device: the DM can free it (the Players list)" % _player_name(pid)
+	seats[pid] = mine
+	if seats_changed.is_valid():
+		seats_changed.call()
+	return ""
+
+
+## The seats players' devices have taken, {player id: the device's secret,
+## hashed}: the campaign's (seats_source), else this hosting's own.
+func _seats() -> Dictionary:
+	var d: Variant = seats_source.call() if seats_source.is_valid() else null
+	return d if d is Dictionary else _own_seats
+
+
+## Whether a player's seat is taken by a device.
+func seat_taken(pid: String) -> bool:
+	return str(_seats().get(pid, "")) != ""
+
+
+## The DM frees a player's seat: the next device to join as them takes it
+## (a new phone, a borrowed one). "" or why not.
+func free_seat(pid: String) -> String:
+	if state.encounter.player(pid).is_empty():
+		return "no such player"
+	_seats().erase(pid)
+	if seats_changed.is_valid():
+		seats_changed.call()
+	_scenes_dirty = true
+	_dm_dirty = true
+	return ""
 
 
 ## A player found by name (as typed, any case), or added: {id} or {why}.
@@ -1215,6 +1494,7 @@ func _on_mark_changed(id: String) -> void:
 func _on_mark_removed(id: String, _m: Dictionary) -> void:
 	_mark_pending.erase(id)
 	_mark_sent_ms.erase(id)
+	_mark_areas.erase(id)
 	for c in _clients:
 		if c.get("marks_sent", {}).has(id):
 			(c.marks_sent as Dictionary).erase(id)
@@ -1295,9 +1575,11 @@ func _mark_for(c: Dictionary, m: Dictionary) -> Dictionary:
 		if as_name != "":
 			out.name = as_name
 		return out
-	# a creature whose name the players don't know casts it: "A creature" (Knowledge)
+	# a creature whose name the players don't know casts it: "A creature" (Knowledge),
+	# and no label naming its power ("Fire Breath, 15-ft cone" says what it is)
 	if as_name != "" and not Knowledge.name_known(state.encounter.actor(str(m.get("_as_actor", ""))), _known()):
 		as_name = Knowledge.UNKNOWN_START
+		out.erase("label")
 	if bool(m.get("private", false)) or str(m.scene) != state.encounter.active_scene_id:
 		return {}
 	var pid := str(c.player) if c.role == Views.ROLE_PLAYER else ""
@@ -1323,7 +1605,10 @@ func _mark_for(c: Dictionary, m: Dictionary) -> Dictionary:
 	return out
 
 
-## Whether a DM's mark lies where a player's screen may show it (`sight`: _sight_of).
+## Whether a DM's mark lies where a player's screen may show it (`sight`:
+## _sight_of): its points, and — a template's, a preview's — every cell it
+## covers on ground they know, no creature they don't see within it (a
+## template laid over the hidden ambushers said where they waited).
 func _shown_to(sight: Dictionary, m: Dictionary) -> bool:
 	var sid := str(m.scene)
 	var map := state.map_for(sid)
@@ -1340,24 +1625,57 @@ func _shown_to(sight: Dictionary, m: Dictionary) -> bool:
 				continue
 			if Vision.token_pos(tk).distance_to(v) <= maxf(0.5, float(tk.get("size", 1)) * 0.5):
 				return false
+	if str(m.get("kind", "")) in ["template", "preview"] and m.get("shape") is Dictionary:
+		var cells := _mark_cells(m)
+		if bool(sight.fog):
+			for key in cells:
+				if not (sight.explored as Dictionary).has(key):
+					return false
+		for tk in state.tokens(sid):
+			if not (sight.seen as Dictionary).has(str(tk.id)) and cells.has(HexMap.cell_key(map.grid.world_to_axial(Vision.token_pos(tk)))):
+				return false
 	return true
 
 
+## The cells a template or a preview covers, {cell key: true}: worked out
+## again only when it moved, turned or changed (MapQuery.template).
+func _mark_cells(m: Dictionary) -> Dictionary:
+	var sig := JSON.stringify([m.get("points"), m.get("shape"), m.get("direction"), m.get("scene"), m.get("token", "")])
+	var hit: Dictionary = _mark_areas.get(str(m.id), {})
+	if str(hit.get("sig", "")) == sig:
+		return hit.cells
+	var cells := {}
+	if kernel != null:
+		for key in kernel.map.template(str(m.scene), Measure.template_spec(m)).get("cells", []):
+			cells[str(key)] = true
+	_mark_areas[str(m.id)] = {"sig": sig, "cells": cells}
+	return cells
+
+
 ## What a player's screen shows of a scene, worked out once until the table
-## changes: {fog, explored (cells), seen (token ids)}. "" is a display's: no eyes.
+## changes: {fog, explored (cells), seen (token ids)}. "" is a display's:
+## what every player's characters see (WebScene.seen).
 func _sight_of(pid: String, sid: String) -> Dictionary:
 	var key := pid + "|" + sid
 	if _sight.has(key):
 		return _sight[key]
 	var fog := state.fog_enabled(sid)
-	var polys: Array = Vision.of(state, sid, WebScene._eyes(state, sid, pid, false)).polygons if fog and pid != "" else []
-	var seen := {}
-	for tk in state.tokens(sid):
-		if WebScene.shows(state, tk, pid, fog, polys):
-			seen[str(tk.id)] = true
-	var out := {"fog": fog, "explored": state.explored(sid) if fog else {}, "seen": seen}
+	var out := {"fog": fog, "explored": state.explored(sid) if fog else {}, "seen": WebScene.seen(state, sid, pid, pid == "")}
 	_sight[key] = out
 	return out
+
+
+## The tokens a screen that isn't a DM's is sent of the scene the players see
+## (a display's: what every player's characters see).
+func _seen_by(c: Dictionary) -> Dictionary:
+	return _sight_of(str(c.player) if c.role == Views.ROLE_PLAYER else "", state.encounter.active_scene_id).seen
+
+
+## The turn order as a screen that isn't a DM's is sent it: only what it sees
+## (Knowledge.player_turns; of an order on a scene the players don't see, nothing).
+func _turns_for(c: Dictionary) -> Dictionary:
+	var e := state.encounter
+	return Knowledge.player_turns(e.turns, e.doc, _known(), _seen_by(c) if WebScene.turns_here(e, e.active_scene_id) else {})
 
 
 func _owns_actor(pid: String, actor_id: String) -> bool:
@@ -1382,15 +1700,24 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 			if m == null:
 				_send(c, Protocol.error("no map " + id))
 				return
-			_send(c, _map_msg(c, id))
+			var mm := _map_msg(c, id)
+			_send(c, mm)
+			# (a Godot player's packs again where the map is drawn with packs it wasn't
+			# sent: the players shown another map)
+			if str(mm.get("t", "")) == "map" and not bool(c.web) and not _is_gm(c):
+				for p in m.doc.get("packs", {}):
+					if not c.get("listed", {}).has(str(p)):
+						_send(c, {"t": "packs", "packs": pack_listing_for(c)})
+						break
 		"packs":
-			_send(c, {"t": "packs", "packs": pack_listing()})
+			_send(c, {"t": "packs", "packs": pack_listing_for(c)})
 		"asset":
 			# a map's own file: only what the document refers to
 			var mid := str(msg.get("map", ""))
 			var file := str(msg.get("file", ""))
 			var m: HexMap = state.maps.get(mid)
-			if m == null or not m.asset_refs().has(file):
+			# (a player's: only of a map they may have, as _map_msg says)
+			if m == null or not m.asset_refs().has(file) or str(_map_msg(c, mid).get("t", "")) != "map":
 				_send(c, Protocol.error("no asset %s in map %s" % [file, mid]))
 				return
 			var bytes := m.asset_bytes(file)
@@ -1402,8 +1729,15 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 			# the compendium, as this viewer may see it: a page or an entry
 			var coll := str(msg.get("collection", ""))
 			var out := {"t": "comp", "req": str(msg.get("req", "")), "collection": coll}
+			# (a collection a ruleset says is the DM's: to a player, as if it had nothing)
+			var dms := Knowledge.dm_collections(_known()) if not _is_gm(c) else {}
 			if kernel == null or coll == "":
 				out.error = "no compendium here"
+			elif dms.has(coll):
+				if msg.has("id"):
+					out.error = "no such entry"
+				else:
+					out.page = {"total": 0, "page": 1, "per_page": int((msg.get("query", {}) as Dictionary).get("per_page", Compendium.PAGE)) if msg.get("query") is Dictionary else Compendium.PAGE, "pages": 0, "entries": [], "facets": {}}
 			elif msg.has("id"):
 				var e := kernel.comp.entry_for(coll, str(msg.id), _is_gm(c))
 				if e.is_empty():
@@ -1417,8 +1751,18 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 		"file":
 			var pack := str(msg.get("pack", ""))
 			var file := str(msg.get("file", ""))
+			# a creature's art by the id that names nothing; a picture or a token's
+			# art only to a screen that was sent it (pack_listing_for)
+			if pack == ART_PACK:
+				var bytes := _pic_bytes(file.get_basename()) if c.get("art_files", {}).has(pack + "/" + file) else PackedByteArray()
+				if bytes.is_empty():
+					_send(c, Protocol.error("no file %s in pack %s" % [file, pack]))
+					return
+				_send(c, {"t": "file", "pack": pack, "file": file, "data": Marshalls.raw_to_base64(bytes)})
+				return
 			var dir := packs.pack_dir(pack)
-			if dir == "" or file.contains("..") or file.begins_with("/") or not packs.pack_files(pack).has(file):
+			if dir == "" or file.contains("..") or file.begins_with("/") or not packs.pack_files(pack).has(file) \
+					or (_restricted_files(pack).has(file) and not c.get("art_files", {}).has(pack + "/" + file)):
 				_send(c, Protocol.error("no file %s in pack %s" % [file, pack]))
 				return
 			var bytes := FileAccess.get_file_as_bytes(dir.path_join(file))
@@ -1426,38 +1770,227 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 
 
 ## A map as this client may have it: whole for a GM (the DM's screen, a
-## co-GM), and for anyone else without the DM's notes on it
-## (Protocol.player_map; those a scene has shown stay). A screen asks for
-## its maps before it joins, so until then it is anyone else.
+## co-GM); for a player (a display) only the map of the scene the players
+## see, as they may see it under that scene (Protocol.player_map: no DM's
+## note, nothing hidden, a secret door a wall — a Godot client's with the
+## hidden walls that stop its sight), and nothing before it has joined.
+## `key`: what its own files are fetched with over HTTP (/mapfile, _cap).
 func _map_msg(c: Dictionary, map_id: String) -> Dictionary:
 	var m: HexMap = state.maps.get(map_id)
 	if m == null:
 		return Protocol.error("no map " + map_id)
-	if _is_gm(c):
-		return {"t": "map", "id": map_id, "doc": m.doc}
-	var shown := {}
-	for sc in state.encounter.scenes:
-		if str(sc.get("map", "")) != map_id:
+	if _is_gm(c) and bool(c.get("joined", false)):
+		return {"t": "map", "id": map_id, "doc": m.doc, "key": _cap("map", map_id)}
+	var sc := state.encounter.scene(state.encounter.active_scene_id)
+	if not bool(c.get("joined", false)) or str(sc.get("map", "")) != map_id:
+		return Protocol.error("no map " + map_id)
+	var godot := not bool(c.get("web", false))
+	var ck := "%s|%s|%s" % [map_id, str(sc.id), godot]
+	if not _player_maps.has(ck):
+		var doc := Protocol.player_map(m.doc, sc.get("overrides", {}), godot, str(sc.get("level", "")))
+		_player_maps[ck] = {"doc": doc, "hash": JSON.stringify(doc).hash()}
+	if not c.has("maps_sent"):
+		c["maps_sent"] = {}
+	c.maps_sent[map_id] = _player_maps[ck].hash
+	return {"t": "map", "id": map_id, "doc": _player_maps[ck].doc, "key": _cap("map", map_id)}
+
+
+## A player's maps again where what they may see of them changed (a prop
+## revealed or hidden again, a secret door found, a note shown): to each
+## screen that holds one, as it may have it now.
+func _push_player_maps() -> void:
+	_maps_dirty = false
+	_player_maps.clear()
+	for c in _clients:
+		if not c.joined or _is_gm(c) or not c.has("maps_sent"):
 			continue
-		var ovs: Dictionary = sc.get("overrides", {})
-		for ref in ovs:
-			if str(ref).begins_with("notes:") and ovs[ref] is Dictionary and ovs[ref].get("gm_only", true) == false:
-				shown[str(ref)] = true
-	return {"t": "map", "id": map_id, "doc": Protocol.player_map(m.doc, shown)}
+		for mid in (c.maps_sent as Dictionary).keys():
+			var was: Variant = c.maps_sent[mid]
+			var msg := _map_msg(c, str(mid))
+			if str(msg.get("t", "")) == "map" and c.maps_sent.get(mid) != was:
+				_send(c, msg)
+
+
+## What only this hosting can make, for an address that is its own leave to
+## fetch something (a map's files): a keyed hash of what it is.
+func _cap(kind: String, what: String) -> String:
+	return Crypto.new().hmac_digest(HashingContext.HASH_SHA256, _secret, (kind + "\n" + what).to_utf8_buffer()).hex_encode().left(32)
 
 
 ## The packs the encounter's maps use, and the packs holding the pictures
-## the DM may show, with their file lists.
+## the DM may show, with their file lists: whole, as the DM's screen has them.
 func pack_listing() -> Array:
+	return pack_listing_for({"joined": true, "role": Views.ROLE_DM, "player": ""})
+
+
+## The pack a player's screen finds the art of a creature it doesn't know by
+## name in: its entries named by what only this hosting can make (_cap), so
+## no file name names the creature.
+const ART_PACK := "__art"
+## cap -> [pack, file]: the art handed out by an address that names nothing.
+var _art_caps: Dictionary = {}
+
+
+## The packs a screen is sent, and of them only what it may have (with the
+## files a Godot client fetches of them):
+## - the DM's (a co-GM's): every pack whole — the maps' and the pictures';
+## - a player's (a display's): the packs of the map of the scene the players
+##   see; of a pack's pictures only those shown to them (a handout, this
+##   session's or in their journal), of its token art only that of the tokens
+##   their screen shows — and of a creature whose name they don't know, in a
+##   pack of its own (ART_PACK) by an id that names nothing;
+## - nobody's, before it has joined: nothing.
+## A picture or a token's art is at an address only those sent it know
+## (`url`: /pic/<cap>.<ext>); the art of the maps at /art/<pack>/<file>.
+func pack_listing_for(c: Dictionary) -> Array:
+	if not bool(c.get("joined", false)) or packs == null:
+		return []
+	var gm := _is_gm(c)
 	var ids := {}
-	for id in state.maps:
-		for p in (state.maps[id] as HexMap).doc.get("packs", {}):
+	var allowed := {}   # "pictures|pack:asset", "tokens|pack:asset"
+	var opaque := {}    # cap -> [pack, file]
+	if gm:
+		for id in state.maps:
+			for p in (state.maps[id] as HexMap).doc.get("packs", {}):
+				ids[str(p)] = true
+		for p in packs.picture_packs():
 			ids[str(p)] = true
-	for p in packs.picture_packs():
-		ids[str(p)] = true
+	else:
+		var m := state.map_for(state.encounter.active_scene_id)
+		if m != null:
+			for p in m.doc.get("packs", {}):
+				ids[str(p)] = true
+		for ref in _pictures_for(c):
+			allowed["pictures|" + ref] = true
+		var known := _known()
+		var seen := _seen_by(c)
+		for tk in state.tokens(state.encounter.active_scene_id):
+			var art := str(tk.get("art", "")) if tk.get("art") != null else ""
+			if not seen.has(str(tk.id)) or art == "" or art.begins_with(Uploads.PREFIX):
+				continue
+			if Knowledge.nameless(tk, state.encounter.actors, known):
+				var o := _opaque_art(art)
+				if o != "":
+					opaque[o.substr(ART_PACK.length() + 1)] = _art_caps[o.substr(ART_PACK.length() + 1)]
+			else:
+				allowed["tokens|" + art] = true
+		for k in allowed:
+			var parts := PackLibrary.split_ref(str(k).get_slice("|", 1))
+			if parts.size() == 2:
+				ids[parts[0]] = true
 	var out := []
+	var files_ok := {}
+	var refs := {}
 	for id in ids:
-		if packs.pack_dir(id) == "":
+		if str(id) == "" or packs.pack_dir(str(id)) == "":
 			continue
-		out.append({"id": id, "version": packs.pack_version(id), "manifest": packs.manifest(id), "files": Array(packs.pack_files(id))})
+		var manifest := packs.manifest(str(id))
+		var restricted := _restricted_files(str(id))
+		var kept_refs := []
+		for coll in ["pictures", "tokens"]:
+			var keep := []
+			for a in manifest.get(coll, []):
+				var ref := "%s:%s" % [id, str(a.get("id", ""))]
+				if not gm and not allowed.has(coll + "|" + ref):
+					continue
+				var e: Dictionary = JsonDoc.deep(a)
+				var tex := str(a.get("texture", ""))
+				if tex != "":
+					e.url = "/pic/%s.%s" % [_file_cap(str(id), tex), tex.get_extension()]
+					files_ok["%s/%s" % [id, tex]] = true
+				keep.append(e)
+				kept_refs.append(ref)
+				refs[ref] = true
+			manifest[coll] = keep
+		var files := Array(packs.pack_files(str(id))).filter(func(f: String) -> bool: return not restricted.has(f) or files_ok.has("%s/%s" % [id, f]))
+		for f in files:
+			files_ok["%s/%s" % [id, f]] = true
+		# (a pack sent with less of its pictures than it has: a version of its own, so
+		# a device that has some of it fetches what it lacks)
+		var version := packs.pack_version(str(id))
+		if not gm and not restricted.is_empty():
+			version += "+" + str(hash(kept_refs))
+		out.append({"id": str(id), "version": version, "manifest": manifest, "files": files})
+	if not opaque.is_empty():
+		var entries := []
+		var files := []
+		var caps := opaque.keys()
+		caps.sort()
+		for cap in caps:
+			var ext := str(opaque[cap][1]).get_extension()
+			entries.append({"id": str(cap), "name": "", "texture": "%s.%s" % [cap, ext], "url": "/pic/%s.%s" % [cap, ext]})
+			files.append("%s.%s" % [cap, ext])
+			files_ok["%s/%s.%s" % [ART_PACK, cap, ext]] = true
+			refs[ART_PACK + ":" + str(cap)] = true
+		out.append({"id": ART_PACK, "version": str(hash(caps)), "files": files,
+			"manifest": {"format": "silvergrove.pack", "version": 1, "id": ART_PACK, "name": "Creatures", "pack_version": str(hash(caps)), "tokens": entries}})
+	c["art_files"] = files_ok
+	c["art_refs"] = refs
+	c["listed"] = ids
 	return out
+
+
+## The pictures shown to the player a screen is (a display: to everyone): the
+## handouts with a picture this session's log and the campaign's journal
+## have for them. Their refs.
+func _pictures_for(c: Dictionary) -> Array:
+	var pid := _viewer(c)
+	var role := Views.ROLE_PLAYER if pid != "" else Views.ROLE_DISPLAY
+	var out := []
+	var all: Array = state.encounter.log.duplicate()
+	if journal_source.is_valid():
+		all.append_array(journal_source.call())
+	for entry in all:
+		if entry is Dictionary and str(entry.get("kind", "")) == "handout" and str(entry.get("image", "")) != "" and Views.can_see(str(entry.get("audience", "gm")), pid, role):
+			out.append(str(entry.image))
+	return out
+
+
+## The files of a pack that are its pictures' and its token art's: served to
+## no one by their names (/art), only by the address a screen is sent with
+## what it may have (/pic).
+func _restricted_files(pack: String) -> Dictionary:
+	var out := {}
+	var m := packs.manifest(pack) if packs != null else {}
+	for coll in ["pictures", "tokens"]:
+		for a in m.get(coll, []):
+			if a is Dictionary and str(a.get("texture", "")) != "":
+				out[str(a.texture)] = true
+	return out
+
+
+## The address a pack's file is handed out by (its cap), noted so it can be served.
+func _file_cap(pack: String, file: String) -> String:
+	var cap := _cap("art", pack + "/" + file)
+	_art_caps[cap] = [pack, file]
+	return cap
+
+
+## A creature's token art as a screen that doesn't know its name is sent it:
+## "pack:asset" → "__art:<cap>" (ART_PACK), or "" for one no pack has.
+func _opaque_art(ref: String) -> String:
+	if packs == null or PackLibrary.split_ref(ref).size() != 2:
+		return ""
+	var file := str(packs.token_art(ref).get("texture", ""))
+	if file == "":
+		return ""
+	return ART_PACK + ":" + _file_cap(PackLibrary.split_ref(ref)[0], file)
+
+
+## The bytes of a picture or a token's art handed out by its address, or none.
+func _pic_bytes(cap: String) -> PackedByteArray:
+	var pf: Variant = _art_caps.get(cap)
+	if not (pf is Array) or packs == null or packs.pack_dir(str(pf[0])) == "":
+		return PackedByteArray()
+	return FileAccess.get_file_as_bytes(packs.pack_dir(str(pf[0])).path_join(str(pf[1])))
+
+
+## The packs again for a screen whose tokens carry art it wasn't sent (a
+## creature come into its sight with a picture of its own): before them.
+func _ensure_art(c: Dictionary, tokens: Array) -> void:
+	var have: Dictionary = c.get("art_refs", {})
+	for tk in tokens:
+		var art := str(tk.get("art", "")) if tk is Dictionary and tk.get("art") != null else ""
+		if art != "" and not art.begins_with(Uploads.PREFIX) and not have.has(art):
+			_send(c, {"t": "packs", "packs": pack_listing_for(c)})
+			return

@@ -536,6 +536,8 @@ hm.ui.knowledge({
   names = hm.settings.get("monster_names", "shown"),           -- "shown" | "hidden"
   conditions = hm.settings.get("monster_conditions", "shown"), -- "shown" | "hidden"
   rolls = "shown",                                             -- "shown" | "hidden"
+  name_tags = { "undead", "dragon", "fiend" },                 -- tags that say a creature's kind
+  dm_collections = { "creatures" },                            -- collections that are the DM's
 })
 ```
 
@@ -543,7 +545,13 @@ The Table filters by it before anything is sent — a web screen's scene, a
 Godot client's document and the token events after it, the rules' view,
 and every message on the wire — so a player's device never holds what the
 DM keeps. The DM sees everything; a token or actor with an owner (or a
-player's character) is the party's own.
+player's character) is the party's own. Whatever a plugin declares, a
+player's screen is sent only the tokens it shows (none the DM hides, under
+fog only what their characters see), and the turn order, its labels, notes,
+counters and groups, and what the table waits on only of those: on the
+turn of a creature they don't see, nobody is up for them (`turn` -1). A
+sheet's `{round, turn}` (an End turn) is its place in their order: the host
+puts it back in the Table's before the action runs.
 
 - **health**: `tags` are the marks its tokens carry for it (the maps draw
   `bloodied`, `down` and `dead`), `resource` the pool its hit points are
@@ -567,8 +575,18 @@ player's character) is the party's own.
   tokens' tags that are its effects' keys.
 - **rolls** `"hidden"`: its rolls are the DM's (give them the GM's
   audience: `spec.visibility = "gm"`), and the Table leaves out what the
-  turn order says of them — its tokens' labels there, their initiative —
-  from what a player is sent: the order itself, and a group's label, stay.
+  turn order says of them — its tokens' labels there, their initiative, a
+  group of them's — from what a player is sent: the order itself stays.
+- **name_tags**: the tags your creatures' tokens carry that say their kind
+  ("undead"): where a player doesn't know a creature's name, its tokens
+  reach them without these. Its token art from a pack (whose name would name
+  it) reaches them by an id that names nothing; a group of creatures none of
+  whose names they know is "Creatures" in their order; a preview of its
+  power on the map loses its label.
+- **dm_collections**: collections of your content that are the DM's (your
+  creatures' stat blocks): a player's screen can neither search nor open
+  them — the Lookup doesn't list them, and a request for one is answered as
+  for an empty collection (no such entry).
 
 A creature's name and conditions are in your words too: a log line, a
 roll's label, a card, an `error`, words kept in your state. Write them

@@ -354,7 +354,7 @@ func op(intent: Dictionary) -> String:
 		"session":
 			if str(intent.get("do", "")) == "start":
 				return ctx.start_session()
-			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all") if ctx.campaign_is_live() else "")
+			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all", ctx.kernel.knowledge_policies() if ctx.kernel != null else []) if ctx.campaign_is_live() else "")
 			return str(r.get("error", ""))
 		"save":
 			return ctx.save_campaign()

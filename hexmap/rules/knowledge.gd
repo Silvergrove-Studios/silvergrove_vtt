@@ -52,9 +52,18 @@ extends RefCounted
 ## sentence, which leaves it whole). A ruleset that never marks a name
 ## leaves it as it wrote it.
 ##
+## Two lists go with it:
+##
+## - **name_tags**: the tags a ruleset puts on its creatures' tokens that say
+##   what kind of creature one is ("undead", "dragon"): where the players
+##   don't know a creature's name, its tokens are sent without them.
+## - **dm_collections**: the collections of its content that are the DM's
+##   (its creatures' stat blocks): not searchable or openable from a player's
+##   screen (the Lookup, a compendium request) — a missing entry to them.
+##
 ## A declaration: {plugin, players, resource, tags, effects, names,
-## conditions, rolls} (the health keys flat, as `hm.ui.health` has always
-## given them).
+## conditions, rolls, name_tags, dm_collections} (the health keys flat, as
+## `hm.ui.health` has always given them).
 
 const MODES := ["exact", "marks", "none"]
 const SHOWN := ["shown", "hidden"]
@@ -79,8 +88,9 @@ static func make(plugin: String, spec: Variant, base: Dictionary = {}) -> Varian
 	if spec is Array and (spec as Array).is_empty():
 		spec = {}
 	if not (spec is Dictionary):
-		return "hm.ui.knowledge takes a table: {health, names, conditions, rolls}"
-	var out := {"plugin": plugin, "players": "marks", "resource": "", "tags": [], "effects": [], "names": "shown", "conditions": "shown", "rolls": "shown"}
+		return "hm.ui.knowledge takes a table: {health, names, conditions, rolls, name_tags, dm_collections}"
+	var out := {"plugin": plugin, "players": "marks", "resource": "", "tags": [], "effects": [], "names": "shown", "conditions": "shown", "rolls": "shown",
+		"name_tags": [], "dm_collections": []}
 	for k in base:
 		out[k] = JsonDoc.deep(base[k])
 	out.plugin = plugin
@@ -108,6 +118,34 @@ static func make(plugin: String, spec: Variant, base: Dictionary = {}) -> Varian
 			if not SHOWN.has(v):
 				return "hm.ui.knowledge: %s is shown or hidden, not '%s'" % [key, v]
 			out[key] = v
+	for key in ["name_tags", "dm_collections"]:
+		if spec.has(key):
+			var v: Variant = spec[key]
+			if v is Dictionary:
+				v = (v as Dictionary).values()
+			if not (v is Array):
+				return "hm.ui.knowledge: %s is a list" % key
+			out[key] = (v as Array).map(func(x: Variant) -> String: return str(x))
+	return out
+
+
+## The tags that say what kind a creature is (`name_tags`), of every
+## declaration: {tag: true}.
+static func kind_tags(policies: Array) -> Dictionary:
+	var out := {}
+	for p in policies:
+		for tg in p.get("name_tags", []):
+			out[str(tg)] = true
+	return out
+
+
+## The collections that are the DM's (`dm_collections`), of every declaration:
+## {collection: true}.
+static func dm_collections(policies: Array) -> Dictionary:
+	var out := {}
+	for p in policies:
+		for c in p.get("dm_collections", []):
+			out[str(c)] = true
 	return out
 
 
@@ -207,8 +245,9 @@ static func knower(actors: Dictionary, policies: Array, gm: bool) -> Callable:
 
 ## The labels the players see on the creatures whose names they don't know,
 ## {token id: label}: "?" for one, numbers in the scene's order for several
-## — those the DM hides aren't counted (they keep "?"), so a number never
-## tells of a creature the players haven't seen. {} with names shown.
+## — those the DM hides aren't counted (they keep "?"), and a screen passes
+## only the tokens it shows (WebScene, Protocol.player_tokens), so a number
+## never tells of a creature that player hasn't seen. {} with names shown.
 static func player_labels(tokens: Array, actors: Dictionary, policies: Array) -> Dictionary:
 	var out := {}
 	if not names_hidden(policies):
@@ -227,9 +266,12 @@ static func player_labels(tokens: Array, actors: Dictionary, policies: Array) ->
 
 ## A token's tags as a player is sent them: the health marks a declaration
 ## keeps from the players ("none") taken out, and — conditions hidden — the
-## tags that are keys of the creature's effects (`fx_keys`).
-static func player_tags(tags: Array, policies: Array, fx_keys: Dictionary = {}) -> Array:
+## tags that are keys of the creature's effects (`fx_keys`); of a creature
+## whose name they don't know (`unknown`), the tags that say its kind.
+static func player_tags(tags: Array, policies: Array, fx_keys: Dictionary = {}, unknown := false) -> Array:
 	var gone := fx_keys.duplicate()
+	if unknown:
+		gone.merge(kind_tags(policies))
 	for p in policies:
 		if str(p.get("players", "marks")) == "none":
 			for tg in p.get("tags", []):
@@ -274,18 +316,21 @@ static func shown_hp(resources: Dictionary, actor_id: String, policies: Array) -
 
 ## A token as a player is sent it, from what the DM's screen would get: for a
 ## creature no player owns, its tags filtered (its health, its conditions)
-## and — its name unknown — "a creature", labelled `label` (player_labels).
+## and — its name unknown — "a creature", labelled `label` (player_labels),
+## without the tags that say its kind or an art whose name says it (unart).
 ## `doc` the encounter's document (actors, effects).
-static func player_token(tk: Dictionary, doc: Dictionary, policies: Array, label := "") -> Dictionary:
+static func player_token(tk: Dictionary, doc: Dictionary, policies: Array, label := "", art_of: Callable = Callable()) -> Dictionary:
 	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
 	if not hides(policies) or not unowned(tk, actors):
 		return tk
 	var out := tk.duplicate()
+	var unknown := nameless(tk, actors, policies)
 	if tk.get("tags") is Array:
 		var fx: Dictionary = doc.get("effects", {}) if doc.get("effects") is Dictionary else {}
-		out.tags = player_tags(tk.tags, policies, condition_keys(fx, tk, policies) if conditions_hidden(policies) and not conditions_known(actors.get(str(tk.actor), {}), policies) else {})
-	if nameless(tk, actors, policies):
+		out.tags = player_tags(tk.tags, policies, condition_keys(fx, tk, policies) if conditions_hidden(policies) and not conditions_known(actors.get(str(tk.actor), {}), policies) else {}, unknown)
+	if unknown:
 		unname(out, label)
+		unart(out, art_of)
 	return out
 
 
@@ -297,36 +342,19 @@ static func unname(out: Dictionary, label: String) -> void:
 	out.unknown = true
 
 
-## A token event as a player's Godot client is sent it: a token added or
-## changed for a creature no player owns, its health and condition tags taken
-## out and its name kept (`label`: the one the players see it by). `token` is
-## the token as it is now (for a change: who it is).
-static func player_event(ev: Dictionary, token: Dictionary, doc: Dictionary, policies: Array, label := "") -> Dictionary:
-	if not hides(policies):
-		return ev
-	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
-	match str(ev.get("t", "")):
-		"token.add":
-			if ev.get("token") is Dictionary and unowned(ev.token, actors):
-				var out := ev.duplicate()
-				out.token = player_token(ev.token, doc, policies, label)
-				return out
-		"token.set":
-			var ch: Variant = ev.get("changes")
-			if ch is Dictionary and unowned(token, actors):
-				var out := ev.duplicate()
-				out.changes = (ch as Dictionary).duplicate()
-				if (ch as Dictionary).get("tags") is Array:
-					var probe := token.duplicate()
-					probe.tags = ch.tags
-					out.changes.tags = player_token(probe, doc, policies).tags
-				if nameless(token, actors, policies):
-					if out.changes.has("name"):
-						out.changes.name = UNKNOWN
-					if out.changes.has("label"):
-						out.changes.label = label if label != "" else UNKNOWN_LABEL
-				return out
-	return ev
+## A token's art kept from a screen that doesn't know its creature's name,
+## in place: a picture of its own (an upload's address says nothing) stays;
+## a pack's, whose name would name it ("monsters:goblin_boss"), is what
+## `art_of` makes of it (the host's: an address that says nothing), or none.
+static func unart(out: Dictionary, art_of: Callable) -> void:
+	var art := str(out.get("art", "")) if out.get("art") != null else ""
+	if art == "" or art.begins_with(Uploads.PREFIX):
+		return
+	var opaque := str(art_of.call(art)) if art_of.is_valid() else ""
+	if opaque == "":
+		out.erase("art")
+	else:
+		out.art = opaque
 
 
 # ---------------------------------------------------------------- turns --
@@ -344,43 +372,133 @@ static func _unowned_tokens(doc: Dictionary) -> Dictionary:
 	return out
 
 
-## The turn order as a player is sent it: where the players don't see a
-## creature's rolls, its tokens' labels (their initiative) left out — the
-## order stays, and a group's label (what it is called) too. A copy.
-static func player_turns(turns: Dictionary, doc: Dictionary, policies: Array) -> Dictionary:
+## The tokens of every scene of `doc` no player's screen leaves out for
+## everyone: not hidden by the DM, not a thing only its owner sees (what
+## player_turns counts as seen when it isn't told what a screen sees).
+static func _shown_tokens(doc: Dictionary) -> Dictionary:
+	var out := {}
+	for sc in doc.get("scenes", []):
+		if not (sc is Dictionary) or not (sc.get("tokens") is Array):
+			continue
+		for tk in sc.tokens:
+			if tk is Dictionary and not bool(tk.get("hidden", false)) and str(tk.get("audience", "all")) != "owner":
+				out[str(tk.get("id", ""))] = true
+	return out
+
+
+## The keys of a turn order's `data` a player's screen is sent: the rest is a
+## ruleset's own, for its own reading on the Table.
+const TURN_DATA_SENT := ["labels", "groups", "notes", "skip", "rolling"]
+
+
+## The turn order as a player is sent it: only what their screen shows of
+## it. `seen` is the tokens their screen is sent ({id: true}: WebScene.seen;
+## null for every token the DM hasn't hidden): a creature not among them is
+## out of every part of it — the order, its groups, the turn's notes and
+## skips, the counters, the labels, the focus and who held it, who may move —
+## so nothing says one is there; the turn of one they don't see is nobody's
+## to them (`turn` -1: their screens say it's the DM's), and the turn that
+## ended (`last`) is told by its place in their order, without where tokens
+## stood or what the log held then. A group whose members they know no names
+## of is "Creatures" (the ruleset's name for it could be the stat block's);
+## where they don't see a creature's rolls, its label (its initiative) is out
+## too — of a group of them, the group's. The data a ruleset keeps there for
+## itself is not sent (TURN_DATA_SENT). A copy.
+static func player_turns(turns: Dictionary, doc: Dictionary, policies: Array, seen: Variant = null) -> Dictionary:
 	var out: Dictionary = JsonDoc.deep(turns)
-	if not rolls_hidden(policies) or not (out.get("data") is Dictionary) or not (out.data.get("labels") is Dictionary):
-		return out
+	var ids: Dictionary = seen if seen is Dictionary else _shown_tokens(doc)
+	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
 	var theirs := _unowned_tokens(doc)
-	for k in (out.data.labels as Dictionary).keys():
-		if theirs.has(str(k)):
-			out.data.labels.erase(k)
-	return out
-
-
-## A turns.set event as a player's Godot client is sent it (player_turns):
-## the labels it sets of creatures whose rolls they don't see left out.
-static func player_turns_event(ev: Dictionary, doc: Dictionary, policies: Array) -> Dictionary:
-	var ch: Variant = ev.get("changes")
-	if not rolls_hidden(policies) or not (ch is Dictionary):
-		return ev
-	var theirs := _unowned_tokens(doc)
-	var out: Dictionary = JsonDoc.deep(ev)
-	for k in (ch as Dictionary).keys():
+	var tokens := {}
+	for sc in doc.get("scenes", []):
+		if sc is Dictionary and sc.get("tokens") is Array:
+			for tk in sc.tokens:
+				if tk is Dictionary:
+					tokens[str(tk.get("id", ""))] = tk
+	var data: Dictionary = out.data if out.get("data") is Dictionary else {}
+	for k in data.keys():
+		if not TURN_DATA_SENT.has(str(k)):
+			data.erase(k)
+	# its groups: the members they see, none left none at all
+	var groups: Dictionary = data.groups if data.get("groups") is Dictionary else {}
+	for gid in groups.keys():
+		var g: Variant = groups[gid]
+		var members: Array = (g.get("tokens", []) as Array).filter(func(id: Variant) -> bool: return ids.has(str(id))) if g is Dictionary and g.get("tokens") is Array else []
+		if members.is_empty():
+			groups.erase(gid)
+			continue
+		g.tokens = members
+		if names_hidden(policies) and members.all(func(id: Variant) -> bool: return nameless(tokens.get(str(id), {}), actors, policies)):
+			g.label = "Creatures"
+	var shown := func(entry: String) -> bool:
+		return groups.has(entry.substr(6)) if entry.begins_with("group:") else ids.has(entry)
+	# the order, and whose turn it is in it
+	var order: Array = out.get("order", []) if out.get("order") is Array else []
+	var kept := []
+	var place := {}
+	for i in order.size():
+		if shown.call(str(order[i])):
+			place[i] = kept.size()
+			kept.append(str(order[i]))
+	if not order.is_empty():
+		out.turn = int(place.get(int(out.get("turn", 0)), -1))
+	out.order = kept
+	if out.get("last") is Dictionary:
+		var last: Dictionary = out.last
+		last.erase("log")
+		last.erase("pos")
+		last.turn = int(place.get(int(last.get("turn", -1)), -1))
+		if not shown.call(str(last.get("entry", ""))):
+			last.entry = ""
+	# the labels, the turn's notes, the skips: of what they see; where the rolls
+	# are the DM's, no creature's initiative (nor a group of them's)
+	var hide_rolls := rolls_hidden(policies)
+	var labels: Dictionary = data.labels if data.get("labels") is Dictionary else {}
+	for k in labels.keys():
 		var key := str(k)
-		var v: Variant = out.changes[k]
-		var labels: Variant = null
-		if key == "data" and v is Dictionary:
-			labels = (v as Dictionary).get("labels")
-		elif key == "data/labels":
-			labels = v
-		elif key.begins_with("data/labels/") and theirs.has(key.substr(12)):
-			out.changes.erase(k)
-		if labels is Dictionary:
-			for id in (labels as Dictionary).keys():
-				if theirs.has(str(id)):
-					(labels as Dictionary).erase(id)
+		if not shown.call(key):
+			labels.erase(k)
+		elif hide_rolls and (theirs.has(key) or (key.begins_with("group:") and (groups[key.substr(6)].tokens as Array).all(func(id: Variant) -> bool: return theirs.has(str(id))))):
+			labels.erase(k)
+	for part in ["notes", "skip"]:
+		if data.get(part) is Dictionary:
+			for k in (data[part] as Dictionary).keys():
+				if not shown.call(str(k)):
+					(data[part] as Dictionary).erase(k)
+	# the counters, the focus and who held it, who may move
+	var ref_shown := func(ref: String) -> bool:
+		if ref.begins_with("token:"):
+			return ids.has(ref.substr(6))
+		if ref.begins_with("actor:"):
+			var aid := ref.substr(6)
+			if not unowned_actor(actors.get(aid, {})):
+				return true
+			for id in ids:
+				if str(tokens.get(id, {}).get("actor", "")) == aid:
+					return true
+			return false
+		return true
+	if out.get("counters") is Dictionary:
+		for ref in (out.counters as Dictionary).keys():
+			if not ref_shown.call(str(ref)):
+				(out.counters as Dictionary).erase(ref)
+	if out.get("focus") is String and not ref_shown.call(str(out.focus)):
+		out.focus = "gm"
+	if out.get("history") is Array:
+		out.history = (out.history as Array).filter(func(r: Variant) -> bool: return ref_shown.call(str(r)))
+	if out.get("active") is Array:
+		out.active = (out.active as Array).filter(func(id: Variant) -> bool: return ids.has(str(id)))
 	return out
+
+
+## Where a player's screen sent `turn` (its place in the order as they were
+## sent it: player_turns), the place in the Table's own; -1 where it is in no
+## order of theirs.
+static func table_turn(turns: Dictionary, doc: Dictionary, policies: Array, seen: Variant, turn: int) -> int:
+	var theirs: Array = player_turns(turns, doc, policies, seen).get("order", [])
+	if turn < 0 or turn >= theirs.size():
+		return -1
+	return (turns.get("order", []) as Array).find(theirs[turn])
 
 
 # --------------------------------------------------------------- actors --
@@ -415,6 +533,10 @@ static func filter_actor(pa: Dictionary, a: Dictionary, policies: Array) -> void
 		if pa.get("token") is Dictionary:
 			(pa.token as Dictionary).erase("name")
 			(pa.token as Dictionary).erase("label")
+			# (and an art whose name would name it, and the tags that say its kind)
+			unart(pa.token, Callable())
+			if (pa.token as Dictionary).get("tags") is Array:
+				pa.token.tags = player_tags(pa.token.tags, policies, {}, true)
 
 
 # ---------------------------------------------------------------- words --

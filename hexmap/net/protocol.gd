@@ -33,10 +33,17 @@ extends RefCounted
 ##                                            template, a spell's preview, a ping — one's own;
 ##                                            the DM may remove or clear anyone's. Never kept.
 ## host → client
-##   welcome  {version, encounter}            the document without its rules blocks (a web
-##                                             client's: the table's name and players alone)
+##   welcome  {version, encounter}            a co-GM's: the document without its rules blocks; a
+##                                             player's Godot client's (a display's): what their
+##                                             screen shows, the scene the players see and the
+##                                             tokens they see (player_document); a web client's,
+##                                             and any client's before it joins: the table's name
+##                                             and players alone
 ##   joined   {player, role}                  the join was accepted
-##   event    {ev}                            a scene event applied; apply it too
+##   event    {ev}                            a scene event applied; apply it too (a player's
+##                                             client: what it sees of it — its tokens and the
+##                                             order kept in step, token.add / token.remove as
+##                                             they come into its sight or leave it)
 ##   view     {view}                          the client's projection (Views.project; since 4, by Wire); the DM seeing
 ##                                             as a player also gets their chat (view.preview_chat)
 ##   refused  {ev | intent, why, req?}        the request was not applied (an intent's `req` with it)
@@ -136,7 +143,10 @@ static func welcome(encounter: Encounter, gm := false, known: Array = []) -> Dic
 ## A web screen's welcome: the table's name and its players (a returning one
 ## taps their name). It holds no document: its scene comes as snapshots.
 static func welcome_web(encounter: Encounter) -> Dictionary:
-	return {"t": "welcome", "version": VERSION, "encounter": {"name": encounter.name, "players": JsonDoc.deep(encounter.players)}}
+	# (a document a Godot client can read: nothing in it but who the players are,
+	# for a screen that hasn't said who it is yet)
+	return {"t": "welcome", "version": VERSION, "encounter": {"format": Encounter.FORMAT, "version": Encounter.VERSION, "name": encounter.name,
+		"players": public_players(encounter.players), "rng": {}}}
 
 
 ## With `gm` (a co-GM), the scene is sent whole: GM regions, every cell,
@@ -159,8 +169,9 @@ static func client_document(doc: Dictionary, gm := false, known: Array = []) -> 
 	if out.get("notes") is Array:
 		out.notes = []
 	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
-	# the order without a creature's initiative where its rolls are the DM's (Knowledge)
-	if Knowledge.rolls_hidden(known) and out.get("turns") is Dictionary:
+	# the order as a player sees it: no creature the DM hides in any part of it,
+	# no initiative where a creature's rolls are the DM's (Knowledge)
+	if out.get("turns") is Dictionary:
 		out.turns = Knowledge.player_turns(out.turns, doc, known)
 	for sc in out.get("scenes", []):
 		sc.erase("triggers")
@@ -181,24 +192,222 @@ static func client_document(doc: Dictionary, gm := false, known: Array = []) -> 
 	return out
 
 
-## A map as a player's screen is sent it: without the DM's notes on it
-## (`gm_only`), but for those `shown` ("notes:<id>" refs a scene's
-## overrides reveal). The walls stay whole — a Godot client works out its
-## own sight from them, so the secret doors and the hidden walls that
-## block it must be there; the screens draw a closed secret door as a
-## plain wall and leave hidden walls out.
-static func player_map(doc: Dictionary, shown: Dictionary = {}) -> Dictionary:
+## A player's welcome (Godot, a display too): their document (player_document).
+static func player_welcome(doc: Dictionary) -> Dictionary:
+	return {"t": "welcome", "version": VERSION, "encounter": doc}
+
+
+## The fields a player's Godot client is sent of a token that isn't the
+## party's: what a web screen's snapshot has of it (no darkvision, nothing the
+## DM keeps on it), and the light it carries (a client lights its own map).
+const PLAYER_TOKEN_KEYS := ["id", "name", "pos", "size", "color", "label", "art", "owner", "actor", "rot", "tags", "elevation", "light"]
+## The fields of a scene a player's Godot client is sent: not its triggers, a
+## ruleset's own data on it, nor where the DM keeps its map.
+const PLAYER_SCENE_KEYS := ["id", "name", "map", "level", "fog", "light", "space"]
+
+
+## The document a player's Godot client holds (a display's: `player_id` "",
+## what every player's characters see): only what their screen would show —
+## the scene the players see (`scene_id`) and of it the tokens they see
+## (`seen`: WebScene.seen), each as they may know it (player_token); its
+## regions and cells as far as they're shown; the order as they see it
+## (Knowledge.player_turns); the table's players, clock and name. No other
+## scene (a fight staged ahead, a map they haven't been shown), no token the
+## DM hides or they can't see, no rules blocks, no DM's notes, nothing a
+## ruleset keeps on the encounter or the campaign. `known`: what the
+## rulesets say the players know (Knowledge).
+static func player_document(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array, art_of: Callable = Callable()) -> Dictionary:
+	var e := state.encounter
+	var out := {"format": Encounter.FORMAT, "version": int(e.doc.get("version", Encounter.VERSION)), "id": str(e.doc.get("id", "")), "name": e.name,
+		"active_scene": scene_id, "players": public_players(e.players), "clock": JsonDoc.deep(e.clock),
+		"campaign": {"id": str(e.campaign.get("id", ""))}, "scenes": [], "rng": {},
+		"turns": Knowledge.player_turns(e.turns, e.doc, known, seen if WebScene.turns_here(e, scene_id) else {})}
+	var sc := e.scene(scene_id)
+	if not sc.is_empty():
+		out.scenes.append(player_scene(state, sc, player_id, seen, known, art_of))
+	return out
+
+
+## A scene as a player's Godot client holds it (player_document).
+static func player_scene(state: EncounterState, sc: Dictionary, player_id: String, seen: Dictionary, known: Array, art_of: Callable = Callable()) -> Dictionary:
+	var out := {}
+	for k in PLAYER_SCENE_KEYS:
+		if sc.has(k):
+			out[k] = JsonDoc.deep(sc[k])
+	out.tokens = player_tokens(state, str(sc.get("id", "")), player_id, seen, known, art_of).values()
+	out.overrides = player_overrides(sc.get("overrides", {}), state.level_for(str(sc.get("id", ""))))
+	out.regions = player_regions(sc, seen)
+	var cells := {}
+	for key in sc.get("cells", {}):
+		if bool(sc.cells[key].get("revealed", false)):
+			cells[key] = JsonDoc.deep(sc.cells[key])
+	out.cells = cells
+	return out
+
+
+## A scene's regions as a player's screen is sent them: none the DM keeps (a
+## GM audience), and none attached to a token their screen doesn't show (an
+## emanation round a creature the DM hides, or beyond their sight: its shape
+## would say where it is), whatever audience the rules gave it.
+static func player_regions(sc: Dictionary, seen: Dictionary) -> Dictionary:
+	var out := {}
+	for id in sc.get("regions", {}):
+		var r: Variant = sc.regions[id]
+		if not (r is Dictionary) or str(r.get("audience", "all")) == "gm":
+			continue
+		var on := str(r.get("attached_to", "")) if r.get("attached_to") != null else ""
+		if on != "" and not seen.has(on):
+			continue
+		var kept: Dictionary = JsonDoc.deep(r)
+		# (what the DM prepared to happen there is the DM's)
+		kept.erase("triggers")
+		out[id] = kept
+	return out
+
+
+## The tokens of a scene a player's Godot client holds, {id: token}, in the
+## scene's order: those `seen`, each as player_token has it, the creatures
+## whose names they don't know labelled as they see them (only those they see
+## counted: Knowledge.player_labels).
+static func player_tokens(state: EncounterState, scene_id: String, player_id: String, seen: Dictionary, known: Array, art_of: Callable = Callable()) -> Dictionary:
+	var shown: Array = state.tokens(scene_id).filter(func(tk: Dictionary) -> bool: return seen.has(str(tk.get("id", ""))))
+	var labels := Knowledge.player_labels(shown, state.encounter.actors, known)
+	var out := {}
+	for tk in shown:
+		out[str(tk.id)] = player_token(state, tk, player_id, known, str(labels.get(str(tk.id), "")), art_of)
+	return out
+
+
+## A token as a player's Godot client holds it: the party's whole (their
+## eyes are what a client works out its sight from); any other only
+## PLAYER_TOKEN_KEYS, and of a creature no player owns what the players know
+## of it (Knowledge.player_token: its health's marks and conditions' tags as
+## they see them, its name kept where they don't know it, `label`).
+static func player_token(state: EncounterState, tk: Dictionary, player_id: String, known: Array, label := "", art_of: Callable = Callable()) -> Dictionary:
+	var out := {}
+	if WebScene._owns(state, tk, player_id) or WebScene._party(state, tk):
+		out = JsonDoc.deep(tk)
+	else:
+		for k in PLAYER_TOKEN_KEYS:
+			if tk.has(k) and tk[k] != null:
+				out[k] = JsonDoc.deep(tk[k])
+	return Knowledge.player_token(out, state.encounter.doc, known, label, art_of)
+
+
+## The table's players as every screen may know them: who they are, not the
+## secret a seat is claimed with.
+static func public_players(players: Array) -> Array:
+	var out := []
+	for p in players:
+		if p is Dictionary:
+			var q: Dictionary = JsonDoc.deep(p)
+			q.erase("seat")
+			out.append(q)
+	return out
+
+
+## A map as a player's screen is sent it, under the scene's `overrides` (the
+## scene the players see on it): nothing on it the players aren't shown —
+## no DM's note (`gm_only`, unless the scene shows it), no prop or light the
+## DM hides (`hidden`, the map's or the scene's) or on a layer not shown; a
+## secret door is the wall it looks like (`door` "none", no state: the scene
+## makes it a door once it opens — player_overrides); a locked door just a
+## closed one (a locked door is found by trying it). A hidden wall (one drawn
+## by a prop, a pillar's) is left out — but for a client that works out its
+## own sight (`sight_walls`: a Godot one), which keeps those that block sight
+## as no more than where sight stops, still hidden (not drawn). With
+## `level_id`, the scene's level alone: not the crypt below the chapel.
+static func player_map(doc: Dictionary, overrides: Dictionary = {}, sight_walls := false, level_id := "") -> Dictionary:
 	var out: Dictionary = JsonDoc.deep(doc)
+	if level_id != "" and out.get("levels") is Array:
+		out.levels = (out.levels as Array).filter(func(l: Variant) -> bool: return l is Dictionary and str(l.get("id", "")) == level_id)
 	for lvl in out.get("levels", []):
 		if not (lvl is Dictionary):
 			continue
-		var kept := []
-		for n in lvl.get("notes", []):
-			if n is Dictionary and (not bool(n.get("gm_only", false)) or shown.has(LayerTree.ref("notes", str(n.get("id", ""))))):
-				kept.append(n)
-		lvl.notes = kept
+		var visible := LayerTree.visible_refs(lvl)
+		for coll in ["notes", "props", "lights", "walls"]:
+			var kept := []
+			for o in lvl.get(coll, []):
+				if not (o is Dictionary):
+					continue
+				var ref := LayerTree.ref(coll, str(o.get("id", "")))
+				var ov: Dictionary = overrides.get(ref, {}) if overrides.get(ref) is Dictionary else {}
+				var eff: Dictionary = (o as Dictionary).duplicate()
+				for k in ov:
+					eff[k] = ov[k]
+				var unseen := not bool(visible.get(ref, true))
+				match coll:
+					"notes":
+						if bool(eff.get("gm_only", false)) or unseen:
+							continue
+						o.erase("gm_only")
+					"props", "lights":
+						if bool(eff.get("hidden", false)) or unseen:
+							continue
+					"walls":
+						if bool(eff.get("hidden", false)) or unseen:
+							var blocks: Dictionary = o.get("blocks", {}) if o.get("blocks") is Dictionary else {}
+							if not sight_walls or not bool(blocks.get("sight", true)):
+								continue
+							o = {"id": o.get("id", ""), "points": o.get("points", []), "blocks": blocks, "hidden": true}
+						else:
+							_as_seen_door(o)
+				kept.append(o)
+			lvl[coll] = kept
 		# (and their leaves in the layer tree)
 		LayerTree.ensure(lvl)
+	return out
+
+
+## A wall as a player knows it: a secret door the wall it looks like, a
+## locked door closed. In place.
+static func _as_seen_door(w: Dictionary) -> void:
+	if str(w.get("door", "none")) == "secret":
+		w.door = "none"
+		w.erase("state")
+	elif str(w.get("state", "")) == "locked":
+		w.state = "closed"
+
+
+## A scene's overrides of its map's elements as a player's screen is sent
+## them (`level`: the scene's level of its map, as stored): none for what
+## player_map leaves out; a secret door, found open, a door then (`door`
+## "door"), else nothing; a locked door closed; no `hidden` (what they have
+## isn't), a note's `gm_only` only where it shows the note.
+static func player_overrides(overrides: Dictionary, level: Dictionary) -> Dictionary:
+	var out := {}
+	var visible := LayerTree.visible_refs(level)
+	for ref in overrides:
+		if not (overrides[ref] is Dictionary):
+			continue
+		var parts := LayerTree.split(str(ref))
+		if parts.size() != 2:
+			continue
+		var base := {}
+		for o in level.get(parts[0], []):
+			if o is Dictionary and str(o.get("id", "")) == parts[1]:
+				base = o
+				break
+		if base.is_empty() or not bool(visible.get(str(ref), true)):
+			continue
+		var ov: Dictionary = JsonDoc.deep(overrides[ref])
+		var eff := base.duplicate()
+		for k in ov:
+			eff[k] = ov[k]
+		if bool(eff.get("hidden", false)) or (parts[0] == "notes" and bool(eff.get("gm_only", false))):
+			continue
+		ov.erase("hidden")
+		if parts[0] == "notes":
+			ov.erase("gm_only")
+			if bool(base.get("gm_only", false)):
+				ov.gm_only = false
+		elif parts[0] == "walls":
+			if str(base.get("door", "none")) == "secret":
+				ov = {"door": "door", "state": "open"} if str(eff.get("state", "closed")) == "open" else {}
+			elif str(ov.get("state", "")) == "locked":
+				ov.state = "closed"
+		if not ov.is_empty():
+			out[str(ref)] = ov
 	return out
 
 

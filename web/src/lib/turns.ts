@@ -101,7 +101,10 @@ export function turnSummary(scene: Dict, me: string): { text: string; mine: bool
       const up = currentTurnTokens(turns, tokens)
         .map((id) => tokens.find((t) => t.id === id))
         .filter((t): t is Dict => !!t);
-      if (!up.length) return { text: `Round ${round}`, mine: false };
+      // a turn of a creature this screen is not shown (the table sends a player
+      // no part of the order of one they do not see: it is nobody's to them) reads
+      // as the DM's, as the DM narrating would
+      if (!up.length) return { text: `The DM's turn (round ${round})`, mine: false };
       const who = up.map((t) => String(t.name ?? '')).join(', ');
       if (!up.some((t) => owned(t, me))) return { text: `${capital(who)}'s turn (round ${round})`, mine: false };
       const note = turnNote(turns, up.filter((t) => owned(t, me)).map((t) => String(t.id)));
