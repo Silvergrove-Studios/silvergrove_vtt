@@ -143,5 +143,17 @@ applies it, and the log says so; a later hit applied as it is, the DM
 calls it a miss from its line in Chat & rolls (Rule), and the damage is
 healed back — the roll's line kept as it was rolled.
 
+`tests/e2e/traffic.mjs <host.json> <out> [--budget] [--frames]` (host with
+`--party --seed 12`): what the table sends the screens, measured. The DM's
+screen and Ana's phone through the chapel fight's first rounds (the session
+and the fight started, initiative, the party inside, a goblin's attack, Ana's
+attacks on her turns, a line of chat), Ana's phone dropping its connection
+and coming back, and the DM setting the sheets to Bookkeeping (the sheets
+built anew): every message each page receives counted by kind and size,
+phase by phase; views, scenes and the DM's state taken apart by what they
+carry, the view schemas on their own. `--budget` fails the run when a
+schema reaches a page twice unchanged or a phone's views run large;
+`--frames` writes every message to `<out>/frames.jsonl`.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).
