@@ -16,6 +16,8 @@
   import Character from './Character.svelte';
   import Journal from './Journal.svelte';
   import TablePane from './TablePane.svelte';
+  import HowTableRuns from './HowTableRuns.svelte';
+  import { summaryOf, summarySeenKey } from '../lib/tablesettings';
   import { chatLog, comp, connect, game, handouts, intent, join, leave, myActors, notice, playerColors, rememberedName, request, sessionPlayer, submit, type Dict } from '../lib/game.svelte';
   import { chatIds, loadRead, saveRead, startFrom, unreadAfter } from '../lib/unread';
   import { freshRolls } from '../lib/rolls';
@@ -84,9 +86,39 @@
   }
   let lookup = $state<{ collection: string; id: string } | null>(null);
   let lookingUp = $state(false);
-  // the header's ⋯ menu (Leave the table), and Leave asked
+  // the header's ⋯ menu (How this table runs, Leave the table), and Leave asked
   let menuOpen = $state(false);
   let leaving = $state(false);
+  // how this table runs (the DM's level, the house rules): shown once on
+  // joining a table the DM has set up (again when its level changes), and
+  // from the ⋯ menu
+  const runs = $derived(summaryOf(game.view));
+  let runsOpen = $state(false);
+  let runsAsked = '';
+  function runsKey(): string {
+    return runs ? summarySeenKey(runs.campaign || game.table, game.me, runs.level) : '';
+  }
+  $effect(() => {
+    if (!runs || !runs.set || !game.me || !game.joined) return;
+    const key = runsKey();
+    if (runsAsked === key) return;
+    runsAsked = key;
+    let seen = false;
+    try {
+      seen = localStorage.getItem(key) === '1';
+    } catch {
+      /* private mode: shown on each join */
+    }
+    if (!seen) runsOpen = true;
+  });
+  function runsSeen(): void {
+    runsOpen = false;
+    try {
+      localStorage.setItem(runsKey(), '1');
+    } catch {
+      /* private mode */
+    }
+  }
   let moreMenu: HTMLDivElement | undefined = $state();
   function closeMenu(e: PointerEvent): void {
     if (menuOpen && moreMenu && !moreMenu.contains(e.target as Node)) menuOpen = false;
@@ -524,9 +556,10 @@
              playtest's stray click by the map landed on it, a browser's bare
              "OK" took it, and the player was out of the table -->
         <div class="moremenu" bind:this={moreMenu}>
-          <button type="button" class="quiet morebtn" aria-label="More" title="More: leave the table" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>⋯</button>
+          <button type="button" class="quiet morebtn" aria-label="More" title="More: how this table runs, leave the table" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>⋯</button>
           {#if menuOpen}
             <div class="menu" role="menu">
+              {#if runs}<button type="button" role="menuitem" class="quiet" onclick={() => ((menuOpen = false), (runsOpen = true))}>How this table runs</button>{/if}
               <button type="button" role="menuitem" class="quiet" onclick={() => ((menuOpen = false), (leaving = true))}>Leave the table…</button>
             </div>
           {/if}
@@ -663,6 +696,9 @@
   {/if}
   {#if lookup || lookingUp}
     <Lookup at={lookup} onclose={() => { lookup = null; lookingUp = false; }} />
+  {/if}
+  {#if runsOpen && runs && !showing && promptIndex < 0 && !leaving}
+    <HowTableRuns summary={runs} onclose={runsSeen} />
   {/if}
   {#if leaving}
     <Modal title="Leave the table?" onclose={() => (leaving = false)}>
