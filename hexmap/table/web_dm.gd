@@ -80,6 +80,10 @@ func state() -> Dictionary:
 				out.party_views.append({"plugin": str(pid), "schema": p.views[kind], "data": Views.status_data(ctx.kernel, projection, str(pid), "", Views.ROLE_GM)})
 		out.cards = EntryCard.cards_of(ctx.host)
 		out.rules = rules_settings()
+		# what the players see of a monster's health (the rulesets' HealthShown: exact, marks,
+		# none), for the DM's list of a fight in the theatre of the mind to say beside each
+		var shown := ctx.kernel.health_policies()
+		out.players_see_health = str(shown[0].get("players", "marks")) if not shown.is_empty() else ""
 	# how the table runs: the level, the questions, every setting (TableSettings)
 	out.table = win.table_settings.registry()
 	return out

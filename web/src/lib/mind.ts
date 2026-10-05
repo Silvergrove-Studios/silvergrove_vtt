@@ -49,6 +49,18 @@ export interface MindRow {
   effects: string[];
   /** what the ruleset says of its turn now ("Movement 15 of 30 ft"), or '' */
   note: string;
+  /** the DM's list: what the players see of a monster's health ("Bloodied", "nothing"), or '' */
+  seen: string;
+}
+
+/** What the players see of a monster's health, for the DM's list: the
+ *  table's way (`mode`: the rulesets' "exact", "marks" or "none"; '' when
+ *  none says) with this creature's marks and hit points. */
+export function playersSee(mode: string, marks: string, hp: string): string {
+  if (mode === 'none') return 'nothing of its health';
+  if (mode === 'exact') return [marks, hp && `${hp} hp`].filter(Boolean).join(', ') || 'its hit points';
+  if (mode === 'marks') return marks || 'no mark yet';
+  return '';
 }
 
 const MARKS: [string, string][] = [
@@ -93,7 +105,7 @@ export function effectsOf(actor: Dict | undefined): string[] {
  *  they joined. `actors` are the viewer's (view.actors): the DM has every
  *  one, a player the party's; `gm` the DM's own list (hit points from the
  *  stat block). */
-export function mindRows(scene: Dict, actors: Dict = {}, opts: { me?: string; gm?: boolean } = {}): MindRow[] {
+export function mindRows(scene: Dict, actors: Dict = {}, opts: { me?: string; gm?: boolean; seen?: string } = {}): MindRow[] {
   const tokens: Dict[] = ((scene?.tokens as Dict[]) ?? []).filter((t) => t && !isObject(t) && (t.actor || t.owner));
   const turns: Dict = scene?.turns ?? {};
   const ours = turns.running || String(turns.scene ?? '') === String(scene?.id ?? '');
@@ -128,6 +140,7 @@ export function mindRows(scene: Dict, actors: Dict = {}, opts: { me?: string; gm
         hp: hpWords(t) || (opts.gm ? actorHp(actor) : ''),
         effects: effectsOf(actor),
         note: current ? turnNote(turns, [id]) : '',
+        seen: opts.gm && String(t.owner ?? '') === '' ? playersSee(opts.seen ?? '', marksOf(t), hpWords(t) || actorHp(actor)) : '',
       } as MindRow,
       i,
     };

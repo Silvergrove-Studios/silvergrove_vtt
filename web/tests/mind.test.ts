@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actorHp, caughtWords, effectsOf, inMind, marksOf, mindPick, mindPickWords, mindRows, namesCaught } from '../src/lib/mind';
+import { actorHp, caughtWords, effectsOf, inMind, marksOf, mindPick, mindPickWords, mindRows, namesCaught, playersSee } from '../src/lib/mind';
 import { offersNoTarget, onBattleMap, pickChoices, pickCount, withTarget } from '../src/lib/map/pick';
 import { fightSettings, fightWhyWords, suggestedDraft, suggestionWords, thisFightWords, type Registry, type Setting } from '../src/lib/tablesettings';
 
@@ -49,6 +49,16 @@ describe('a fight in the theatre of the mind', () => {
     // the DM's: a stat block's hit points where no token says them
     const dm = mindRows(scene(), { a_g1: { resources: { srd: { hp: { current: 4, max: 10 } } } } }, { gm: true });
     expect(dm.find((r) => r.id === 't_g1')?.hp).toBe('4/10');
+    // …and what the players see of a monster's health, as the table shows it them
+    const marks = mindRows(scene(), {}, { gm: true, seen: 'marks' });
+    expect(marks.find((r) => r.id === 't_g1')?.seen).toBe('Bloodied');
+    expect(marks.find((r) => r.id === 't_g2')?.seen).toBe('no mark yet');
+    expect(marks.find((r) => r.id === 't_sela')?.seen).toBe('');
+    expect(mindRows(scene(), {}, { gm: true, seen: 'none' }).find((r) => r.id === 't_g2')?.seen).toBe('nothing of its health');
+    expect(mindRows(scene(), {}, { gm: true, seen: 'exact' }).find((r) => r.id === 't_g2')?.seen).toBe('7/10 hp');
+    expect(mindRows(scene(), {}, { me: 'pl_ana', seen: 'marks' }).find((r) => r.id === 't_g1')?.seen).toBe('');
+    expect(playersSee('exact', 'Bloodied', '5/10')).toBe('Bloodied, 5/10 hp');
+    expect(playersSee('', 'Bloodied', '')).toBe('');
   });
 
   it('reads health and effects as the host sends them', () => {

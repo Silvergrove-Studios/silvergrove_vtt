@@ -359,7 +359,7 @@
   const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { gm: true, grid: map && !inMind(game.scene) ? new Grid(map.grid ?? {}) : undefined }) : []);
   // a fight in the theatre of the mind: its list where the map would be
   const mind = $derived(inMind(game.scene));
-  const mindList = $derived(mind ? mindRows(game.scene, (game.view.actors ?? {}) as Dict, { gm: true }) : []);
+  const mindList = $derived(mind ? mindRows(game.scene, (game.view.actors ?? {}) as Dict, { gm: true, seen: String(dm.players_see_health ?? '') }) : []);
   const mindWhy = $derived(Object.fromEntries(choices.map((c) => [c.target, c.why])));
 
   function chooseListed(target: string): void {
@@ -609,7 +609,10 @@
           </div>
         {/if}
         <div class="mapholder">
-          {#if mind && !seeing}
+          {#if mind && seeing}
+            <!-- seeing as a player: their list, as their screen has it (no hidden creature, their health words) -->
+            <MindFight rows={mindRows(game.preview as Dict, {}, { me: game.previewAs })} />
+          {:else if mind}
             <!-- a fight in the theatre of the mind: who's in it, where the map would be;
                  a tap opens one's stat block beside it; creatures join with no token -->
             <MindFight

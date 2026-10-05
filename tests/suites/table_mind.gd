@@ -140,6 +140,8 @@ func test_a_fight_in_the_theatre_of_the_mind() -> void:
 	if dlg != null:
 		dlg._close()
 	await tree.process_frame
+	# (the DM's list says what the players see of a monster's health, as the rules declare it: none do here)
+	check(dm.state().has("players_see_health") and str(dm.state().players_see_health) == "", "what the players see of health, for the DM's list (no ruleset here says)")
 	# the players' screens: who's in it, no map — the goblins once the DM reveals them
 	check(str(WebScene.build(ctx.state, sid, "pl_1", false).get("space", "")) == "mind" and (WebScene.build(ctx.state, sid, "pl_1", false).tokens as Array).size() == 1, "a player's screen: the hero, the goblins still hidden")
 	for tk in ctx.state.tokens(sid):

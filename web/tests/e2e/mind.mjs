@@ -173,6 +173,8 @@ ok = ok && (await step('a fight with no map: three goblins, started in the theat
   expect((await dm.locator('.mapholder canvas').count()) === 0, 'a map on the DM’s screen');
   const names = await list.locator('.row .name').allInnerTexts();
   expect(names.filter((x) => /Goblin Warrior/.test(x)).length === 3 && names.some((x) => /Sela/.test(x)) && names.some((x) => /Brakka/.test(x)), `who’s in the fight: ${names.join(', ')}`);
+  // (beside each goblin, what the players see of its health: its marks, at this table)
+  await list.getByText('players see: no mark yet').first().waitFor({ timeout: 5000 });
   const scene = await dm.evaluate(() => ({ space: window.hexmap.game.scene.space, map: window.hexmap.game.scene.map }));
   expect(scene.space === 'mind' && scene.map === '', `the scene: ${JSON.stringify(scene)}`);
   await shot(dm, 'dm_who_is_in_the_fight');

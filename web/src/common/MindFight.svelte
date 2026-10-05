@@ -79,6 +79,7 @@
           {#if r.hp}<span class="hp" title="Hit points">{r.hp} hp</span>{/if}
           {#each r.effects as e (e)}<span class="badge">{e}</span>{/each}
           {#if r.note}<span class="dim small">{r.note}</span>{/if}
+          {#if r.seen}<span class="dim small seen">players see: {r.seen}</span>{/if}
         </div>
         {#if pick}
           <div class="choose">
