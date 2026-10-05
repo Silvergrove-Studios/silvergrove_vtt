@@ -127,8 +127,10 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 				mine.left = left
 			out.prompts.append(mine)
 		# what the table waits on, for everyone: a reaction's card ("a reaction
-		# (Ilvara)"), whose it is, and its time; the question itself stays theirs
-		if str(rec.get("public", "")) != "":
+		# (Ilvara)"), whose it is, and its time; the question itself stays theirs.
+		# Not one of a creature they don't see (a hidden one's opportunity
+		# attack): to them the table isn't waiting on anything
+		if str(rec.get("public", "")) != "" and (role == ROLE_GM or _shown_actor(e, str(rec.get("actor", "")), seen)):
 			var to := str(rec.get("to", "gm"))
 			var w := {"id": str(pr), "to": to, "who": "the DM" if to == "gm" else str(e.player(to).get("name", "a player")),
 				"what": str(rec.public), "urgent": bool(rec.get("urgent", false)), "deadline": float(rec.get("deadline", 0))}
@@ -156,6 +158,21 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 	# the rulesets' words as this viewer reads them: a creature named, or its
 	# conditions told, as far as they know it; who rolled at whom (Knowledge)
 	return Knowledge.for_viewer(out, e.actors, known, role == ROLE_GM)
+
+
+## Whether a screen that sees `seen` (the tokens of the scene the players see
+## it is sent) may know of an actor: none named, the party's, or a creature
+## with a token on it.
+static func _shown_actor(e: Encounter, actor_id: String, seen: Variant) -> bool:
+	if actor_id == "":
+		return true
+	var a := e.actor(actor_id)
+	if a.is_empty() or not Knowledge.unowned_actor(a):
+		return true
+	for tk in e.scene(e.active_scene_id).get("tokens", []):
+		if str(tk.get("actor", "")) == actor_id and seen is Dictionary and (seen as Dictionary).has(str(tk.get("id", ""))):
+			return true
+	return false
 
 
 ## A log entry as a viewer with `role` receives it. Its `dm` block — what the

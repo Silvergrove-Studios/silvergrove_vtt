@@ -593,7 +593,7 @@ func _toggle_session() -> void:
 		ctx.say(why if why != "" else "Session %d started" % int(ctx.encounter().clock.get("session", 0)))
 	else:
 		_confirm("End session %d? The recap is kept, the journal stamped and the campaign saved." % n, func() -> void:
-			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all") if ctx.campaign_is_live() else "")
+			var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all", ctx.kernel.knowledge_policies() if ctx.kernel != null else []) if ctx.campaign_is_live() else "")
 			ctx.say(str(r.get("error", "")) if str(r.get("error", "")) != "" else "Session %d ended" % n))
 	_update_session_bar()
 	_update_banner()
@@ -2194,7 +2194,7 @@ func _recap_dialog() -> void:
 	form.build([{"key": "who", "label": "For", "type": "enum", "options": ["the players", "the GM"]}], {"who": "the players"})
 	_form_dialog("Session recap", form, func(v: Dictionary) -> void:
 		var audience := "gm" if str(v.who) == "the GM" else "all"
-		var md := Recap.markdown(ctx.encounter(), audience)
+		var md := Recap.markdown(ctx.encounter(), audience, ctx.kernel.knowledge_policies() if ctx.kernel != null else [])
 		var d := AcceptDialog.new()
 		d.title = "Recap"
 		d.min_size = Vector2i(560, 480)

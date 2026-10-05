@@ -545,6 +545,81 @@ func test_pictures_names_and_lookups() -> void:
 	host.stop()
 
 
+# ------------------------------------------------- waiting list, recap --
+
+## What the table waits on, as a player is sent it: never a card of a creature
+## they don't see (a hidden one's opportunity attack, "the DM: a reaction"
+## counting down, told them it was there); once it is shown, as before.
+func test_the_waiting_list_names_no_hidden_reactor() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, "t.react", """
+local hm = hexmap
+hm.actions.register('react', { label = 'React', target = '', run = function(ctx)
+	hm.prompt_open('gm', { title = 'An opportunity attack?', fields = {} }, { public = 'a reaction', actor = ctx.who, urgent = true, deadline = 30 })
+	return true
+end })
+""") == "", "a ruleset that asks the DM for a creature's reaction")
+	_fight(kernel, sid)
+	check(plugins.dispatch("t.react", "react", {"gm": true, "who": "a_lurk"}).status != PluginHost.PluginCall.ERROR, "the hidden lurker's reaction asked of the DM")
+	check(plugins.dispatch("t.react", "react", {"gm": true, "who": "a_gob"}).status != PluginHost.PluginCall.ERROR, "and the goblin's, which she sees")
+	var mine: Array = Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER).waiting
+	var dms: Array = Views.project(kernel, plugins, "", Views.ROLE_GM).waiting
+	check(mine.size() == 1 and dms.size() == 2, "Ana's waiting list: the goblin's alone; the DM's both: %d / %d" % [mine.size(), dms.size()])
+	kernel.commit([{"t": "token.set", "scene": sid, "id": "t_lurk", "changes": {"hidden": false}}], "Reveal")
+	check(Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER).waiting.size() == 2, "the lurker shown: its card too")
+
+
+## The players' recap: what every player may know, nothing more — not a
+## creature they haven't been shown nor its rolls, not a creature's hit
+## points, not an effect only the DM sees nor one on a creature whose
+## conditions they don't know, not a scene they weren't shown; a creature's
+## name as they know it. The DM's has it all.
+func test_the_players_recap() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, "t.recap", "hexmap.ui.knowledge({ names = 'hidden', conditions = 'hidden', health = { tags = { 'bloodied' }, resource = 'hp', players = 'marks' } })") == "", "a ruleset keeping names and conditions")
+	var known := kernel.knowledge_policies()
+	check(kernel.checkpoint("Session 1 start") != "", "the session starts")
+	var staged := Encounter.new_scene(st.map_for(sid), "ground", "Ambush ahead", "")
+	staged.tokens.append(Encounter.new_token("Bone Colossus", Vector2(5, 5), {"id": "t_bones", "actor": "a_bones"}))
+	check(kernel.commit([
+		{"t": "actor.add", "actor": {"id": "a_ghoul", "kind": "npc", "name": "Ghoul Lord"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Ghoul Lord", Vector2(3.5, 6.0), {"id": "t_ghoul", "actor": "a_ghoul", "hidden": true})},
+		{"t": "actor.add", "actor": {"id": "a_snarl", "kind": "npc", "name": "Snarlfang"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Snarlfang", Vector2(4.5, 6.6), {"id": "t_snarl", "actor": "a_snarl"})},
+		Resources.set_event("actor:a_snarl", "t.recap", "hp", Resources.pool(7, 7)),
+		{"t": "actor.add", "actor": {"id": "a_bones", "kind": "npc", "name": "Bone Colossus"}},
+		{"t": "scene.add", "scene": staged},
+		{"t": "effect.apply", "effect": {"id": "e_doom", "on": "actor:a_snarl", "plugin": "t.recap", "key": "doomed", "label": "Marked for death", "audience": "gm", "changes": [], "duration": {"kind": "until_cleared"}}},
+		{"t": "effect.apply", "effect": {"id": "e_fear", "on": "actor:a_snarl", "plugin": "t.recap", "key": "frightened", "label": "Frightened", "changes": [], "duration": {"kind": "until_cleared"}}},
+		{"t": "log.add", "entry": {"id": "n_hit", "kind": "note", "text": Knowledge.mark("name", "a_snarl", "Snarlfang", "A creature") + " howls.", "audience": "all"}},
+	], "the fight") == "", "a hidden ghoul, Snarlfang (its name kept), a colossus staged elsewhere, a mark the DM keeps, its fear")
+	kernel.roll({"expr": "1d20+3", "visibility": "gm"}, {"actor": "a_ghoul"}, "Claw")
+	kernel.roll({"expr": "1d20+4"}, {"actor": "a_snarl"}, "Bite")
+	kernel.commit([Resources.spend(st, "actor:a_snarl", "t.recap", "hp", 5)], "Hit")
+	var theirs := Recap.markdown(st.encounter, "all", known)
+	for said in ["Ghoul Lord", "Snarlfang", "Bone Colossus", "Ambush ahead", "Marked for death", "Frightened", "hp → 2"]:
+		check(not theirs.contains(said), "the players' recap doesn't say %s" % said)
+	check(theirs.contains("- **A creature**: 1 roll") and theirs.contains("A creature howls.") and theirs.count("joined") == 1, "it says a creature rolled once, and howled, and one came:\n" + theirs)
+	var summ := Recap.summary(st.encounter, "all", known)
+	check(not summ.rolls.has("Ghoul Lord") and summ.rolls.has("A creature") and not summ.rolls["A creature"].labels.has("Claw"), "no roll of the ghoul's: %s" % [summ.rolls])
+	var dms := Recap.markdown(st.encounter, "gm", known)
+	for said in ["Ghoul Lord", "Snarlfang", "Bone Colossus", "Marked for death", "Frightened", "hp → 2"]:
+		check(dms.contains(said), "the DM's says %s" % said)
+	check(Recap.summary(st.encounter, "gm", known).rolls.has("Ghoul Lord"), "and the ghoul's roll")
+
+
 # ------------------------------------------------------------------- maps --
 
 static func _el(lvl: Dictionary, coll: String, id: String) -> Dictionary:

@@ -7,15 +7,28 @@ extends RefCounted
 ## a reading of the document, so it works for any ruleset and after the
 ## session, from the saved file.
 ##
-## `audience` picks what goes in: "all" is the players' version (GM
-## notes and rulings left out); "gm" is everything.
+## `audience` picks what goes in: "all" is the players' version — what every
+## player may know, nothing more: no GM note or ruling, no roll, note,
+## handout, track or effect not shown to them all, no creature they haven't
+## been shown (a hidden one, one added to a fight staged elsewhere) nor its
+## hit points, no effect on a creature whose conditions they don't know, no
+## scene they weren't shown, a creature's name only as they know it ("a
+## creature"), a ruleset's words as they read them; `known` the rulesets'
+## declarations of what the players know (Knowledge). "gm" is everything.
 
 
 ## The structured recap. {title, session, players: [{name, actors}],
 ## scenes, rolls: {actor: {count, outcomes: {kind: n}, best}}, notes,
 ## handouts, rulings, changes (the diff against the start checkpoint or
 ## null), tracks_done, effects_active}
-static func summary(e: Encounter, audience := "gm") -> Dictionary:
+static func summary(e: Encounter, audience := "gm", known: Array = []) -> Dictionary:
+	var out := _summary(e, audience)
+	if audience != "gm":
+		_as_players_know(out, e, known)
+	return out
+
+
+static func _summary(e: Encounter, audience := "gm") -> Dictionary:
 	var out := {"title": e.name, "session": int(e.clock.get("session", 1)), "day": int(e.clock.get("day", 1)),
 		"players": [], "scenes": [], "rolls": {}, "notes": [], "handouts": [], "rulings": [], "changes": null,
 		"tracks_done": [], "effects_active": []}
@@ -65,6 +78,176 @@ static func summary(e: Encounter, audience := "gm") -> Dictionary:
 	if not start.is_empty():
 		out.changes = diff(start.snapshot, e.snapshot())
 	return out
+
+
+## The players' version of a summary, in place: what every player may know of
+## it (summary's "all"). The rolls, notes and effects were read from what all
+## of them were shown; here the creatures, scenes and words go as they know them.
+static func _as_players_know(out: Dictionary, e: Encounter, known: Array) -> void:
+	var knows := Knowledge.knower(e.actors, known, false)
+	var words := func(text: String) -> String: return Knowledge.render(text, knows)
+	# the scenes they were shown: the one they see, and those the party stood in
+	var shown := {}
+	var shown_ids := _shown_scenes(e)
+	for sc in e.scenes:
+		if shown_ids.has(str(sc.id)):
+			shown[str(sc.get("name", sc.id))] = true
+	out.scenes = (out.scenes as Array).filter(func(n: String) -> bool: return shown.has(n))
+	# rolls by who made them, as they know them (a creature whose name they don't
+	# know is "A creature"); a ruleset's words as they read them
+	var rolls := {}
+	for entry in e.log:
+		if str(entry.get("kind", "")) != "roll" or not Views.can_see(str(entry.get("audience", "all")), "", Views.ROLE_DISPLAY):
+			continue
+		var who := str(entry.get("actor", ""))
+		var name := "the table"
+		if who != "":
+			var a := e.actor(who)
+			name = str(a.get("name", who)) if knows.call("name", who) else Knowledge.UNKNOWN_START
+		if not rolls.has(name):
+			rolls[name] = {"count": 0, "outcomes": {}, "best": 0.0, "labels": {}}
+		var r: Dictionary = rolls[name]
+		r.count += 1
+		var oc := str(entry.get("result", {}).get("outcome", ""))
+		if oc != "":
+			r.outcomes[oc] = int(r.outcomes.get(oc, 0)) + 1
+		r.best = maxf(float(r.best), float(entry.get("result", {}).get("total", 0)))
+		var lbl := str(words.call(str(entry.get("label", ""))))
+		if lbl != "":
+			r.labels[lbl] = int(r.labels.get(lbl, 0)) + 1
+	out.rolls = rolls
+	out.notes = []
+	for entry in e.log:
+		if str(entry.get("kind", "")) == "note" and Views.can_see(str(entry.get("audience", "all")), "", Views.ROLE_DISPLAY):
+			var t := str(words.call(str(entry.get("text", ""))))
+			if t != "":
+				out.notes.append({"text": t, "audience": str(entry.get("audience", "all")), "by": str(entry.get("plugin", ""))})
+	out.rulings = []
+	# what is still on whom: only on what they know of, as they know it
+	out.effects_active = []
+	for fid in e.effects:
+		var fx: Dictionary = e.effects[fid]
+		if not Views.can_see(str(fx.get("audience", "all")), "", Views.ROLE_DISPLAY):
+			continue
+		var on := _known_ref(e, str(fx.get("on", "")), known)
+		if on == "":
+			continue
+		var aid := _actor_of(e, str(fx.get("on", "")))
+		if aid != "" and not Knowledge.conditions_known(e.actor(aid), known):
+			continue
+		out.effects_active.append("%s on %s" % [words.call(str(fx.get("label", fx.get("key", fid)))), on])
+	out.tracks_done = []
+	for tid in e.tracks:
+		var tr: Dictionary = e.tracks[tid]
+		if bool(tr.get("done", false)) and Views.can_see(str(tr.get("audience", "all")), "", Views.ROLE_DISPLAY):
+			out.tracks_done.append(str(tr.get("name", tid)))
+	var ch: Variant = out.get("changes")
+	if not (ch is Dictionary):
+		return
+	var start := session_start(e)
+	var before: Dictionary = start.get("snapshot", {}) if start.get("snapshot") is Dictionary else {}
+	# who came and went: the party, and the creatures they have been shown, by
+	# the names they know; never a creature's hit points (the party's own, theirs)
+	ch.actors_added = []
+	ch.actors_removed = []
+	for aid in e.actors:
+		if not before.get("actors", {}).has(aid) and _known_actor(e, str(aid), known):
+			ch.actors_added.append(_name_as_known(e, str(aid), known))
+	for aid in before.get("actors", {}):
+		if not e.actors.has(aid) and not Knowledge.unowned_actor(before.actors[aid]):
+			ch.actors_removed.append(str(before.actors[aid].get("name", aid)))
+	ch.resources = (ch.resources as Array).filter(func(r: Dictionary) -> bool:
+		var aid := _actor_of(e, str(r.get("ref", "")))
+		return aid != "" and not Knowledge.unowned_actor(e.actor(aid)))
+	ch.tokens_added = (ch.tokens_added as Array).filter(func(t: Dictionary) -> bool: return shown.has(str(t.scene)) and _known_token_name(e, str(t.get("id", "")), known) != "")
+	for t in ch.tokens_added:
+		t.name = _known_token_name(e, str(t.get("id", "")), known)
+	ch.tokens_removed = (ch.tokens_removed as Array).filter(func(t: Dictionary) -> bool: return shown.has(str(t.scene)) and bool(t.get("party", false)))
+	ch.tracks = (ch.tracks as Array).filter(func(t: Dictionary) -> bool: return Views.can_see(str(e.tracks.get(str(t.get("id", "")), {}).get("audience", "all")), "", Views.ROLE_DISPLAY))
+	ch.effects_added = []
+	ch.effects_removed = []
+	ch.state = []
+
+
+## A token of the party: a player's, or a player's character's.
+static func _party_token(e: Encounter, tk: Dictionary) -> bool:
+	if tk.get("owner", null) != null and str(tk.owner) != "":
+		return true
+	return str(tk.get("actor", "")) != "" and str(e.actor(str(tk.actor)).get("owner", "")) != ""
+
+
+static func _actor_of(e: Encounter, ref: String) -> String:
+	if ref.begins_with("actor:"):
+		return ref.substr(6)
+	if ref.begins_with("token:"):
+		for sc in e.scenes:
+			var tk := Encounter.token_in(sc, ref.substr(6))
+			if not tk.is_empty():
+				return str(tk.get("actor", ""))
+	return ""
+
+
+## The scenes the players were shown: the one they see, and those the party
+## stood in (not a fight staged elsewhere). {id: true}
+static func _shown_scenes(e: Encounter) -> Dictionary:
+	var out := {}
+	for sc in e.scenes:
+		if str(sc.id) == e.active_scene_id or (sc.get("tokens", []) as Array).any(func(tk: Dictionary) -> bool: return _party_token(e, tk)):
+			out[str(sc.id)] = true
+	return out
+
+
+## Whether the players know of an actor at all: the party's, one listed to
+## them, or a creature with a token the DM hasn't hidden on a scene they were
+## shown.
+static func _known_actor(e: Encounter, aid: String, known: Array) -> bool:
+	var a := e.actor(aid)
+	if a.is_empty():
+		return false
+	if not Knowledge.unowned_actor(a) or str(a.get("audience", {}).get("visible", "")) == "all":
+		return true
+	var shown := _shown_scenes(e)
+	for sc in e.scenes:
+		if not shown.has(str(sc.id)):
+			continue
+		for tk in sc.get("tokens", []):
+			if str(tk.get("actor", "")) == aid and not bool(tk.get("hidden", false)):
+				return true
+	return false
+
+
+static func _name_as_known(e: Encounter, aid: String, known: Array) -> String:
+	var a := e.actor(aid)
+	return str(a.get("name", aid)) if Knowledge.name_known(a, known) else Knowledge.UNKNOWN_START
+
+
+## A ref ("actor:", "token:") as the players know what it is on: "" for one
+## they don't know of.
+static func _known_ref(e: Encounter, ref: String, known: Array) -> String:
+	if ref.begins_with("token:"):
+		return _known_token_name(e, ref.substr(6), known)
+	if ref.begins_with("actor:"):
+		var aid := ref.substr(6)
+		return _name_as_known(e, aid, known) if _known_actor(e, aid, known) else ""
+	return "the table" if ref == "encounter" else ""
+
+
+## A token's name as the players know it, "" for one they don't know of (the
+## DM hides it).
+static func _known_token_name(e: Encounter, tid: String, known: Array) -> String:
+	var shown := _shown_scenes(e)
+	for sc in e.scenes:
+		if not shown.has(str(sc.id)):
+			continue
+		var tk := Encounter.token_in(sc, tid)
+		if tk.is_empty():
+			continue
+		if bool(tk.get("hidden", false)):
+			return ""
+		if Knowledge.nameless(tk, e.actors, known):
+			return Knowledge.UNKNOWN_START
+		return str(tk.get("name", tid))
+	return ""
 
 
 ## The most recent checkpoint whose name starts with "Session", or {}.
@@ -129,9 +312,9 @@ static func diff(a: Dictionary, b: Dictionary) -> Dictionary:
 	for id in bt:
 		var before: Dictionary = at.get(id, {})
 		if before.is_empty():
-			out.tracks.append({"name": str(bt[id].get("name", id)), "from": null, "to": bt[id].get("value"), "done": bool(bt[id].get("done", false))})
+			out.tracks.append({"id": str(id), "name": str(bt[id].get("name", id)), "from": null, "to": bt[id].get("value"), "done": bool(bt[id].get("done", false))})
 		elif not JsonDoc.same(before.get("value"), bt[id].get("value")) or bool(before.get("done", false)) != bool(bt[id].get("done", false)):
-			out.tracks.append({"name": str(bt[id].get("name", id)), "from": before.get("value"), "to": bt[id].get("value"), "done": bool(bt[id].get("done", false))})
+			out.tracks.append({"id": str(id), "name": str(bt[id].get("name", id)), "from": before.get("value"), "to": bt[id].get("value"), "done": bool(bt[id].get("done", false))})
 	var ascenes := {}
 	for sc in a.get("scenes", []):
 		ascenes[str(sc.id)] = sc
@@ -144,10 +327,10 @@ static func diff(a: Dictionary, b: Dictionary) -> Dictionary:
 		for tk in sc.get("tokens", []):
 			have[str(tk.id)] = tk
 			if not had.has(str(tk.id)):
-				out.tokens_added.append({"scene": str(sc.get("name", sc.id)), "name": str(tk.get("name", tk.id))})
+				out.tokens_added.append({"scene": str(sc.get("name", sc.id)), "name": str(tk.get("name", tk.id)), "id": str(tk.id)})
 		for id in had:
 			if not have.has(id):
-				out.tokens_removed.append({"scene": str(sc.get("name", sc.id)), "name": str(had[id].get("name", id))})
+				out.tokens_removed.append({"scene": str(sc.get("name", sc.id)), "name": str(had[id].get("name", id)), "id": str(id), "party": had[id].get("owner") != null and str(had[id].get("owner")) != ""})
 	for k in b.get("clock", {}):
 		if not JsonDoc.same(a.get("clock", {}).get(k), b.clock[k]):
 			out.clock[k] = {"from": a.get("clock", {}).get(k), "to": b.clock[k]}
@@ -180,8 +363,8 @@ static func diff_is_empty(d: Dictionary) -> bool:
 
 # -------------------------------------------------------------- markdown --
 
-static func markdown(e: Encounter, audience := "gm") -> String:
-	var s := summary(e, audience)
+static func markdown(e: Encounter, audience := "gm", known: Array = []) -> String:
+	var s := summary(e, audience, known)
 	var lines := PackedStringArray()
 	lines.append("# %s — session %d" % [s.title, s.session])
 	lines.append("")

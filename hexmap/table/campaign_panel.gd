@@ -58,7 +58,7 @@ func _init(p_ctx: TableContext) -> void:
 	_campaign_buttons = HBoxContainer.new()
 	_button(_campaign_buttons, "Start session", "The next session: the counter, the rules' session refills, a checkpoint to recap from", func() -> void: _say(ctx.start_session(), "Session started"))
 	_button(_campaign_buttons, "End session", "Close the session: the journal stamped, the recap kept, the campaign saved", func() -> void:
-		var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all") if ctx.campaign_is_live() else "")
+		var r := ctx.end_session(Recap.markdown(ctx.encounter(), "all", ctx.kernel.knowledge_policies() if ctx.kernel != null else []) if ctx.campaign_is_live() else "")
 		_say(str(r.get("error", "")), "Session ended: %d journal entries kept" % int(r.get("journal", 0))))
 	_button(_campaign_buttons, "Recap…", "The session recap as Markdown", func() -> void:
 		if on_campaign_action.is_valid():
