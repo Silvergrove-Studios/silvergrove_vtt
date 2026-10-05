@@ -130,7 +130,8 @@ func header_actions() -> Array:
 
 func bind() -> void:
 	ctx.encounter().changed.connect(func(what: String, _s: String) -> void:
-		if what == "turns" or what == "tokens":
+		# (a card opened or answered: the turn may be waiting on it, or no longer)
+		if what == "turns" or what == "tokens" or what == "pending":
 			refresh())
 	refresh()
 
@@ -312,6 +313,14 @@ func refresh() -> void:
 			_prev.disabled = order.is_empty() or not running
 			_end.disabled = not running
 			_start.text = "Restart" if not order.is_empty() else "Start"
+	# a step of the turns waiting on a card (a roll its roller makes as a turn
+	# ends or starts): said under the round, and Next and Back wait on it
+	var waits := ctx.kernel.turns.waiting_words() if ctx.kernel != null and m == "ordered" else ""
+	if waits != "":
+		_round.text = (_round.text + " — " if _round.text != "" else "") + waits
+		_next.disabled = true
+		_prev.disabled = true
+	_next.tooltip_text = waits
 	# turns order the tokens on a scene: with no map on screen there is nothing to order
 	var no_scene := ctx.scene_id == "" or ctx.encounter().scene(ctx.scene_id).is_empty()
 	_start.disabled = no_scene

@@ -15,10 +15,12 @@ extends RefCounted
 ##
 ## Whatever the shape, the runner fires the same hooks — `turn_start` /
 ## `turn_end` for the participant gaining or losing the turn or the
-## focus, `round_start` / `round_end` (ordered only), `focus_changed` —
-## expires effects whose durations are tied to those moments, and
-## commits everything as one undo step. Plugins' handlers may append
-## events to `payload.events`.
+## focus, `round_start` / `round_end` (ordered only), `focus_changed`,
+## `combat_end` — expires effects whose durations are tied to those
+## moments, and commits everything as one undo step. Plugins' handlers
+## may append events to `payload.events`, veto the step, or wait on a card
+## (a roll its roller makes): the step then waits with it, and goes on
+## once it's answered (the steps, below).
 ##
 ## A strategy is a spec registered by a plugin (or the host's "list"):
 ##   { plugin, shape: "ordered" | "focus", name, description,
@@ -31,6 +33,12 @@ const LIST := {"plugin": "", "shape": "ordered", "name": "As listed", "descripti
 var kernel: RulesKernel
 ## strategy id ("list" or a plugin id) -> spec
 var strategies: Dictionary = {"list": LIST}
+## The step waiting on a card, {} when none (the steps, below):
+## {id, label, stages, at, waited, wait}.
+var _step: Dictionary = {}
+## A step is running its stages now (a call into the turns from inside one
+## is refused: the turns are already moving).
+var _running := false
 
 
 func _init(p_kernel: RulesKernel) -> void:
@@ -79,12 +87,16 @@ func shape() -> String:
 
 ## Begin turns on a scene under a strategy. Ordered: initiative for every
 ## token on the scene, sorted; the first turn starts. Focus: the GM holds
-## the focus. Returns "" or why not.
+## the focus. Returns "" or why not (a start that waits on a card goes on
+## once it's answered: the steps, below).
 func start(scene_id: String, strategy_id := "list") -> String:
-	return kernel.transaction("Start turns", func() -> String: return _start(scene_id, strategy_id))
+	var busy := waiting()
+	if busy != "":
+		return busy
+	return _run("Start turns", [func() -> Variant: return _start(scene_id, strategy_id)])
 
 
-func _start(scene_id: String, strategy_id: String) -> String:
+func _start(scene_id: String, strategy_id: String) -> Variant:
 	var spec := strategy(strategy_id)
 	var events := []
 	# the scene the order is for (a screen shows another scene's order only
@@ -97,12 +109,9 @@ func _start(scene_id: String, strategy_id: String) -> String:
 		base.round = 1
 		base.focus = "gm"
 		base.history = ["gm"]
-		var asked := kernel.ask("focus_changed", {"from": "", "to": "gm", "by": "gm", "scene": scene_id})
-		if not asked.ok:
-			return asked.why
-		events.append({"t": "turns.set", "changes": base})
-		events.append_array(asked.events)
-		return kernel.commit(events, "Start turns", {"hook": "focus_changed"})
+		# (the rulesets are asked first: the start lands with what they add)
+		return [_hook_stage("focus_changed", {"from": "", "to": "gm", "by": "gm", "scene": scene_id}, "Start turns",
+			func() -> Array: return [{"t": "turns.set", "changes": base}])]
 	var entries := []
 	var labels := {}
 	var by_id := {}
@@ -160,23 +169,28 @@ func _start(scene_id: String, strategy_id: String) -> String:
 	if why != "":
 		return why
 	var first := _ref_of(str(order[0])) if not order.is_empty() else ""
-	var fired := _fire("round_start", {"round": 1, "scene": scene_id}, "Round 1")
-	if fired != "":
-		return fired
-	return _begin_turn(first) if first != "" else ""
+	var stages := [_hook_stage("round_start", {"round": 1, "scene": scene_id}, "Round 1")]
+	if first != "":
+		stages.append(func() -> Variant: return _begin_turn(first))
+	return stages
 
 
 ## End the turns. What lasted rounds or turns ends with the fight, and the
 ## rulesets hear of it (`combat_end`): what their handlers add — the
 ## fight's initiative put away, say — lands in the same step. "" or why not.
+## A step of the turns waiting on a card is given up (its card stays: the
+## roll is still its roller's, and what it brings still lands); an end that
+## waits on a card itself ends the turns once it's answered.
 func stop() -> String:
-	var asked := kernel.ask("combat_end", {"scene": str(turns().get("scene", "")), "round": int(turns().get("round", 1))})
-	if not asked.ok:
-		return asked.why
-	var events: Array = [{"t": "turns.set", "changes": {"running": false}}]
-	events.append_array(kernel.expire({"kind": "combat_end"}))
-	events.append_array(asked.events)
-	return kernel.commit(events, "End turns", {"hook": "combat_end"})
+	if _running:
+		return "the turns are moving on: end them once this step is done"
+	if not _step.is_empty() and waiting_on().size() > 0:
+		if str(_step.get("label", "")) == "End turns":
+			return waiting()
+		_step.given_up = true
+		_step = {}
+	return _run("End turns", [_hook_stage("combat_end", {"scene": str(turns().get("scene", "")), "round": int(turns().get("round", 1))}, "End turns",
+		func() -> Array: return [{"t": "turns.set", "changes": {"running": false}}] + kernel.expire({"kind": "combat_end"}))])
 
 
 # --------------------------------------------------------------- ordered --
@@ -190,15 +204,23 @@ func stop() -> String:
 ## that ended is kept as `last` ({by, entry, round, turn, at}, and what
 ## the new turn began with: `log`, the newest log entry, and `pos`, where
 ## its tokens stood), and a player's end is said in the log for everyone.
-## "" or why not.
+## "" or why not. While a step of the turns waits on a card (a roll its
+## roller makes as a turn ends or starts), another Next is refused, saying
+## on whom it waits.
 func next(opts := {}) -> String:
 	var late := stale(kernel.state, opts.get("expect"))
 	if late != "":
 		return late
-	return kernel.transaction("Next turn", func() -> String: return _next(opts))
+	var busy := waiting()
+	if busy != "":
+		return busy
+	return _run("Next turn", [func() -> Variant: return _next(opts)])
 
 
-func _next(opts: Dictionary) -> String:
+## The stages of a Next: the turn ending (its hooks, what ends with it), the
+## order moving on, the round's end and start when it wraps, the next turn's
+## start, what that turn began with, a turn the DM said is lost.
+func _next(opts: Dictionary) -> Variant:
 	var t := turns()
 	if shape() == "focus":
 		return "focus turns have no next; grant the focus"
@@ -209,19 +231,32 @@ func _next(opts: Dictionary) -> String:
 	var round := int(t.get("round", 1))
 	var entry := str(order[turn]) if turn >= 0 and turn < order.size() else ""
 	var cur := _ref_of(entry) if entry != "" else ""
-	var ended := {}
-	if bool(t.get("running", false)) and cur != "":
-		var why := _end_turn(cur)
-		if why != "":
-			return why
-		ended = {"by": str(opts.get("by", "gm")), "entry": entry, "round": round, "turn": turn, "at": JsonDoc.now()}
-	turn += 1
+	var ending := bool(t.get("running", false)) and cur != ""
+	var stages: Array = _end_turn(cur) if ending else []
+	stages.append(func() -> Variant: return _move_on(opts, entry, turn, round, ending))
+	return stages
+
+
+## The order moves on from `entry` (the turn that ended, the `turn`th of the
+## order in `round`): to the one after it in the order as it is now (one that
+## left the order while its turn ended — a creature its own turn's end killed
+## — leaves the next where it stood), wrapping into a new round.
+func _move_on(opts: Dictionary, entry: String, turn: int, round: int, ending: bool) -> Variant:
+	var order: Array = turns().get("order", [])
+	if order.is_empty():
+		return "no turn order"
+	var at := order.find(entry) if entry != "" else -1
+	var nturn := at + 1 if at >= 0 else (turn if entry != "" else turn + 1)
+	var nround := round
 	var wrapped := false
-	if turn >= order.size():
-		turn = 0
-		round += 1
+	if nturn >= order.size():
+		nturn = 0
+		nround += 1
 		wrapped = true
-	var changes := {"turn": turn, "round": round, "running": true}
+	var ended := {}
+	if ending:
+		ended = {"by": str(opts.get("by", "gm")), "entry": entry, "round": round, "turn": turn, "at": JsonDoc.now()}
+	var changes := {"turn": nturn, "round": nround, "running": true}
 	if not ended.is_empty():
 		changes.last = ended
 	var events := [{"t": "turns.set", "changes": changes}]
@@ -232,39 +267,37 @@ func _next(opts: Dictionary) -> String:
 	var why := kernel.commit(events, "Next turn")
 	if why != "":
 		return why
+	var next_entry := str(order[nturn])
+	var stages := []
 	if wrapped:
-		why = _fire("round_end", {"round": round - 1}, "Round %d ends" % (round - 1))
-		if why != "":
-			return why
-		why = kernel.commit(Effects.expire(kernel.state, {"kind": "round"}), "Round effects")
-		if why != "":
-			return why
-		why = _fire("round_start", {"round": round}, "Round %d" % round)
-		if why != "":
-			return why
-	why = _begin_turn(_ref_of(str(order[turn])))
-	if why != "" or ended.is_empty():
-		return why
-	# what the new turn began with, so a screen can tell whether anything has
-	# happened on it since: the newest log entry, where its tokens stand
+		stages.append(_hook_stage("round_end", {"round": nround - 1}, "Round %d ends" % (nround - 1)))
+		stages.append(func() -> Variant: return kernel.commit(Effects.expire(kernel.state, {"kind": "round"}), "Round effects"))
+		stages.append(_hook_stage("round_start", {"round": nround}, "Round %d" % nround))
+	stages.append(func() -> Variant: return _begin_turn(_ref_of(next_entry)))
+	if ending:
+		stages.append(func() -> Variant: return _began_with())
+		stages.append(func() -> Variant: return _skip_if_marked(next_entry))
+	return stages
+
+
+## What the new turn began with, so a screen can tell whether anything has
+## happened on it since: the newest log entry, where its tokens stand.
+func _began_with() -> String:
 	var entries: Array = kernel.state.encounter.log
 	var pos := {}
 	for id in kernel.state.current_turn_tokens():
 		var tk := kernel.state.find_token(str(id))
 		if not tk.is_empty():
 			pos[str(id)] = JsonDoc.deep(tk.get("pos", [0, 0]))
-	why = kernel.commit([{"t": "turns.set", "changes": {"last/log": str(entries.back().get("id", "")) if not entries.is_empty() else "", "last/pos": pos}}], "Next turn")
-	if why != "":
-		return why
-	return _skip_if_marked(str(order[turn]))
+	return kernel.commit([{"t": "turns.set", "changes": {"last/log": str(entries.back().get("id", "")) if not entries.is_empty() else "", "last/pos": pos}}], "Next turn")
 
 
 ## A participant marked to lose its next turn (`data.skip`: a token id, or
 ## a group's entry, -> true; a group's slot when every member is marked):
 ## its turn has begun — what starts a turn has started, its hooks have run
 ## — and it ends at once, as the DM's Next would end it, and the next turn
-## begins. The marks go as they are used, so each recursion takes one away.
-func _skip_if_marked(entry: String) -> String:
+## begins. The marks go as they are used, so each pass takes one away.
+func _skip_if_marked(entry: String) -> Variant:
 	var t := turns()
 	var data: Dictionary = t.get("data", {}) if t.get("data") is Dictionary else {}
 	var skip: Dictionary = data.get("skip", {}) if data.get("skip") is Dictionary else {}
@@ -327,7 +360,11 @@ static func entry_name(st: EncounterState, entry: String) -> String:
 
 
 ## Step back one turn without firing anything (a correction, not play).
+## Not while a step of the turns waits on a card: that's answered first.
 func previous() -> String:
+	var busy := waiting()
+	if busy != "":
+		return busy
 	var t := turns()
 	var order: Array = t.get("order", [])
 	if order.is_empty() or shape() == "focus":
@@ -662,42 +699,36 @@ static func _collapse_groups(order: Array, groups: Dictionary) -> Array:
 func set_focus(holder: String, by := "gm") -> String:
 	if shape() != "focus":
 		return "not a focus encounter"
-	return kernel.transaction("Focus", func() -> String: return _set_focus(holder, by))
+	var busy := waiting()
+	if busy != "":
+		return busy
+	return _run("Focus", [func() -> Variant: return _set_focus(holder, by)])
 
 
-func _set_focus(holder: String, by: String) -> String:
+func _set_focus(holder: String, by: String) -> Variant:
 	var t := turns()
 	var from := str(t.get("focus", ""))
 	if from == holder:
 		return ""
 	if holder != "gm" and holder != "" and kernel.state._need_ref(holder, "focus") != "":
 		return kernel.state._need_ref(holder, "focus")
-	var why := ""
-	if from != "" and from != "gm":
-		why = _end_turn(from)
-		if why != "":
-			return why
-	var history: Array = (t.get("history", []) as Array).duplicate()
-	history.append(holder)
-	if history.size() > 50:
-		history = history.slice(history.size() - 50)
-	var requests: Array = []
-	for r in t.get("requests", []):
-		if str(r.get("ref", "")) != holder:
-			requests.append(r)
+	var stages: Array = _end_turn(from) if from != "" and from != "gm" else []
 	# the rulesets are asked before the focus moves: one may veto (a cost
 	# it cannot pay) or add events (the cost it pays)
-	var asked := kernel.ask("focus_changed", {"from": from, "to": holder, "by": by})
-	if not asked.ok:
-		return asked.why
-	var events: Array = [{"t": "turns.set", "changes": {"focus": holder, "history": history, "requests": requests}}]
-	events.append_array(asked.events)
-	why = kernel.commit(events, "Focus", {"hook": "focus_changed"})
-	if why != "":
-		return why
+	stages.append(_hook_stage("focus_changed", {"from": from, "to": holder, "by": by}, "Focus", func() -> Array:
+		var now := turns()
+		var history: Array = (now.get("history", []) as Array).duplicate()
+		history.append(holder)
+		if history.size() > 50:
+			history = history.slice(history.size() - 50)
+		var requests: Array = []
+		for r in now.get("requests", []):
+			if str(r.get("ref", "")) != holder:
+				requests.append(r)
+		return [{"t": "turns.set", "changes": {"focus": holder, "history": history, "requests": requests}}]))
 	if holder != "gm" and holder != "":
-		return _begin_turn(holder)
-	return ""
+		stages.append(func() -> Variant: return _begin_turn(holder))
+	return stages
 
 
 ## A Player asks for the focus for one of their refs.
@@ -764,10 +795,6 @@ func _label(spec: Dictionary, view: Dictionary, init: Variant) -> String:
 	return str(int(init)) if init != null and is_equal_approx(float(init), floor(float(init))) else str(init)
 
 
-func _fire(hook: String, payload: Dictionary, label: String) -> String:
-	return kernel.fire(hook, payload, label)
-
-
 ## The ref of an order entry: "group:<id>" stays, a token id gets its prefix.
 static func _ref_of(entry: String) -> String:
 	return entry if entry.begins_with("group:") else "token:" + entry
@@ -784,23 +811,25 @@ func _slot_refs(ref: String) -> Array:
 	return [ref]
 
 
-func _end_turn(ref: String) -> String:
+## The stages of a slot's turn ending: each member's `turn_end`, then what
+## ends with its turn.
+func _end_turn(ref: String) -> Array:
 	var group := ref.substr(6) if ref.begins_with("group:") else ""
+	var out := []
 	for r in _slot_refs(ref):
-		var payload := {"ref": r, "actor": kernel.actor_of_ref(r)}
-		if group != "":
-			payload.group = group
-		var why := _fire("turn_end", payload, "Turn ends")
-		if why != "":
-			return why
+		out.append(_hook_stage("turn_end", func() -> Dictionary:
+			var payload := {"ref": r, "actor": kernel.actor_of_ref(r)}
+			if group != "":
+				payload.group = group
+			return payload, "Turn ends"))
 		var token: String = r.substr(6) if r.begins_with("token:") else ""
-		why = kernel.commit(kernel.expire({"kind": "turn_end", "of": token if token != "" else r}), "Turn effects")
-		if why != "":
-			return why
-	return ""
+		out.append(func() -> Variant: return kernel.commit(kernel.expire({"kind": "turn_end", "of": token if token != "" else r}), "Turn effects"))
+	return out
 
 
-func _begin_turn(ref: String) -> String:
+## The stages of a slot's turn beginning: its budgets, then each member's
+## turn-start expiries and `turn_start`.
+func _begin_turn(ref: String) -> Variant:
 	var spec := current()
 	var group := ref.substr(6) if ref.begins_with("group:") else ""
 	var refs := _slot_refs(ref)
@@ -811,15 +840,170 @@ func _begin_turn(ref: String) -> String:
 	var why := kernel.commit(events, "Budgets")
 	if why != "":
 		return why
+	var out := []
 	for r in refs:
 		var token: String = r.substr(6) if r.begins_with("token:") else ""
-		why = kernel.commit(kernel.expire({"kind": "turn_start", "of": token if token != "" else r}), "Turn effects")
-		if why != "":
-			return why
-		var payload := {"ref": r, "actor": kernel.actor_of_ref(r)}
-		if group != "":
-			payload.group = group
-		why = _fire("turn_start", payload, "Turn starts")
-		if why != "":
-			return why
+		out.append(func() -> Variant: return kernel.commit(kernel.expire({"kind": "turn_start", "of": token if token != "" else r}), "Turn effects"))
+		out.append(_hook_stage("turn_start", func() -> Dictionary:
+			var payload := {"ref": r, "actor": kernel.actor_of_ref(r)}
+			if group != "":
+				payload.group = group
+			return payload, "Turn starts"))
+	return out
+
+
+# ------------------------------------------------------------- the steps --
+# A step of the turns — Next, the start, a focus given, the end — runs its
+# moments in order (a turn's end and what ends with it, the order moving on,
+# a round's end and start, the next turn's start) as one undo step that all
+# happens or none of it does. A hook's handler may wait on a card (a roll
+# its roller makes: the DM's recharge die typed, a player's save — a
+# HookBus.Wait, a plugin's hm.prompt): the step keeps what it has done, the
+# card opens (its context's `turn` names the step: the waiting list says on
+# whom the turn waits, Views), and the rest of the step runs once the hook
+# has finished — each part after a wait an undo step of its own. A veto
+# before any wait refuses the step as a whole, as ever; one after a wait
+# stops it there, and the DM is told why. While a step waits, the turns
+# wait with it: Next, Back, a focus given or a start is refused, saying on
+# whom it waits; ending the fight gives the rest of it up (the card stays:
+# the roll is still its roller's, and what it brings still lands).
+#
+# A stage is a Callable returning "" (go on), why it stopped, an Array of
+# stages to run next, or a hook run that waits ({wait, label, before}).
+
+## Run a step from its first stage. "" (done, or waiting on a card) or why
+## it was refused (nothing of it happened then).
+func _run(label: String, stages: Array) -> String:
+	if _running:
+		return "the turns are moving on already"
+	return _go({"id": JsonDoc.new_id("ts"), "label": label, "stages": stages, "at": 0, "waited": false}, Callable())
+
+
+## Run a step's stages from where it stands, as one transaction (`first`
+## before them: the hook it waited on, finished). Stopping, what this part
+## did is undone; waiting on a card, it's kept, and the card opens.
+func _go(step: Dictionary, first: Callable) -> String:
+	var paused := [{}]
+	_running = true
+	var why := kernel.transaction(str(step.label), func() -> String:
+		if first.is_valid():
+			var w := _absorb(step, first.call(), paused)
+			if w != "" or not (paused[0] as Dictionary).is_empty():
+				return w
+		while int(step.at) < (step.stages as Array).size():
+			var stage: Callable = step.stages[int(step.at)]
+			step.at = int(step.at) + 1
+			var w := _absorb(step, stage.call(), paused)
+			if w != "" or not (paused[0] as Dictionary).is_empty():
+				return w
+		return "")
+	_running = false
+	var wait: Dictionary = paused[0]
+	if wait.is_empty():
+		if str(_step.get("id", "")) == str(step.id):
+			_step = {}
+		if why != "" and bool(step.waited):
+			# (nobody waits on the answer: the DM is told why it stopped there)
+			kernel.commit([{"t": "log.add", "entry": {"id": JsonDoc.new_id("n"), "kind": "note", "audience": "gm",
+				"text": "%s stopped: %s" % [str(step.label), why]}}], "Turn stopped", {}, "gm")
+		return why
+	step.waited = true
+	step.wait = wait
+	_step = step
+	var run: HookBus.HookRun = wait.wait
+	var me: WeakRef = weakref(self)
+	kernel.pending.drive(run, RulesKernel._waiting_owner(run), func(r: HookBus.HookRun) -> void:
+		var tr: TurnRunner = me.get_ref()
+		if tr != null:
+			tr._resume(step, r), {"turn": str(step.id)})
 	return ""
+
+
+## A stage's result taken into the step: "" to go on (more stages put next,
+## or a wait noted in `paused`), or why it stopped.
+func _absorb(step: Dictionary, r: Variant, paused: Array) -> String:
+	if r is Dictionary and (r as Dictionary).has("wait"):
+		paused[0] = r
+		return ""
+	if r is Array:
+		var at := int(step.at)
+		for i in (r as Array).size():
+			(step.stages as Array).insert(at + i, r[i])
+		return ""
+	return str(r) if r != null else ""
+
+
+## A hook as a stage: run (`payload` a Dictionary, or a Callable that makes
+## it as the stage runs), its events committed as `label` once it has
+## finished — after `before`'s (the change it was asked about: a focus
+## moved, the turns ended) — or its veto the stage's why.
+func _hook_stage(hook: String, payload: Variant, label: String, before := Callable()) -> Callable:
+	return func() -> Variant:
+		var p: Dictionary = (payload as Callable).call() if payload is Callable else (payload as Dictionary).duplicate()
+		p.events = []
+		return _hook_done(kernel.hooks.run(hook, p), label, before)
+
+
+func _hook_done(run: HookBus.HookRun, label: String, before: Callable) -> Variant:
+	if run.status == HookBus.HookRun.PENDING:
+		return {"wait": run, "label": label, "before": before}
+	if run.status == HookBus.HookRun.VETOED:
+		var veto := str(run.payload.get("veto", ""))
+		return veto if veto != "" else "refused"
+	var events: Array = (before.call() as Array).duplicate() if before.is_valid() else []
+	events.append_array(run.payload.get("events", []) if run.payload.get("events") is Array else [])
+	return kernel.commit(events, label, {"hook": run.hook})
+
+
+## The hook a step waited on has finished: the step goes on from there —
+## unless it was given up meanwhile (the fight ended), when what the hook
+## brought still lands and nothing after it runs.
+func _resume(step: Dictionary, run: HookBus.HookRun) -> void:
+	var wait: Dictionary = step.get("wait", {})
+	step.erase("wait")
+	if bool(step.get("given_up", false)) or str(_step.get("id", "")) != str(step.id):
+		if run.status == HookBus.HookRun.DONE:
+			var events: Array = run.payload.get("events", []) if run.payload.get("events") is Array else []
+			if not events.is_empty():
+				kernel.commit(events, str(wait.get("label", "")), {"hook": run.hook})
+		return
+	_go(step, func() -> Variant: return _hook_done(run, str(wait.get("label", "")), wait.get("before", Callable())))
+
+
+## Whether a step of the turns waits on a card: the words a refused Next is
+## answered with — "The turn is waiting on Ana: a roll (Brann). It goes on
+## once that's answered." — or "" when nothing waits.
+func waiting() -> String:
+	if _running:
+		return "the turns are moving on already"
+	return waiting_words()
+
+
+## On whom a step of the turns waits, in words, or "" (a screen's line: it
+## asks nothing of a step that is running now). A step whose card is gone
+## (an undo took it back) waits on nothing: a new step may start.
+func waiting_words() -> String:
+	var on := waiting_on()
+	if on.is_empty():
+		return ""
+	var bits := []
+	for rec in on:
+		var to := str(rec.get("to", "gm"))
+		var who := "the DM" if to == "gm" else str(kernel.state.encounter.player(to).get("name", "a player"))
+		var what := str(rec.get("public", ""))
+		bits.append(who + (": " + what if what != "" else ""))
+	return "The turn is waiting on %s. It goes on once %s answered." % ["; ".join(PackedStringArray(bits)), "that's" if on.size() == 1 else "they're"]
+
+
+## The cards (prompt records) a step of the turns waits on, oldest first.
+func waiting_on() -> Array:
+	var out := []
+	if _step.is_empty():
+		return out
+	var prompts := kernel.pending.prompts()
+	for id in prompts:
+		var ctx: Variant = prompts[id].get("context", {})
+		if ctx is Dictionary and str((ctx as Dictionary).get("turn", "")) == str(_step.id):
+			out.append(prompts[id])
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("opened", 0)) < int(b.get("opened", 0)))
+	return out

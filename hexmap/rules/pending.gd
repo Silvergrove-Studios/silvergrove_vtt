@@ -107,9 +107,10 @@ func answer(id: String, p_answer: Variant, who := "") -> String:
 	if cont is Callable and (cont as Callable).is_valid():
 		(cont as Callable).call(p_answer)
 	elif bool(rec.get("context", {}).get("hook", false)):
-		# nothing waits: the plugins are told
+		# nothing waits: the plugins are told — and what they do about it may wait
+		# on a card of its own (a roll its roller makes), driven as an action is
 		var ctx: Dictionary = rec.get("context", {}) if rec.get("context") is Dictionary else {}
-		kernel.fire("prompt_answered", {"prompt": JsonDoc.deep(rec), "answer": p_answer, "by": who, "timed_out": timed_out,
+		kernel.run_after("prompt_answered", {"prompt": JsonDoc.deep(rec), "answer": p_answer, "by": who, "timed_out": timed_out,
 			"plugin": str(rec.get("by", "")), "context": ctx.get("context", {})}, "Answered")
 	return ""
 
@@ -211,8 +212,9 @@ func close_orphans() -> void:
 
 ## Drive a PluginCall or HookRun through its prompts: while it is pending,
 ## open a prompt whose answer resumes it. `done` is called with the final
-## call once it finishes or fails.
-func drive(call: Variant, by: String, done: Callable = Callable()) -> void:
+## call once it finishes or fails. `extra` goes into each prompt's context
+## (the turns' `turn`: a step of the turns waits on that card, TurnRunner).
+func drive(call: Variant, by: String, done: Callable = Callable(), extra: Dictionary = {}) -> void:
 	var pending := false
 	var request := {}
 	if call is PluginHost.PluginCall:
@@ -228,25 +230,26 @@ func drive(call: Variant, by: String, done: Callable = Callable()) -> void:
 	var me: WeakRef = weakref(self)
 	var kind := str(request.get("kind", ""))
 	var context := {"action": call.action if call is PluginHost.PluginCall else ""}
+	context.merge(extra, true)
 	if kind == "prompt_all":
 		open_prompt_group(request, by, func(p_answers: Variant) -> void:
 			var pd: Pending = me.get_ref()
 			if pd == null:
 				return
 			call.resume(p_answers)
-			pd.drive(call, by, done), context)
+			pd.drive(call, by, done, extra), context)
 		return
 	if kind != "prompt":
 		# not a prompt: nothing else can wait yet — give it nothing
 		call.resume(null)
-		drive(call, by, done)
+		drive(call, by, done, extra)
 		return
 	open_prompt(request, by, func(p_answer: Variant) -> void:
 		var pd: Pending = me.get_ref()
 		if pd == null:
 			return
 		call.resume(p_answer)
-		pd.drive(call, by, done), context)
+		pd.drive(call, by, done, extra), context)
 
 
 # ----------------------------------------------------------------- rolls --

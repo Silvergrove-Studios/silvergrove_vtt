@@ -107,6 +107,11 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 			out.tracks.append(JsonDoc.deep(tr))
 	var pids: Array = e.pending.prompts.keys()
 	pids.sort()
+	# the cards a step of the turns waits on now (TurnRunner)
+	var turn_cards := {}
+	if kernel.turns != null:
+		for rec in kernel.turns.waiting_on():
+			turn_cards[str(rec.get("id", ""))] = true
 	for pr in pids:
 		var rec: Dictionary = e.pending.prompts[pr]
 		# the seconds its deadline has left as this is sent (the screens count
@@ -118,11 +123,16 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 				mine.left = left
 			out.prompts.append(mine)
 		# what the table waits on, for everyone: a reaction's card ("a reaction
-		# (Ilvara)"), whose it is, and its time; the question itself stays theirs
-		if str(rec.get("public", "")) != "":
+		# (Ilvara)"), whose it is, and its time; the question itself stays theirs.
+		# A card the turns wait on (a roll as a turn ends or starts: TurnRunner)
+		# is listed whatever it says, `turn` marking it: the turn shows it waits.
+		var turn := turn_cards.has(str(pr))
+		if str(rec.get("public", "")) != "" or turn:
 			var to := str(rec.get("to", "gm"))
 			var w := {"id": str(pr), "to": to, "who": "the DM" if to == "gm" else str(e.player(to).get("name", "a player")),
-				"what": str(rec.public), "urgent": bool(rec.get("urgent", false)), "deadline": float(rec.get("deadline", 0))}
+				"what": str(rec.get("public", "")) if str(rec.get("public", "")) != "" else "the turn", "urgent": bool(rec.get("urgent", false)), "deadline": float(rec.get("deadline", 0))}
+			if turn:
+				w.turn = true
 			if left >= 0.0:
 				w.left = left
 			if role == ROLE_GM:

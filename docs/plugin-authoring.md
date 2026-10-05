@@ -137,10 +137,10 @@ Hooks in API 1:
 |---|---|---|
 | `before_roll` | `{spec, ctx}` | add `spec.parts`, change `spec.expr`, veto |
 | `after_roll` | `{spec, result, ctx, id, dm}` | set `result.outcome` and anything else the log should show; `id` is the log entry the roll becomes; set `dm[hm.id]` to give the entry the DM's buttons and this ruleset's notes on it (*The log*, below) |
-| `turn_start`, `turn_end` | `{ref, actor, group, events}` | the participant gaining / losing the turn *or the focus*; `group` names the slot when it is a group's member |
-| `round_start`, `round_end` | `{round, events}` | ordered shape only |
-| `combat_end` | `{scene, round, events}` | the turns end (End turns, End the fight): put away what was the fight's own — its initiative, say — with the events the step commits; a veto keeps the turns running |
-| `focus_changed` | `{from, to, by, events}` | asked *before* the focus moves: veto to refuse, add events for a cost |
+| `turn_start`, `turn_end` | `{ref, actor, group, events}` | the participant gaining / losing the turn *or the focus*; `group` names the slot when it is a group's member. **May prompt**: the turn waits on the card (*Hooks that wait*, below) |
+| `round_start`, `round_end` | `{round, events}` | ordered shape only; may prompt, as the turn's own |
+| `combat_end` | `{scene, round, events}` | the turns end (End turns, End the fight): put away what was the fight's own — its initiative, say — with the events the step commits; a veto keeps the turns running. May prompt: the turns end once it's answered |
+| `focus_changed` | `{from, to, by, events}` | asked *before* the focus moves: veto to refuse, add events for a cost. May prompt: the focus moves once it's answered |
 | `rest` | `{kind, events}` | after refills and expiries |
 | `session_start`, `scene_start` | `{session}` / `{scene}` | the second clock; `session_start` also fires when a session starts from a campaign, with campaign state already in |
 | `time_advanced` | `{from, to, minutes, day, events}` | minutes are absolute since day 1 |
@@ -148,12 +148,41 @@ Hooks in API 1:
 | `token_moved` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | asked *before* a move applies: veto (a wall of force), add events (a cost); synchronous. An object's move (below) comes with `actor = ""` |
 | `region_entered`, `region_left` | `{scene, token, actor, region, record, events}` | after a move, once per region crossed |
 | `after_move` | `{scene, token, actor, from, to, cells, entered, left, by, events}` | once a move is done and its prep has fired. The one move hook that **may prompt** (an opportunity attack offered to the other side's owner): the move stands whatever happens, a veto changes nothing, and `events` land as their own step once the last handler is through |
-| `prompt_answered` | `{prompt, answer, by, timed_out, plugin, context, events}` | a prompt opened with `hm.prompt_open` was answered (or timed out: the default, `timed_out = true`); `plugin` is whose prompt it was, `context` what it was opened with |
+| `prompt_answered` | `{prompt, answer, by, timed_out, plugin, context, events}` | a prompt opened with `hm.prompt_open` was answered (or timed out: the default, `timed_out = true`); `plugin` is whose prompt it was, `context` what it was opened with. May prompt, as `after_move` does: what the answer sets off (the roll it asked for, its roller's dice) waits on a card of its own, and `events` land once it's through |
 
-Handlers of the turn, clock and rest hooks run synchronously and may not
+Handlers of the clock and rest hooks run synchronously and may not
 prompt; they append events to `payload.events` and the kernel commits
 them with the step — the whole step is one undo entry, and a veto or a
 refused event undoes all of it.
+
+**Hooks that wait.** A step of the turns — Next, the start, a focus given,
+the end — runs its moments in order: the turn ending (`turn_end`, then
+what ends with it), the order moving on, `round_end` and `round_start` when
+it wraps, the next turn's `turn_start`. As long as no handler prompts it is
+one undo step that all happens or none of it does, a veto refusing the
+whole of it, as ever. A handler may `hm.prompt` there — a roll its roller
+makes as a turn ends or starts: a monster's recharge die the DM types, a
+player's death saving throw, a repeated save — and the step waits on the
+card: what it has done so far stays (an undo step of its own), the card
+opens, and the rest runs once it's answered, chained (the next turn's start
+after the end has finished). A veto after a wait stops the step there and
+the DM is told why. While it waits:
+
+- the table is told on whom: the card is in everyone's waiting list
+  (`waiting`, with `turn = true`, whatever its `public` words say — "the
+  turn" when it has none), and the screens say the turn is waiting on it;
+- another Next (a player's End turn too), Back, a focus given or a start is
+  refused, saying on whom it waits (`hm.turns.next` raises that); the DM
+  answers the card or goes on without its answer (*Go on*: its default);
+- ending the turns gives the rest of the step up: the card stays (the roll
+  is still its roller's), and what its hook brings still lands when it's
+  answered; nothing after it runs.
+
+A step whose first moment waits never moved: a turn's end that waits keeps
+the turn the ending participant's until it's answered. The order moves on
+from the turn that ended as the order stands then (one that left the order
+as its own turn ended — a creature its turn's end killed — leaves the next
+where it stood).
 
 **A ruleset's own hooks.** Besides the kernel's, a plugin can publish
 hook points of its own, so a house-rules plugin layered over it has
@@ -1108,8 +1137,9 @@ local answers = hm.prompt_all({ "pl_1", "pl_2" }, form, { default = { dodge = fa
 -- action resumes once when the last has answered or timed out
 local id = hm.prompt_open("pl_1", form, { default = {…}, deadline = 60, context = { actor = "a_1" } })
 -- nothing waits: the action goes on; the answer arrives as the
--- `prompt_answered` hook with `context` as given (a synchronous hook:
--- append events to `p.events`)
+-- `prompt_answered` hook with `context` as given (append events to
+-- `p.events`; a handler may hm.prompt again — the roll the answer asked
+-- for, on its roller's dice — and its events land once that's answered)
 hm.prompt_close(id)
 -- closes one of your own unattended prompts unanswered (no hook fires):
 -- what it asked for was done some other way, or taken back
@@ -1185,8 +1215,10 @@ An action that asks for a reaction waits on it with `hm.prompt`, one
 creature at a time (the trigger's damage waits on the Shield). A move's
 aftermath asks with `hm.prompt_open` instead, since the move stands whatever
 the answer: an opportunity attack's card can have the attacks as buttons,
-each an intent, and close when its turn ends. Where nothing may wait (a
-turn's hooks, `prompt_answered` itself) a plugin can't ask; it can tell the
+each an intent, and close when its turn ends. A turn's hooks and
+`prompt_answered` may ask too (the turn waits on the card: *Hooks that
+wait*); where nothing may wait (`token_moved`, the clock's and rest's
+hooks, a ruleset's own `hm.hooks.run`) a plugin can't ask; it can tell the
 DM and the player what could have been taken.
 
 ### Typed numbers

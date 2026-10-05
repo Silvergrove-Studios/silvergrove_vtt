@@ -35,7 +35,7 @@
   import { startPreview, tools, whereOf } from '../lib/map/tools.svelte';
   import { fogOf, fogWords } from '../lib/map/sight';
   import type { Cell } from '../lib/grid';
-  import { movedOn, turnSummary } from '../lib/turns';
+  import { movedOn, turnSummary, turnWaiting } from '../lib/turns';
   import { tapIntent } from '../lib/tap';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
@@ -225,6 +225,9 @@
 
   const map = $derived(game.maps[String(game.scene.map ?? '')] ?? null);
   const turn = $derived(turnSummary(game.scene, game.me));
+  // a card the turn's end or start waits on (a roll as a turn ends or starts):
+  // said under whose turn it is, so nobody takes the pause for a stuck table
+  const turnWaits = $derived(turnWaiting((game.view.waiting as Dict[]) ?? [], game.me));
   const mine = $derived(myActors());
   // what the map keeps in view: my character's token (not a light of mine sent
   // off down a corridor), or on the region the party's marker
@@ -594,7 +597,7 @@
     <header class="bar">
       <div class="where">
         <span class="table">{game.table}</span>
-        <span class="turn" class:mine={turn.mine}>{turn.text}{#if turn.note}<span class="sr-only">{' · '}</span><span class="turnnote">{turn.note}</span>{/if}</span>
+        <span class="turn" class:mine={turn.mine}>{turn.text}{#if turnWaits}<span class="sr-only">{' · '}</span><span class="turnnote">The turn is {turnWaits}</span>{:else if turn.note}<span class="sr-only">{' · '}</span><span class="turnnote">{turn.note}</span>{/if}</span>
       </div>
       <div class="me">
         {#if game.status !== 'open'}<span class="chip warn">Reconnecting…</span>{/if}

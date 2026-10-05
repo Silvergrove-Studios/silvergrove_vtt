@@ -203,6 +203,33 @@ hm.test("the order from Lua: reorder, insert, remove, a group of goblins", funct
 	t.ok(not ok, "no such group is an error")
 end)
 
+-- A turn's hook may wait on a card as an action does: the bleeding hero's
+-- d4 is their player's to roll as their turn starts, and the turn waits on
+-- it — another Next is refused, saying on whom it waits — then goes on.
+hm.test("a turn's start waits on its card: the bleeding hero's d4", function(t)
+	t.actor({ id = "a_h", name = "Hero", owner = "pl_1", ext = { [hm.id] = { level = 1, stats = { agi = 1, str = 0, wit = 0 } } } })
+	t.actor({ id = "a_g", name = "Gob", ext = { [hm.id] = { level = 1, stats = { agi = 3, str = 0, wit = 0 } } } })
+	t.dispatch("setup", { actor = "a_h" })
+	local sc = t.scene(nil, { { id = "t_h", actor = "a_h", x = 3, y = 3 }, { id = "t_g", actor = "a_g", x = 5, y = 3 } })
+	t.dispatch("condition", { key = "bleeding", target = "actor:a_h" })
+	t.ok(hm.turns.start(sc), "started")
+	t.eq(hm.turns.current().order[1], "t_g", "the goblin (agility 3) first")
+	local hp = hm.resources.get("actor:a_h", "hp").current
+	t.ok(hm.turns.next(), "the goblin's turn ends")
+	t.eq(hm.turns.current().order[hm.turns.current().turn + 1], "t_h", "the hero's turn")
+	local open = t.prompts()
+	t.eq(#open, 1, "a card")
+	t.eq(open[1] and open[1].to, "pl_1", "for the hero's player")
+	t.eq(hm.resources.get("actor:a_h", "hp").current, hp, "nothing lost yet: the turn waits on the roll")
+	local ok, why = pcall(hm.turns.next)
+	t.ok(not ok and tostring(why):find("waiting on", 1, true) ~= nil, "another Next waits on it: " .. tostring(why))
+	t.ok(t.answer(open[1].id, { d4 = 3 }, "pl_1"), "a 3")
+	t.eq(hm.resources.get("actor:a_h", "hp").current, hp - 3, "three hit points lost as the turn started")
+	t.eq(#t.prompts(), 0, "nothing waits")
+	t.ok(hm.turns.next(), "and the turns go on")
+	t.eq(hm.turns.current().order[hm.turns.current().turn + 1], "t_g", "the goblin's turn again")
+end)
+
 hm.test("after a move, the guard's owner is offered an opportunity strike", function(t)
 	t.actor({ id = "a_run", name = "Runner", owner = "pl_1", ext = { [hm.id] = { level = 1, stats = { agi = 2, str = 0, wit = 0 } } } })
 	t.actor({ id = "a_grd", name = "Guard", owner = "pl_2", ext = { [hm.id] = { level = 1, stats = { agi = 1, str = 0, wit = 0 } } } })

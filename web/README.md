@@ -218,5 +218,15 @@ and Wren takes what was typed; then out of sight, a goblin hits Wren and
 Ben's screen says so ("…attacks Wren with its Scimitar: it hits, 7
 slashing damage.") with no roll of the goblin's in his log.
 
+`tests/e2e/waiting.mjs <host.json> <out>` (host with `--party --seed 12`, on
+a package built on the rules being tried, as for the rulings journey): a
+turn that waits on a roll. The table rolls real dice; in the chapel fight
+the DM drops Wren to 0 from her sheet, and Next turn goes on until hers: it
+starts with her death saving throw, its d20 asked on Ana's phone, and the
+turn waits on it — the DM's fight bar says the turn is waiting on Ana and
+holds Next and Back, and Ben's header says so too. Ana types her d20: the
+save is made as she rolled it, the waiting goes from every screen, and Next
+is the DM's again.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).
