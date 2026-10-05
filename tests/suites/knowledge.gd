@@ -233,6 +233,14 @@ end })
 	check(Knowledge.render("Wren makes the save" + line + ".", everyone) == "Wren makes the save.", "a player reads nothing of it, nothing else kept: %s" % Knowledge.render("Wren makes the save" + line + ".", everyone))
 	check(Knowledge.render("Wren makes the save" + line + ".", Knowledge.knower(st.encounter.actors, [], true), true) == "Wren makes the save (DC 15).", "the DM reads it")
 	check(Knowledge.render(Knowledge.mark("dm", "-", "17", "?"), everyone) == "?", "or its stand-in")
+	# a phrase kept within a sentence carries its own separator: read as nothing, the
+	# sentence stays whole — its next comma isn't a list's to take
+	var kept := "The DM makes it 14" + Knowledge.mark("dm", "-", " against AC 15") + ", a miss."
+	check(Knowledge.render(kept, everyone) == "The DM makes it 14, a miss.", "a phrase kept, its comma after stays: %s" % Knowledge.render(kept, everyone))
+	var two := "Brann's Wisdom save" + Knowledge.mark("dm", "-", ", 12") + Knowledge.mark("dm", "-", " against DC 15") + ", fails: Frightened."
+	check(Knowledge.render(two, everyone) == "Brann's Wisdom save, fails: Frightened.", "two in a row: %s" % Knowledge.render(two, everyone))
+	check(Knowledge.render_json(JSON.stringify({"t": kept}), everyone) == JSON.stringify({"t": "The DM makes it 14, a miss."}), "and on the wire")
+	check(Knowledge.render(Knowledge.mark("cond", "a_gob", "Paralyzed") + ", and 5 fire damage", everyone).begins_with("Paralyzed"), "(conditions shown: as before)")
 	_setup(kernel, sid)
 	var host := HostSession.new(st, PackLibrary.new())
 	host.kernel = kernel

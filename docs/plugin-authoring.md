@@ -554,7 +554,11 @@ A mark is plain text (Unicode's interlinear annotation characters round
 the words and what they're about), so it goes anywhere a string does; the
 words you give it are the DM's, the last its stand-in. A stand-in at the
 head of a sentence is given a capital; words read as nothing take their
-list's comma with them ("fails the save, Frightened" reads "fails the save").
+list's comma with them ("fails the save, Frightened" reads "fails the save"),
+unless they carry their own separator — words that begin with a space, a
+comma, a semicolon or a colon are a phrase within a sentence, which reads
+whole without them ("14" + `hm.known.dm(" against AC 15")` + ", a miss"
+reads "14, a miss").
 Mark only where it matters (where your setting keeps names or conditions):
 your own tests then read your words as before. A roll's entry says whom it
 was rolled at (`target`, from `ctx.target`), and each screen reads who rolled
@@ -581,6 +585,16 @@ shape), `friendly` (the party listed first), `range` (feet, or a list of
 which the farthest counts: those farther are listed with why), `sight =
 false` (its creature needn't be seen: the dark is no bar) and `walls =
 false` (nor is a wall: where the table doesn't check line of sight).
+
+**A tap on a creature.** An action registered with `tap = "creature"` (and
+`target = "token"`) is what a player's screen sends as they pick out the
+token of a creature no player owns — not their own, the party's or a
+thing's: `{ kind = "action", plugin, action, ctx = { target = "token:<id>",
+scene } }`, checked like any token target (one hidden from them is refused).
+A ruleset answers with what the party knows of it: a card of its own
+(`hm.prompt_open` to `ctx.player`, nothing waiting on it), its words marked
+so each screen reads what it may know. Where no ruleset registers one, a tap
+only picks the token out.
 
 ### Turns
 

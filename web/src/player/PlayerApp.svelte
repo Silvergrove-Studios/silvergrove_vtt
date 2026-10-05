@@ -36,6 +36,7 @@
   import { fogOf, fogWords } from '../lib/map/sight';
   import type { Cell } from '../lib/grid';
   import { movedOn, turnSummary } from '../lib/turns';
+  import { tapIntent } from '../lib/tap';
 
   type Tab = 'map' | 'character' | 'table' | 'chat' | 'journal';
   const TAB_KEYS: Tab[] = ['map', 'character', 'table', 'chat', 'journal'];
@@ -384,7 +385,12 @@
       selected = String(t.id);
       return;
     }
-    selected = selected === t.id ? '' : String(t.id);
+    const picking = selected !== t.id;
+    selected = picking ? String(t.id) : '';
+    // a creature picked out: what the party knows of it, on a card of its own
+    // (the ruleset's tap action; the table sends each screen what it may know)
+    const asked = picking ? tapIntent(game.view.actions, t, String(game.scene.id ?? '')) : null;
+    if (asked) intent(asked);
   }
 
   function onCellClick(cell: Cell, at: { x: number; y: number }): void {

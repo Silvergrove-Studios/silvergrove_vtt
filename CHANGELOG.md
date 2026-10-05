@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **What we know of a creature.** A player who picks out the token of a
+  creature no player owns asks the rules what the party knows of it: a
+  ruleset that answers (an action with `tap = "creature"`) sends a card of
+  its own, its words marked so each screen reads what it may know, and the
+  DM all of it. Words only the DM reads that carry their own separator
+  (" against AC 15", ", 12") read as a phrase gone from its sentence:
+  "14, a miss", where the comma after them used to go too.
 - **A creature's initiative kept with its rolls.** A ruleset that keeps its
   creatures' rolls from the players says so (`hm.ui.knowledge`'s `rolls`),
   and the turn order a player is sent leaves out their labels there (their

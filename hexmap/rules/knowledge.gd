@@ -43,9 +43,13 @@ extends RefCounted
 ##
 ## (Unicode's interlinear annotation characters: the annotated text, then
 ## its annotation.) `conditions` marks words about a creature's conditions
-## the same way ("cond <actor id> <unknown words>", usually nothing). The
-## Table puts each mark right for each screen as it is sent: a reveal reaches
-## every line said of it before, at once. A ruleset that never marks a name
+## the same way ("cond <actor id> <unknown words>", usually nothing), and
+## `hm.known.dm` words only the DM reads ("dm - <stand-in>": a DC kept, a
+## monster's AC, a hidden roll's total). The Table puts each mark right for
+## each screen as it is sent: a reveal reaches every line said of it before,
+## at once. Words read as nothing take their list's separator with them,
+## unless they carry their own (", 12", " against DC 15": a phrase within a
+## sentence, which leaves it whole). A ruleset that never marks a name
 ## leaves it as it wrote it.
 ##
 ## A declaration: {plugin, players, resource, tags, effects, names,
@@ -463,7 +467,7 @@ static func render(text: String, knows: Callable, gm := false) -> String:
 		out += text.substr(at, m.get_start() - at)
 		var said := _instead(m, knows, _starts_sentence(out))
 		at = m.get_end()
-		if said == "" and m.get_string(1) != "":
+		if said == "" and m.get_string(1) != "" and not _own_separator(m.get_string(1)):
 			# words read as nothing take their list's comma with them ("fails the save,
 			# Frightened" is "fails the save" to a screen that doesn't see it)
 			var cut := _unlist(out, text.substr(at, 2), text.length() - at <= 0)
@@ -474,6 +478,14 @@ static func render(text: String, knows: Callable, gm := false) -> String:
 	if out.contains(ANCHOR) or out.contains(SEP) or out.contains(END):
 		out = _strays(out, gm)
 	return out
+
+
+## Whether a mark's words carry their own separator (", 12", " against DC 15",
+## "; immune to fire", ": AC 20"): a phrase within a sentence, not an item of
+## a list. Read as nothing, they leave the sentence whole, and nothing around
+## them goes ("14 against AC 15, a miss" is "14, a miss", not "14a miss").
+static func _own_separator(words: String) -> bool:
+	return words.begins_with(" ") or words.begins_with(",") or words.begins_with(";") or words.begins_with(":")
 
 
 ## Words read as nothing between `before` and `after` (its next two
@@ -572,7 +584,7 @@ static func render_json(text: String, knows: Callable, gm := false) -> String:
 		# after a full stop and a space, or an escaped new line)
 		var said := _instead(m, knows, out.ends_with("\"") or out.ends_with("\\n") or _starts_sentence(out))
 		at = m.get_end()
-		if said == "" and m.get_string(1) != "":
+		if said == "" and m.get_string(1) != "" and not _own_separator(m.get_string(1)):
 			# (a string's end is its closing quote)
 			var cut := _unlist(out, text.substr(at, 2), text.substr(at, 1) == "\"")
 			out = cut[0]

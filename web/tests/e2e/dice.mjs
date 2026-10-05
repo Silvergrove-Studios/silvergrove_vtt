@@ -346,7 +346,8 @@ async function swing(goblin, attack) {
 }
 
 ok = ok && (await step('the DM rolls the creatures’ dice by hand: a goblin’s attack on Wren asks the DM’s screen for its d20, then its damage', async () => {
-  await setRule("Your creatures' dice", 'Real dice: you roll them and type what came up');
+  // (in the open: the players see the roll typed, below)
+  await setRule("Your creatures' dice", 'Your real dice, in the open: you type what came up, and the players see it');
   const before = await wren();
   const card = diceCard(dm, 'Your dice');
   let asked = false;
