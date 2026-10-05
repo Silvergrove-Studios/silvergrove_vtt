@@ -26,6 +26,8 @@
     if (d) return `Disadvantage: ${d}`;
     return '';
   });
+  // real dice, typed in by whoever rolled them (the rules mark the roll: `typed`)
+  const atTable = $derived(kind === 'roll' && (entry.spec as Dict | undefined)?.typed === true);
 </script>
 
 {#if kind === 'roll'}
@@ -34,6 +36,7 @@
       {#if who}<span class="who">{who}</span>{/if}
       <span class="label">{entry.label ?? 'Roll'}</span>
       {#if entry.audience && entry.audience !== 'all'}<span class="tag">secret</span>{/if}
+      {#if atTable}<span class="tag table" title="Real dice: what came up was typed in">rolled at the table</span>{/if}
     </div>
     <div class="result">
       <span class="dice">
@@ -110,6 +113,10 @@
     border-radius: 999px;
     background: var(--hover);
     color: var(--muted);
+  }
+  .tag.table {
+    border: 1px solid var(--border);
+    background: transparent;
   }
   .result {
     display: flex;

@@ -12,6 +12,7 @@
 // data (`@values`, the answers so far; `@chosen`, the record each answer
 // picked; and the view's own data) before the field is drawn or checked.
 import { Expr } from '../expr';
+import { diceProblem } from '../dice';
 import type { Dict } from './viewlib';
 
 /** Every `{expr}` in a field's properties, worked out against the context. */
@@ -329,6 +330,8 @@ export function fieldProblem(f: Dict, value: unknown, options: Choice[] | null =
       return scoresProblem(f, value);
     case 'choose':
       return chooseProblem(f, value, options);
+    case 'dice':
+      return diceProblem(f, value);
     default:
       if (f.required && (value === undefined || value === null || String(value).trim() === '')) return String(f.required_text ?? `${f.label ?? f.key}: fill this in.`);
       return '';

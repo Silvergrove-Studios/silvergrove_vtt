@@ -700,7 +700,9 @@ func _log(n: Dictionary, ctx: Dictionary) -> Control:
 			match str(e.get("kind", "")):
 				"roll":
 					var r: Dictionary = e.get("result", {})
-					l.text = "%s: %s%s" % [str(e.get("label", "Roll")), _num(r.get("total", 0)), (" — " + str(r.outcome)) if r.has("outcome") else ""]
+					# (real dice, typed in: the rules mark the roll so)
+					var typed: bool = e.get("spec") is Dictionary and e.spec.get("typed") == true
+					l.text = "%s: %s%s%s" % [str(e.get("label", "Roll")), _num(r.get("total", 0)), (" — " + str(r.outcome)) if r.has("outcome") else "", "  (rolled at the table)" if typed else ""]
 				"note":
 					l.text = str(e.get("text", ""))
 					l.theme_type_variation = "DimLabel"

@@ -2,7 +2,7 @@ class_name PropertyForm
 extends GridContainer
 ## A two-column form built from a schema, used by the inspector and the
 ## export dialogs. Schema entries:
-##   { key, label, type: float|int|bool|enum|color|string|text|vec2|list|choose|scores,
+##   { key, label, type: float|int|bool|enum|color|string|text|vec2|list|choose|scores|dice,
 ##     min, max, step, options: [..] (enum, choose), suffix, tooltip,
 ##     fields: [..] (list: the sub-form each item is edited with) }
 ## A `list` is a repeater: its value is an array of records, one sub-form
@@ -10,6 +10,8 @@ extends GridContainer
 ## (docs/plugin-authoring.md): some of a list of options, as check boxes
 ## (or one, `single`); numbers for named stats under a method, as spin
 ## boxes. The web screens draw both more fully; the rules check either.
+## `dice` is real dice typed in: a box for each die (`dice`: each one's
+## sides), its value the faces typed (null for one left empty).
 ## Emits value_changed(key, value) as the user edits; get_values() reads
 ## the whole form.
 
@@ -69,6 +71,10 @@ func _make_control(item: Dictionary) -> Control:
 			var sc := ScoresField.new(item)
 			sc.changed.connect(func() -> void: _emit(key, sc.get_value()))
 			return sc
+		"dice":
+			var df := DiceField.new(item)
+			df.changed.connect(func() -> void: _emit(key, df.get_value()))
+			return df
 		"list":
 			var rep := ListField.new()
 			rep.fields = item.get("fields", []) if item.get("fields") is Array else []
@@ -168,6 +174,8 @@ func set_values(values: Dictionary) -> void:
 				(ctl as ChooseField).set_value(v)
 			"scores":
 				(ctl as ScoresField).set_value(v)
+			"dice":
+				(ctl as DiceField).set_value(v)
 			_:
 				(ctl as LineEdit).text = str(v if v != null else "")
 	_updating = false
@@ -202,6 +210,7 @@ func get_values() -> Dictionary:
 			"list": out[key] = (ctl as ListField).get_values()
 			"choose": out[key] = (ctl as ChooseField).get_value()
 			"scores": out[key] = (ctl as ScoresField).get_value()
+			"dice": out[key] = (ctl as DiceField).get_value()
 			_: out[key] = (ctl as LineEdit).text
 	return out
 
@@ -488,3 +497,75 @@ class ScoresField extends VBoxContainer:
 		for id in base:
 			final[id] = mini(cap, int(base[id]) + int(bonus.get(id, 0))) if int(bonus.get(id, 0)) > 0 else int(base[id])
 		return {"method": str(item.get("method", "manual")), "base": base, "bonus": bonus, "final": final}
+
+
+## Real dice typed in (`dice`): a box for each die, `dice` each one's sides
+## ([20, 20] for two d20s), the total so far beside them (with `plus`, the
+## modifier the roll adds). A d10's 0 is its 10. Its value: the faces, each
+## a whole number from 1 to its die's sides, or null for a box left empty or
+## typed wrong; the rules check it again.
+class DiceField extends HBoxContainer:
+	signal changed
+	var item: Dictionary
+	var _boxes: Array = []
+	var _total: Label
+
+	func _init(p_item: Dictionary) -> void:
+		item = p_item
+		size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		add_theme_constant_override("separation", 4)
+		for i in _sides().size():
+			var le := LineEdit.new()
+			le.name = "Die%d" % i
+			le.custom_minimum_size.x = 44
+			le.max_length = 3
+			le.placeholder_text = "d%d" % int(_sides()[i])
+			le.alignment = HORIZONTAL_ALIGNMENT_CENTER
+			le.text_changed.connect(func(_t: String) -> void:
+				_refresh()
+				changed.emit())
+			add_child(le)
+			_boxes.append(le)
+		_total = Label.new()
+		_total.name = "Total"
+		_total.theme_type_variation = "DimLabel"
+		add_child(_total)
+		_refresh()
+
+	func _sides() -> Array:
+		return item.get("dice", []) if item.get("dice") is Array else []
+
+	## A typed face as the die reads it: 1 to its sides (a d10's 0 is 10), or null.
+	static func face_of(text: String, sides: int) -> Variant:
+		var t := text.strip_edges()
+		if t == "" or not t.is_valid_int():
+			return null
+		var n := int(t)
+		if n == 0 and (sides == 10 or sides == 100):
+			n = sides
+		return n if n >= 1 and n <= sides else null
+
+	func get_value() -> Array:
+		var out := []
+		var sides := _sides()
+		for i in _boxes.size():
+			out.append(face_of((_boxes[i] as LineEdit).text, int(sides[i])))
+		return out
+
+	func set_value(v: Variant) -> void:
+		var faces: Array = v if v is Array else []
+		for i in _boxes.size():
+			var f: Variant = faces[i] if i < faces.size() else null
+			(_boxes[i] as LineEdit).text = str(int(f)) if (f is int or f is float) else ""
+		_refresh()
+
+	func _refresh() -> void:
+		var sum := 0
+		var all := true
+		for f in get_value():
+			if f == null:
+				all = false
+			else:
+				sum += int(f)
+		var plus := int(item.get("plus", 0))
+		_total.text = ("= %d" % (sum + plus)) if all and not _boxes.is_empty() else ""

@@ -23,6 +23,10 @@
   import { game } from '../game.svelte';
   import { clock } from '../clock.svelte';
   import { buttonAnswer, secondsLeft } from '../prompts';
+  import { cardDiceProblem } from '../dice';
+
+  // a card's choices that answer with no dice typed (Roll it for me, No reaction, Cancel)
+  const APP_CHOICES = ['app', 'none', 'skip', 'cancel'];
 
   let { node, ctx, depth = 0 }: { node: any; ctx: Dict; depth?: number } = $props();
   const ui = viewUi();
@@ -117,13 +121,26 @@
   let cardId = '';
   let cardAt = 0;
   const SETTLE_MS = 600;
+  // real dice typed in: a card's dice must all be dice before its Done goes (not
+  // its Roll it for me: the app rolls those); what's missing, said under them
+  let diceSaid = $state('');
   $effect.pre(() => {
     if (type !== 'prompt' || !n) return;
     const id = String((valueOf(n, ctx) as Dict | null)?.id ?? '');
     if (id !== cardId) {
       cardId = id;
       cardAt = performance.now();
+      diceSaid = '';
     }
+  });
+
+  // (what's said of the dice follows them as they're put right)
+  $effect(() => {
+    if (!diceSaid || type !== 'prompt' || !n) return;
+    const rec = valueOf(n, ctx) as Dict | null;
+    if (!rec || typeof rec !== 'object') return;
+    const now = cardDiceProblem(formFields(prompted(rec)), formValues);
+    if (now !== diceSaid) diceSaid = now;
   });
 
   // one tap per card: the choice goes, and the buttons wait for the card to close
@@ -131,6 +148,11 @@
   function choose(f: Dict, c: Dict): void {
     if (chose === f.prompt) return;
     if (f.urgent && performance.now() - cardAt < SETTLE_MS) return;
+    if (!APP_CHOICES.includes(String(c.id ?? '')) && !c.intent) {
+      const problem = cardDiceProblem(formFields(f), $state.snapshot(formValues));
+      diceSaid = problem;
+      if (problem) return;
+    }
     chose = String(f.prompt);
     const values = $state.snapshot(formValues);
     if (c.intent && typeof c.intent === 'object') ui.intent(putValue(fillIntent(c.intent, ctx), values, '$values'));
@@ -380,13 +402,14 @@
           </div>
         {/if}
         <Form fields={formFields(f)} bind:values={formValues} />
+        {#if diceSaid && type === 'prompt'}<p class="dicesaid" role="alert">{diceSaid}</p>{/if}
         {#if f.choices && f.choices.length > 0}
           <!-- a reaction's buttons one under another, big enough to hit at once on a phone;
                its "none" is the quiet one -->
           <div class="actions" class:stack={f.urgent}>
             {#each f.choices as c (String(c.id ?? c.label))}
-              <!-- (what takes nothing is the quiet one: a reaction's No reaction, a hit's Not this time, Cancel) -->
-              <button type="button" class={(f.urgent && (String(c.id) === 'none' || String(c.id) === 'skip')) || String(c.id) === 'cancel' ? 'quiet' : 'accent'} disabled={chose === f.prompt} onclick={() => choose(f, c)}>{c.label ?? c.id}</button>
+              <!-- (what takes nothing is the quiet one: a reaction's No reaction, a hit's Not this time, Cancel, the app's dice) -->
+              <button type="button" class={(f.urgent && (String(c.id) === 'none' || String(c.id) === 'skip')) || String(c.id) === 'cancel' || String(c.id) === 'app' ? 'quiet' : 'accent'} disabled={chose === f.prompt} onclick={() => choose(f, c)}>{c.label ?? c.id}</button>
             {/each}
           </div>
         {:else}
@@ -650,6 +673,11 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+  .dicesaid {
+    margin: 6px 0 0;
+    color: var(--danger, #d9534f);
+    font-size: 0.9rem;
   }
   .badge {
     padding: 3px 9px;

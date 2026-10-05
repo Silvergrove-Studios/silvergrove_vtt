@@ -581,3 +581,48 @@ func test_wizard_text_and_chosen_records() -> void:
 	check(sent.size() == 1 and sent[0].ctx.form == {"kit": "", "note": "Hi"}, "the answers sent, as ever: %s" % [sent])
 	r.queue_free()
 	await tree.process_frame
+
+
+## Real dice typed in (a card's `dice` field, the DM's creatures' rolls on the
+## Table): a box a die, the faces typed (a d10's 0 its 10; one its die can't
+## show, or left empty, none), the total with the roll's own number; the
+## card's Done answers with the faces.
+func test_dice_fields() -> void:
+	var pf := PropertyForm.new()
+	root.add_child(pf)
+	pf.build([{"key": "main", "label": "The d20s + 5", "type": "dice", "dice": [20, 20], "plus": 5},
+		{"key": "extra1", "label": "Sneak Attack: 2d6", "type": "dice", "dice": [6, 6]},
+		{"key": "hd", "label": "Hit Dice", "type": "dice", "dice": [10]}], {"main": [12]})
+	var boxes := _all(pf, "LineEdit")
+	check(boxes.size() == 5, "a box a die: %d" % boxes.size())
+	check(pf.get_values().main == [12, null], "what the card gave, and a box still to type: %s" % [pf.get_values().main])
+	(boxes[1] as LineEdit).text = "3"
+	(boxes[1] as LineEdit).text_changed.emit("3")
+	check(pf.get_values().main == [12, 3], "both typed: %s" % [pf.get_values().main])
+	check(_find(pf, "Label", "= 20") != null, "the total with its + 5: 12 + 3 + 5")
+	(boxes[2] as LineEdit).text = "7"
+	(boxes[3] as LineEdit).text = "4"
+	(boxes[4] as LineEdit).text = "0"
+	check(pf.get_values().extra1 == [null, 4] and pf.get_values().hd == [10], "a d6 can't show 7; a d10's 0 is its 10: %s, %s" % [pf.get_values().extra1, pf.get_values().hd])
+	pf.queue_free()
+	await tree.process_frame
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var sent := []
+	r.intent.connect(func(i: Dictionary) -> void: sent.append(i))
+	r.render({"type": "prompt", "bind": "/prompts/0"}, {"prompts": [{"id": "p_d", "to": "gm", "form": {"heading": "Your dice", "title": "Scimitar → Wren: roll your d20 + 4. Type what came up.",
+		"fields": [{"key": "main", "type": "dice", "label": "The d20 + 4", "dice": [20], "plus": 4}],
+		"choices": [{"id": "roll", "label": "Done: that's what I rolled"}, {"id": "app", "label": "Roll it for me"}]}, "default": {"choice": "app"}}]})
+	await tree.process_frame
+	var box := _find(r, "LineEdit") as LineEdit
+	box.text = "15"
+	box.text_changed.emit("15")
+	_find(r, "Button", "Done").pressed.emit()
+	check(sent.size() == 1 and sent[0].kind == "answer" and sent[0].prompt == "p_d" and sent[0].answer.main == [15] and sent[0].answer.choice == "roll", "Done answers with the die typed: %s" % [sent])
+	# the log (the Table's Rules pane): a roll typed in says so
+	r.render({"type": "log", "bind": "/log"}, {"log": [{"id": "r_1", "kind": "roll", "label": "Scimitar", "spec": {"typed": true}, "result": {"total": 19, "outcome": "hit"}},
+		{"id": "r_2", "kind": "roll", "label": "Shortbow", "spec": {}, "result": {"total": 9, "outcome": "miss"}}]})
+	await tree.process_frame
+	check(_find(r, "Label", "Scimitar: 19 — hit  (rolled at the table)") != null and _find(r, "Label", "Shortbow: 9 — miss") != null and _find(r, "Label", "Shortbow: 9 — miss  (rolled") == null, "a typed roll marked, the app's not")
+	r.queue_free()
+	await tree.process_frame

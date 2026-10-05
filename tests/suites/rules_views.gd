@@ -86,6 +86,41 @@ func test_projection_audience() -> void:
 	check(Views.can_see("gm", "pl_1", "player") == false and Views.can_see("owner:pl_1", "pl_1", "player") and not Views.can_see("owner:pl_1", "pl_2", "player") and Views.can_see("", "", "display") and Views.can_see("gm", "", "gm"), "can_see")
 
 
+## What a player is sent of the rolls: one typed from real dice comes with
+## its dice as they were typed and the mark that says so (`spec.typed`); a
+## roll the DM keeps out of the players' sight (a creature's, `visibility`
+## "gm") never reaches them, the words of what happened do; and each player's
+## own preferences come on their record (PlayerPrefs).
+func test_what_a_player_is_sent_of_typed_and_hidden_rolls() -> void:
+	var st := _state()
+	var k := RulesKernel.new(st)
+	st.apply({"t": "player.add", "player": {"id": "pl_1", "name": "Ana", "color": "#4f9cf6"}})
+	st.apply({"t": "player.add", "player": {"id": "pl_2", "name": "Ben", "color": "#5bc86a"}})
+	check(k.commit([
+		{"t": "actor.add", "actor": {"id": "a_wren", "kind": "pc", "name": "Wren", "owner": "pl_1", "ext": {}}},
+		{"t": "actor.add", "actor": {"id": "a_gob", "kind": "npc", "name": "Goblin", "ext": {}}},
+	], "Setup") == "", "setup")
+	var mine := k.roll({"expr": "1d20+5", "faces": {"main": [17]}, "typed": true, "typed_by": "pl_1"}, {"actor": "a_wren", "kind": "attack"}, "Shortsword → Goblin")
+	check(not mine.is_empty() and float(mine.result.total) == 22.0, "the face typed is the roll's: 17 + 5")
+	var hidden := k.roll({"expr": "1d20+4", "visibility": "gm"}, {"actor": "a_gob", "kind": "attack"}, "Scimitar → Wren")
+	check(str(hidden.get("audience", "")) == "gm", "the creature's roll is the DM's alone")
+	check(k.commit([{"t": "log.add", "entry": {"id": "n_said", "kind": "note", "text": "The goblin attacks Wren with its Scimitar: it hits, 5 slashing damage.", "audience": "all"}}], "Said") == "", "what happened, said")
+	var ben := Views.project(k, null, "pl_2", Views.ROLE_PLAYER)
+	var ids: Array = (ben.log as Array).map(func(e: Dictionary) -> String: return str(e.get("id", "")))
+	check(ids.has(str(mine.id)) and not ids.has(str(hidden.id)) and ids.has("n_said"), "Ben's screen: Wren's roll and the words, not the goblin's roll: %s" % [ids])
+	var seen: Dictionary = ben.log.filter(func(e: Dictionary) -> bool: return str(e.get("id", "")) == str(mine.id))[0]
+	check(seen.spec.get("typed") == true and (seen.result.dice as Array).size() == 1 and int(seen.result.dice[0].face) == 17, "with the mark that it was rolled at the table, and its die as typed")
+	check(not seen.has("dm") and not seen.has("caused"), "and nothing of the DM's on it")
+	var dm := Views.project(k, null, "", Views.ROLE_GM)
+	check(dm.log.any(func(e: Dictionary) -> bool: return str(e.get("id", "")) == str(hidden.id)), "the DM sees the goblin's roll")
+	# a player's preferences come on their record, which every screen is sent
+	st.apply({"t": "player.set", "id": "pl_1", "changes": {"prefs": {"srd5e": {"dice": "typed"}}}})
+	check(Protocol.client_document(st.encounter.doc, false).players.filter(func(p: Dictionary) -> bool: return str(p.id) == "pl_1")[0].get("prefs", {}) == {"srd5e": {"dice": "typed"}}, "Ana's choice on her record, as a screen has it")
+	var m := {"settings": {"schema": {"properties": {"dice_players": {"type": "string"}}}}, "preferences": {"schema": {"properties": {"dice": {"type": "string", "enum": ["app", "typed"], "x-when": {"dice_players": "choice"}}}}, "defaults": {"dice": "app"}}}
+	check(PlayerPrefs.value(st.encounter, m, {"dice_players": "choice"}, "srd5e", "pl_1", "dice") == "typed" and PlayerPrefs.value(st.encounter, m, {"dice_players": "choice"}, "srd5e", "pl_2", "dice") == "app", "hers is hers; Ben's the default")
+	check(PlayerPrefs.value(st.encounter, m, {"dice_players": "app"}, "srd5e", "pl_1", "dice") == "app", "and hers only while the table lets each player choose")
+
+
 func test_wire_views_intents_and_roles() -> void:
 	if not PluginHost.available():
 		skip("no Lua runtime in this build")
