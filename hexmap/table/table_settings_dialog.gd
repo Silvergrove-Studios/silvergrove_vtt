@@ -142,6 +142,12 @@ func ask_level(level: String) -> void:
 	var lines := PackedStringArray(["Switch to %s? %s" % [str(TableSettings.LEVEL_INFO[level].title), TableSettings.change_words(changes).get_slice(":", 0) + (":" if not changes.is_empty() else "")]])
 	for ch in changes:
 		lines.append("   •  %s:  %s → %s%s" % [str(ch.title), str(ch.from_words), str(ch.to_words), "  (takes effect at the next fight)" if bool(ch.next_fight) else ""])
+	# a prepared fight's own values still win over the level while it runs: said
+	var keeps := TableSettings.keeping_lines((reg.get("fights_keep", {}) as Dictionary).get(level, []), level)
+	if not keeps.is_empty():
+		lines.append(TableSettings.KEEPING_HEAD)
+		for line in keeps:
+			lines.append("   •  " + line)
 	_preview_words.text = "\n".join(lines)
 	_preview.visible = true
 	_switch.text = "Switch to %s" % str(TableSettings.LEVEL_INFO[level].title)

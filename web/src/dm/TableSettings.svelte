@@ -14,6 +14,7 @@
     badgeWords,
     changeWords,
     fightWhyWords,
+    fightsKeeping,
     levelChanges,
     levelTitle,
     noticeWords,
@@ -35,6 +36,8 @@
   // the level a press asked for: what it changes is shown before it does
   let asking = $state<Level | null>(null);
   const preview = $derived(reg && asking ? levelChanges(reg, asking) : []);
+  // what the switch leaves to the prepared fights: their own values, still winning while each runs
+  const keeps = $derived(fightsKeeping(reg, asking));
   const shown = $derived(reg ? sections(reg, search) : []);
   // the house rules as typed here, until kept (null: as the table has them)
   let house = $state<string | null>(null);
@@ -123,6 +126,19 @@
           </ul>
         {:else}
           <p class="count">{changeWords(preview)}</p>
+        {/if}
+        {#if keeps.length}
+          <p class="count">While they run, these fights keep their own:</p>
+          <ul class="changes keeps" aria-label="What the fights keep">
+            {#each keeps as f (f.id)}
+              <li>
+                <span>{f.name}</span>
+                <span class="fromto"
+                  >{#each f.items as it, i (it.id)}{i ? '; ' : ''}{it.title} <strong>{it.own_words}</strong> <span class="dim">({levelTitle(reg, asking)}: {it.level_words})</span>{/each}</span
+                >
+              </li>
+            {/each}
+          </ul>
         {/if}
         <div class="btns">
           <button type="button" class="accent" disabled={busy} onclick={switchLevel}>Switch to {levelTitle(reg, asking)}</button>

@@ -167,6 +167,25 @@ await step('a setting changed by hand: Customized, and its section reset to Book
   await settings.getByRole('button', { name: 'Done' }).click();
 });
 
+await step('a prepared fight’s own setting: a switch of level says it still wins while that fight runs', async () => {
+  // the chapel's fight, from the book: its own Count movement, off
+  await dm.locator('.book').getByRole('button', { name: /^Goblins in the chapel/ }).first().click();
+  await dm.getByText('This fight’s settings').or(dm.getByText("This fight's settings")).first().click();
+  await dm.getByRole('combobox', { name: 'Count movement on each creature’s turn, this fight' }).selectOption({ label: 'Off' });
+  await dm.waitForFunction(() => (window.hexmap.game.dm.table?.fights_keep?.automated ?? []).length > 0, null, { timeout: 8000 });
+  await dm.getByRole('button', { name: /^Table settings/ }).click();
+  const settings = dm.getByRole('dialog', { name: 'Table settings' });
+  await settings.waitFor({ timeout: 5000 });
+  await settings.getByRole('group', { name: 'Level' }).getByRole('button', { name: 'Automated' }).click();
+  const preview = settings.getByRole('region', { name: 'What switching changes' });
+  await preview.getByText('While they run, these fights keep their own:').waitFor({ timeout: 5000 });
+  const kept = await preview.getByRole('list', { name: 'What the fights keep' }).innerText();
+  expect(kept.includes('Goblins in the chapel') && kept.includes('Count movement on each creature’s turn Off') && kept.includes('(Automated: On)'), `the switch says the fight keeps its own: ${kept}`);
+  await shot(dm, 'dm_switch_says_what_the_fight_keeps');
+  await preview.getByRole('button', { name: 'Cancel' }).click();
+  await settings.getByRole('button', { name: 'Done' }).click();
+});
+
 const pia = await open(info.player, { width: 390, height: 844 }, 'pia');
 await step('a player joins and is shown how this table runs', async () => {
   await pia.locator('#name').fill('Pia');

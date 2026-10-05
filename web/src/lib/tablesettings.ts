@@ -136,6 +136,22 @@ export interface Registry {
   /** What players may choose for themselves, and each player's choices. */
   prefs?: Pref[];
   players?: PlayerPrefs[];
+  /** By level: the prepared fights' own values a switch to it leaves winning while each runs. */
+  fights_keep?: Partial<Record<Level, FightKeep[]>>;
+}
+
+/** A prepared fight's own values that still win over a level while it runs. */
+export interface FightKeep {
+  id: string;
+  name: string;
+  items: { id: string; title: string; own: unknown; own_words: string; level_words: string }[];
+}
+
+/** What a switch to `level` leaves to the prepared fights: each one's own values that win while it runs. */
+export function fightsKeeping(reg: Registry | null, level: Level | null): FightKeep[] {
+  if (!reg || !level) return [];
+  const k = reg.fights_keep?.[level];
+  return Array.isArray(k) ? k : [];
 }
 
 export interface Change {

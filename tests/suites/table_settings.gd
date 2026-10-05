@@ -84,6 +84,39 @@ func test_the_preview_of_a_level_switch() -> void:
 	check(TableSettings.change_words(to_assisted).begins_with("1 setting changes: "), "one change reads as one")
 
 
+## A level switch says what it leaves to the prepared fights: each one's own
+## values (the DM's for that fight alone) that will still win over the level
+## while it runs — on the Table's Table settings and to the DM's web screen.
+func test_a_level_switch_says_what_the_fights_keep() -> void:
+	var reg := TableSettings.build([{"id": "test.rules", "name": "Test rules", "manifest": _manifest(), "values": {}}], {})
+	var c := Campaign.create("Fights")
+	c.encounters.append({"id": "enc_bridge", "name": "On the bridge", "settings": {"test.rules/auto_hit": true, "test.rules/wait": 30, "test.rules/edition": "2014", "test.rules/gone": 1}})
+	c.encounters.append({"id": "enc_hall", "name": "The hall"})
+	var keeps := TableSettings.fights_keeping(c, reg, "bookkeeping")
+	check(keeps.size() == 1 and str(keeps[0].name) == "On the bridge" and (keeps[0].items as Array).map(func(i: Dictionary) -> String: return str(i.title)) == ["Apply a hit at once", "Seconds to answer"],
+		"to Bookkeeping: the bridge keeps its own hit and its seconds (not a rules option no level names, nor a setting gone): %s" % [keeps])
+	check(str(keeps[0].items[0].own_words) == "On" and str(keeps[0].items[0].level_words) == "Off", "each with its value and the level's")
+	check(TableSettings.fights_keeping(c, reg, "automated").is_empty(), "to Automated: the bridge's own are the level's, nothing to say")
+	check(TableSettings.keeping_lines(keeps, "bookkeeping") == PackedStringArray(["On the bridge: Apply a hit at once On (Bookkeeping: Off); Seconds to answer 30 (Bookkeeping: 0)"]), "in words: %s" % [TableSettings.keeping_lines(keeps, "bookkeeping")])
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var win := _table("user://table_settings_keep_test", {"level": "assisted"})
+	await tree.process_frame
+	win.ctx.campaign.encounters.append({"id": "enc_bridge", "name": "On the bridge", "settings": {"sample.ordered/armour_reduces": 2}})
+	check((win.table_settings.registry().fights_keep as Dictionary).has("bookkeeping") and not (win.table_settings.registry().fights_keep as Dictionary).has("automated"), "the model has it by level")
+	check(str(win.web_dm.state().table.fights_keep.bookkeeping[0].name) == "On the bridge", "and the DM's web screen")
+	win.open_table_settings()
+	await tree.process_frame
+	var d := win._settings_dialog
+	if d != null:
+		d.ask_level("bookkeeping")
+		check(d.preview_text().contains("\n" + TableSettings.KEEPING_HEAD + "\n   •  On the bridge: What a marked armour slot takes off a hit 2 (Bookkeeping: 0)"), "the switch says it: %s" % d.preview_text())
+		d.cancel_level()
+	win.queue_free()
+	await tree.process_frame
+
+
 func test_values_are_checked_against_their_schema() -> void:
 	var reg := TableSettings.build([{"id": "test.rules", "name": "T", "manifest": _manifest(), "values": {}}], {})
 	var wait := _find(reg, "wait")

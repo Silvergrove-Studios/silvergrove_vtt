@@ -3,6 +3,7 @@ import {
   badgeWords,
   changeWords,
   draftFor,
+  fightsKeeping,
   houseKey,
   levelChanges,
   noticeWords,
@@ -173,6 +174,15 @@ describe('how a table runs, as the DM’s screen works it out', () => {
     expect(summarySeenKey('c1', 'pl_2')).not.toBe(summarySeenKey('c1', 'pl_1'));
     expect(noticeWords('players')).toBe('players notice');
     expect(noticeWords('')).toBe('');
+  });
+
+  it('says what a level switch leaves to the prepared fights’ own settings', () => {
+    const bridge = { id: 'enc_bridge', name: 'On the bridge', items: [{ id: 'r/damage', title: 'Apply a hit', own: true, own_words: 'On', level_words: 'Off' }] };
+    const reg = { fights_keep: { bookkeeping: [bridge] } } as unknown as Registry;
+    expect(fightsKeeping(reg, 'bookkeeping')).toEqual([bridge]);
+    expect(fightsKeeping(reg, 'automated')).toEqual([]);
+    expect(fightsKeeping(reg, null)).toEqual([]);
+    expect(fightsKeeping(null, 'bookkeeping')).toEqual([]);
   });
 
   it('takes a walkthrough summary’s line back to where it is set', () => {

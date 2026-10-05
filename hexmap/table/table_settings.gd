@@ -335,6 +335,53 @@ static func changes_for_level(reg: Dictionary, level: String) -> Array:
 	return out
 
 
+## What a level switch leaves to the prepared fights: each fight's own
+## values (its `settings`, the DM's for that fight alone) that will still
+## win over what `level` makes the table while that fight runs — on a
+## setting the level names, where the fight's differs from the level's.
+## [{id, name, items: [{id, title, own, own_words, level_words}]}], the
+## fights with none left out.
+static func fights_keeping(c: Campaign, reg: Dictionary, level: String) -> Array:
+	var out := []
+	if c == null:
+		return out
+	var items := {}
+	for it in reg.get("settings", []):
+		items[str(it.id)] = it
+	for e in c.encounters:
+		if not (e is Dictionary) or not (e.get("settings") is Dictionary):
+			continue
+		var kept := []
+		var own: Dictionary = e.settings
+		var ids := own.keys()
+		ids.sort()
+		for id in ids:
+			var it: Dictionary = items.get(str(id), {})
+			if it.is_empty() or not (it.levels as Dictionary).has(level) or JsonDoc.same(own[id], it.levels[level]):
+				continue
+			kept.append({"id": str(id), "title": str(it.title), "own": JsonDoc.deep(own[id]), "own_words": value_words(it, own[id]), "level_words": value_words(it, it.levels[level])})
+		if not kept.is_empty():
+			out.append({"id": str(e.get("id", "")), "name": str(e.get("name", "")) if str(e.get("name", "")) != "" else "A fight", "items": kept})
+	return out
+
+
+## The fights' own values a level switch leaves, a line a fight: "On the
+## bridge: Check range On (Bookkeeping: Off)" (under KEEPING_HEAD).
+static func keeping_lines(keeps: Array, level: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var title := str(LEVEL_INFO.get(level, {}).get("title", level))
+	for f in keeps:
+		var bits := PackedStringArray()
+		for it in f.items:
+			bits.append("%s %s (%s: %s)" % [str(it.title), str(it.own_words), title, str(it.level_words)])
+		out.append("%s: %s" % [str(f.name), "; ".join(bits)])
+	return out
+
+
+## What the lines of keeping_lines are said under.
+const KEEPING_HEAD := "While they run, these fights keep their own:"
+
+
 ## The preview of a level switch, in a sentence: "3 settings change: …".
 static func change_words(changes: Array) -> String:
 	if changes.is_empty():
@@ -441,7 +488,9 @@ static func check_manifest(manifest: Dictionary) -> Array:
 ## setting it makes otherwise says so (`fight_value`, `fight_words`,
 ## `fight_why`: "fight", its own for this fight, or "mind", the theatre of
 ## the mind's). An author's suggestion, for a campaign started from their
-## package, is `recommended` (recommended_of).
+## package, is `recommended` (recommended_of). `fights_keep`, by level: the
+## prepared fights' own values a switch to it would leave winning while
+## each runs (fights_keeping).
 func registry() -> Dictionary:
 	if ctx == null or ctx.campaign == null:
 		return {}
@@ -455,6 +504,13 @@ func registry() -> Dictionary:
 	if not rec.is_empty():
 		reg.recommended = rec
 	reg.fight_spaces = FIGHT_SPACES.map(func(s: String) -> Dictionary: return {"id": s, "title": str(FIGHT_SPACE_INFO[s].title), "words": str(FIGHT_SPACE_INFO[s].words)})
+	# what each level would leave to the prepared fights' own settings (a switch's preview says it)
+	var keeps := {}
+	for lv in LEVELS:
+		var k := fights_keeping(ctx.campaign, reg, lv)
+		if not k.is_empty():
+			keeps[lv] = k
+	reg.fights_keep = keeps
 	# what players may choose for themselves (PlayerPrefs), and each one's choices
 	reg.prefs = PlayerPrefs.items(ctx.host)
 	reg.players = PlayerPrefs.players(ctx.encounter(), ctx.host)

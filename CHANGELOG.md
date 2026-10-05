@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A level switch says what the prepared fights keep.** Switching the
+  table's level, the preview says, under what changes, each prepared
+  fight's own values that will still win over the level while it runs
+  ("Goblins in the chapel: Count movement on each creature's turn Off
+  (Automated: On)"), on the Table and the DM's web screen.
 - **The walkthrough's summary goes back to each setting.** Each line of
   "Your table" is a press back to where it is set — where fights happen,
   the level, a question's answer (opened there), the rules options and
