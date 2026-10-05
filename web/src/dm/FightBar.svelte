@@ -9,6 +9,7 @@
   import ActButton from '../lib/views/ActButton.svelte';
   import { endedByPlayer, initiativeAction, nothingSince, orderRows, unusedOnTurn } from './fight';
   import { inMind } from '../lib/mind';
+  import { turnWaiting } from '../lib/turns';
 
   let { fight }: { fight: Dict } = $props();
   const turns = $derived((game.scene.turns ?? {}) as Dict);
@@ -18,6 +19,9 @@
   const players = $derived(game.players.map((p) => String(p.id)));
   // the turn before this one, ended from a player's sheet
   const ended = $derived(endedByPlayer(game.scene, players));
+  // a card the turn's end or start waits on (a roll its roller makes): the
+  // turn goes on once it's answered, and Next waits on it too
+  const waits = $derived(turnWaiting((game.view.waiting as Dict[]) ?? [], game.me, true));
   let ending = $state(false);
   // Next with nothing done since a player ended their turn: asked first
   let asking = $state<{ ended: string; up: string } | null>(null);
@@ -69,7 +73,7 @@
   <div class="what">
     <strong>{fight.name ?? 'A fight'}{#if inMind(game.scene)}<span class="dim mind"> · in the theatre of the mind</span>{/if}</strong>
     {#if turns.running}
-      <span>Round {turns.round ?? 1}{up ? ` · ${up.name}’s turn` : ''}{#if up?.note}<span class="dim">{` · ${up.note}`}</span>{/if}{#if ended}<span class="dim"> · {ended} ended their turn</span>{/if}</span>
+      <span>Round {turns.round ?? 1}{up ? ` · ${up.name}’s turn` : ''}{#if waits}<span class="waits"> · the turn is {waits}</span>{:else}{#if up?.note}<span class="dim">{` · ${up.note}`}</span>{/if}{#if ended}<span class="dim"> · {ended} ended their turn</span>{/if}{/if}</span>
     {:else}
       <span class="dim">Not started: roll initiative when everyone is ready.</span>
     {/if}
@@ -90,8 +94,8 @@
   {:else}
     <div class="buttons">
       {#if turns.running}
-        <button type="button" disabled={stepping} onclick={() => step('previous')}>‹ Back</button>
-        <button type="button" class="accent" disabled={stepping} onclick={next}>Next turn ›</button>
+        <button type="button" disabled={stepping || !!waits} title={waits ? `The turn is ${waits}: it goes on once that's answered` : undefined} onclick={() => step('previous')}>‹ Back</button>
+        <button type="button" class="accent" disabled={stepping || !!waits} title={waits ? `The turn is ${waits}: it goes on once that's answered (or Go on, below)` : undefined} onclick={next}>Next turn ›</button>
       {:else if roll}
         <ActButton accent label="Roll initiative" act={() => submit({ kind: 'action', plugin: roll.plugin, action: roll.action, ctx: { scene: String(game.scene.id ?? '') } })} />
       {:else}
@@ -153,5 +157,8 @@
   }
   .mind {
     font-weight: 500;
+  }
+  .waits {
+    color: #ffcf8a;
   }
 </style>

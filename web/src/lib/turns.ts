@@ -45,6 +45,23 @@ export function turnNote(turns: Dict, ids: string[]): string {
   return '';
 }
 
+/** What the turn waits on, from the view's waiting list (`turn`: a card a
+ *  turn's end or start waits on, a roll its roller makes — the host's turn
+ *  steps): "waiting on Ana: a death saving throw (Brann)", "waiting on you:
+ *  a roll", or '' when the turn waits on nothing. (`dm`: the DM's screen,
+ *  where the DM's cards are "you".) */
+export function turnWaiting(waiting: Dict[] | undefined, me: string, dm = false): string {
+  const bits: string[] = [];
+  for (const w of waiting ?? []) {
+    if (!w || typeof w !== 'object' || w.turn !== true) continue;
+    const to = String(w.to ?? '');
+    const who = (me !== '' && to === me) || (dm && to === 'gm') ? 'you' : String(w.who ?? 'a player');
+    const what = String(w.what ?? '').trim();
+    bits.push(`${who}${what ? `: ${what}` : ''}`);
+  }
+  return bits.length ? `waiting on ${bits.join('; ')}` : '';
+}
+
 /** Said to a player whose turn (`at`) the DM ended: "The DM moved on: it's
  *  Jin's turn." — or '' when it ended some other way. A playtest's player
  *  pressed End turn after the DM's Next, and ended the next one's too. */

@@ -222,6 +222,198 @@ func test_a_marked_turn_is_skipped() -> void:
 	k.hooks.off("test")
 
 
+## A handler for `hook` that waits on a card to `to` (a roll its roller
+## makes) when `when` says so (given the payload): the answer's number
+## lands as a note (the hook's events), or the answer's `veto` vetoes.
+func _waits(k: RulesKernel, hook: String, to: String, when: Callable, owner := "wait") -> void:
+	k.hooks.on(hook, func(p: Dictionary) -> Variant:
+		if not bool(when.call(p)):
+			return p
+		var form := {"title": "Roll a d6", "fields": [{"key": "n", "type": "int"}]}
+		return HookBus.Wait.make({"kind": "prompt", "to": to, "form": form, "opts": {"default": {"n": 1}, "deadline": 0, "public": "a roll"}},
+			func(q: Dictionary, answer: Variant) -> Variant:
+				var a: Dictionary = answer if answer is Dictionary else {}
+				if str(a.get("veto", "")) != "":
+					q.veto = str(a.veto)
+					return q
+				q.events.append({"t": "log.add", "entry": {"id": JsonDoc.new_id("n"), "kind": "note", "text": "%s %s: %s" % [hook, str(q.get("ref", q.get("round", q.get("to", "")))), str(a.get("n", "?"))]}})
+				return q), owner)
+
+
+func _said(st: EncounterState, text: String) -> Array:
+	return st.encounter.log.filter(func(e: Dictionary) -> bool: return str(e.get("text", "")) == text)
+
+
+## A turn's start that waits on a card (a roll its roller makes): the order
+## has moved on, the start waits; the table is told on whom; another Next,
+## and Back, wait on it, saying why; once it's answered the start goes on.
+func test_a_turn_waits_on_a_card_as_it_starts() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	k.commit([{"t": "player.add", "player": {"id": "pl_c", "name": "Cy", "color": "#fff"}},
+		{"t": "player.add", "player": {"id": "pl_b", "name": "Bo", "color": "#fff"}}], "Players")
+	var fired := []
+	for h in ["turn_start", "turn_end"]:
+		k.hooks.on(h, func(p: Dictionary) -> Dictionary: fired.append([h, str(p.ref)]); return p, "test")
+	_waits(k, "turn_start", "pl_c", func(p: Dictionary) -> bool: return str(p.get("ref", "")) == "token:t_c")
+	check(k.turns.start("s_1", "sample") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b"], "A, C, B")
+	fired.clear()
+	check(k.turns.next() == "", "Next is taken")
+	check(st.current_turn_token() == "t_c" and fired == [["turn_end", "token:t_a"], ["turn_start", "token:t_c"]], "the order moved on and C's start began: %s" % [fired])
+	var cards: Array = k.pending.prompts().values()
+	check(cards.size() == 1 and str(cards[0].to) == "pl_c" and str(cards[0].get("context", {}).get("turn", "")) != "", "a card for C's player, the turn's: %s" % [cards])
+	check(_said(st, "turn_start token:t_c: 4").is_empty(), "what it brings waits on the roll")
+	var why := k.turns.waiting()
+	check(why == "The turn is waiting on Cy: a roll. It goes on once that's answered.", "on whom it waits: " + why)
+	# every screen is told the turn waits, and on whom
+	var bo := Views.project(k, null, "pl_b", Views.ROLE_PLAYER)
+	check(bo.waiting.size() == 1 and bo.waiting[0].get("turn") == true and bo.waiting[0].get("who") == "Cy" and bo.waiting[0].get("what") == "a roll", "Bo's screen: the turn waits on Cy: %s" % [bo.waiting])
+	# another Next waits on it (a player's End turn and the DM's Next alike), and Back
+	var before := JsonDoc.sans_modified(st.encounter.to_json())
+	check(k.turns.next() == why and k.turns.next({"by": "pl_c", "expect": {"round": 1, "turn": 1}}) == why, "another Next is refused, saying why")
+	check(k.turns.previous() == why and k.turns.start("s_1", "sample") == why, "Back and a start too")
+	check(JsonDoc.sans_modified(st.encounter.to_json()) == before, "and nothing changed")
+	# Cy rolls: the start goes on
+	check(k.pending.answer(str(cards[0].id), {"n": 4}, "pl_c") == "", "Cy rolls a 4")
+	check(_said(st, "turn_start token:t_c: 4").size() == 1 and k.log.undo_label() == "Next turn", "what the hook brought landed, the step's own")
+	check(k.turns.waiting() == "" and str(st.encounter.turns.last.entry) == "t_a" and str(st.encounter.turns.last.log) != "", "the step is done: what C's turn began with, kept")
+	check(k.turns.next() == "" and st.current_turn_token() == "t_b", "and Next goes on: B's turn")
+	k.hooks.off("test")
+	k.hooks.off("wait")
+
+
+## A turn's end that waits: the turn stays the ending one's until it's
+## answered (what ends with it, and the order, wait too), then moves on.
+func test_a_turn_end_that_waits_keeps_the_turn_until_answered() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	k.commit([{"t": "player.add", "player": {"id": "pl_a", "name": "Ana", "color": "#fff"}}], "Ana")
+	_waits(k, "turn_end", "pl_a", func(p: Dictionary) -> bool: return str(p.get("ref", "")) == "token:t_a")
+	var fired := []
+	k.hooks.on("turn_start", func(p: Dictionary) -> Dictionary: fired.append(str(p.ref)); return p, "test")
+	check(k.turns.start("s_1", "sample") == "", "start")
+	k.commit(Effects.apply(st, {"id": "e_a", "on": "token:t_a", "plugin": "sample", "key": "shaken", "duration": {"kind": "turn_end", "of": "t_a", "turns": 1}}), "Shaken")
+	fired.clear()
+	check(k.turns.next({"by": "pl_a", "expect": {"round": 1, "turn": 0}}) == "", "Ana ends A's turn")
+	check(st.current_turn_token() == "t_a" and st.encounter.effects.has("e_a") and fired.is_empty(), "A's turn, its end waiting: its effect is on, nobody started")
+	var cards: Array = k.pending.prompts().values()
+	check(cards.size() == 1 and str(cards[0].to) == "pl_a", "Ana's card")
+	check(k.pending.answer(str(cards[0].id), {"n": 2}, "pl_a") == "", "she rolls")
+	check(_said(st, "turn_end token:t_a: 2").size() == 1 and not st.encounter.effects.has("e_a"), "A's end landed, and what ended with it")
+	check(st.current_turn_token() == "t_c" and fired == ["token:t_c"] and str(st.encounter.turns.last.by) == "pl_a", "then C's turn began: %s" % [fired])
+	check(_said(st, "A ends their turn").size() == 1, "a player's end said, as ever")
+	k.hooks.off("test")
+	k.hooks.off("wait")
+
+
+## A veto after a wait stops the step where it is (what was done stays), and
+## the DM is told why; a veto before any wait refuses it whole, as ever.
+func test_a_veto_after_a_wait_stops_the_step_and_tells_the_dm() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	_waits(k, "turn_end", "pl_a", func(p: Dictionary) -> bool: return str(p.get("ref", "")) == "token:t_a")
+	check(k.turns.start("s_1", "sample") == "", "start")
+	check(k.turns.next() == "" and st.current_turn_token() == "t_a", "A's end waits")
+	var cards: Array = k.pending.prompts().values()
+	check(k.pending.answer(str(cards[0].id), {"veto": "not yet"}, "pl_a") == "", "answered: and its handler vetoes")
+	check(st.current_turn_token() == "t_a" and k.turns.waiting() == "", "the turn stays A's; nothing waits")
+	var told := _said(st, "Next turn stopped: not yet")
+	check(told.size() == 1 and str(told[0].audience) == "gm", "the DM is told why: %s" % [told])
+	k.hooks.off("wait")
+	k.hooks.on("turn_end", func(p: Dictionary) -> Dictionary: p.veto = "no"; return p, "veto")
+	var before := JsonDoc.sans_modified(st.encounter.to_json())
+	check(k.turns.next() == "no" and JsonDoc.sans_modified(st.encounter.to_json()) == before, "a veto with no wait refuses the step whole")
+	k.hooks.off("veto")
+
+
+## Ending the fight while a step waits gives the rest of it up: its card stays
+## (the roll is still its roller's), and what it brings still lands once it's
+## answered; nothing after it runs.
+func test_ending_the_fight_gives_a_waiting_step_up() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	_waits(k, "turn_start", "pl_c", func(p: Dictionary) -> bool: return str(p.get("ref", "")) == "token:t_c")
+	check(k.turns.start("s_1", "sample") == "" and k.turns.next() == "", "C's start waits")
+	var cards: Array = k.pending.prompts().values()
+	check(k.turns.stop() == "" and not k.turns.running(), "the DM ends the fight")
+	check(k.pending.prompts().size() == 1 and k.turns.waiting() == "", "the card stays; the turns wait on nothing")
+	check(not (Views.project(k, null, "", Views.ROLE_GM).waiting as Array).any(func(w: Dictionary) -> bool: return w.get("turn") == true), "and no screen says the turn waits")
+	check(k.pending.answer(str(cards[0].id), {"n": 6}, "pl_c") == "", "the roll, made later")
+	check(_said(st, "turn_start token:t_c: 6").size() == 1 and not k.turns.running() and str((st.encounter.turns.last as Dictionary).get("log", "")) == "", "what it brought landed; nothing after it ran (what C's turn began with isn't kept)")
+	k.hooks.off("wait")
+
+
+## A round's start, the end of the turns and a focus given may wait too: the
+## round waits to begin, the turns run until the end is answered (and land
+## with what it brought, one step), the focus moves once it's answered.
+func test_rounds_the_end_and_a_focus_can_wait() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	_waits(k, "round_start", "gm", func(p: Dictionary) -> bool: return int(p.get("round", 0)) == 2)
+	check(k.turns.start("s_1", "sample") == "" and k.turns.next() == "" and k.turns.next() == "", "to B, the round's last")
+	check(k.turns.next() == "" and st.encounter.turns.round == 2 and k.turns.waiting() != "", "round 2 waits to begin")
+	var cards: Array = k.pending.prompts().values()
+	check(k.pending.answer(str(cards[0].id), {"n": 3}) == "" and _said(st, "round_start 2: 3").size() == 1 and st.current_turn_token() == "t_a", "the DM rolls: round 2, A's turn")
+	k.hooks.off("wait")
+	# the end
+	_waits(k, "combat_end", "gm", func(_p: Dictionary) -> bool: return true)
+	check(k.turns.stop() == "" and k.turns.running(), "the end waits: the turns run")
+	check(k.turns.stop().begins_with("The turn is waiting on the DM") and k.turns.next().begins_with("The turn is waiting"), "End again, and Next, wait on it")
+	cards = k.pending.prompts().values()
+	check(k.pending.answer(str(cards[0].id), {"n": 1}) == "" and not k.turns.running(), "answered: the turns end")
+	check(_said(st, "combat_end 2: 1").size() == 1 and k.log.undo_label() == "End turns", "with what the hook brought, in the same step")
+	k.log.undo()
+	check(k.turns.running() and _said(st, "combat_end 2: 1").is_empty(), "undone together")
+	k.log.redo()
+	k.hooks.off("wait")
+	# a focus
+	k.turns.register("spot", {"shape": "focus", "name": "Spotlight"})
+	check(k.turns.start("s_1", "spot") == "" and st.encounter.turns.focus == "gm", "the GM holds the focus")
+	_waits(k, "focus_changed", "pl_b", func(p: Dictionary) -> bool: return str(p.get("to", "")) == "token:t_b")
+	var started := []
+	k.hooks.on("turn_start", func(p: Dictionary) -> Dictionary: started.append(str(p.ref)); return p, "test")
+	check(k.turns.set_focus("token:t_b", "gm") == "" and st.encounter.turns.focus == "gm", "asked first: the focus waits")
+	cards = k.pending.prompts().values()
+	check(k.pending.answer(str(cards[0].id), {"n": 5}, "pl_b") == "" and st.encounter.turns.focus == "token:t_b" and started == ["token:t_b"], "answered: the focus moved, B's turn began")
+	check(k.turns.set_focus("gm") == "" and k.turns.set_focus("token:t_b", "gm") == "", "away and back: it waits again")
+	cards = k.pending.prompts().values()
+	check(k.pending.answer(str(cards[0].id), {"veto": "no"}, "pl_b") == "" and st.encounter.turns.focus == "gm", "a veto after the wait: the focus stays")
+	k.hooks.off("wait")
+	k.hooks.off("test")
+
+
+## The same through a plugin: a Lua turn_start that asks with hm.prompt
+## (sample.ordered's bleeding) waits as a Lua action does.
+func test_a_plugin_turn_hook_waits_on_its_prompt() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _state()
+	var k := RulesKernel.new(st)
+	var host := PluginHost.new(k)
+	check(host.load_dir("res://tests/plugins/sample.ordered") == "", "sample.ordered loads")
+	k.commit([{"t": "scene.add", "scene": _scene()}, {"t": "player.add", "player": {"id": "pl_1", "name": "Ana", "color": "#fff"}},
+		{"t": "actor.add", "actor": {"id": "a_h", "name": "Hero", "owner": "pl_1", "ext": {"sample.ordered": {"level": 1, "stats": {"agi": 1, "str": 0, "wit": 0}}}}},
+		{"t": "actor.add", "actor": {"id": "a_g", "name": "Gob", "ext": {"sample.ordered": {"level": 1, "stats": {"agi": 3, "str": 0, "wit": 0}}}}},
+		{"t": "token.add", "scene": "s_1", "token": Encounter.new_token("Hero", Vector2(1, 0), {"id": "t_h", "actor": "a_h"})},
+		{"t": "token.add", "scene": "s_1", "token": Encounter.new_token("Gob", Vector2(3, 0), {"id": "t_g", "actor": "a_g"})}], "Fight")
+	host.dispatch("sample.ordered", "setup", {"actor": "a_h"})
+	host.dispatch("sample.ordered", "condition", {"key": "bleeding", "target": "actor:a_h"})
+	check(k.turns.start("s_1", "sample.ordered") == "" and st.encounter.turns.order == ["t_g", "t_h"], "the goblin first")
+	var hp: float = Resources.get_record(st, "actor:a_h", "sample.ordered", "hp").current
+	check(k.turns.next() == "" and st.current_turn_token() == "t_h", "the hero's turn")
+	var cards: Array = k.pending.prompts().values()
+	check(cards.size() == 1 and str(cards[0].to) == "pl_1" and str(cards[0].by) == "sample.ordered", "the plugin's card for Ana: %s" % [cards])
+	check(k.turns.waiting().begins_with("The turn is waiting on Ana: a roll (Hero)"), k.turns.waiting())
+	check(k.pending.answer(str(cards[0].id), {"d4": 2}, "pl_1") == "" and Resources.get_record(st, "actor:a_h", "sample.ordered", "hp").current == hp - 2, "two lost as the turn started")
+	check(k.turns.waiting() == "" and k.turns.next() == "", "and the turns go on")
+
+
 func test_order_helpers_and_groups() -> void:
 	var parts := _party()
 	var k: RulesKernel = parts[0]
@@ -478,6 +670,23 @@ func test_unattended_prompts_wait_and_close() -> void:
 		check(k.pending.answer(waiting, {"spend": false}, "pl_2") == "" and pc.status == PluginHost.PluginCall.OK, "it's answered instead")
 
 
+## What the rulesets do when a card nothing waited on is answered may itself
+## wait on a card (the roll the answer asked for, its roller's): driven as an
+## action is, what it brings landing once that's answered.
+func test_what_an_answer_sets_off_may_wait_on_a_card() -> void:
+	var st := _state()
+	var k := RulesKernel.new(st)
+	k.commit([{"t": "player.add", "player": {"id": "pl_1", "name": "Ana", "color": "#fff"}}], "Ana")
+	_waits(k, "prompt_answered", "pl_1", func(p: Dictionary) -> bool: return str(p.get("context", {}).get("ask", "")) == "roll")
+	var id := k.pending.open_prompt_unattended({"to": "pl_1", "form": {"title": "Roll your save"}, "opts": {"default": {}, "deadline": 0}}, "test", {"ask": "roll"})
+	check(k.pending.answer(id, {"choice": "roll"}, "pl_1") == "", "Ana presses Roll")
+	var cards: Array = k.pending.prompts().values()
+	check(cards.size() == 1 and str(cards[0].to) == "pl_1" and str(cards[0].id) != id, "what it set off waits on her dice: %s" % [cards])
+	check(k.pending.answer(str(cards[0].id), {"n": 5}, "pl_1") == "", "she types them")
+	check(st.encounter.log.any(func(e: Dictionary) -> bool: return str(e.get("text", "")).ends_with(": 5")) and k.log.undo_label() == "Answered", "and what it brings lands, as its own step")
+	k.hooks.off("wait")
+
+
 ## A reaction's card: a question to answer now (`urgent`), which everyone is
 ## told the table waits on (`public`), with the seconds it has left; the DM
 ## sees whose it is and can go on without waiting (its default, waved).
@@ -586,6 +795,20 @@ func test_table_turn_panel_both_shapes() -> void:
 			group_row = it
 		it = it.get_next()
 	check(group_row != null and group_row.get_text(0).contains("The goblin pack") and group_row.get_text(1) == "%d together" % gobs.size() and group_row.get_child_count() == gobs.size(), "one row for the pack, a child per goblin")
+	# a turn whose start waits on a card: the panel says on whom, and Next and Back wait
+	var once := [true]
+	_waits(ctx.kernel, "turn_start", "gm", func(_p: Dictionary) -> bool:
+		var first: bool = once[0]
+		once[0] = false
+		return first)
+	check(ctx.commands.next_turn() == "", "Next: the new turn's start waits on the DM's card")
+	panel.refresh()
+	check(panel._round.text.contains("The turn is waiting on the DM: a roll") and panel._next.disabled and panel._prev.disabled, "the panel says so, and Next and Back wait: " + panel._round.text)
+	check(ctx.commands.next_turn().begins_with("The turn is waiting"), "Next from the Table's commands waits too")
+	check(ctx.kernel.pending.answer(str(ctx.kernel.pending.prompts().keys()[0]), {"n": 2}) == "", "the DM answers")
+	panel.refresh()
+	check(not panel._round.text.contains("waiting") and not panel._next.disabled, "and the turn goes on: " + panel._round.text)
+	ctx.kernel.hooks.off("wait")
 	panel.queue_free()
 	await tree.process_frame
 

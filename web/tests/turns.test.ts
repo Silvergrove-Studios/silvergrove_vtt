@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { currentTurnTokens, movedOn, turnNote, turnSummary } from '../src/lib/turns';
+import { currentTurnTokens, movedOn, turnNote, turnSummary, turnWaiting } from '../src/lib/turns';
 import { orderRows } from '../src/dm/fight';
 
 describe('turns', () => {
+  // a card a turn's end or start waits on (the host's turn steps: a roll its
+  // roller makes) is in the waiting list marked `turn`; the screens say the
+  // turn waits on it, and on whom
+  it('says on whom the turn waits', () => {
+    const waiting = [
+      { id: 'p1', to: 'pl_a', who: 'Ana', what: 'a death saving throw (Brann)', turn: true },
+      { id: 'p2', to: 'pl_b', who: 'Bo', what: 'a reaction (Sela)' },
+    ];
+    expect(turnWaiting(waiting, 'pl_c')).toBe('waiting on Ana: a death saving throw (Brann)');
+    expect(turnWaiting(waiting, 'pl_a')).toBe('waiting on you: a death saving throw (Brann)');
+    expect(turnWaiting([{ id: 'p3', to: 'gm', who: 'the DM', what: 'a roll', turn: true }], '', true)).toBe('waiting on you: a roll');
+    expect(turnWaiting([{ id: 'p3', to: 'gm', who: 'the DM', what: 'a roll', turn: true }], 'pl_a')).toBe('waiting on the DM: a roll');
+    // a reaction's card isn't the turn's; nothing waiting, nothing said
+    expect(turnWaiting([waiting[1]], 'pl_c')).toBe('');
+    expect(turnWaiting(undefined, 'pl_c')).toBe('');
+  });
   const tokens = [
     { id: 't1', name: 'Wren', owner: 'pl_a' },
     { id: 'g1', name: 'Goblin' },

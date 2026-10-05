@@ -34,6 +34,8 @@ local CONDITIONS = {
 	oily = { label = "Oily", stack = "none", changes = { { path = "defence", mode = "add", value = -1, type = "status" } } },
 	prone = { label = "Prone", stack = "none", changes = { { path = "defence", mode = "add", value = -2, type = "status" }, { path = "speed", mode = "multiply", value = 0.5 } } },
 	blessed = { label = "Blessed", stack = "highest", changes = { { path = "attack", mode = "add", expr = "@value", type = "status" } } },
+	-- (it costs hit points as its turn starts: the turn_start hook below)
+	bleeding = { label = "Bleeding", stack = "none", changes = {} },
 }
 
 local function condition(key, on, value, duration)
@@ -149,6 +151,25 @@ hm.on("after_move", function(p)
 			end
 		end
 	end
+	return p
+end)
+
+-- Bleeding: as a bleeding creature's turn starts, its owner rolls a d4 for
+-- the hit points it loses — a card the turn waits on (a turn's hook may wait
+-- as an action does: the start goes on once it's answered); one nobody
+-- owns bleeds at once on the table's dice.
+hm.on("turn_start", function(p)
+	local a = hm.actor(p.actor or "")
+	if a == nil or not hm.effects.has("actor:" .. a.id, "bleeding") then return p end
+	local faces = nil
+	if (a.owner or "") ~= "" then
+		local ans = hm.prompt(a.owner, { title = a.name .. " is bleeding: roll a d4", fields = { { key = "d4", type = "int", label = "Your d4", min = 1, max = 4 } } },
+			{ default = { d4 = 1 }, deadline = 0, actor = a.id, public = "a roll (" .. a.name .. ")" })
+		faces = { main = { math.max(1, math.min(4, math.floor(tonumber((ans or {}).d4) or 1))) } }
+	end
+	local r = hm.dice.roll({ expr = "1d4", faces = faces }, { actor = a.id, kind = "bleed" }, "Bleeding")
+	local hp = hm.resources.get("actor:" .. a.id, "hp")
+	if hp then table.insert(p.events, hm.resources.set("actor:" .. a.id, "hp", hm.resources.pool(math.max(0, hp.current - r.result.total), hp.max, hp.recharge))) end
 	return p
 end)
 

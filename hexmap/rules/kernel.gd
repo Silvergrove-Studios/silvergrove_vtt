@@ -121,19 +121,43 @@ func move_token(scene_id: String, id: String, to: Vector2, by := "gm") -> String
 ## step. A veto here changes nothing — the move already happened. Driven
 ## like an action, so it runs on while the Table goes on.
 func after_move(payload: Dictionary) -> void:
-	if hooks.handlers("after_move").is_empty():
-		return
+	run_after("after_move", payload, "After move")
+
+
+## A hook told of something already done (a move, a card answered): its
+## handlers may wait on a card (a roll its roller makes) and go on when it's
+## answered, driven like an action while the Table goes on; what they append
+## to `events` is committed as its own step (`label`) once they finish. A
+## veto changes nothing: what it's about has happened. "" or, when it
+## finished at once, its veto or the commit's refusal.
+func run_after(hook: String, payload: Dictionary, label: String) -> String:
+	if hooks.handlers(hook).is_empty():
+		return ""
 	var p: Dictionary = payload.duplicate()
 	p.events = []
-	var run := hooks.run("after_move", p)
+	var run := hooks.run(hook, p)
 	var me: WeakRef = weakref(self)
-	pending.drive(run, "host", func(r: HookBus.HookRun) -> void:
+	var out := [""]
+	pending.drive(run, _waiting_owner(run), func(r: HookBus.HookRun) -> void:
 		var k: RulesKernel = me.get_ref()
-		if k == null or r.status != HookBus.HookRun.DONE:
+		if k == null:
+			return
+		if r.status != HookBus.HookRun.DONE:
+			out[0] = str(r.payload.get("veto", ""))
 			return
 		var events: Array = r.payload.get("events", []) if r.payload.get("events") is Array else []
 		if not events.is_empty():
-			k.commit(events, "After move", {"hook": "after_move"}))
+			out[0] = k.commit(events, label, {"hook": hook}))
+	return out[0]
+
+
+## Whose handler a waiting hook run waits in (the plugin whose card it opens), or "host".
+static func _waiting_owner(run: HookBus.HookRun) -> String:
+	if run.status == HookBus.HookRun.PENDING and run.index > 0 and run.index - 1 < run.chain.size():
+		var owner := str(run.chain[run.index - 1].get("owner", ""))
+		if owner != "":
+			return owner
+	return "host"
 
 
 func _move_token(scene_id: String, id: String, mv: Dictionary, by: String) -> String:

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **A turn waits on its rolls.** A ruleset's handlers of a turn's start and
+  end (and a round's, the end of the turns, a focus given, a card's answer)
+  may ask with a card as an action does — a monster's recharge die the DM
+  types, a player's death saving throw, a save repeated as a turn ends — and
+  the turn waits on it: Next moves the order on, the turn ending first, the
+  next one's start chained after it, and goes on once the card is answered.
+  Before, such a hook could not wait: a card there refused Next and undid
+  it, so a fight could never pass a creature whose recharge was spent where
+  the DM rolls real dice, and the rules rolled those dice themselves. While
+  the turn waits, every screen says on whom (the waiting list, the DM's
+  fight bar, a player's header, the Table's turns pane), and another Next,
+  a player's End turn and Back wait on it, saying why; the DM can answer
+  for the player or go on with the card's default. A veto before any card
+  still refuses the whole step; one after a card stops it there, told to
+  the DM. Ending the fight gives the rest of the step up (the card stays:
+  the roll is still its roller's). The order moves on from the turn that
+  ended as the order stands then: a creature its own turn's end killed no
+  longer took the next one's turn with it.
+
 - **A creature's initiative kept with its rolls.** A ruleset that keeps its
   creatures' rolls from the players says so (`hm.ui.knowledge`'s `rolls`),
   and the turn order a player is sent leaves out their labels there (their
