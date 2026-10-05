@@ -142,7 +142,10 @@ A scene is one map level with its overlay, tokens and fog.
 - `highlight` (version 2, optional): a template being shown —
   `{cells, color, label}` — set by a plugin through `scene.set` and
   cleared with `null`. Transient by nature; it is fine for it to be in
-  the file.
+  the file. (The table's shared marks — the rulers, templates, spells'
+  previews and pings anyone at the table puts on the map — are not:
+  they live on the Table while they last and are never in the document
+  or its undo history; docs/plugin-authoring.md, "Table tools".)
 - `triggers` (version 2, optional; also on a region): prep that fires
   during play. `on` is `scene` (this scene shown to the players),
   `door` (the wall `ref` reaches `state`, default `open`), `reveal` (any

@@ -447,7 +447,9 @@ answer}` (only the player a prompt is for), `{kind = "focus", ref}`
 (one of their tokens or characters), `{kind = "contribute", roll, name,
 expr}`. `{kind = "lookup", collection, id}` never reaches the Table: the
 device opens the entry's card (the phone fetches the entry under its
-audience). Displays may send none.
+audience). Nor does `{kind = "preview", actor, area, cast}`: the device
+puts a spell's shape on the map for everyone ("Table tools: rulers,
+previews, templates, pings", below). Displays may send none.
 
 **Audience.** A player character's `ext` and `derived` are public except
 the paths its `audience.fields` marks `owner` or `gm`; any other actor is
@@ -596,6 +598,17 @@ Registers this ruleset's range bands, ascending, in *edge* distance
 last band is what lies beyond the rest. Bands are pure data: nothing
 in Hexmap knows what "close" means.
 
+```lua
+hm.map.measure({ diagonals = hm.settings.get("diagonals", "5-5-5") })
+```
+Says how the table's rulers count diagonals on a square grid —
+`"5-5-5"` (every square one cell), `"5-10-5"` (every second diagonal two)
+or `"euclid"` (as the crow flies) — as this game's moves do (pass the same
+to `hm.map.path`). Read at load time: a setting changed reloads the
+plugins, so the rulers follow it. With several rulesets the first by id
+rules; with none, every square is one cell. Hexes are hex steps whatever
+it says. (Table tools, below.)
+
 | call | returns |
 |---|---|
 | `hm.map.distance(scene, a, b)` | `{units, edge, cells, diagonals, band}` — centre to centre, edge to edge, cell steps (hex steps, or Chebyshev on squares with `diagonals` saying how many of them were diagonal, so a ruleset can charge 5-10-5 or whatever it likes), and this ruleset's band |
@@ -640,6 +653,85 @@ instead, wherever its creature goes, and goes out with the effect: a rod
 planted in the ground, a spell's sunlight at a point (`{ bright = 60, dim =
 120, units = "ft", at = { x, y }, scene = scene }`). `light_at` names it
 `effect:<id>` among its `sources`.
+
+### Table tools: rulers, previews, templates, pings
+
+Everyone at the table — every player, the DM — has a ruler, templates
+and pings on the map, at every level of automation (a table whose rules
+plugin automates nothing measures by eye with them). They are **shared
+marks**: one person's, drawn in their colour with their name ("Wren: 25
+ft"), sent to everyone allowed to see them, and never the encounter's — no
+event, no undo step, nothing in the saved game (`Marks`,
+`hexmap/net/marks.gd`). A ruleset adds one thing to them: a **Preview**
+button for an area spell or ability, which puts its shape on the map.
+
+```lua
+{ type = "button", label = "Preview", ["if"] = "@item.preview != null",
+  intent = { kind = "preview", actor = "$/actor/id", area = "$/item/preview",
+             cast = { kind = "action", plugin = hm.id, action = "cast", ctx = { actor = "$/actor/id", spell = "$/item/id" },
+                      pick = "area", area = "$/item/area" } } }
+```
+
+`{kind = "preview"}` never reaches the Table as an intent: the screen
+puts the preview on the map as its owner's mark (the Table's own sheets
+do the same, as the DM's). `area` is the shape **as the cast lays it**,
+in cells: `{from = "self" | "point", type = "circle" | "cone" | "line" |
+"square", size (a circle's radius, a cone's or line's length, a square's
+side), width (a line's), angle (a cone's, default 53), origin = "edge"
+(a cone, a line or a square from its caster's edge), include_self (a
+circle round its caster: false leaves the caster out), label}` — `label`
+is what everyone reads after the caster's name ("Fireball, 20-ft
+sphere"). From `self`, the shape goes out from (or round) the caster's
+token and turns; at a `point`, it is put where its owner taps (a
+circle's or a square's middle on a cell's — a square of an even side on
+the corner between four) and moves. Each screen says who it would catch
+**among the creatures that screen shows** (the same cells a template's
+`tokens` are counted from: `hm.map.template`), so a preview never tells
+of a hidden creature, by name or by count; the DM's names everyone.
+`cast`, when given, is the intent behind the preview's **Cast here**
+(**Use here** when its action isn't `cast`: a breath, Turn Undead):
+sent with `ctx.target = {at = "token:<caster>", direction}` (from
+`self`) or `{at = "q,r", direction = 0}` (at a point) when its `pick` is
+`"area"`, as it is when it has none (round its caster), its pick keys
+taken off — the cast's own path and its checks (range, slots, the turn).
+Give no `cast` where the app doesn't cast (a level where the players tick
+their slots by hand): the preview is still shown.
+
+**The marks on the wire** (protocol 3; `hexmap/net/protocol.gd`):
+
+| client → host | |
+|---|---|
+| `{t: "mark", op: "set", mark}` | put a mark, or change one's own: `{id, kind: ruler \| template \| preview \| ping, scene, points: [[x, y], …], shape, direction, token, label, pinned, live, private, actor}` — hex units; `id` 4–40 of `A-Z a-z 0-9 - _`, made by the screen; a ruler's `points` its ends and waypoints (16 at most), anything else one place; `token`: a mark on a creature stands where it stands and goes with it; `live` while its owner holds it (a ruler being dragged); `private` the DM's alone; `actor` a preview's caster (its name labels it, where the screen sees the caster) |
+| `{t: "mark", op: "remove", id}` | take one off: one's own, or — the DM — anyone's |
+| `{t: "mark", op: "clear", whose}` | one's own (`whose` absent), or — the DM — one person's (`"gm"`, a player's id) or everyone's (`"all"`) |
+
+| host → client | |
+|---|---|
+| `{t: "marks", marks}` | on joining: every mark this screen may see |
+| `{t: "mark", mark}` | one put or changed, with the Table's `owner`, `name`, `color` and — a ruler — `measure` `{straight, walk?, no_way?, units, words}` |
+| `{t: "unmark", ids}` | gone, or no longer for this screen |
+
+Who sees what: the DMs every mark; anyone else, on the scene the players
+see, every player's mark, and the DM's not where it lies over what they
+can't see — ground unexplored under fog, a creature hidden from them, a
+mark that goes out from one — nor a private one. A ruler's `straight` is
+counted cell to cell by the map's scale (`grid.distance` of
+`grid.units`) and the diagonal rule above, point to point on a map that
+draws no grid; its `walk`, when it is longer than the ground alone would
+make it ("30 ft straight, 45 ft to walk round"), is `hm.map.path` round
+the walls and doors as they are — a player's only over the ground their
+party has explored (measuring into the dark says nothing of what is
+there), and the DM's to a player only where they know all of its way.
+
+Limits: a screen sends a held mark at most ten times a second; the Table
+takes one screen's marks at most every 40 ms (the newest of each waits
+its turn) and passes a changed mark on at most every 66 ms, its last
+state always; eight marks a person, pinned or not (one more takes the
+place of their oldest unpinned one; eight pinned: one comes off first);
+a label of 80 characters. A mark held with no word for 30 seconds goes;
+let go, a ruler lingers 5 seconds, a template or a preview a minute, a
+ping 4; pinned, one stays until its owner or the DM takes it off. A
+screen that goes lets go of what it held. A display may put none.
 
 ### Objects on the map
 

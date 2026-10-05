@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- **Table tools, for everyone at every level of the rules.** A small
+  toolbar on the map of every web screen, the players' and the DM's — Ruler,
+  Template, Ping, Clear mine, and the marks on the map in words — and on the
+  Table's own map a Ruler tool and a right-click ping. What anyone puts on
+  the map is a **shared mark**: theirs, drawn in their colour with their
+  name, seen by the whole table as it is made, and never the game's — no
+  event, no undo step, nothing saved. A mark goes when its owner lets go of
+  it (a ruler after a few seconds, a template a minute on), unless pinned:
+  then it stays till its owner or the DM takes it off. The DM's marks reach
+  the players except where they lie over what the players can't see (ground
+  unexplored, a hidden creature), and the DM can keep them to themselves
+  (Only me) and take anyone's off.
+- The **ruler**: drag from any point, or on a phone tap where it starts and
+  tap for each point of a path, then Done. It counts as the map does —
+  hexes, or squares by the diagonal rule the rules play (every square five
+  feet, every second diagonal ten, or as the crow flies: a ruleset says
+  which, `hm.map.measure`), in feet or metres by the map's scale, point to
+  point on a map drawn with no grid — and where walls make the walk longer
+  it says both: "Wren: 30 ft straight, 45 ft to walk round", the walk priced
+  by the way movement goes round walls and doors. A player's walk keeps to
+  the ground their party has explored, and a ruler snaps only to the
+  creatures that screen shows: measuring into the dark tells nothing.
+- **Previews**: a ruleset's sheet can give an area spell or ability a
+  Preview button (`{kind = "preview"}`), for any player at any time, on
+  their turn or not. Its own shape and size go on the map for everyone,
+  labelled ("Sela: Fireball, 20-ft sphere"), moved and turned, pinned; each
+  screen says who it would catch among the creatures it shows (the DM's
+  every one; a hidden creature is never named or counted), and **Cast
+  here** casts it where it is, through the cast's own checks.
+- **Templates**: a circle, a cone, a line or a cube of any size in feet,
+  moved, turned and pinned — the tool for a table that judges areas by eye.
+  **Pings**: "look here", from the toolbar, a long press or a right-click.
+  The marks' messages and limits are in docs/plugin-authoring.md ("Table
+  tools"); a journey in a real browser (`web/tests/e2e/tools.mjs`) has a
+  preview off its caster's turn, a ruler between two players' screens and
+  the DM's ping.
+
 - **Creatures a spell makes are creatures.** A ruleset can give a spell's
   familiar, steed, animated dead or conjured beast an actor and a token of
   its caster's player's: a target, a tab of its own in the player's

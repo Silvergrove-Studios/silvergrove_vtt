@@ -171,6 +171,14 @@ second; the Player lists what it hears, or takes a typed address. LAN
 only for now; a relay would sit between `NetSession` and `HostSession`
 speaking the same protocol.
 
+One thing crosses the wire without being an event: the table's **shared
+marks** — a ruler, a template, a spell's preview, a ping, anyone's —
+which `Marks` (`hexmap/net/marks.gd`) keeps on the Table while they last
+and `HostSession` sends to everyone allowed to see them (the DM's never
+over what a player can't see). They are never in the document, its undo
+history or its saved file; a ruler's distance and its walk round the walls
+are the Table's (`Measure`, over `MapQuery.path`).
+
 ## Turns and game systems
 
 Who may move is the encounter's `turns.mode`: **free** (any visible
