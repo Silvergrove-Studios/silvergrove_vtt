@@ -237,7 +237,8 @@ func test_the_template_tool_on_the_table() -> void:
 	ev.keycode = KEY_ESCAPE
 	check(tool.key(ev) and ctx.template_mark == "" and ctx.marks.of_scene(sid).is_empty(), "Esc takes it off")
 	# a ruleset's action on a template: offered, and sent as the DM's with whom it catches
-	check(GmIntents.template_actions(ctx).is_empty(), "no ruleset's: nothing offered")
+	# (a ruleset installed on this machine may offer its own: only those with target "template")
+	check(GmIntents.template_actions(ctx).all(func(a: Dictionary) -> bool: return str(a.plugin) != "t.areas"), "before it loads: none of its own")
 	if not PluginHost.available():
 		ctx.canvas.free()
 		skip("no Lua runtime in this build")
@@ -252,8 +253,8 @@ func test_the_template_tool_on_the_table() -> void:
 		hm.actions.register("other", { label = "Not this", target = "token", run = function(ctx) return true end })
 	"""]])
 	check(why == "", "the plugin loads: %s" % why)
-	var acts := GmIntents.template_actions(ctx)
-	check(acts.size() == 1 and str(acts[0].label) == "Damage those caught" and str(acts[0].plugin) == "t.areas" and str(acts[0].action) == "boom", "a template's actions, theirs alone: %s" % [acts])
+	var acts := GmIntents.template_actions(ctx).filter(func(a: Dictionary) -> bool: return str(a.plugin) == "t.areas")
+	check(acts.size() == 1 and str(acts[0].label) == "Damage those caught" and str(acts[0].action) == "boom", "a template's actions: its template one, not its token one: %s" % [acts])
 	var goblin: Dictionary = ctx.state.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Goblin")[0]
 	ctx.template_type = "circle"
 	ctx.template_feet = 5.0
