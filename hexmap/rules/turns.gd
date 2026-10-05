@@ -253,7 +253,40 @@ func _next(opts: Dictionary) -> String:
 		var tk := kernel.state.find_token(str(id))
 		if not tk.is_empty():
 			pos[str(id)] = JsonDoc.deep(tk.get("pos", [0, 0]))
-	return kernel.commit([{"t": "turns.set", "changes": {"last/log": str(entries.back().get("id", "")) if not entries.is_empty() else "", "last/pos": pos}}], "Next turn")
+	why = kernel.commit([{"t": "turns.set", "changes": {"last/log": str(entries.back().get("id", "")) if not entries.is_empty() else "", "last/pos": pos}}], "Next turn")
+	if why != "":
+		return why
+	return _skip_if_marked(str(order[turn]))
+
+
+## A participant marked to lose its next turn (`data.skip`: a token id, or
+## a group's entry, -> true; a group's slot when every member is marked):
+## its turn has begun — what starts a turn has started, its hooks have run
+## — and it ends at once, as the DM's Next would end it, and the next turn
+## begins. The marks go as they are used, so each recursion takes one away.
+func _skip_if_marked(entry: String) -> String:
+	var t := turns()
+	var data: Dictionary = t.get("data", {}) if t.get("data") is Dictionary else {}
+	var skip: Dictionary = data.get("skip", {}) if data.get("skip") is Dictionary else {}
+	if skip.is_empty():
+		return ""
+	var members := EncounterState.turn_members(t, entry)
+	var marked := bool(skip.get(entry, false))
+	if not marked and not members.is_empty():
+		marked = true
+		for id in members:
+			if not bool(skip.get(str(id), false)):
+				marked = false
+	if not marked:
+		return ""
+	var changes := {}
+	for k in [entry] + members:
+		if skip.has(str(k)):
+			changes["data/skip/" + str(k)] = null
+	var why := kernel.commit([{"t": "turns.set", "changes": changes}], "Turn skipped")
+	if why != "":
+		return why
+	return _next({"by": "gm"})
 
 
 ## Why a step meant to end the turn `expect` ({round, turn}) comes too

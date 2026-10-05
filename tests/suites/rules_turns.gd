@@ -190,6 +190,38 @@ func test_combat_end_hook() -> void:
 	k.hooks.off("veto")
 
 
+## A turn the DM said a participant loses (`data.skip`): when it comes, it
+## begins (its effects end, its hooks run) and ends at once, and the next
+## one begins, in the same step; the mark goes as it's used.
+func test_a_marked_turn_is_skipped() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	var fired := []
+	for h in ["turn_start", "turn_end"]:
+		k.hooks.on(h, func(p: Dictionary) -> Dictionary:
+			fired.append([h, str(p.get("ref", ""))])
+			return p, "test")
+	check(k.turns.start("s_1", "sample") == "" and st.encounter.turns.order == ["t_a", "t_c", "t_b"], "A, C, B")
+	k.commit(Effects.apply(k.state, {"id": "e_c", "on": "token:t_c", "plugin": "sample", "key": "dazed", "duration": {"kind": "turn_start", "of": "t_c", "turns": 1}}), "Dazed")
+	check(k.commit([{"t": "turns.set", "changes": {"data/skip/t_c": true}}], "Skip C") == "", "the DM marks C to lose its next turn")
+	fired.clear()
+	var depth := k.log.undo_depth()
+	check(k.turns.next() == "", "A's turn ends")
+	check(st.current_turn_token() == "t_b" and st.encounter.turns.turn == 2, "C's turn went by: it's B's: %s" % [st.encounter.turns])
+	check(fired == [["turn_end", "token:t_a"], ["turn_start", "token:t_c"], ["turn_end", "token:t_c"], ["turn_start", "token:t_b"]], "C's turn began and ended: %s" % [fired])
+	check(not st.encounter.effects.has("e_c"), "what ends as C's turn starts, ended")
+	check(not (st.encounter.turns.data.get("skip", {}) as Dictionary).has("t_c") and str(st.encounter.turns.last.entry) == "t_c", "the mark is gone; the turn that ended last was C's")
+	check(k.log.undo_depth() == depth + 1, "one step")
+	k.log.undo()
+	check(st.current_turn_token() == "t_a" and bool(st.encounter.turns.data.skip.t_c), "undone together: A's turn, C still marked")
+	k.log.redo()
+	# marked and unmarked again: false is no mark
+	k.commit([{"t": "turns.set", "changes": {"data/skip/t_a": false}}], "Not A")
+	check(k.turns.next() == "" and k.turns.next() == "" and st.current_turn_token() == "t_c" and st.encounter.turns.round == 2, "a mark set back to false skips nothing: A's turn, then C's")
+	k.hooks.off("test")
+
+
 func test_order_helpers_and_groups() -> void:
 	var parts := _party()
 	var k: RulesKernel = parts[0]
