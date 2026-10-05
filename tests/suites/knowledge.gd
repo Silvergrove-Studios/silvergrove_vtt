@@ -120,6 +120,43 @@ func test_knowledge_declared() -> void:
 	check(k.knowledge_policies().is_empty(), "unloaded, nothing is declared")
 
 
+## Where a ruleset keeps its creatures' rolls from the players (`rolls`), the
+## turn order a player is sent leaves out a creature's label there (its
+## initiative) — the rules' view, a web screen's scene, a Godot client's
+## document and the order's events; the DM's keep it, and the order stays.
+func test_initiative_kept_with_the_rolls() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(_load(plugins, "hexmap.ui.knowledge({ rolls = 'hidden' })") == "", "declared")
+	check(Knowledge.rolls_hidden(kernel.knowledge_policies()) and not Knowledge.names_hidden(kernel.knowledge_policies()), "rolls kept, names not")
+	check(plugins.load_source({"id": "t.bad3", "version": "1", "api": 1, "name": "Bad"}, [["main.lua", "hexmap.ui.knowledge({ rolls = 'some' })"]]) != "", "a value it doesn't know is refused")
+	_setup(kernel, sid)
+	var fighter := str(st.tokens(sid).filter(func(t: Dictionary) -> bool: return str(t.name) == "Ana's fighter")[0].id)
+	check(kernel.commit([{"t": "turns.set", "changes": {"scene": sid, "order": [fighter, "t_gob"], "turn": 0, "round": 1,
+		"data": {"labels": {fighter: "12", "t_gob": "17", "group:g1": "Creatures 1"}, "groups": {}}}}], "Order") == "", "an order, labelled")
+	var known := kernel.knowledge_policies()
+	var view := Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER)
+	var labels: Dictionary = view.turns.data.labels
+	check(not labels.has("t_gob") and str(labels.get(fighter, "")) == "12" and str(labels.get("group:g1", "")) == "Creatures 1", "Ana's view: her fighter's 12, a group's name, no 17 for the goblin: %s" % [labels])
+	check((view.turns.order as Array).has("t_gob"), "the goblin still in the order")
+	check(str(Views.project(kernel, plugins, "", Views.ROLE_GM).turns.data.labels.get("t_gob", "")) == "17", "the DM's: 17")
+	check(not WebScene.build(st, sid, ANA, false, known).turns.data.labels.has("t_gob") and str(WebScene.build(st, sid, "", true, known).turns.data.labels.get("t_gob", "")) == "17",
+		"a web screen's scene: Ana's without it, the DM's with")
+	check(not Protocol.client_document(st.encounter.doc, false, known).turns.data.labels.has("t_gob"), "a Godot client's document without")
+	check(str(st.encounter.turns.data.labels.t_gob) == "17", "the order itself untouched")
+	var ev := Knowledge.player_turns_event({"t": "turns.set", "changes": {"data/labels/t_gob": "18", "data/labels/" + fighter: "13"}}, st.encounter.doc, known)
+	check(not ev.changes.has("data/labels/t_gob") and ev.changes.has("data/labels/" + fighter), "an event setting one: the goblin's left out, hers kept")
+	ev = Knowledge.player_turns_event({"t": "turns.set", "changes": {"data": {"labels": {"t_gob": "17", fighter: "12"}}}}, st.encounter.doc, known)
+	check(not ev.changes.data.labels.has("t_gob") and ev.changes.data.labels.has(fighter), "and one setting them all")
+	check(_load(plugins, "hexmap.ui.knowledge({ rolls = 'shown' })") == "", "shown again")
+	check(str(Views.project(kernel, plugins, ANA, Views.ROLE_PLAYER).turns.data.labels.get("t_gob", "")) == "17", "Ana's view has the goblin's 17")
+
+
 ## The marks a ruleset's words carry: the DM's words for the DM, "a creature"
 ## for a screen that doesn't know, conditions' words gone; a mark cut short is
 ## nothing to a player; the wire's JSON stays JSON.

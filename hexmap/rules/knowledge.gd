@@ -30,6 +30,10 @@ extends RefCounted
 ##   player owns are left out of the players' view of it (but those its
 ##   health declares, which follow its health), and so are its tokens' tags
 ##   that are its effects' keys.
+## - **rolls** "shown" | "hidden": hidden, the ruleset keeps a creature's rolls
+##   to the DM (their audience), and the Table leaves out what the turn order
+##   says of them: its tokens' labels there (their initiative) — the order
+##   itself the players still see.
 ##
 ## A ruleset's words name a creature through a mark (`hm.known.name`): the
 ## words the DM reads, the actor they are about, and what a screen that
@@ -45,8 +49,8 @@ extends RefCounted
 ## leaves it as it wrote it.
 ##
 ## A declaration: {plugin, players, resource, tags, effects, names,
-## conditions} (the health keys flat, as `hm.ui.health` has always given
-## them).
+## conditions, rolls} (the health keys flat, as `hm.ui.health` has always
+## given them).
 
 const MODES := ["exact", "marks", "none"]
 const SHOWN := ["shown", "hidden"]
@@ -64,15 +68,15 @@ static var _MARK := RegEx.create_from_string("\uFFF9([^\uFFF9\uFFFA\uFFFB]*)\uFF
 
 # ------------------------------------------------------------ declaring --
 
-## A ruleset's declaration (`hm.ui.knowledge`'s {health, names, conditions};
+## A ruleset's declaration (`hm.ui.knowledge`'s {health, names, conditions, rolls};
 ## `hm.ui.health` gives {health} alone), made plain over what it declared
 ## before (`base`); a String when it isn't one.
 static func make(plugin: String, spec: Variant, base: Dictionary = {}) -> Variant:
 	if spec is Array and (spec as Array).is_empty():
 		spec = {}
 	if not (spec is Dictionary):
-		return "hm.ui.knowledge takes a table: {health, names, conditions}"
-	var out := {"plugin": plugin, "players": "marks", "resource": "", "tags": [], "effects": [], "names": "shown", "conditions": "shown"}
+		return "hm.ui.knowledge takes a table: {health, names, conditions, rolls}"
+	var out := {"plugin": plugin, "players": "marks", "resource": "", "tags": [], "effects": [], "names": "shown", "conditions": "shown", "rolls": "shown"}
 	for k in base:
 		out[k] = JsonDoc.deep(base[k])
 	out.plugin = plugin
@@ -94,7 +98,7 @@ static func make(plugin: String, spec: Variant, base: Dictionary = {}) -> Varian
 			if not (v is Array):
 				return "hm.ui.health: %s is a list" % key
 			out[key] = (v as Array).map(func(x: Variant) -> String: return str(x))
-	for key in ["names", "conditions"]:
+	for key in ["names", "conditions", "rolls"]:
 		if spec.has(key):
 			var v := str(spec[key])
 			if not SHOWN.has(v):
@@ -122,6 +126,11 @@ static func names_hidden(policies: Array) -> bool:
 ## Whether any declaration keeps a creature's conditions from the players.
 static func conditions_hidden(policies: Array) -> bool:
 	return policies.any(func(p: Dictionary) -> bool: return str(p.get("conditions", "shown")) == "hidden")
+
+
+## Whether any declaration keeps a creature's rolls from the players.
+static func rolls_hidden(policies: Array) -> bool:
+	return policies.any(func(p: Dictionary) -> bool: return str(p.get("rolls", "shown")) == "hidden")
 
 
 # ----------------------------------------------------------------- who --
@@ -308,6 +317,60 @@ static func player_event(ev: Dictionary, token: Dictionary, doc: Dictionary, pol
 						out.changes.label = label if label != "" else UNKNOWN_LABEL
 				return out
 	return ev
+
+
+# ---------------------------------------------------------------- turns --
+
+## The tokens, by id, of the creatures no player owns, in every scene of `doc`.
+static func _unowned_tokens(doc: Dictionary) -> Dictionary:
+	var out := {}
+	var actors: Dictionary = doc.get("actors", {}) if doc.get("actors") is Dictionary else {}
+	for sc in doc.get("scenes", []):
+		if not (sc is Dictionary) or not (sc.get("tokens") is Array):
+			continue
+		for tk in sc.tokens:
+			if tk is Dictionary and unowned(tk, actors):
+				out[str(tk.get("id", ""))] = true
+	return out
+
+
+## The turn order as a player is sent it: where the players don't see a
+## creature's rolls, its tokens' labels (their initiative) left out — the
+## order stays, and a group's label (what it is called) too. A copy.
+static func player_turns(turns: Dictionary, doc: Dictionary, policies: Array) -> Dictionary:
+	var out: Dictionary = JsonDoc.deep(turns)
+	if not rolls_hidden(policies) or not (out.get("data") is Dictionary) or not (out.data.get("labels") is Dictionary):
+		return out
+	var theirs := _unowned_tokens(doc)
+	for k in (out.data.labels as Dictionary).keys():
+		if theirs.has(str(k)):
+			out.data.labels.erase(k)
+	return out
+
+
+## A turns.set event as a player's Godot client is sent it (player_turns):
+## the labels it sets of creatures whose rolls they don't see left out.
+static func player_turns_event(ev: Dictionary, doc: Dictionary, policies: Array) -> Dictionary:
+	var ch: Variant = ev.get("changes")
+	if not rolls_hidden(policies) or not (ch is Dictionary):
+		return ev
+	var theirs := _unowned_tokens(doc)
+	var out: Dictionary = JsonDoc.deep(ev)
+	for k in (ch as Dictionary).keys():
+		var key := str(k)
+		var v: Variant = out.changes[k]
+		var labels: Variant = null
+		if key == "data" and v is Dictionary:
+			labels = (v as Dictionary).get("labels")
+		elif key == "data/labels":
+			labels = v
+		elif key.begins_with("data/labels/") and theirs.has(key.substr(12)):
+			out.changes.erase(k)
+		if labels is Dictionary:
+			for id in (labels as Dictionary).keys():
+				if theirs.has(str(id)):
+					(labels as Dictionary).erase(id)
+	return out
 
 
 # --------------------------------------------------------------- actors --

@@ -62,6 +62,9 @@ static func project(kernel: RulesKernel, host: PluginHost, player_id: String, ro
 	# actors (a creature no player owns shows a player what the rulesets say
 	# the players know of it — its health, its name, its conditions: Knowledge)
 	var known := kernel.knowledge_policies()
+	# (the order as a player is sent it: a creature's initiative left out where its rolls are the DM's)
+	if role != ROLE_GM:
+		out.turns = Knowledge.player_turns(e.turns, e.doc, known)
 	var health := known if role != ROLE_GM else []
 	var ids := e.actors.keys()
 	ids.sort()
@@ -178,7 +181,8 @@ static func sheet_data(kernel: RulesKernel, pa: Dictionary, plugin: String, play
 	return {"me": player_id, "role": role, "actor": {"id": pa.id, "name": pa.name, "owner": pa.owner, "kind": pa.kind, "mine": pa.mine},
 		"ext": JsonDoc.deep(pa.get("ext", {}).get(plugin, {})), "derived": JsonDoc.deep(pa.get("derived", {}).get(plugin, {})),
 		"resources": res, "effects": effects, "effect_keys": keys, "tokens": pa.get("tokens", []),
-		"turns": JsonDoc.deep(kernel.state.encounter.turns), "clock": JsonDoc.deep(kernel.state.encounter.clock),
+		"turns": JsonDoc.deep(kernel.state.encounter.turns) if role == ROLE_GM else Knowledge.player_turns(kernel.state.encounter.turns, kernel.state.encounter.doc, kernel.knowledge_policies()),
+		"clock": JsonDoc.deep(kernel.state.encounter.clock),
 		"state": JsonDoc.deep(kernel.state.encounter.doc.state.ext.get(plugin, {})), "party": party_of(kernel, str(pa.id))}
 
 

@@ -500,6 +500,7 @@ hm.ui.knowledge({
     effects = { "dead", "dying" }, players = hm.settings.get("monster_health", "marks") },
   names = hm.settings.get("monster_names", "shown"),           -- "shown" | "hidden"
   conditions = hm.settings.get("monster_conditions", "shown"), -- "shown" | "hidden"
+  rolls = "shown",                                             -- "shown" | "hidden"
 })
 ```
 
@@ -529,6 +530,10 @@ player's character) is the party's own.
 - **conditions** `"hidden"`: the effects on it leave a player's view of it
   (but those its health declares, which follow its health), and so do its
   tokens' tags that are its effects' keys.
+- **rolls** `"hidden"`: its rolls are the DM's (give them the GM's
+  audience: `spec.visibility = "gm"`), and the Table leaves out what the
+  turn order says of them — its tokens' labels there, their initiative —
+  from what a player is sent: the order itself, and a group's label, stay.
 
 A creature's name and conditions are in your words too: a log line, a
 roll's label, a card, an `error`, words kept in your state. Write them

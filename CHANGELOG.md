@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **A creature's initiative kept with its rolls.** A ruleset that keeps its
+  creatures' rolls from the players says so (`hm.ui.knowledge`'s `rolls`),
+  and the turn order a player is sent leaves out their labels there (their
+  initiative): the rules' view, a web screen's scene, a Godot client's
+  document and the order's events. The order itself stays, and the DM's
+  has every number.
+- A phone sent its document again (a creature added or revealed where the
+  players don't know them, a rules reload) stays at the table: it went back
+  to "Who are you?".
+- The Table's own panes (the Rules pane's cards and log, a sheet, the DM's
+  views, the journal) read a ruleset's marked words as the DM reads them:
+  they showed the marks.
+
 - **Fights in the theatre of the mind.** Where fights happen is the DM's —
   on maps, in the theatre of the mind, or each fight its own — and a fight
   in the mind needs no map: its scene has none (`space: "mind"`), its

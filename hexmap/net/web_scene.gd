@@ -75,7 +75,8 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 		"visible": (sight.polygons as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
 		"los": (sight.los as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)) if light == "dark" else [],
 		"dark_sight": (sight.dark as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
-		"lights": lights(state, scene_id, lvl, tokens), "regions": regions, "turns": JsonDoc.deep(e.turns)}
+		"lights": lights(state, scene_id, lvl, tokens), "regions": regions,
+		"turns": JsonDoc.deep(e.turns) if gm else Knowledge.player_turns(e.turns, e.doc, known)}
 	if gm:
 		out.light_set = str(sc.get("light", "")) if Vision.LIGHT_LEVELS.has(str(sc.get("light", ""))) else ""
 		out.map_light = str(state.level_for(scene_id).get("light", ""))
