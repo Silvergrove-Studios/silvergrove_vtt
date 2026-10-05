@@ -36,7 +36,7 @@ The site's rules — species, classes, backgrounds, spells, monsters, items — 
 
 {{#setup}}
 ## How your table runs
-The DM decides how this table runs — how much the site does, how dice are rolled, what you get to see — and the site tells you when you join. If your table rolls real dice, use `roll_dice`: it's your own dice on the table beside you; roll them and type what came up when the site asks. Where the DM leaves something up to you (your dice, whether you're asked about your reactions), choose what suits who you are. Try the map's tools too: measuring a distance, seeing where a spell would land before you cast it.
+The DM decides how this table runs — how much the site does, how dice are rolled, what you get to see — and the site tells you when you join. If your table rolls real dice, use `roll_dice`: it's your own dice on the table beside you; roll them and type what came up when the site asks. Where the DM leaves something up to you (your dice, whether you're asked about your reactions), choose what suits who you are. Try the map's tools too: measuring a distance, seeing where a spell would land before you cast it. Some fights may have no map at all (the theatre of the mind): then say what you do, and pick from who's in the fight.
 {{/setup}}
 ## Play like a real player: go off script
 Real players don't just follow the adventure, and you shouldn't either. Do what a person at the table would:
@@ -73,7 +73,7 @@ Write `review.md` by {{t_review}}, in your own voice, with these sections:
 2. Verdict: a score out of 10, and would I play here again?
 3. Making my character
 4. Roleplay and talking — meeting the DM's characters, social checks, in-character chat with the party, private words, deciding things together
-5. My turn in a fight, and the combat details{{#setup}} (and how the table's way of running felt: the dice, what I could see, the map's tools){{/setup}}
+5. My turn in a fight, and the combat details{{#setup}} (and how the table's way of running felt: the dice, what I could see, the map's tools, any fight without a map){{/setup}}
 6. Spells (choosing and casting) — or, if I had none, what I saw of them
 7. Leveling up
 8. Chat, journal, pictures and the rest

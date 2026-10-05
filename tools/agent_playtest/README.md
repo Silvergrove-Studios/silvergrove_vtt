@@ -92,9 +92,12 @@ else is refused (`--permission-mode dontAsk`, `--strict-mcp-config`).
 Four tables, one per way of running a table. The DM sets the table up through
 the site's walkthrough (`--walkthrough` on the host), and the briefs'
 `{{#setup}}` sections (`setup.mjs --setup`) ask the DM to set it up their own
-way, make their rulings through the site, give slow players time to answer,
-and try the map's tools; the players read how their table runs and roll
-their own dice with `roll_dice` where the table types dice in.
+way — how much the site does, whose dice, where fights happen (maps or the
+theatre of the mind), what the players know — make their rulings through the
+site, give slow players time to answer, and try the map's tools; the players
+read how their table runs, choose what the DM leaves to them (their dice,
+being asked about their reactions), and roll their own dice with `roll_dice`
+where the table types dice in (the DM too, for monsters).
 
 ```
 # one table (here the first); each table its own host ports, away from 47777/47780

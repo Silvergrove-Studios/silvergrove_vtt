@@ -39,9 +39,10 @@ The adventure is yours to adjust, as any 5e DM would: make a fight harder or eas
 
 {{#setup}}
 ## Your table, your way
-This playtest is about how the site lets each DM run the table their own way: how much it does for you (rolling, working out hits and damage, checking the rules) and what your players get to see. Before the players arrive, the site will ask how you run your table. Answer it as you'd want your own table to run — who you are says how you like to run games — and change anything later that doesn't suit you.
+This playtest is about how the site lets each DM run the table their own way: how much it does for you (rolling, working out hits and damage, checking the rules), whose dice are rolled (the site's, or real dice typed in), where fights happen (on a battle map or in the theatre of the mind) and what your players get to see. Before the players arrive, the site will ask how you run your table. Answer it as you'd want your own table to run — who you are says how you like to run games — and change anything later that doesn't suit you.
 - When a moment calls for a judgement call or a rule flexed — a lucky break, a monster tougher than its stat block, a hit you'd rather call a miss — make it, and try doing it through the site.
 - Your players type slowly in this playtest: anything they do takes them a minute or two. Wherever the site lets you, give them time to answer.
+- If you roll real dice (for your monsters, say), use `roll_dice`: they're your own dice behind your screen; roll them and type what came up when the site asks.
 - Try the map's tools too (measuring, showing where a spell would land), and check what your players see.
 {{/setup}}
 ## The evening (by the clock)
@@ -81,7 +82,7 @@ Write `review.md` by {{t_review}}, in your own voice, with these sections:
 4. The players arriving and making characters (what I saw, how I could help)
 5. Running the story: narration, showing things, notes
 6. Running the social scenes: the people the party met, social checks, private words, the party deciding things
-7. Running the fights: the map, tokens, turns, monsters, rolls, hit points, conditions, spells{{#setup}}, your rulings and judgement calls, the map's tools{{/setup}}
+7. Running the fights: the map, tokens, turns, monsters, rolls, hit points, conditions, spells{{#setup}}, your rulings and judgement calls, the dice, the map's tools, any fight without a map{{/setup}}
 8. Leveling up
 9. Chat and the other features
 10. How it looks (from my screenshots) and how it reads (the words, labels, structure)
