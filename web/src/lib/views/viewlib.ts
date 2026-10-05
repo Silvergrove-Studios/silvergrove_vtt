@@ -37,6 +37,13 @@ export function shown(node: Dict, ctx: Dict): boolean {
   return !('if' in node) || truthy(Expr.evaluate(String(node.if), ctx));
 }
 
+/** A `tabs` node's tabs this viewer gets: each one's `if` (the DM's Adjust
+ *  tab on a sheet, a player's own when the table allows it) as any node's. */
+export function shownTabs(node: Dict, ctx: Dict): Dict[] {
+  const tabs = Array.isArray(node.tabs) ? (node.tabs as unknown[]) : [];
+  return tabs.filter((t): t is Dict => !!t && typeof t === 'object' && !Array.isArray(t) && shown(t as Dict, ctx));
+}
+
 /** An intent with its "$/pointer" strings resolved against the data. */
 export function fillIntent(template: unknown, ctx: Dict): any {
   if (typeof template === 'string' && template.startsWith('$/')) return atPointer(ctx, template.slice(1));

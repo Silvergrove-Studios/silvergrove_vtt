@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atPointer, facts, fillIntent, matchWords, num, optionsFrom, pickLabel, putValue, textOf, timeLeft, valueOf, wordsOf } from '../src/lib/views/viewlib';
+import { atPointer, facts, fillIntent, matchWords, num, optionsFrom, pickLabel, putValue, shownTabs, textOf, timeLeft, valueOf, wordsOf } from '../src/lib/views/viewlib';
 
 describe('views', () => {
   const data = { actor: { name: 'Ana', stats: { dex: 14 } }, list: [{ id: 'a', name: 'Alpha', ok: true }, { id: 'b', name: 'Beta', ok: false }], 'a/b': 1 };
@@ -87,5 +87,12 @@ describe('timeLeft', () => {
     expect(timeLeft({ duration: { kind: 'turn_start', of: 'tok_1' } }, clock)).toBe('');
     expect(timeLeft({ key: 'prone' }, clock)).toBe('');
     expect(timeLeft(until(8), undefined)).toBe('');
+  });
+  it("leaves out the tabs a viewer isn't to have", () => {
+    // (the DM's Adjust tab on a sheet; a player's own when the table allows it)
+    const node = { type: 'tabs', tabs: [{ title: 'Stat block', children: [] }, { title: 'Adjust', if: "@role == 'gm'", children: [] }, null] };
+    expect(shownTabs(node, { role: 'gm' }).map((t) => t.title)).toEqual(['Stat block', 'Adjust']);
+    expect(shownTabs(node, { role: 'player' }).map((t) => t.title)).toEqual(['Stat block']);
+    expect(shownTabs({ type: 'tabs' }, {})).toEqual([]);
   });
 });

@@ -189,6 +189,25 @@ func test_a_signed_number() -> void:
 	await tree.process_frame
 
 
+## A tab with an `if` is the viewer's only when it holds (the DM's Adjust
+## tab on a sheet); one tab left is drawn with no bar.
+func test_a_tab_for_some_viewers() -> void:
+	var r := ViewRenderer.new()
+	root.add_child(r)
+	var schema := {"type": "tabs", "tabs": [
+		{"title": "Stat block", "children": [{"type": "text", "text": "AC 15"}]},
+		{"title": "Adjust", "if": "@role == 'gm'", "children": [{"type": "text", "text": "Set to…"}]}]}
+	r.render(schema, {"role": "gm"})
+	var tabs := _find(r, "TabContainer") as TabContainer
+	check(tabs != null and tabs.get_tab_count() == 2 and tabs.tabs_visible and tabs.get_tab_title(1) == "Adjust", "the DM's: both tabs")
+	r.render(schema, {"role": "player"})
+	tabs = _find(r, "TabContainer") as TabContainer
+	check(tabs != null and tabs.get_tab_count() == 1 and not tabs.tabs_visible, "a player's: the stat block alone, with no bar of one tab")
+	check(_find(r, "Label", "Set to…") == null and _find(r, "Label", "AC 15") != null, "and nothing of the other")
+	r.queue_free()
+	await tree.process_frame
+
+
 ## A form or wizard field may take its choices from a collection: what
 ## the campaign has, less what it turned off, plus what it imported.
 func test_choice_fields_come_from_the_compendium() -> void:
