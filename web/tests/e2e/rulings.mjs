@@ -84,12 +84,13 @@ await step('the DM’s screen opens; Ana (a phone) and Ben (a laptop) join', asy
 });
 
 await step('an Assisted table: the DM turns on Approve outcomes before they land', async () => {
-  await dm.getByRole('button', { name: 'Rules settings' }).click();
-  const box = dm.getByRole('dialog', { name: 'Rules settings' });
+  // (Table settings, on a ruleset that says which question each setting answers)
+  await dm.getByRole('button', { name: /^(Rules|Table) settings/ }).first().click();
+  const box = dm.getByRole('dialog', { name: /^(Rules|Table) settings$/ });
   await box.waitFor({ timeout: 5000 });
   const row = box.locator('li').filter({ hasText: 'Approve outcomes before they land' });
   await row.locator('input[type="checkbox"]').check();
-  await row.getByText('On').waitFor({ timeout: 5000 });
+  await row.getByText('On', { exact: true }).waitFor({ timeout: 5000 });
   await shot(dm, 'dm_rules_settings');
   await box.getByRole('button', { name: 'Done' }).click();
   await box.waitFor({ state: 'detached', timeout: 5000 });

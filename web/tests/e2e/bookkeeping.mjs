@@ -185,6 +185,9 @@ ok = ok && (await step('the DM wounds the goblin on its stat block: Bloodied, on
   await dm.locator('.fightpanel .order button').filter(named).first().click();
   await dm.locator('.fightpanel .order button.on').filter(named).first().waitFor({ timeout: 5000 });
   const block = dm.locator('.fightpanel .chosen');
+  // (at Bookkeeping its card opens on By hand: the damage is on its stat block)
+  const statTab = block.getByRole('tab', { name: 'Stat block' });
+  if (await statTab.count()) await statTab.first().click();
   await block.getByLabel('Damage (or healing)').fill(String(amount));
   await block.getByRole('button', { name: 'Apply' }).first().click();
   const marked = (page) => page.waitForFunction((id) => ((window.hexmap.game.scene.tokens ?? []).find((t) => t.id === id)?.tags ?? []).includes('bloodied'), goblin.id, { timeout: 8000 })
