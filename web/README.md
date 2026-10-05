@@ -13,7 +13,7 @@ over its WebSocket (`src/lib/net.ts`, `src/lib/game.svelte.ts`).
 ```sh
 npm ci
 npm run check   # types and Svelte
-npm test        # unit tests (grid, expressions, views, the book, picks, turns, rulers and templates)
+npm test        # unit tests (grid, expressions, views, the book, picks, turns, rulers and templates, dice typed in)
 npm run build   # dist/ → ../webclient.zip — commit it with the sources
 ```
 
@@ -142,6 +142,22 @@ the table waits on the DM, Wren unhurt; the DM changes the damage and
 applies it, and the log says so; a later hit applied as it is, the DM
 calls it a miss from its line in Chat & rolls (Rule), and the damage is
 healed back — the roll's line kept as it was rolled.
+
+`tests/e2e/dice.mjs <host.json> <out>` (host with `--party --seed 12`, on a
+package built on the rules being tried, as for the rulings journey): real
+dice typed in, the creatures' rolls out of sight, and a player's own
+preference. The DM gives Wren a dagger and sets the table to real dice:
+Ana's attack asks her phone for her d20 (a 25 is refused, saying a d20
+shows 1 to 20; the total worked out as she types) and then her damage
+dice, and the chat marks both rolls *rolled at the table*. The DM lets
+each player choose: Ana takes her own dice in *My preferences* (⋯), the
+DM's Table settings lists it as hers, her next attack asks (*Roll it for
+me* lets the app roll it), and back on the app's dice the next rolls at
+once. In the chapel fight the DM rolls the creatures' dice by hand: a
+goblin's attack on Wren asks the DM's screen for the d20 and the damage,
+and Wren takes what was typed; then out of sight, a goblin hits Wren and
+Ben's screen says so ("…attacks Wren with its Scimitar: it hits, 7
+slashing damage.") with no roll of the goblin's in his log.
 
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).

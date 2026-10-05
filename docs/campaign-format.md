@@ -95,7 +95,10 @@ party is), `sessions` and `runtime`. Every other field is as before.
   as Automated (`TableSettings.EXISTING_LEVEL`), its settings as they
   were.
 - `players`: the group. A session's encounter gets them on start and
-  gives back any it added.
+  gives back any it added. A player's `prefs` are what they chose for
+  themselves of each ruleset's preferences, by plugin id (`{"srd5e":
+  {"dice": "typed"}}`): set from their screen, changed by the DM in Table
+  settings (docs/plugin-authoring.md, "Players' preferences").
 - `actors`: the persistent ones — player characters, companions,
   recurring NPCs (an actor marked `persistent: true`, as the NPC pane
   marks what it adds) — without their `derived` blocks (the kernel recomputes
