@@ -32,6 +32,9 @@ var band_tables: Dictionary = {}
 ## tagged (a pack's rubble is "difficult"): the Table's own library. With
 ## none, a cell's terrain carries no tags.
 var art: PackLibrary = null
+## plugin id -> how the table's rulers count ({diagonals}), as a ruleset
+## registered it (hm.map.measure): the first of them rules.
+var measure_rules: Dictionary = {}
 
 
 func _init(p_kernel: RulesKernel) -> void:
@@ -45,6 +48,22 @@ func register_bands(plugin: String, bands: Array) -> void:
 			list.append({"name": str(b.name), "max": float(b.get("max", INF))})
 	list.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x.max < y.max)
 	band_tables[plugin] = list
+
+
+## How the table's rulers count, as a ruleset says its game does: `diagonals`
+## on squares, "5-5-5" (every step one cell), "5-10-5" (every second
+## diagonal two) or "euclid" (as the crow flies). Anything else is ignored.
+func register_measure(plugin: String, rule: Dictionary) -> void:
+	var d := str(rule.get("diagonals", "5-5-5"))
+	measure_rules[plugin] = {"diagonals": d if Measure.RULES.has(d) else "5-5-5"}
+
+
+## The rulers' rule: the first ruleset's that registered one (by id, so it
+## is the same every time), else every step a cell.
+func measure_rule() -> Dictionary:
+	var ids := measure_rules.keys()
+	ids.sort()
+	return (measure_rules[ids[0]] as Dictionary).duplicate() if not ids.is_empty() else {"diagonals": "5-5-5"}
 
 
 # ----------------------------------------------------------------- basics --

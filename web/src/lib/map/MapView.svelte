@@ -4,6 +4,9 @@
   fingers. Tapping a token or a cell tells the page; dragging a token the
   page allows moves it (dropped on a cell's centre). While the page is
   picking a target a banner says so and the cell under the pointer is lit.
+  With `tools`, the table's tools are on it for everyone — a ruler, a
+  template, a ping, a spell's preview (MapTools) — and the table's shared
+  marks are drawn over it; a long press (or a right-click) pings.
 -->
 <script lang="ts">
   import { onMount, untrack, type Snippet } from 'svelte';
@@ -11,6 +14,10 @@
   import { onArt } from '../art';
   import { game, type Dict } from '../game.svelte';
   import { drawFrame, drawTerrain, layout, prepare, tokenAt, tokenPos, type Camera, type TerrainCache } from './render';
+  import MapTools from './MapTools.svelte';
+  import { gridless, ruleOf } from './measure';
+  import { PING_MS } from './marks';
+  import { abort as toolAbort, done as toolDone, drag as toolDrag, hover as toolHover, ping as toolPing, press as toolPress, release as toolRelease, stop as toolStop, tools, type Where } from './tools.svelte';
 
   interface Props {
     map: Dict | null;
@@ -44,6 +51,8 @@
     onCellClick?: (cell: Cell, at: Vec) => void;
     onTokenDrop?: (t: Dict, pos: [number, number]) => void;
     onCancelPick?: () => void;
+    /** the table's tools on the map (a ruler, a template, a ping, previews) and the shared marks drawn */
+    tools?: boolean;
   }
 
   let {
@@ -67,6 +76,7 @@
     onCellClick,
     onTokenDrop,
     onCancelPick,
+    tools: withTools = false,
   }: Props = $props();
 
   let host: HTMLDivElement;
@@ -92,6 +102,28 @@
   // where each token is drawn: tokens sharing a cell fan out, and a tap is
   // theirs where they are drawn
   const placed = $derived(prep ? layout(tokens, prep.grid, drag?.id ?? '') : undefined);
+
+  // ------------------------------------------------------------- marks --
+  // where the table's tools work: this map's grid, the scene, the tokens this
+  // screen shows (a ruler never snaps to one it doesn't), its zoom
+  const where = $derived<Where | null>(withTools && prep && map ? { grid: prep.grid, scene, map, tokens, scale: cam.scale } : null);
+  // the table's shared marks on this scene; the one being made here drawn from here
+  const sceneMarks = $derived.by((): Dict[] => {
+    if (!withTools || !scene?.id) return [];
+    const sid = String(scene.id);
+    const out = Object.values(game.marks).filter((m) => String(m.scene ?? '') === sid);
+    const d = tools.draft;
+    if (d && String(d.scene ?? '') === sid) {
+      const echo = game.marks[String(d.id)];
+      const me = game.players.find((p) => String(p.id) === game.me);
+      const mine: Dict = { name: echo?.name ?? (game.role === 'dm' ? 'DM' : String(me?.name ?? '')), color: echo?.color ?? (game.role === 'dm' ? '#ffffff' : String(me?.color ?? '#ffffff')), owner: game.role === 'dm' ? 'gm' : game.me, ...$state.snapshot(d) };
+      const i = out.findIndex((m) => String(m.id) === String(d.id));
+      if (i >= 0) out[i] = mine;
+      else out.push(mine);
+    }
+    return out;
+  });
+  const markEchoes = $derived(tools.draft ? { [String(tools.draft.id)]: game.marks[String(tools.draft.id)] } : {});
 
   // ----------------------------------------------------------- terrain --
   let terrain: TerrainCache | null = null;
@@ -143,18 +175,64 @@
       scene,
       prep,
       terrain,
-      look: { gm, selected, dragging: drag, picking: picking !== '', hoverCell: hover, playerColors, activeToken, showGrid, showWalls, seeAs, ghosts, fight },
+      look: {
+        gm,
+        selected,
+        dragging: drag,
+        picking: picking !== '',
+        hoverCell: hover,
+        playerColors,
+        activeToken,
+        showGrid,
+        showWalls,
+        seeAs,
+        ghosts,
+        fight,
+        marks: withTools
+          ? {
+              list: sceneMarks,
+              echoes: markEchoes as Record<string, Dict>,
+              look: {
+                grid: prep.grid,
+                scale: cam.scale,
+                tokens,
+                rule: ruleOf(scene),
+                noGrid: gridless(map),
+                draft: String(tools.draft?.id ?? ''),
+                now: performance.now(),
+                born: (id) => game.marksBorn[id] ?? performance.now(),
+                // (the view, in hex units: a mark's words stay inside it)
+                view: { x0: cam.x - width / 2 / cam.scale, y0: cam.y - height / 2 / cam.scale, x1: cam.x + width / 2 / cam.scale, y1: cam.y + height / 2 / cam.scale },
+              },
+            }
+          : undefined,
+      },
     });
+    // a ping's rings move and fade: drawn again till it has gone
+    if (sceneMarks.some((m) => m.kind === 'ping' && performance.now() - (game.marksBorn[String(m.id)] ?? 0) < PING_MS)) schedule();
   }
 
   $effect(() => {
     void [prep, cam.x, cam.y, cam.scale, selected, picking, hover, drag, gm, showGrid, activeToken, width, height, dpr, artTick, playerColors, Object.keys(game.packs).length];
     schedule();
   });
+  // (the table's marks, as they come and go and as one is made here)
+  $effect(() => {
+    void [sceneMarks, markEchoes];
+    schedule();
+  });
   // (what the DM's Walls and See as change, and a fight starting or ending)
   $effect(() => {
     void [showWalls, seeAs, ghosts, fight];
     schedule();
+  });
+
+  // another scene shown: a tool out on the one before is put away (what it made stays there)
+  $effect(() => {
+    const sid = String(scene?.id ?? '');
+    untrack(() => {
+      if (withTools && tools.draft && String(tools.draft.scene ?? '') !== sid) toolStop();
+    });
   });
 
   // a new scene (or map, or level): fit it to the view
@@ -275,10 +353,19 @@
   // ------------------------------------------------------------- input --
   const pointers = new Map<number, Vec>();
   // what a press is on: the token nearest (a tap's), and the nearest the
-  // page lets be dragged (a drag's)
-  let press: { id: number; at: Vec; token: Dict | null; drags: Dict | null; moved: boolean; cam: Vec } | null = null;
+  // page lets be dragged (a drag's); a table tool's (`tool`), or one held
+  // long enough to ping (`long`: no tap when it is let go)
+  let press: { id: number; at: Vec; token: Dict | null; drags: Dict | null; moved: boolean; cam: Vec; tool?: boolean; long?: boolean } | null = null;
   let pinch: { d: number; scale: number; world: Vec } | null = null;
   let pressing = $state(false);
+  // a press held still this long pings: "look here" (a phone has no right button)
+  const LONG_MS = 550;
+  let longTimer: ReturnType<typeof setTimeout> | null = null;
+  let longAt = -Infinity;
+  function clearLong(): void {
+    if (longTimer) clearTimeout(longTimer);
+    longTimer = null;
+  }
 
   function onpointerdown(e: PointerEvent): void {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
@@ -286,8 +373,15 @@
     const p = local(e);
     pointers.set(e.pointerId, p);
     if (pointers.size === 1) {
-      // (a reach of at least 16 px on screen, 22 on a touch screen)
       const w = toWorld(p.x, p.y);
+      // a table tool that is out takes the press (a ruler's point, a template
+      // moved or turned) — not while a pick waits for its target
+      if (where && tools.mode && !picking && toolPress(where, w)) {
+        press = { id: e.pointerId, at: p, token: null, drags: null, moved: false, cam: { x: cam.x, y: cam.y }, tool: true };
+        pressing = true;
+        return;
+      }
+      // (a reach of at least 16 px on screen, 22 on a touch screen)
       const reach = (e.pointerType === 'mouse' ? 16 : 22) / cam.scale;
       // a token dropped and not yet where the table has it is where it is
       // drawn, and where the table has it too
@@ -306,7 +400,22 @@
       }
       press = { id: e.pointerId, at: p, token: t, drags, moved: false, cam: { x: cam.x, y: cam.y } };
       pressing = true;
+      // held still: a ping where it is
+      clearLong();
+      if (where && !picking) {
+        const id = e.pointerId;
+        longTimer = setTimeout(() => {
+          longTimer = null;
+          if (!where || !press || press.id !== id || press.moved || pinch) return;
+          press.long = true;
+          longAt = performance.now();
+          toolPing(where, toWorld(p.x, p.y));
+        }, LONG_MS);
+      }
     } else if (pointers.size === 2) {
+      clearLong();
+      // (a pinch, not a ruler's point)
+      if (press?.tool && where) toolAbort(where);
       press = null;
       drag = null;
       const [a, b] = [...pointers.values()];
@@ -319,6 +428,8 @@
     const p = local(e);
     if (!pointers.has(e.pointerId)) {
       if (prep && e.pointerType === 'mouse') hover = prep.grid.cellAt(toWorld(p.x, p.y));
+      // a ruler being clicked out follows the mouse from its last point
+      if (where && tools.mode && e.pointerType === 'mouse') toolHover(where, toWorld(p.x, p.y));
       return;
     }
     pointers.set(e.pointerId, p);
@@ -334,8 +445,15 @@
     if (!press || press.id !== e.pointerId) return;
     const dx = p.x - press.at.x;
     const dy = p.y - press.at.y;
-    if (!press.moved && Math.hypot(dx, dy) > (e.pointerType === 'mouse' ? 4 : 8)) press.moved = true;
+    if (!press.moved && Math.hypot(dx, dy) > (e.pointerType === 'mouse' ? 4 : 8)) {
+      press.moved = true;
+      clearLong();
+    }
     if (!press.moved) return;
+    if (press.tool) {
+      if (where) toolDrag(where, toWorld(p.x, p.y));
+      return;
+    }
     if (press.drags && !picking) {
       drag = { id: String(press.drags.id), pos: toWorld(p.x, p.y) };
     } else {
@@ -349,6 +467,7 @@
   function onpointerup(e: PointerEvent): void {
     const p = local(e);
     pointers.delete(e.pointerId);
+    clearLong();
     if (pinch) {
       if (pointers.size < 2) pinch = null;
       press = null;
@@ -359,6 +478,12 @@
     const was = press;
     press = null;
     pressing = false;
+    if (was.tool) {
+      if (where) toolRelease(where, toWorld(p.x, p.y), was.moved);
+      return;
+    }
+    // (held still, it pinged: not a tap too)
+    if (was.long && !was.moved) return;
     if (!was.moved) {
       const w = toWorld(p.x, p.y);
       if (was.token) onTokenClick?.(was.token, w);
@@ -379,10 +504,22 @@
 
   function onpointercancel(e: PointerEvent): void {
     pointers.delete(e.pointerId);
+    clearLong();
     if (pointers.size < 2) pinch = null;
+    if (press?.tool && where) toolRelease(where, toWorld(press.at.x, press.at.y), false);
     press = null;
     pressing = false;
     drag = null;
+  }
+
+  // a right-click pings ("look here"); never the browser's menu over the map
+  function oncontextmenu(e: MouseEvent): void {
+    e.preventDefault();
+    if (!where || picking) return;
+    // (a phone's long press says contextmenu too: it pinged already)
+    if ((e as PointerEvent).pointerType === 'touch' || performance.now() - longAt < 1000) return;
+    const p = local(e);
+    toolPing(where, toWorld(p.x, p.y));
   }
 
   function onwheel(e: WheelEvent): void {
@@ -401,6 +538,8 @@
 
   function onkeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape' && picking) onCancelPick?.();
+    // (a table tool put away: what it made stays on the map, lingering or pinned)
+    else if (e.key === 'Escape' && withTools && tools.mode) toolStop();
   }
 
   /** Where a token is on the screen (client pixels): for tests and for pointing at things. */
@@ -453,15 +592,23 @@
 <div class="map" bind:this={host}>
   <canvas
     bind:this={canvas}
-    class:picking={picking !== ''}
+    class:picking={picking !== '' || (withTools && tools.mode !== '')}
     {onpointerdown}
     {onpointermove}
     {onpointerup}
     {onpointercancel}
+    {oncontextmenu}
+    ondblclick={() => {
+      // a ruler clicked out: a double click ends it
+      if (withTools && tools.mode === 'ruler' && tools.tapping) toolDone(where);
+    }}
     onpointerleave={() => {
       if (!pressing) hover = null;
     }}
   ></canvas>
+  {#if withTools && scene?.id && map}
+    <MapTools {where} {gm} hidden={picking !== ''} />
+  {/if}
   {#if !map || !scene?.id}
     <div class="empty">{scene?.id ? 'The map is on its way…' : 'Nothing is on the table yet.'}</div>
   {/if}

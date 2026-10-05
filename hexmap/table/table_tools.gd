@@ -12,6 +12,7 @@ static func make(tool_name: String, ctx: TableContext) -> Tool:
 		"token": t = TokenTool.new()
 		"fog": t = FogTool.new()
 		"pick": t = PickTool.new()
+		"ruler": t = RulerTool.new()
 		_: t = SelectTool.new()
 	t.ctx = ctx
 	t.tool_name = tool_name
@@ -23,6 +24,7 @@ static func all_tools() -> Array[Dictionary]:
 		{"name": "select", "label": "Select", "key": "V", "icon": "mouse-pointer-2", "hint": "Click a token to select, drag to move (Shift: free placement). Click a door to open or close it, a light to put it out or relight it."},
 		{"name": "token", "label": "Token", "key": "T", "icon": "circle-dot", "hint": "Click to place a token. Set its name, colour and owner in Tool options."},
 		{"name": "fog", "label": "Fog", "key": "F", "icon": "moon-star", "hint": "Drag to reveal cells to the players; right-drag hides them again. [ ] change the brush."},
+		{"name": "ruler", "label": "Ruler", "key": "M", "icon": "ruler", "hint": "Drag to measure, or click for each point of a path; double-click or Enter ends it, Esc takes it off, P pins it. Everyone sees it (Only me: the DMs alone). Right-click anywhere: a ping, “look here”."},
 	]
 
 
@@ -49,6 +51,11 @@ class Tool extends RefCounted:
 	## Screen-constant size in hex units.
 	func handle_hex(px_size := 7.0) -> float:
 		return px_size / maxf(1e-6, ctx.canvas.ppx * ctx.zoom)
+
+	## A ping where the DM pointed: "look here", fading (the table's shared marks).
+	func ping(p: Vector2) -> void:
+		if ctx.put_mark({"kind": "ping", "points": [[p.x, p.y]]}) != "":
+			ctx.say("Ping")
 
 	func outline_cell(c: Node2D, cell: Vector2i, color: Color, width := 2.0) -> void:
 		var pts := PackedVector2Array()
@@ -201,6 +208,10 @@ class SelectTool extends Tool:
 		return Control.CURSOR_POINTING_HAND if not _hover.is_empty() else Control.CURSOR_ARROW
 
 	func press(p: Vector2, button: int, mods: Dictionary) -> bool:
+		if button == MOUSE_BUTTON_RIGHT:
+			# "look here", for everyone
+			ping(p)
+			return true
 		if button != MOUSE_BUTTON_LEFT:
 			return false
 		var tk := token_at(p)
@@ -469,3 +480,146 @@ class FogTool extends Tool:
 			return
 		for cell in _cells(_at):
 			outline_cell(c, cell, Color(1, 1, 1, 0.8), 2.0 / maxf(1e-6, ctx.zoom))
+
+
+# =============================================================================
+
+## The ruler: drag from a point to measure (the line follows the pointer,
+## everyone sees it as it goes: "DM: 25 ft"), or click for each point of a
+## path — the line follows the pointer from the last — and double-click or
+## Enter to end it. Let go, it lingers a few seconds and goes; P pins it.
+## On a map with its grid drawn the points are cells' middles (a creature
+## under the pointer, its own; Shift: anywhere). Right-click pings.
+class RulerTool extends Tool:
+	var _id := ""
+	## The ruler finished last (P pins it).
+	var _last := ""
+	## The points fixed so far, and where the pointer is.
+	var _fixed: Array = []
+	var _cursor := Vector2.ZERO
+	var _dragging := false
+	var _start := Vector2.ZERO
+	var _moved := false
+
+	func cursor() -> Control.CursorShape:
+		return Control.CURSOR_CROSS
+
+	func deactivate() -> void:
+		finish()
+
+	## Where a press at `p` measures from: a creature's middle, a cell's, or the point.
+	func snap(p: Vector2, mods: Dictionary = {}) -> Vector2:
+		if bool(mods.get("shift", false)) or ctx.map() == null:
+			return p
+		var tk := token_at(p)
+		if not tk.is_empty():
+			return Vision.token_pos(tk)
+		return ctx.map().grid.snap_to_center(p) if ctx.map().shows_grid() else p
+
+	func press(p: Vector2, button: int, mods: Dictionary) -> bool:
+		if button == MOUSE_BUTTON_RIGHT:
+			ping(p)
+			return true
+		if button != MOUSE_BUTTON_LEFT:
+			return false
+		var at := snap(p, mods)
+		if _id == "":
+			_fixed = [at]
+		else:
+			_fixed.append(at)
+		_cursor = at
+		_dragging = true
+		_start = p
+		_moved = false
+		_send(true)
+		return true
+
+	func drag(p: Vector2, _button: int, mods: Dictionary) -> void:
+		if not _dragging:
+			return
+		if p.distance_to(_start) > 0.3:
+			_moved = true
+		_cursor = snap(p, mods)
+		_send(true)
+
+	func release(p: Vector2, _button: int, mods: Dictionary) -> void:
+		if not _dragging:
+			return
+		_dragging = false
+		if _moved:
+			# dragged: measured, and let go
+			_cursor = snap(p, mods)
+			_fixed.append(_cursor)
+			finish()
+
+	func move(p: Vector2) -> void:
+		# clicking a path: the line follows the pointer from its last point
+		if _id != "" and not _dragging:
+			_cursor = snap(p)
+			_send(true)
+
+	func double_click(_p: Vector2) -> bool:
+		if _id == "":
+			return false
+		finish()
+		return true
+
+	func key(event: InputEventKey) -> bool:
+		if not event.pressed:
+			return false
+		match event.keycode:
+			KEY_ENTER, KEY_KP_ENTER:
+				if _id != "":
+					finish()
+					return true
+			KEY_ESCAPE:
+				if _id != "":
+					ctx.marks.remove("gm", _id, true)
+					_reset()
+					return true
+			KEY_BACKSPACE:
+				if _id != "" and _fixed.size() > 1:
+					_fixed.pop_back()
+					_send(true)
+					return true
+			KEY_P:
+				var which := _id if _id != "" else _last
+				var m: Dictionary = ctx.marks.marks.get(which, {})
+				if not m.is_empty():
+					var pinned := not bool(m.get("pinned", false))
+					ctx.put_mark({"kind": "ruler", "points": m.points, "pinned": pinned, "live": _id != ""}, which)
+					ctx.say("Ruler pinned: it stays till you take it off" if pinned else "Ruler unpinned")
+					return true
+		return false
+
+	## The ruler as it is now, to everyone; `live` while it is still being made.
+	func _send(live: bool) -> void:
+		var pts := []
+		for v in _fixed:
+			pts.append([v.x, v.y])
+		if live and (pts.is_empty() or Vector2(pts[-1][0], pts[-1][1]) != _cursor):
+			pts.append([_cursor.x, _cursor.y])
+		if pts.size() == 1:
+			pts.append(pts[0])
+		var had: Dictionary = ctx.marks.marks.get(_id, {})
+		var id := ctx.put_mark({"kind": "ruler", "points": pts.slice(0, Marks.MAX_POINTS), "live": live, "pinned": bool(had.get("pinned", false))}, _id)
+		if id != "":
+			_id = id
+
+	## Done: let go, it lingers and goes (unless pinned).
+	func finish() -> void:
+		if _id == "":
+			return
+		_send(false)
+		_last = _id
+		var m: Dictionary = ctx.marks.marks.get(_id, {})
+		var me: Dictionary = m.get("measure", {}) if m.get("measure") is Dictionary else {}
+		if not me.is_empty():
+			ctx.say("Measured: %s" % str(me.get("words", "")))
+		_reset()
+
+	func _reset() -> void:
+		_id = ""
+		_fixed = []
+		_dragging = false
+		_moved = false

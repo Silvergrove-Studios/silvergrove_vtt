@@ -13,7 +13,7 @@ over its WebSocket (`src/lib/net.ts`, `src/lib/game.svelte.ts`).
 ```sh
 npm ci
 npm run check   # types and Svelte
-npm test        # unit tests (grid, expressions, views, the book, picks, turns)
+npm test        # unit tests (grid, expressions, views, the book, picks, turns, rulers and templates)
 npm run build   # dist/ → ../webclient.zip — commit it with the sources
 ```
 
@@ -82,6 +82,17 @@ Lightning; her throw hits, and a card is in front on her phone at once
 (Piercing or Lightning, its seconds counting) while the DM's screen says
 the table waits on her; the DM answers it for her (Answer, beside Go on)
 and the damage roll says Lightning.
+
+`tests/e2e/tools.mjs <host.json> <out>` (host with `--party --wizard
+--seed 5`): the table's tools, everyone's. The DM gives Sela Fireball; in
+the chapel fight, one goblin hidden from the players again, Ana previews
+Fireball on her phone off her turn and puts it on the goblins; Ben's
+screen and the DM's show it with its label ("Sela: Fireball, 20-ft
+sphere"), and say who it would catch — Ben's only the creatures he can
+see, the DM's the hidden goblin too; Ben measures from Brakka with the
+ruler and Ana's phone shows it as his laptop does; the DM pings by a
+right-click (both players see it, and not a second ping over the hidden
+goblin), then clears everyone's marks.
 
 `tests/e2e/reactions.mjs <host.json> <out>` (host with `--party --wizard
 --seed 12`: Ana plays Sela, a wizard with Shield prepared, and the dice

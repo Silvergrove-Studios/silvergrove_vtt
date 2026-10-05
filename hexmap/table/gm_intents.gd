@@ -43,7 +43,71 @@ static func run(ctx: TableContext, payload: Dictionary) -> String:
 				ref = "actor:" + str(payload.actor)
 			ctx.show_ref.call(ref)
 			return ""
+		"preview":
+			return preview(ctx, payload)
 	return "unknown intent"
+
+
+## A spell's or a power's Preview (`{kind = "preview", area, actor, cast}`,
+## docs/plugin-authoring.md): its shape on the map for everyone, as the DM's
+## mark — at once around its caster, or where the DM points (a sphere's
+## middle; a cone's way from its caster). "" or why not.
+static func preview(ctx: TableContext, payload: Dictionary) -> String:
+	var area: Dictionary = payload.get("area", {}) if payload.get("area") is Dictionary else {}
+	var shape := preview_shape(area)
+	if shape.is_empty() or ctx.map() == null:
+		return "nothing to show on the map" if ctx.map() != null else "no map is shown"
+	var label := str(area.get("label", ""))
+	var actor := str(payload.get("actor", ""))
+	var from := ""
+	for tk in ctx.state.tokens(ctx.scene_id):
+		if actor != "" and str(tk.get("actor", "")) == actor:
+			from = str(tk.id)
+			break
+	var put := func(points: Array, direction: float, token: String) -> void:
+		var m := {"kind": "preview", "points": points, "shape": shape, "direction": direction, "label": label, "actor": actor}
+		if token != "":
+			m.token = token
+		if ctx.put_mark(m) != "":
+			ctx.say("%s: on the map for everyone" % label)
+	if str(area.get("from", "point")) == "self":
+		if from == "":
+			return "%s isn't on this map" % str(ctx.encounter().actor(actor).get("name", "the caster"))
+		var at := Vision.token_pos(ctx.state.token(ctx.scene_id, from))
+		if str(shape.type) == "circle":
+			put.call([[at.x, at.y]], 0.0, from)
+			return ""
+		# which way it goes: the DM points (the pick shows its cells as it will be)
+		var spec := Measure.template_spec({"points": [[at.x, at.y]], "token": from, "shape": shape})
+		spec.erase("at")
+		spec.erase("direction")
+		ctx.begin_pick({"kind": "area", "area": spec, "from": from, "label": label}, func(target: Variant) -> void:
+			put.call([[at.x, at.y]], float(target.get("direction", 0.0)) if target is Dictionary else 0.0, from))
+		return ""
+	ctx.begin_pick({"kind": "cell", "label": label}, func(target: Variant) -> void:
+		var c := ctx.map().grid.cell_center(HexMap.key_cell(str(target)))
+		put.call([[c.x, c.y] if not square_even(shape) else [c.x + 0.5, c.y + 0.5]], 0.0, ""))
+	return ""
+
+
+## A ruleset's preview spec as a mark's shape ({type, size, width, angle,
+## origin, include_self}), or {} when it isn't one.
+static func preview_shape(area: Dictionary) -> Dictionary:
+	var type := str(area.get("type", ""))
+	if not Marks.SHAPES.has(type) or not (area.get("size") is float or area.get("size") is int):
+		return {}
+	var out := {"type": type, "size": float(area.size), "origin": str(area.get("origin", "center")), "include_self": area.get("include_self", true) != false}
+	if type == "line":
+		out.width = float(area.get("width", 1.0))
+	if type == "cone":
+		out.angle = float(area.get("angle", 53.0))
+	return out
+
+
+## A square put at a point whose side is an even number of cells stands on the
+## corner between four of them, not on one (a 20-foot cube: sixteen squares).
+static func square_even(shape: Dictionary) -> bool:
+	return str(shape.get("type", "")) == "square" and int(roundf(float(shape.get("size", 0.0)))) % 2 == 0
 
 
 ## A button that wants a target on the map first: the pick, then the intent.

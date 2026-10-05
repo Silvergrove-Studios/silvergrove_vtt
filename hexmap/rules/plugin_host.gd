@@ -753,7 +753,7 @@ func _host_table(p: Plugin) -> Dictionary:
 			"turns_register", "turns_get", "turns_op", "turns_consume", "track_make", "track_advance", "track_get", "track_all",
 			"clock_get", "clock_op", "rest", "roll_open", "roll_contribute", "roll_resolve", "roll_pending", "ui_register",
 			"comp_query", "comp_get", "comp_collections", "comp_count", "comp_put", "comp_remove", "comp_versions", "comp_outdated",
-			"map_bands", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
+			"map_bands", "map_measure", "map_distance", "map_within", "map_template", "map_los", "map_light", "map_can_see", "map_regions_at", "map_tags_at",
 			"map_move", "map_cell", "map_cells", "map_token", "map_path", "map_space", "test_scene",
 			"improv_registered", "ruling", "bulk_run", "checkpoint_op", "campaign_get", "test_improvise",
 			"prompt_open", "prompt_close", "test_answer", "test_prompts", "test_tick", "hooks_run", "test_dispatch_of", "turns_order", "test_move", "scene_get", "test_setting"]:
@@ -1193,6 +1193,9 @@ class Bridge:
 
 	func map_bands(table: Variant) -> void:
 		_k().map.register_bands(plugin_id, table if table is Array else [])
+
+	func map_measure(rule: Variant) -> void:
+		_k().map.register_measure(plugin_id, PluginHost._as_dict(rule))
 
 	func map_distance(scene: String, a: Variant, b: Variant) -> Dictionary:
 		var d := _k().map.distance(str(scene), _place(a), _place(b), plugin_id)
