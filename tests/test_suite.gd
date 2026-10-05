@@ -131,17 +131,20 @@ func join_remote(address: String, port: int, timeout_s := 20.0) -> void:
 	check(pump.call(func() -> bool: return s.state != null, "the welcome"), "welcomed by the table at %s:%d" % [address, port])
 	if s.state == null:
 		return
-	say.call("  table: '%s', %d scenes, %d players, turns %s" % [s.state.encounter.name, s.state.encounter.scenes.size(), s.state.encounter.players.size(), s.state.encounter.turns.get("mode", "?")])
-	check(pump.call(func() -> bool: return s.maps_ready(), "the maps"), "maps streamed")
-	check(pump.call(func() -> bool: return s.assets_pending() == 0, "pack files"), "pack files streamed (or already here)")
-	check(s.state.map_for(s.scene_id()) != null, "the shown scene has its map")
+	say.call("  table: '%s', %d players" % [s.state.encounter.name, s.state.encounter.players.size()])
 	if s.state.encounter.players.is_empty():
 		check(false, "the table has no players to join as")
 		s.leave()
 		return
+	# (until a seat is taken a client holds the players alone: the scene, its map
+	# and what is on it come with the join, as that player may see them)
 	var pid := str(s.state.encounter.players[0].id)
 	s.join(pid)
 	check(pump.call(func() -> bool: return s.joined, "the join"), "joined as %s" % s.player_name())
+	say.call("  %d scenes held, turns %s" % [s.state.encounter.scenes.size(), s.state.encounter.turns.get("mode", "?")])
+	check(pump.call(func() -> bool: return s.maps_ready() and s.state.map_for(s.scene_id()) != null, "the maps"), "maps streamed")
+	check(pump.call(func() -> bool: return s.assets_pending() == 0, "pack files"), "pack files streamed (or already here)")
+	check(s.state.map_for(s.scene_id()) != null, "the shown scene has its map")
 	var mine := s.my_tokens()
 	say.call("  %d tokens of mine on the scene; %s" % [mine.size(), s.turn_summary()])
 	if not mine.is_empty():
