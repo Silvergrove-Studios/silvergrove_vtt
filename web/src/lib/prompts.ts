@@ -96,16 +96,25 @@ export function secondsLeft(rec: Dict | null | undefined, viewAt: number, now: n
 }
 
 /** What the table waits on, in words: "Waiting on Ana: a reaction (Sela) · 23 s",
- *  "Waiting on you: …", "Waiting on the DM: a reaction". */
-export function waitingText(w: Dict, me: string, secs: number | null): string {
+ *  "Waiting on you: …", "Waiting on the DM: a reaction". (`dm`: the DM's own
+ *  screen, where the DM's cards are "you".) */
+export function waitingText(w: Dict, me: string, secs: number | null, dm = false): string {
   const to = String(w?.to ?? '');
-  const who = me !== '' && to === me ? 'you' : String(w?.who ?? 'a player');
+  const who = (me !== '' && to === me) || (dm && to === 'gm') ? 'you' : String(w?.who ?? 'a player');
   const what = String(w?.what ?? '').trim();
   return `Waiting on ${who}${what ? `: ${what}` : ''}${secs !== null ? ` · ${secs} s` : ''}`;
 }
 
 /** What the table waits on that isn't this screen's own card to answer: a
- *  player's are everyone else's; the DM's own (`to` "gm") are asked of the DM. */
-export function waitingOn(waiting: Dict[] | undefined, me: string, dm: boolean): Dict[] {
-  return (waiting ?? []).filter((w) => isCard(w) && (dm ? String(w.to ?? '') !== 'gm' : String(w.to ?? '') !== me));
+ *  player's are everyone else's; the DM's own (`to` "gm") are asked of the DM,
+ *  in front — unless the DM put one aside (`putOff`, its ids), when it waits
+ *  here with the others, to go back to or go on without (an outcome the
+ *  DM approves, a monster's reaction). */
+export function waitingOn(waiting: Dict[] | undefined, me: string, dm: boolean, putOff: string[] = []): Dict[] {
+  return (waiting ?? []).filter((w) => {
+    if (!isCard(w)) return false;
+    const to = String(w.to ?? '');
+    if (dm) return to !== 'gm' || putOff.includes(String(w.id ?? ''));
+    return to !== me;
+  });
 }

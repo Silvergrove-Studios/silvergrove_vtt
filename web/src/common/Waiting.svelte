@@ -5,15 +5,22 @@
   waiting: the card is answered with its default (no reaction), and the
   fight goes on; or answer it for them (`onanswer`: the DM's screen opens
   the player's own card — a hit's choice of damage type, whose default
-  chooses nothing). A screen's own card isn't in it: that card is in front.
+  chooses nothing). A screen's own card isn't in it: that card is in front —
+  but one the DM put aside (`putOff`: an outcome to approve, a monster's
+  reaction) waits here, with Open to bring it back and Go on.
 -->
 <script lang="ts">
   import { game, submit, type Dict } from '../lib/game.svelte';
   import { clock } from '../lib/clock.svelte';
   import { secondsLeft, waitingOn, waitingText } from '../lib/prompts';
 
-  let { dm = false, onanswer }: { dm?: boolean; onanswer?: (id: string, who: string) => void } = $props();
-  const list = $derived(waitingOn(game.view.waiting as Dict[], game.me, dm));
+  let {
+    dm = false,
+    onanswer,
+    putOff = [],
+    onreopen,
+  }: { dm?: boolean; onanswer?: (id: string, who: string) => void; putOff?: string[]; onreopen?: (id: string) => void } = $props();
+  const list = $derived(waitingOn(game.view.waiting as Dict[], game.me, dm, putOff));
   // the cards the DM's view has (all of them): one of these the DM can answer for its player
   const open = $derived(new Set(((game.view.prompts as Dict[]) ?? []).filter((p) => p && typeof p === 'object').map((p) => String(p.id ?? ''))));
   let going = $state<string[]>([]);
@@ -29,16 +36,19 @@
 {#if list.length}
   <div class="waitstrip" class:dm role="status" aria-label="What the table waits on">
     {#each list as w (String(w.id))}
+      {@const mine = dm && String(w.to ?? '') === 'gm'}
       <div class="wait">
         <span class="pulse" aria-hidden="true"></span>
-        <span class="words">{waitingText(w, game.me, secondsLeft(w, game.viewAt, clock.now))}</span>
+        <span class="words">{waitingText(w, game.me, secondsLeft(w, game.viewAt, clock.now), dm)}</span>
         {#if dm}
-          {#if onanswer && open.has(String(w.id))}
+          {#if mine}
+            <button type="button" class="quiet" onclick={() => onreopen?.(String(w.id))} title="Your card, in front again">Open</button>
+          {:else if onanswer && open.has(String(w.id))}
             <button type="button" class="quiet" onclick={() => onanswer?.(String(w.id), String(w.who ?? ''))}
               title="Their card, to answer for them">Answer</button>
           {/if}
           <button type="button" class="quiet" disabled={going.includes(String(w.id))} onclick={() => goOn(w)}
-            title="Answer for them with the card's default (no reaction; a hit's extra damage left to you), and go on">Go on</button>
+            title={mine ? 'Go on without answering it now: what it holds waits for you (the log keeps it)' : 'Answer for them with the card’s default (no reaction; a hit’s extra damage left to you), and go on'}>Go on</button>
         {/if}
       </div>
     {/each}

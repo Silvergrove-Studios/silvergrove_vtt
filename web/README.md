@@ -91,5 +91,17 @@ Ben's screen and the DM's say whom the fight waits on; she casts it, the
 attack misses, and her level 1 slot and her reaction are spent; the next
 round the DM goes on without waiting for her answer.
 
+`tests/e2e/rulings.mjs <host.json> <out>` (host with `--party --seed 12`,
+on a package built on the rules being tried: `tools/package.py --out` and
+`build_starter.gd --out … --rules …` in the ruleset): the DM's rulings and
+the approval step. The DM turns on *Approve outcomes before they land* in
+Rules settings (an Assisted table); in the chapel fight a goblin's hit on
+Wren (Ana's rogue) is in everyone's chat at once while its damage waits on
+the DM's card (Apply, Change…, Skip), Ana's phone and Ben's screen saying
+the table waits on the DM, Wren unhurt; the DM changes the damage and
+applies it, and the log says so; a later hit applied as it is, the DM
+calls it a miss from its line in Chat & rolls (Rule), and the damage is
+healed back — the roll's line kept as it was rolled.
+
 `tests/e2e/probe.mjs <host.json> dm|player '<expression>'` evaluates an
 expression in a page (`window.hexmap.game` is what the page knows).

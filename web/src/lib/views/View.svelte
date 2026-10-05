@@ -180,13 +180,18 @@
   });
 
   // a form's starting values, once for each form drawn here (a tab switch
-  // draws another in this place: it starts from its own)
+  // draws another in this place: it starts from its own) — and for each card:
+  // the next one in front comes in the same place, and starts from its own
+  // (the DM's second card for an outcome, its amounts, came up empty)
   let seededFor = '';
   $effect.pre(() => {
     if (!n || (type !== 'prompt' && type !== 'form' && type !== 'field')) return;
-    const key = JSON.stringify(n);
+    const card = type === 'prompt' ? String((valueOf(n, ctx) as Dict | null)?.id ?? '') : '';
+    const key = `${JSON.stringify(n)}#${card}`;
     if (key === seededFor) return;
+    const another = type === 'prompt' && seededFor !== '' && !seededFor.endsWith(`#${card}`);
     seededFor = key;
+    if (another) formValues = {};
     const src = type === 'prompt' ? prompted((valueOf(n, ctx) as Dict) ?? {}).values : type === 'form' ? n.values : null;
     if (src && typeof src === 'object') for (const [k, v] of Object.entries(clone(src))) formValues[k] = v;
     if (type === 'field') fieldValue = n.bind ? clone(valueOf({ bind: n.bind }, ctx)) : n.value;
