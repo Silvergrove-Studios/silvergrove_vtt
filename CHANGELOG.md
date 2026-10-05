@@ -49,6 +49,15 @@
   DM all of it. Words only the DM reads that carry their own separator
   (" against AC 15", ", 12") read as a phrase gone from its sentence:
   "14, a miss", where the comma after them used to go too.
+- **What we know, on a Godot phone too.** The Godot player client asks as
+  a web screen does: a tap on a creature no player owns that the player
+  sees (not the party's own, nor a thing) picks it out, its ring drawn, and
+  sends the ruleset's tap action at it; the same one tapped again lets it
+  go, and a press that wanders off it (a drag, a pinch) asks nothing. The
+  card comes to the front in the Table pane, at its top. A card on the
+  Godot screens (a player client's, the Table's Rules pane) shows its
+  heading above its words ("What we know", "Your choice"), and its words
+  wrap: a long one ran off a phone's narrow pane.
 - **A turn waits on its rolls.** A ruleset's handlers of a turn's start and
   end (and a round's, the end of the turns, a focus given, a card's answer)
   may ask with a card as an action does — a monster's recharge die the DM

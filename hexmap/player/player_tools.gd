@@ -1,20 +1,79 @@
 class_name PlayerTools
 extends RefCounted
 ## The Player's one tool: tap a token of yours to pick it up, drag it,
-## let go to ask the table for the move. Everything else on the map is
-## look-only. Written for a finger: no hover state matters, no modifiers
-## are needed, a small wobble is still a tap.
+## let go to ask the table for the move. A creature no player owns, tapped,
+## is picked out and the rules are asked what the party knows of it.
+## Everything else on the map is look-only. Written for a finger: no hover
+## state matters, no modifiers are needed, a small wobble is still a tap.
+
+
+## What a tap on a creature's token asks of the rules, as a web screen's
+## does (web/src/lib/tap.ts): the action a ruleset registers with `tap =
+## "creature"` — the first by plugin, then by name — as {plugin, action},
+## or {} where no ruleset answers. `actions` is a view's (Views.project).
+static func tap_action(actions: Variant, kind := "creature") -> Dictionary:
+	if not (actions is Dictionary):
+		return {}
+	var plugins: Array = (actions as Dictionary).keys().map(func(k: Variant) -> String: return str(k))
+	plugins.sort()
+	for plugin in plugins:
+		var list: Variant = actions[plugin]
+		if not (list is Dictionary):
+			continue
+		var names: Array = (list as Dictionary).keys().map(func(k: Variant) -> String: return str(k))
+		names.sort()
+		for name in names:
+			var a: Variant = list[name]
+			if a is Dictionary and (a as Dictionary).get("tap") is String and str(a.tap) == kind:
+				return {"plugin": plugin, "action": name}
+	return {}
+
+
+## Whether a token tapped is a creature to ask about: one with a creature
+## behind it that no player owns (the party's own are their sheets), not a
+## thing on the map.
+static func asks_about(tk: Dictionary) -> bool:
+	if tk.is_empty():
+		return false
+	var actor: Variant = tk.get("actor")
+	if actor == null or str(actor) == "":
+		return false
+	var owner: Variant = tk.get("owner")
+	if owner != null and str(owner) != "":
+		return false
+	var tags: Variant = tk.get("tags", [])
+	return not (tags is Array and (tags as Array).has("object"))
+
+
+## The intent a tap on such a token sends: the ruleset's action, aimed at
+## it on the scene shown; {} for a token that asks nothing, or where no
+## ruleset answers.
+static func tap_intent(actions: Variant, tk: Dictionary, scene: String) -> Dictionary:
+	if not asks_about(tk):
+		return {}
+	var found := tap_action(actions)
+	if found.is_empty():
+		return {}
+	return {"kind": "action", "plugin": found.plugin, "action": found.action, "ctx": {"target": "token:" + str(tk.get("id", "")), "scene": scene}}
+
 
 class MoveTool extends RefCounted:
+	## How far a press may wander (hex units) and still be a tap.
+	const WOBBLE := 0.08
+
 	var session: Session
 	var canvas: MapCanvas
 	var zoom := 1.0
+	## The token picked out: one of mine (to move), or a creature tapped
+	## (what we know of it asked); its ring is drawn.
 	var selected := ""
 	## A pick in flight: the intent waiting for its target (with `pick`
 	## and `area` still on it), or empty.
 	var pick: Dictionary = {}
 	var _hover := Vector2.INF
 	var _dragging := false
+	## A creature pressed: a tap once the press ends where it began.
+	var _tapping := ""
 	var _start := Vector2.ZERO
 	var _at := Vector2.ZERO
 	var _moved := false
@@ -33,6 +92,46 @@ class MoveTool extends RefCounted:
 			if canvas.token_hit(toks[i], p):
 				return toks[i]
 		return {}
+
+	## The creature this player sees at a point that the rules may be asked
+	## about (no player's, not a thing): the token on top there, when it is
+	## one; else {}. Never one hidden or out of sight (tokens_in_view).
+	func creature_at(p: Vector2) -> Dictionary:
+		var toks: Array = canvas.tokens_in_view()
+		for i in range(toks.size() - 1, -1, -1):
+			if canvas.token_hit(toks[i], p):
+				return toks[i] if PlayerTools.asks_about(toks[i]) else {}
+		return {}
+
+	## Whether a token is on this player's screen now: theirs, or in view.
+	func _shown(id: String) -> bool:
+		for t in canvas.tokens_in_view():
+			if str(t.get("id", "")) == id:
+				return true
+		return false
+
+	## A tap on a creature no player owns, as the web's screen has it: the
+	## first picks it out and asks the rules what the party knows of it (the
+	## ruleset's tap action, aimed at it: its card comes as the table's cards
+	## do); the same one tapped again lets it go, asking nothing. Nothing is
+	## asked where no ruleset answers, nor by a co-GM (the DM's own card is
+	## the stat block's).
+	func tap_creature(id: String) -> void:
+		if selected == id:
+			selected = ""
+			canvas.overlay.queue_redraw()
+			return
+		selected = id
+		canvas.overlay.queue_redraw()
+		if session.is_gm():
+			return
+		var sid := session.scene_id()
+		var payload := PlayerTools.tap_intent(session.view.get("actions", {}), session.state.token(sid, id), sid)
+		if payload.is_empty():
+			return
+		var why := session.intent(payload)
+		if why != "":
+			session.status.emit(why)
 
 	## Start asking for a target: the next tap resolves it and sends the
 	## intent; a tap on nothing (for a token pick) cancels.
@@ -82,11 +181,20 @@ class MoveTool extends RefCounted:
 	func press(p: Vector2, button: int, _mods: Dictionary) -> bool:
 		if button != MOUSE_BUTTON_LEFT:
 			return false
+		_tapping = ""
 		if not pick.is_empty():
 			_resolve_pick(p)
 			return true
 		var tk := token_at(p)
 		if tk.is_empty():
+			# a creature no player owns: picked out and asked about once the
+			# press is a tap (a press that wanders, or two fingers, ask nothing)
+			var other := creature_at(p)
+			if not other.is_empty():
+				_tapping = str(other.id)
+				_start = p
+				_moved = false
+				return true
 			selected = ""
 			canvas.overlay.queue_redraw()
 			return false
@@ -99,14 +207,25 @@ class MoveTool extends RefCounted:
 		return true
 
 	func drag(p: Vector2, _button: int, _mods: Dictionary) -> void:
+		if _tapping != "" and p.distance_to(_start) > WOBBLE:
+			_moved = true
 		if not _dragging:
 			return
 		_at = p
-		if p.distance_to(_start) > 0.08:
+		if p.distance_to(_start) > WOBBLE:
 			_moved = true
 		canvas.overlay.queue_redraw()
 
 	func release(p: Vector2, _button: int, _mods: Dictionary) -> void:
+		if _tapping != "":
+			var id := _tapping
+			_tapping = ""
+			# (a pinch's second finger ends the first's press at their middle: not a tap)
+			var tapped := not _moved and p.distance_to(_start) <= WOBBLE
+			_moved = false
+			if tapped:
+				tap_creature(id)
+			return
 		if _dragging and _moved and selected != "":
 			var tk := session.state.token(session.scene_id(), selected)
 			if not tk.is_empty():
@@ -135,6 +254,10 @@ class MoveTool extends RefCounted:
 			return
 		var tk := session.state.token(session.scene_id(), selected)
 		if tk.is_empty():
+			return
+		# (a creature picked out that's since gone from sight: no ring tells where it is)
+		var mine := tk.get("owner") != null and str(tk.owner) == session.player_id and session.player_id != ""
+		if not mine and not _shown(selected):
 			return
 		var ppx := canvas.ppx
 		if _dragging and _moved:

@@ -1,6 +1,25 @@
 extends TestCase
 ## The Player client.
 
+const ANA := "pl_fe0170c1"
+const BEN := "pl_393eb25a"
+
+
+## A Godot client's session that notes each intent it sends, then sends it.
+class Spy extends NetSession:
+	var sent: Array = []
+
+	func _init(p_address: String, p_port: int, p_packs: PackLibrary, p_name := "") -> void:
+		super(p_address, p_port, p_packs, p_name)
+
+	func intent(payload: Dictionary) -> String:
+		sent.append(payload.duplicate(true))
+		return super(payload)
+
+	## The rules actions it asked for (not a card's answers).
+	func asked() -> Array:
+		return sent.filter(func(i: Dictionary) -> bool: return str(i.get("kind", "")) == "action")
+
 
 func test_local_session() -> void:
 	var src := example("chapel_ambush.encounter")
@@ -171,3 +190,172 @@ func test_player_window() -> void:
 	win.queue_free()
 	await tree.process_frame
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_player.json"))
+
+
+# ------------------------------------------------------ what we know, on a tap --
+
+## A ruleset that answers a tap on a creature (its `tap = "creature"`
+## action: what the party knows of it, a card of its own), and keeps count.
+const TAP_RULES := """
+local hm = hexmap
+-- (an action first by name that a tap doesn't ask)
+hm.actions.register('aim', { label = 'Aim', target = 'token', run = function(ctx) return true end })
+hm.actions.register('known', { label = 'What we know', target = 'token', tap = 'creature', run = function(ctx)
+	local tid = tostring(ctx.target or ''):gsub('^token:', '')
+	local st = hm.state.get('encounter') or {}
+	hm.commit(hm.state.set('encounter', '', { asked = (tonumber(st.asked) or 0) + 1, last = tid, by = tostring(ctx.player) }), 'Asked')
+	hm.prompt_open(ctx.player, { heading = 'What we know', title = 'The Goblin: bloodied; Frightened; its Armor Class not known; and what the party has seen it shrug off, a sentence longer than a phone is wide.',
+		fields = {}, choices = { { id = 'close', label = 'Close' } } }, { default = { choice = 'close' }, deadline = 0 })
+	return true
+end })
+"""
+
+
+func _pump(host: HostSession, s: NetSession, done: Callable, max_ms := 4000) -> bool:
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < max_ms:
+		host.poll(0.016)
+		s.poll()
+		if done.call():
+			return true
+		OS.delay_msec(5)
+	return false
+
+
+func _label(node: Node, begins: String) -> Label:
+	for l in node.find_children("*", "Label", true, false):
+		if (l as Label).text.begins_with(begins):
+			return l
+	return null
+
+
+func _button(node: Node, text: String) -> Button:
+	for b in node.find_children("*", "Button", true, false):
+		if (b as Button).text == text:
+			return b
+	return null
+
+
+func _tap(tool: PlayerTools.MoveTool, at: Vector2) -> bool:
+	var took := tool.press(at, MOUSE_BUTTON_LEFT, {})
+	tool.release(at, MOUSE_BUTTON_LEFT, {})
+	return took
+
+
+## A player's Godot client asks what the party knows of a creature as she taps
+## its token, as a web screen does: the ruleset's action registered with `tap
+## = "creature"` (the first by plugin, then by name), aimed at the token on
+## the scene she's shown. Its card comes back as the table's cards do — its
+## heading and its words, which wrap — in front, in the Table pane. The same
+## creature tapped again lets it go; her own token, another player's, a thing
+## on the map, a creature she doesn't see or a press that wanders ask nothing,
+## nor does any tap where no ruleset answers.
+func test_what_we_know_on_a_tap() -> void:
+	var acts := {"b.rules": {"look": {"label": "Look"}, "known": {"tap": "creature", "target": "token"}, "zzz": {"tap": "creature"}}, "a.rules": {"say": {"label": "Say"}}}
+	check(PlayerTools.tap_action(acts) == {"plugin": "b.rules", "action": "known"}, "the action a tap asks: the first plugin, then the first action, with tap = creature")
+	check(PlayerTools.tap_action({"a.rules": {"say": {"label": "Say", "tap": "item"}}}).is_empty() and PlayerTools.tap_action(null).is_empty(), "none where no ruleset answers one")
+	var gob := {"id": "t_g", "actor": "a_g", "owner": null, "tags": ["humanoid"]}
+	check(PlayerTools.asks_about(gob), "a creature no player owns is asked about")
+	check(not PlayerTools.asks_about({"id": "t_f", "actor": "a_f", "owner": "pl_1"}) and not PlayerTools.asks_about({"id": "t_l", "actor": "a_g", "owner": null, "tags": ["object"]})
+		and not PlayerTools.asks_about({"id": "t_x", "actor": "", "owner": null}) and not PlayerTools.asks_about({"id": "t_y", "actor": null}), "not the party's own, a thing, nor a token with nobody behind it")
+	check(PlayerTools.tap_intent(acts, gob, "s_1") == {"kind": "action", "plugin": "b.rules", "action": "known", "ctx": {"target": "token:t_g", "scene": "s_1"}}, "the intent: the action aimed at the token, on the scene shown")
+	check(PlayerTools.tap_intent({"a.rules": {"say": {}}}, gob, "s_1").is_empty(), "and none where no ruleset answers")
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var st := EncounterState.new(Encounter.load_file(example("chapel_ambush.encounter")))
+	st.resolve_maps()
+	var sid := st.encounter.active_scene_id
+	var kernel := RulesKernel.new(st)
+	var plugins := PluginHost.new(kernel)
+	check(plugins.load_source({"id": "t.tap", "version": "1", "api": 1, "name": "Tap", "capabilities": ["state", "log", "prompts"]}, [["main.lua", TAP_RULES]]) == "", "a ruleset that answers a tap")
+	var fighter: Dictionary = st.tokens_owned_by(sid, ANA)[0]
+	var ranger: Dictionary = st.tokens_owned_by(sid, BEN)[0]
+	var gpos := Vector2(5.0, 7.4)
+	var lpos := Vector2(4.0, 5.5)
+	check(kernel.commit([
+		{"t": "actor.add", "actor": {"id": "a_fighter", "kind": "pc", "name": "Ana's fighter", "owner": ANA}},
+		{"t": "token.set", "scene": sid, "id": str(fighter.id), "changes": {"actor": "a_fighter"}},
+		{"t": "actor.add", "actor": {"id": "a_gob", "kind": "npc", "name": "Goblin", "audience": {"visible": "all"}}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Goblin", gpos, {"id": "t_gob", "actor": "a_gob", "hidden": false, "tags": ["humanoid"]})},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Floating light", lpos, {"id": "t_obj", "actor": "a_gob", "hidden": false, "tags": ["object"]})},
+		{"t": "actor.add", "actor": {"id": "a_lurk", "kind": "npc", "name": "Lurker"}},
+		{"t": "token.add", "scene": sid, "token": Encounter.new_token("Lurker", Vector2(3.5, 6.0), {"id": "t_lurk", "actor": "a_lurk", "hidden": true})},
+	], "setup") == "", "set up: a goblin and a floating light by Ana's fighter, a lurker the DM hides")
+	var host := HostSession.new(st, PackLibrary.new())
+	host.kernel = kernel
+	host.plugins = plugins
+	host.dm_token = "sesame"
+	host.dm_state_source = func() -> Dictionary: return {}
+	check(host.start(49750, false, -1) == OK, "hosting")
+	var app := App.new("user://test_prefs_player_tap.json")
+	var win := PlayerWindow.new()
+	win.app = app
+	root.add_child(win)
+	win._stop_browsing()
+	var s := Spy.new("127.0.0.1", host.port, app.packs, "Ana's phone")
+	check(s.connect_to_host() == OK and _pump(host, s, func() -> bool: return s.state != null), "her phone reaches the table")
+	s.join(ANA)
+	check(_pump(host, s, func() -> bool: return s.joined and s.maps_ready() and not s.view.is_empty() and not s.state.token(sid, "t_gob").is_empty()), "joined as Ana: her scene, its map, the rules' view")
+	win._bind(s)
+	win.show_screen("play")
+	await tree.process_frame
+	var tool := win.tool
+	var in_view := win.view.canvas.tokens_in_view().map(func(t: Dictionary) -> String: return str(t.id))
+	check(in_view.has("t_gob") and in_view.has("t_obj") and not in_view.has("t_lurk"), "she sees the goblin and the light, not the lurker: %s" % [in_view])
+	# the goblin tapped: picked out, and what we know of it asked
+	check(_tap(tool, gpos), "a press on the goblin is the tool's")
+	check(s.asked().size() == 1 and s.asked()[0] == {"kind": "action", "plugin": "t.tap", "action": "known", "ctx": {"target": "token:t_gob", "scene": sid}},
+		"a tap on the goblin asks the rules what we know of it, as a web screen does: %s" % [s.asked()])
+	check(tool.selected == "t_gob", "and picks it out")
+	check(_pump(host, s, func() -> bool: return not (s.view.get("prompts", []) as Array).is_empty()), "its card comes back")
+	var card: Dictionary = s.view.prompts[0] if not (s.view.get("prompts", []) as Array).is_empty() else {}
+	check(str(card.get("form", {}).get("heading", "")) == "What we know" and str(card.get("form", {}).get("title", "")).begins_with("The Goblin:"), "the card, for her: %s" % [card.get("form")])
+	var rules := Views.plugin_state(kernel, "t.tap", Views.ROLE_GM)
+	check(int(rules.get("asked", 0)) == 1 and str(rules.get("last", "")) == "t_gob" and str(rules.get("by", "")) == ANA, "the rules ran it at the goblin, for Ana: %s" % [rules])
+	await tree.process_frame
+	check(win.pane_mode == "table", "in front: the Table pane")
+	var words := _label(win._pane_box, "The Goblin:")
+	check(_label(win._pane_box, "What we know") != null and words != null, "the card there: its heading and its words")
+	check(words != null and words.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "its words wrap on a narrow screen")
+	# the same one again: let go, nothing asked
+	_tap(tool, gpos)
+	check(s.asked().size() == 1 and tool.selected == "", "the goblin tapped again: let go, nothing asked")
+	# her own token: picked up to move; another player's, a thing, the hidden lurker: nothing
+	_tap(tool, Vision.token_pos(fighter))
+	check(s.asked().size() == 1 and tool.selected == str(fighter.id), "her own token: hers to move, nothing asked")
+	_tap(tool, Vision.token_pos(ranger))
+	check(s.asked().size() == 1 and tool.selected == "", "Ben's ranger: nothing asked")
+	_tap(tool, lpos)
+	check(s.asked().size() == 1 and tool.selected == "", "a thing on the map: nothing asked")
+	_tap(tool, Vector2(3.5, 6.0))
+	check(s.asked().size() == 1 and tool.selected == "", "where the hidden lurker stands: nothing asked, nothing picked out")
+	# a press that wanders off the goblin, and a pinch's release away from it, aren't taps
+	tool.press(gpos, MOUSE_BUTTON_LEFT, {})
+	tool.drag(gpos + Vector2(0.6, 0.0), MOUSE_BUTTON_LEFT, {})
+	tool.release(gpos + Vector2(0.6, 0.0), MOUSE_BUTTON_LEFT, {})
+	tool.press(gpos, MOUSE_BUTTON_LEFT, {})
+	tool.release(gpos + Vector2(1.5, 0.5), MOUSE_BUTTON_LEFT, {})
+	check(s.asked().size() == 1 and tool.selected == "", "a drag from it, or a pinch's release away from it: nothing asked")
+	# a pick in flight still takes the tap
+	tool.begin_pick({"kind": "action", "plugin": "t.tap", "action": "aim", "pick": "token", "label": "Aim", "ctx": {"actor": "a_fighter"}})
+	_tap(tool, gpos)
+	check(s.asked().size() == 2 and str(s.asked().back().action) == "aim" and str(s.asked().back().ctx.target) == "token:t_gob" and tool.pick.is_empty(), "a pick in flight takes the tap as before: %s" % [s.asked().back()])
+	# Close: the card goes
+	var close := _button(win._pane_box, "Close")
+	check(close != null, "the card's Close")
+	if close != null:
+		close.pressed.emit()
+		check(_pump(host, s, func() -> bool: return (s.view.get("prompts", []) as Array).is_empty()), "Close: the card goes")
+	# where no ruleset answers a tap, nothing is asked
+	var plain: Dictionary = JsonDoc.deep(s.view.get("actions", {}))
+	(plain["t.tap"]["known"] as Dictionary).erase("tap")
+	s.view.actions = plain
+	_tap(tool, gpos)
+	check(s.asked().size() == 2 and tool.selected == "t_gob", "no ruleset answers a tap: the goblin picked out, nothing asked")
+	win._leave()
+	win._stop_browsing()   # (the join screen listens for tables: not here)
+	host.stop()
+	win.queue_free()
+	await tree.process_frame
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_prefs_player_tap.json"))
