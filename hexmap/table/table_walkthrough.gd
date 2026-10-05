@@ -62,14 +62,17 @@ func _init(p_settings: TableSettings) -> void:
 	_error.add_theme_color_override("font_color", Color("#e36b5b"))
 	_error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_error)
-	add_cancel_button("Not now")
-	_back = add_button("Back", false, "back")
+	# (each added to the left of the last: Not now, Back, See every setting, Next)
 	_see_all = add_button("See every setting", false, "see_all")
+	_back = add_button("Back", false, "back")
+	add_button("Not now", false, "not_now")
 	custom_action.connect(func(action: StringName) -> void:
 		if action == &"back":
 			back()
 		elif action == &"see_all":
-			finish(true))
+			finish(true)
+		elif action == &"not_now":
+			_closed())
 	confirmed.connect(func() -> void: next())
 	canceled.connect(_closed)
 
@@ -199,7 +202,7 @@ func _show() -> void:
 			var group := ButtonGroup.new()
 			for lv in TableSettings.LEVELS:
 				var info: Dictionary = TableSettings.LEVEL_INFO[lv]
-				var b := HomeScreen.card("%s — %s" % [str(info.title), str(info.tagline)], "• " + "\n• ".join(PackedStringArray(info.lines)), "", lv == draft.level)
+				var b := HomeScreen.card("%s — %s" % [str(info.title), str(info.tagline)], "• " + "\n• ".join(PackedStringArray(info.lines)), "", false)
 				b.name = "Level_" + str(lv)
 				b.toggle_mode = true
 				b.button_group = group
@@ -346,6 +349,5 @@ func _setting_control_row(it: Dictionary) -> Control:
 		if pv != null:
 			pv.text = question_preview(opened)
 			pv.tooltip_text = pv.text)
-	ctl.custom_minimum_size.x = 160
 	row.add_child(ctl)
 	return row

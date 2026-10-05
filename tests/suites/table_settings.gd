@@ -326,7 +326,7 @@ func test_table_settings_on_the_table() -> void:
 	d._search.text = ""
 	d.refresh()
 	d.ask_level("bookkeeping")
-	check(d.preview_text().begins_with("Switch to Bookkeeping? 1 setting changes: What a marked armour slot takes off a hit (2 → 0)"), "a switch says what it changes before it does: %s" % d.preview_text())
+	check(d.preview_text() == "Switch to Bookkeeping? 1 setting changes:\n   •  What a marked armour slot takes off a hit:  2 → 0", "a switch says what it changes before it does: %s" % d.preview_text())
 	check(win.table_settings.registry().level == "assisted", "nothing changed yet")
 	d.cancel_level()
 	check(d.preview_text() == "" and win.table_settings.registry().level == "assisted", "Cancel: nothing")

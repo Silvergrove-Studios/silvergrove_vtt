@@ -97,7 +97,9 @@ func _init(p_settings: TableSettings) -> void:
 	srow.add_child(_undo)
 	box.add_child(srow)
 	_scroll = ScrollContainer.new()
-	_scroll.custom_minimum_size = Vector2(600, 400)
+	# (small at least, filling what the window has: a level switch's preview
+	# above it takes room from it rather than growing the window off screen)
+	_scroll.custom_minimum_size = Vector2(600, 200)
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(_scroll)
@@ -136,7 +138,11 @@ func ask_level(level: String) -> void:
 		cancel_level()
 		return
 	pending_level = level
-	_preview_words.text = "Switch to %s? %s" % [str(TableSettings.LEVEL_INFO[level].title), TableSettings.change_words(TableSettings.changes_for_level(reg, level))]
+	var changes := TableSettings.changes_for_level(reg, level)
+	var lines := PackedStringArray(["Switch to %s? %s" % [str(TableSettings.LEVEL_INFO[level].title), TableSettings.change_words(changes).get_slice(":", 0) + (":" if not changes.is_empty() else "")]])
+	for ch in changes:
+		lines.append("   •  %s:  %s → %s%s" % [str(ch.title), str(ch.from_words), str(ch.to_words), "  (takes effect at the next fight)" if bool(ch.next_fight) else ""])
+	_preview_words.text = "\n".join(lines)
 	_preview.visible = true
 	_switch.text = "Switch to %s" % str(TableSettings.LEVEL_INFO[level].title)
 	_refresh_levels(reg)
@@ -333,7 +339,6 @@ func _setting_row(it: Dictionary, fight: bool, level_title: String) -> Control:
 		if why != "":
 			settings.ctx.say(why)
 			refresh(), true)
-	ctl.custom_minimum_size.x = 160
 	row.add_child(ctl)
 	return row
 
@@ -380,6 +385,7 @@ static func control_for(it: Dictionary, value: Variant, on_change: Callable, set
 		ob.fit_to_longest_item = false
 		ob.clip_text = true
 		ob.custom_minimum_size.x = 220
+		ob.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		ob.item_selected.connect(func(i: int) -> void: on_change.call(JsonDoc.deep(it.enum[i])))
 		return ob
 	match str(it.get("type", "")):
@@ -387,12 +393,16 @@ static func control_for(it: Dictionary, value: Variant, on_change: Callable, set
 			var cb := CheckButton.new()
 			cb.button_pressed = value == true
 			cb.text = "On" if value == true else "Off"
+			cb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			cb.tooltip_text = str(it.title)
 			cb.toggled.connect(func(on: bool) -> void:
 				cb.text = "On" if on else "Off"
 				on_change.call(on))
 			return cb
 		"integer", "number":
 			var sb := SpinBox.new()
+			sb.custom_minimum_size.x = 110
+			sb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			sb.min_value = float(it.get("minimum", -1e9))
 			sb.max_value = float(it.get("maximum", 1e9))
 			sb.allow_lesser = not it.has("minimum")
@@ -414,5 +424,7 @@ static func control_for(it: Dictionary, value: Variant, on_change: Callable, set
 			return sb
 	var le := LineEdit.new()
 	le.text = str(value) if value != null else ""
+	le.custom_minimum_size.x = 220
+	le.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	le.text_submitted.connect(func(t: String) -> void: on_change.call(t))
 	return le
