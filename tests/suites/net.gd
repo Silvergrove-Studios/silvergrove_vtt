@@ -263,6 +263,13 @@ func test_table_hosts_player_joins() -> void:
 	check(player._players.item_count == 2 and player._pick_title.text == "Chapel Ambush", "players listed from the table's document")
 	player._start(str(player._players.get_item_metadata(0)))
 	check(pump.call(func() -> bool: return player.screen == "play" and player.view.canvas.map != null), "joined as Ana and the map arrived")
+	# her document sent again (a creature's name revealed, one added that the players
+	# don't know): the scene drawn anew from it, and she stays at the table — not
+	# asked again who she is
+	var held: EncounterState = player.session.state
+	table.host.refresh_scenes()
+	check(pump.call(func() -> bool: return player.session.state != held), "her document again")
+	check(player.screen == "play" and player.view.canvas.state == player.session.state and player.view.canvas.map != null, "still at the table, the scene drawn from it (%s)" % player.screen)
 	# a player with no character of her own is taken to where one is made
 	check(pump.call(func() -> bool: return not player.session.view.is_empty()), "the table's view arrived")
 	var no_character: bool = player.session.my_actors().is_empty()

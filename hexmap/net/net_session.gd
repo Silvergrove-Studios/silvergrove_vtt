@@ -7,6 +7,7 @@ extends Session
 ## side only pre-checks a request to give the reason at once.
 
 ## The welcome arrived: `state` is usable and the players can be listed.
+## (Not again once joined: the document sent again only redraws, `changed`.)
 signal connected
 ## Every pack file has arrived; textures were reloaded.
 signal assets_ready
@@ -231,6 +232,12 @@ func _receive_encounter(doc: Dictionary) -> void:
 	for id in old_maps:
 		state.attach_map(old_maps[id])
 	_want_missing_maps()
+	# the document again, once joined (a creature's name revealed, one added where
+	# the players don't know them: HostSession._send_docs): the scene drawn anew,
+	# not a new welcome — that asks the player who they are
+	if joined:
+		changed.emit("", "")
+		return
 	_send({"t": "need", "kind": "packs"})
 	connected.emit()
 	changed.emit("", "")
