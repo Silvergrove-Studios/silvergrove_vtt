@@ -252,6 +252,37 @@ ok = ok && (await step('Ben measures from Brakka with the ruler, and Ana sees it
   await ana.waitForFunction(() => Object.values(window.hexmap.game.marks ?? {}).some((m) => m.kind === 'ruler' && m.name === 'Brakka' && m.live === false), null, { timeout: 5000 });
 }));
 
+ok = ok && (await step('the DM measures across the chapel’s rubble: the walk priced as a move pays for it', async () => {
+  // the chapel's map (pointy hexes, odd rows): its rubble at 9,6, difficult by its art
+  const map = await dm.evaluate(() => {
+    const g = window.hexmap.game;
+    const m = g.maps?.[String(g.scene.map ?? '')];
+    const lvl = (m?.levels ?? []).find((l) => l.id === g.scene.level) ?? m?.levels?.[0];
+    return { rubble: lvl?.terrain?.['9,6']?.t ?? '', grid: m?.grid ?? {} };
+  });
+  expect(/rubble$/.test(map.rubble) && map.grid.orientation === 'pointy', `the chapel's rubble at 9,6: ${JSON.stringify(map)}`);
+  const ref = await dm.evaluate(() => {
+    const t = (window.hexmap.game.scene.tokens ?? []).find((x) => x.name === 'Brakka');
+    return { id: t.id, pos: t.pos };
+  });
+  const at = await screenOf(dm, ref.id);
+  const scale = await dm.evaluate(() => document.querySelector('canvas').pxPerHex());
+  const S3 = Math.sqrt(3);
+  const center = (q, r) => ({ x: q + r * 0.5 + 0.5, y: (r * 1.5) / S3 + 1 / S3 });
+  const toScreen = (p) => ({ x: at.x + (p.x - ref.pos[0]) * scale, y: at.y + (p.y - ref.pos[1]) * scale });
+  const a = toScreen(center(8, 6));
+  const b = toScreen(center(10, 6));
+  await dm.getByRole('button', { name: 'Ruler' }).click();
+  const banner = dm.getByRole('group', { name: 'Ruler' });
+  await banner.getByText('Ruler: drag, or tap where it starts').waitFor({ timeout: 4000 });
+  await dm.mouse.click(a.x, a.y);
+  await dm.mouse.click(b.x, b.y);
+  // two hexes straight; over the rubble (or round it) three's worth
+  await banner.getByText('10 ft straight, 15 ft to walk round').waitFor({ timeout: 6000 });
+  await shot(dm, 'dm_measures_across_the_rubble');
+  await banner.getByRole('button', { name: 'Done' }).click();
+}));
+
 ok = ok && (await step('the DM pings by a right-click: both players see it', async () => {
   // (on Brakka: ground everyone sees, with nobody hidden there)
   const brakka = await dm.evaluate(() => (window.hexmap.game.scene.tokens ?? []).find((t) => t.name === 'Brakka')?.id ?? '');

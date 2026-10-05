@@ -103,7 +103,9 @@ Fireball on her phone off her turn and puts it on the goblins; Ben's
 screen and the DM's show it with its label ("Sela: Fireball, 20-ft
 sphere"), and say who it would catch — Ben's only the creatures he can
 see, the DM's the hidden goblin too; Ben measures from Brakka with the
-ruler and Ana's phone shows it as his laptop does; the DM pings by a
+ruler and Ana's phone shows it as his laptop does; the DM measures across
+the chapel's rubble ("10 ft straight, 15 ft to walk round": the walk
+priced as a move pays for difficult ground); the DM pings by a
 right-click (both players see it, and not a second ping over the hidden
 goblin); the DM puts a template on the goblins and deals Damage those
 caught from its banner (the DM's card: a fire trap, DC 40) — their saves
@@ -125,10 +127,13 @@ the campaign as a DM starting it has it, not yet set up): how the table
 runs. The walkthrough opens by itself on the DM's screen — on maps,
 Assisted offered and Bookkeeping picked, the table's questions each with a
 line of its answer (one opened with Change), the rules options and a house
-rule, a summary that says Bookkeeping; then Table settings: "As Bookkeeping
+rule, a summary that says Bookkeeping (its lines back to where each is
+set: a dice answer, the house rule); then Table settings: "As Bookkeeping
 has it", a switch to Automated that says what it would change and is
 cancelled, a setting changed by hand ("Customized") and its section's
-Reset. A player joins and is shown How this table runs, and finds it again
+Reset; the chapel's fight given its own Count movement, and a switch to
+Automated saying the fight keeps it while it runs. A player joins and is
+shown How this table runs, and finds it again
 in the ⋯ menu; the DM changes the house rules, and she is shown it again,
 saying so. (Every other journey's pages put How this table runs away as it
 comes up: a player joining a campaign from before levels is shown it too.)
