@@ -108,10 +108,18 @@ func run(hook: String, payload: Dictionary) -> HookRun:
 	return r
 
 
+## How deep the runs that must not pause go now: a handler called while one
+## runs may not wait on a card (a plugin reads it as hm.may_wait()), whatever
+## bus it is on — a plugin's test kernel's, a nested run's.
+static var sync_depth := 0
+
+
 ## The final payload of a run that must not pause (host-internal hooks).
 ## A paused run is treated as vetoed.
 func run_sync(hook: String, payload: Dictionary) -> Dictionary:
+	sync_depth += 1
 	var r := run(hook, payload)
+	sync_depth -= 1
 	if r.status == HookRun.PENDING:
 		r.payload.veto = "hook '%s' paused where it may not" % hook
 		r.status = HookRun.VETOED

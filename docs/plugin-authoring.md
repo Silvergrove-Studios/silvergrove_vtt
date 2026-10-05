@@ -153,7 +153,8 @@ Hooks in API 1:
 Handlers of the clock and rest hooks run synchronously and may not
 prompt; they append events to `payload.events` and the kernel commits
 them with the step — the whole step is one undo entry, and a veto or a
-refused event undoes all of it.
+refused event undoes all of it. A handler can tell which kind of call it is
+in with `hm.may_wait()` (below).
 
 **Hooks that wait.** A step of the turns — Next, the start, a focus given,
 the end — runs its moments in order: the turn ending (`turn_end`, then
@@ -1147,8 +1148,23 @@ Table answers (a monster's reaction, a ruling). The action pauses; the Table rec
 in the encounter (`pending.prompts`, so a Player who reconnects still
 sees it), shows the form to that Player (Phase 4), answers with the
 default at the deadline, or lets the GM override; the call returns the
-answer table. Needs the `prompts` capability. `derive` and the
-turn/clock/rest hooks may never prompt.
+answer table. Needs the `prompts` capability. `derive`, the clock's and a
+rest's hooks and the others the Table runs straight through may never
+prompt (a turn's steps, `after_move` and `prompt_answered` may: *Hooks that
+wait*).
+
+```lua
+if hm.may_wait() then … hm.prompt(…) … else … hm.prompt_open(…) … end
+```
+Whether the code running now may wait on a card. Each call from the Table
+runs in a thread of its own, so a thread that can yield is no guide: an
+action may wait, and so may a hook that waits (a turn's steps,
+`after_move`, `prompt_answered`); a hook the Table runs straight through —
+`time_advanced`, `rest`, `session_start`, `scene_start`, `track_done`,
+`token_moved`, `region_entered`/`region_left`, `before_roll`/`after_roll`,
+a plugin's own `hm.hooks.run` — may not (`false`), and a card there would
+refuse the step. Code shared between the two (a commit's aftermath, a roll
+that may offer a reroll) asks this before it asks a person anything.
 
 Two more shapes of asking:
 

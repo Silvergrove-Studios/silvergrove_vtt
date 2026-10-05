@@ -316,6 +316,36 @@ hm.on("t.base.after_damage", function(p) p.note = (p.note or "") .. "only me" re
 	check(r.value.note == "self;only me", "the overriding plugin replaced the house handler for the base's hook: %s" % [r.value.note])
 
 
+func test_plugin_may_wait() -> void:
+	if not PluginHost.available():
+		skip("no Lua runtime in this build")
+		return
+	var k := _kernel()
+	var host := PluginHost.new(k)
+	# hm.may_wait(): an action may wait on a card, a hook that waits may; a run the
+	# Table makes straight through (the clock's, a rest's, a roll's, a plugin's own
+	# hm.hooks.run) may not — a card there would refuse the step
+	_load(host, """
+local hm = hexmap
+hm.on("t.wait.check", function(p) p.may = hm.may_wait() return p end)
+hm.on("time_advanced", function(p) p.may = hm.may_wait() return p end)
+hm.on("after_move", function(p) p.may = hm.may_wait() return p end)
+hm.on("before_roll", function(p) if not hm.may_wait() then p.spec.expr = "1d20+100" end return p end)
+hm.actions.register("look", { label = "Look", run = function(ctx)
+	local own = hm.hooks.run("check", {})
+	local r = hm.dice.roll("1d20", { actor = "" }, "a roll")
+	return { action = hm.may_wait(), own = own.may, roll = (r.result.total > 100) and "straight" or "may" }
+end })
+""", {"id": "t.wait", "version": "1", "api": 1, "name": "wait", "capabilities": ["actions", "dice"]})
+	var r := host.dispatch("t.wait", "look", {})
+	check(r.status == PluginHost.PluginCall.OK and r.value.action == true, "an action may wait: %s" % [r.value])
+	check(r.value.own == false, "its own hm.hooks.run may not")
+	check(r.value.roll == "straight", "nor a roll's hook")
+	check(k.hooks.run("after_move", {}).payload.may == true, "a hook run that can pause may (after_move)")
+	check(k.hooks.run_sync("time_advanced", {}).may == false, "one run straight through may not (time_advanced)")
+	check(HookBus.sync_depth == 0, "and the depth is back to nothing after")
+
+
 func test_sample_plugin_conformance() -> void:
 	if not PluginHost.available():
 		skip("no Lua runtime in this build")

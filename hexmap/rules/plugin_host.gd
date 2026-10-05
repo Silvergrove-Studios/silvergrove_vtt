@@ -473,13 +473,16 @@ func _derive(view: Dictionary, id: String) -> Dictionary:
 
 
 ## One HookBus handler per (plugin, hook): runs the plugin's handlers in a
-## thread; a yield becomes a Wait the bus can resume.
+## thread; a yield becomes a Wait the bus can resume. The thread is told
+## whether it may wait at all (hm.may_wait): not in a run that must not
+## pause (HookBus.run_sync: the clock's, a rest's, token_moved, a roll's,
+## a plugin's own hm.hooks.run), where a card would refuse the step.
 func _on_hook(payload: Dictionary, id: String, hook: String) -> Variant:
 	_call_started_ms = Time.get_ticks_msec()
 	var p: Plugin = plugins.get(id)
 	if p == null:
 		return null
-	var c := p.vm.call_function("__run_hook", [hook, payload])
+	var c := p.vm.call_function("__run_hook", [hook, payload, HookBus.sync_depth == 0])
 	return _hook_result(p, hook, c)
 
 
