@@ -8,6 +8,7 @@
   import Modal from '../common/Modal.svelte';
   import ActButton from '../lib/views/ActButton.svelte';
   import { endedByPlayer, initiativeAction, nothingSince, orderRows, unusedOnTurn } from './fight';
+  import { inMind } from '../lib/mind';
 
   let { fight }: { fight: Dict } = $props();
   const turns = $derived((game.scene.turns ?? {}) as Dict);
@@ -66,7 +67,7 @@
 <div class="fightbar" role="region" aria-label="The fight">
   <span class="swords" aria-hidden="true">⚔</span>
   <div class="what">
-    <strong>{fight.name ?? 'A fight'}</strong>
+    <strong>{fight.name ?? 'A fight'}{#if inMind(game.scene)}<span class="dim mind"> · in the theatre of the mind</span>{/if}</strong>
     {#if turns.running}
       <span>Round {turns.round ?? 1}{up ? ` · ${up.name}’s turn` : ''}{#if up?.note}<span class="dim">{` · ${up.note}`}</span>{/if}{#if ended}<span class="dim"> · {ended} ended their turn</span>{/if}</span>
     {:else}
@@ -149,5 +150,8 @@
   .ask span {
     font-weight: 600;
     margin-right: 4px;
+  }
+  .mind {
+    font-weight: 500;
   }
 </style>

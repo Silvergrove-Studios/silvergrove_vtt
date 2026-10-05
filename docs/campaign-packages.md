@@ -155,6 +155,8 @@ reach.campaignpkg (zip)
   "requires": { "app": ">=2.0.0", "plugins": [ { "id": "srd5e", "version": ">=0.1.0", "content_api": 1 } ] },
   "tested_with": { "app": "2.0.0", "plugins": { "srd5e": "0.1.0" }, "packs": { "srd5e.srd52": "1" } },
   "bundles_rules": true,
+  "recommended": { "level": "assisted", "space": "maps", "answers": { "srd5e/monster_health": "none" },
+                   "note": "The fights are short and deadly: approve what lands." },
   "campaign": "campaign.json"
 }
 ```
@@ -171,6 +173,16 @@ reach.campaignpkg (zip)
   its content packs travel with it. `requires.plugins` is then only for
   the rare package that deliberately leans on an installed ruleset
   (`bundle_rules: false`), and it is what tells a DM what is missing.
+- `recommended` is the author's suggestion of how a table runs it: a
+  `level` (`bookkeeping`, `rolling`, `assisted`, `automated`), where
+  fights happen (`space`: `maps`, `mind`, `per_fight`), `answers` to the
+  table's questions (`"<plugin>/<key>": value`, as the walkthrough's) and
+  a `note`. It is only a suggestion: the instance keeps it in its
+  `package` block, and the walkthrough on starting it says "The author
+  suggests …" and offers it chosen, the DM free to choose otherwise
+  (`TableSettings.recommended_of` keeps what this table's rulesets know
+  and their schemas allow). An export takes it from its options
+  (`recommended`), else from the campaign's `meta.recommended`.
 
 ## The instance
 

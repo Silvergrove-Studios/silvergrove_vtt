@@ -29,6 +29,8 @@
   import { Grid } from '../lib/grid';
   import { DEAD_WORDS, blocksMove, followedToken, moveTo, moveWords, offersNoTarget, onBattleMap, pickChoices, pickCount, pickEach, pickTarget, pickWords, pickedWords, sightOf, tappedTheDead, togglePicked, unpick, withNoTarget, withTarget } from '../lib/map/pick';
   import PickBanner from '../lib/map/PickBanner.svelte';
+  import MindFight from '../common/MindFight.svelte';
+  import { caughtWords, inMind, mindPick, mindPickWords, mindRows, namesCaught } from '../lib/mind';
   import { startPreview, tools, whereOf } from '../lib/map/tools.svelte';
   import { fogOf, fogWords } from '../lib/map/sight';
   import type { Cell } from '../lib/grid';
@@ -76,7 +78,7 @@
   } catch {
     /* private mode */
   }
-  const dragTip = $derived(!dragTipDone && ((game.scene.tokens as Dict[]) ?? []).some((t) => String(t.owner ?? '') === game.me && game.me !== ''));
+  const dragTip = $derived(!dragTipDone && !inMind(game.scene) && ((game.scene.tokens as Dict[]) ?? []).some((t) => String(t.owner ?? '') === game.me && game.me !== ''));
   function dragTipSeen(): void {
     dragTipDone = true;
     try {
@@ -162,7 +164,7 @@
         // a spell's shape on the map, for everyone to see, any time: the map comes up
         const w = whereOf(game.scene, map);
         if (!w) {
-          notice('There is no map shown to put it on', 'error');
+          notice(inMind(game.scene) ? 'The fight is in the theatre of the mind: there is no map to show it on' : 'There is no map shown to put it on', 'error');
           return;
         }
         pick = null;
@@ -177,6 +179,14 @@
       pickDone = words ?? '';
       picked = [];
       stopMoving();
+      // a fight in the theatre of the mind: a creature is chosen from its list,
+      // an area's creatures named from it ("Who does your Fireball catch?");
+      // a space has nowhere to be, so it goes with no target
+      if (inMind(game.scene) && ['token', 'area'].includes(String(p.pick ?? ''))) {
+        pick = mindPick(p, ((game.scene.tokens as Dict[]) ?? []).length);
+        if (!wide) tab = 'map';
+        return;
+      }
       // with no battle map on this screen (the region, or nothing on the table)
       // there is nothing to tap: it goes at once with no target, rolled and
       // nothing applied (the owner: people play theatre of the mind with no
@@ -483,8 +493,13 @@
   // what the player's characters see: the rest of the party is on the map
   // wherever they are, and one out of their sight (behind a wall, too dark
   // to see) is listed with why it can't be chosen, as is one out of range
-  const pickOpts = $derived({ sight: sightOf(game.scene), grid: map ? new Grid(map.grid ?? {}) : undefined });
+  // (in the theatre of the mind nothing is measured: only the dead can't be chosen)
+  const pickOpts = $derived(inMind(game.scene) ? {} : { sight: sightOf(game.scene), grid: map ? new Grid(map.grid ?? {}) : undefined });
   const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, pickOpts) : []);
+  // the fight's list in the theatre of the mind: who's in it, and whom a pick may take
+  const mind = $derived(inMind(game.scene));
+  const mindList = $derived(mind ? mindRows(game.scene, (game.view.actors ?? {}) as Dict, { me: game.me }) : []);
+  const mindWhy = $derived(Object.fromEntries(choices.map((c) => [c.target, c.why])));
 
   // a creature chosen from the banner's list: the one (again: not), one of
   // several, or another dart
@@ -496,7 +511,8 @@
 
   function sendChosen(): void {
     if (!pick || !picked.length) return;
-    sendPick(pickCount(pick) > 1 ? [...picked] : picked[0]);
+    // (an area's creatures go as a list, however many: the rules take them as caught)
+    sendPick(pickCount(pick) > 1 || namesCaught(pick) ? [...picked] : picked[0]);
   }
 
   function pickNoTarget(): void {
@@ -581,6 +597,20 @@
 
     <div class="body">
       <section class="mapwrap" class:hidden={!wide && tab !== 'map'}>
+        {#if mind}
+          <!-- a fight in the theatre of the mind: who's in it, where the map would be -->
+          <MindFight
+            rows={mindList}
+            pick={pick ? { words: mindPickWords(pick), status: namesCaught(pick) ? caughtWords(pick, picked, targetName) : pickedWords(pick, picked, targetName), many: pickCount(pick), each: pickEach(pick), noTarget: offersNoTarget(pick) } : null}
+            {picked}
+            why={mindWhy}
+            onChoose={chooseListed}
+            onUnchoose={(t) => (picked = unpick(picked, t))}
+            onDone={sendChosen}
+            onCancel={() => ((pick = null), (picked = []), (confirmPick = null))}
+            onNoTarget={pickNoTarget}
+          />
+        {:else}
         <MapView
           {map}
           scene={game.scene}
@@ -598,6 +628,7 @@
           {onTokenDrop}
           onCancelPick={() => ((pick = null), (picked = []), (confirmPick = null), stopMoving())}
         />
+        {/if}
         {#snippet pickBanner()}
           {#if pick}
             <PickBanner
@@ -622,7 +653,7 @@
             <button type="button" class="quiet" onclick={dragTipSeen}>Got it</button>
           </div>
         {/if}
-        {#if game.scene.fog && !confirmPick && !confirmMove}
+        {#if game.scene.fog && !confirmPick && !confirmMove && !mind}
           <!-- (a playtest's players all took the dark for a broken map, the
                enemies it hid for missing ones; at the next, nobody could say
                whether it was the dark or the walls) -->

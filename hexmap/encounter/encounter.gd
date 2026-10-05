@@ -78,6 +78,52 @@ static func new_scene(map: HexMap, level_id: String, p_name := "", map_path := "
 	}
 
 
+## A scene with no map: a fight in the theatre of the mind (`space:
+## "mind"`). Its tokens are the fight's creatures — who is in it, in the
+## turn order, hidden or seen — and nothing is drawn. Where a token stands
+## means nothing: each is put far from the rest (`mind_pos`), so nothing
+## the rules measure is ever near anything by itself, and range, sight,
+## movement and reach are the DM's to judge (docs/campaign-format.md).
+static func new_mind_scene(p_name := "") -> Dictionary:
+	return {
+		"id": JsonDoc.new_id("s"),
+		"name": p_name if p_name != "" else "In the theatre of the mind",
+		"map": "",
+		"map_path": "",
+		"level": "",
+		"space": SPACE_MIND,
+		"overrides": {},
+		"fog": {"enabled": false, "explored": []},
+		"tokens": [],
+		"regions": {},
+		"cells": {},
+	}
+
+
+## A scene's `space` when its fight is in the theatre of the mind.
+const SPACE_MIND := "mind"
+## How far apart the creatures of a fight in the theatre of the mind stand,
+## in hexes: farther than anything the rules measure reaches.
+const MIND_GAP := 1000.0
+
+
+## Whether a scene is a fight in the theatre of the mind: no map, its
+## tokens only who is in the fight.
+static func is_mind(p_scene: Dictionary) -> bool:
+	return str(p_scene.get("space", "")) == SPACE_MIND
+
+
+## Where the next creature on a scene in the theatre of the mind goes: a
+## gap past the farthest one already there (the first at one gap).
+static func mind_pos(p_scene: Dictionary, extra := 0) -> Vector2:
+	var far := 0.0
+	for tk in p_scene.get("tokens", []):
+		var p: Variant = tk.get("pos", [0, 0])
+		if p is Array and (p as Array).size() >= 1:
+			far = maxf(far, float(p[0]))
+	return Vector2(far + MIND_GAP * (1 + extra), 0.0)
+
+
 ## `owner` and `light` are simply absent when a token has none: an event's
 ## `null` means "remove", so a stored null could not be undone exactly.
 static func new_token(p_name: String, pos: Vector2, extra := {}) -> Dictionary:

@@ -30,6 +30,9 @@
   import PickBanner from '../lib/map/PickBanner.svelte';
   import { startPreview, tools, whereOf } from '../lib/map/tools.svelte';
   import QuickToken from './QuickToken.svelte';
+  import MindFight from '../common/MindFight.svelte';
+  import MindJoin from './MindJoin.svelte';
+  import { caughtWords, inMind, mindPick, mindPickWords, mindRows, namesCaught } from '../lib/mind';
   import { fightToken, liveFight } from './fight';
   import { currentTurnTokens } from '../lib/turns';
   import { ghostsOf } from '../lib/map/sight';
@@ -62,7 +65,7 @@
       else if (p?.kind === 'preview') {
         // a spell's or a creature's power's shape on the map, for the table to see
         const w = whereOf(game.scene, map);
-        if (!w) notice('There is no map shown to put it on', 'error');
+        if (!w) notice(inMind(game.scene) ? 'The fight is in the theatre of the mind: there is no map to show it on' : 'There is no map shown to put it on', 'error');
         else {
           pick = null;
           placing = null;
@@ -334,6 +337,15 @@
   // nothing applied, as a player's does (theatre of the mind)
   function startPick(p: Dict): void {
     placing = null;
+    // a fight in the theatre of the mind: a creature chosen from its list, an
+    // area's creatures named from it; a space has nowhere to be: no target
+    if (inMind(game.scene)) {
+      if (['token', 'area'].includes(String(p.pick ?? ''))) {
+        pick = mindPick(p, ((game.scene.tokens as Dict[]) ?? []).length, true);
+        picked = [];
+      } else intent(withNoTarget(p, String(game.scene.id ?? '')));
+      return;
+    }
     if (String(p.pick ?? '') === 'token' && !onBattleMap(game.scene)) {
       intent(withNoTarget(p, String(game.scene.id ?? '')));
       return;
@@ -344,7 +356,11 @@
 
   // (the DM's list has every creature; those the pick can't take — the dead,
   // one out of its range — say why)
-  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { gm: true, grid: map ? new Grid(map.grid ?? {}) : undefined }) : []);
+  const choices = $derived(pick ? pickChoices((game.scene.tokens as Dict[]) ?? [], pick, { gm: true, grid: map && !inMind(game.scene) ? new Grid(map.grid ?? {}) : undefined }) : []);
+  // a fight in the theatre of the mind: its list where the map would be
+  const mind = $derived(inMind(game.scene));
+  const mindList = $derived(mind ? mindRows(game.scene, (game.view.actors ?? {}) as Dict, { gm: true, seen: String(dm.players_see_health ?? '') }) : []);
+  const mindWhy = $derived(Object.fromEntries(choices.map((c) => [c.target, c.why])));
 
   function chooseListed(target: string): void {
     if (!pick) return;
@@ -361,7 +377,7 @@
 
   function pickDone(): void {
     if (!pick || !picked.length) return;
-    sendPick(pickCount(pick) > 1 ? [...picked] : picked[0]);
+    sendPick(pickCount(pick) > 1 || namesCaught(pick) ? [...picked] : picked[0]);
   }
 
   // --- the party and things, where the DM taps ---
@@ -546,7 +562,9 @@
               </div>
             {/if}
           </div>
-          {#if game.scene.id}
+          {#if mind}
+            <span class="dim mindnote">In the theatre of the mind: no map</span>
+          {:else if game.scene.id}
             <!-- how lit the scene is: by day the players see everything in their
                  line of sight; in the dark, only lights and darkvision show -->
             <label class="lightsel">
@@ -591,6 +609,31 @@
           </div>
         {/if}
         <div class="mapholder">
+          {#if mind && seeing}
+            <!-- seeing as a player: their list, as their screen has it (no hidden creature, their health words) -->
+            <MindFight rows={mindRows(game.preview as Dict, {}, { me: game.previewAs })} />
+          {:else if mind}
+            <!-- a fight in the theatre of the mind: who's in it, where the map would be;
+                 a tap opens one's stat block beside it; creatures join with no token -->
+            <MindFight
+              gm
+              rows={mindList}
+              pick={pick ? { words: mindPickWords(pick), status: namesCaught(pick) ? caughtWords(pick, picked, pickedName) : pickedWords(pick, picked, pickedName), many: pickCount(pick), each: pickEach(pick), noTarget: offersNoTarget(pick) } : null}
+              {picked}
+              why={mindWhy}
+              {selected}
+              onSelect={(id) => ((selected = id), fight && (side = 'fight'))}
+              onChoose={chooseListed}
+              onUnchoose={(t) => (picked = unpick(picked, t))}
+              onDone={pickDone}
+              onCancel={() => ((pick = null), (picked = []))}
+              onNoTarget={pickNoTarget}
+            >
+              {#snippet extra()}
+                {#if fight}<MindJoin />{/if}
+              {/snippet}
+            </MindFight>
+          {:else}
           <MapView
             {map}
             scene={seeing ? (game.preview as Dict) : game.scene}
@@ -611,6 +654,7 @@
             {onTokenDrop}
             onCancelPick={() => ((pick = null), (picked = []), (placing = null))}
           />
+          {/if}
           <!-- what the table waits on (a player's reaction), over the map's top edge:
                the map never moves under a tap; the DM can go on without waiting -->
           <div class="waitslot"><Waiting dm onanswer={(id, who) => (answering = { id, who })} {putOff} onreopen={(id) => (putOff = putOff.filter((x) => x !== id))} /></div>
@@ -796,6 +840,9 @@
   }
   .legend.ring {
     text-decoration: underline dashed;
+  }
+  .mindnote {
+    font-size: 0.9rem;
   }
   .seeas {
     display: flex;

@@ -3,10 +3,17 @@
   many, hidden at first or seen), the DM's notes, and Start. The
   adventure's own fights and the DM's (a playtest's DM could start only
   the adventure's, and couldn't bring in the mastiff the party found).
+  Where the table leaves it to each fight, Start says where: on its map, or
+  in the theatre of the mind (no map needed); a table whose fights are all
+  in the mind needs no map for any. Its own settings, for this fight alone
+  (what it checks, whether the DM approves its outcomes, what the players
+  see of its creatures' health), are the DM's here, as the table has them
+  until changed.
 -->
 <script lang="ts">
   import { comp, dmOp, game, submit, type Dict } from '../lib/game.svelte';
   import { pictureUrl } from '../lib/art';
+  import { fightSettings, registryOf, valueWords, type Setting } from '../lib/tablesettings';
   import Modal from '../common/Modal.svelte';
   import ActButton from '../lib/views/ActButton.svelte';
 
@@ -26,6 +33,25 @@
     });
   });
   const fromPlace = $derived(((dm.places as Dict[]) ?? []).find((p) => p.kind === 'encounter' && String(p.target ?? '') === fightId));
+  // where fights happen at this table, and this one's own settings
+  const reg = $derived(registryOf(dm));
+  const tableSpace = $derived(String(reg?.space ?? 'maps'));
+  const hasMap = $derived(String(fight?.map ?? '') !== '');
+  const own = $derived((fight?.settings && typeof fight.settings === 'object' ? fight.settings : {}) as Record<string, unknown>);
+  const perFight = $derived(fightSettings(reg));
+  // a choice's options for one fight: as the table has it, or each of its own
+  function fightOptions(st: Setting): { key: string; words: string; value: unknown }[] {
+    const out = [{ key: 'table', words: `As the table (${valueWords(st, st.value)})`, value: null as unknown }];
+    const values = Array.isArray(st.enum) ? st.enum : st.type === 'boolean' ? [true, false] : [];
+    for (const v of values) out.push({ key: JSON.stringify(v), words: valueWords(st, v), value: v });
+    return out;
+  }
+  function setOwn(st: Setting, key: string): void {
+    const opt = fightOptions(st).find((o) => o.key === key);
+    if (!opt) return;
+    dmOp('fight_set', { encounter: fightId, settings: { [st.id]: opt.value } });
+  }
+  const ownCount = $derived(perFight.filter((st) => st.id in own).length);
   // the creatures the rules put on a map, in the campaign's rules version
   const creatureFilter = $derived.by((): Dict => {
     for (const acts of Object.values((game.view.actions ?? {}) as Dict)) {
@@ -77,10 +103,10 @@
   // Start the fight: busy until the table has it going, and the card gives way
   // to the fight's bar (a playtest's DM watched "Starting…" for three seconds
   // with nothing else moving, and nearly pressed again)
-  async function start(): Promise<void> {
+  async function start(space = ''): Promise<void> {
     if (starting) return;
     starting = true;
-    const r = await submit({ kind: 'dm', op: 'launch', encounter: fightId });
+    const r = await submit({ kind: 'dm', op: 'launch', encounter: fightId, ...(space ? { space } : {}) });
     // (done: the fight's state is on its way; the bar takes over when it lands)
     setTimeout(() => (starting = false), r.ok ? 5000 : 0);
   }
@@ -110,12 +136,20 @@
       </div>
     {/if}
     <label class="edit">Name <input type="text" value={fight.name ?? ''} oninput={(e) => setLater('name', e.currentTarget.value)} /></label>
+    {#if tableSpace === 'mind'}
+      <!-- (every fight at this table is in the theatre of the mind: no map needed) -->
+      <p class="dim mindline">Fought in the theatre of the mind: no map needed. Who's in it is a list on everyone's screen; range, sight and movement are yours to judge.</p>
+    {:else}
     <label class="edit">
       The map it's on
       <select value={String(fight.map ?? '')} disabled={live} onchange={(e) => dmOp('fight_set', { encounter: fightId, map: e.currentTarget.value })}>
+        <!-- (where fights may be in the theatre of the mind, one needs no map) -->
+        {#if !hasMap || tableSpace === 'per_fight'}<option value="">No map: in the theatre of the mind</option>{/if}
         {#each maps as m (m.id)}<option value={String(m.id)}>{m.name}</option>{/each}
       </select>
     </label>
+    {/if}
+    {#if tableSpace !== 'mind' && hasMap}
     <!-- the light it is fought in: by day the players see all in their line
          of sight, in the dark only what lights and darkvision show -->
     <label class="edit">
@@ -128,6 +162,7 @@
       </select>
       {#if live}<span class="dim small">Under way: change it in the map's bar (Light).</span>{/if}
     </label>
+    {/if}
 
     <section>
       <h3>Creatures</h3>
@@ -179,14 +214,49 @@
 
     <label class="edit">Notes for you <textarea rows="4" value={fight.notes ?? ''} oninput={(e) => setLater('notes', e.currentTarget.value)}></textarea></label>
 
+    {#if perFight.length}
+      <!-- for this fight alone: the table runs as Table settings say, this fight as set here
+           (while it runs; Table settings says what differs) -->
+      <details class="own">
+        <summary>This fight's settings <span class="dim">— {ownCount ? `${ownCount} of its own` : 'as the table has them'}</span></summary>
+        <p class="dim small">For this fight alone, while it runs. The rest of the table runs as Table settings say.</p>
+        <ul>
+          {#each perFight as st (st.id)}
+            {@const mine = st.id in own}
+            <li>
+              <label>
+                <span>{st.title}</span>
+                <select aria-label={`${st.title}, this fight`} value={mine ? JSON.stringify(own[st.id]) : 'table'} onchange={(e) => setOwn(st, e.currentTarget.value)}>
+                  {#each fightOptions(st) as o (o.key)}<option value={o.key}>{o.words}</option>{/each}
+                </select>
+              </label>
+            </li>
+          {/each}
+        </ul>
+      </details>
+    {/if}
+
     <div class="actions">
       {#if live}
         <button type="button" onclick={() => dmOp('end_fight')}>End the fight</button>
       {:else}
         <!-- (one press: a fight takes a moment to set up, and a second press started it twice) -->
-        <button type="button" class="accent" disabled={starting || !lines.length} aria-busy={starting ? 'true' : undefined} onclick={start}>
-          {#if starting}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start the fight{/if}
-        </button>
+        {#if tableSpace === 'per_fight'}
+          <!-- where the table leaves it to each fight: chosen as it starts -->
+          {#if hasMap}
+            <button type="button" class="accent" disabled={starting || !lines.length} aria-busy={starting ? 'true' : undefined} onclick={() => start('maps')}>
+              {#if starting}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start on its map{/if}
+            </button>
+          {/if}
+          <button type="button" class={hasMap ? '' : 'accent'} disabled={starting || !lines.length} onclick={() => start('mind')}>
+            {#if starting && !hasMap}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start in the theatre of the mind{/if}
+          </button>
+        {:else}
+          <button type="button" class="accent" disabled={starting || !lines.length || (tableSpace === 'maps' && !hasMap)} aria-busy={starting ? 'true' : undefined} onclick={() => start()}>
+            {#if starting}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start the fight{/if}
+          </button>
+          {#if tableSpace === 'maps' && !hasMap}<span class="dim">Choose the map it's on first.</span>{/if}
+        {/if}
         {#if !lines.length}<span class="dim">Add a creature first.</span>{/if}
         {#if !fromPlace}<button type="button" class="quiet danger" onclick={() => (deleting = true)}>Delete the fight</button>{/if}
       {/if}
@@ -314,5 +384,30 @@
     gap: 10px;
     align-items: center;
     flex-wrap: wrap;
+  }
+  .mindline {
+    margin: 0;
+  }
+  .own summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .own ul {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .own label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .own select {
+    max-width: 100%;
   }
 </style>

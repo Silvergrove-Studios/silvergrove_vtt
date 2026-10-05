@@ -338,6 +338,7 @@ func _build_ui() -> void:
 		fd.file_selected.connect(then)
 		fd.popup_centered_ratio(0.7)
 	rules.table_settings = table_settings
+	maps.table_settings = table_settings
 	rules.open_table_settings = open_table_settings
 	rules.open_walkthrough = open_walkthrough
 	maps.pick_map_file = func(then: Callable) -> void:

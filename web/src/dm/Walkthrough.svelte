@@ -11,7 +11,7 @@
 <script lang="ts">
   import Modal from '../common/Modal.svelte';
   import { game, notice, submit } from '../lib/game.svelte';
-  import { draftFor, levelTitle, ownAnswers, questionLine, registryOf, valueWords, type Level, type Setting } from '../lib/tablesettings';
+  import { draftFor, levelTitle, ownAnswers, questionLine, registryOf, suggestedDraft, suggestionWords, valueWords, type Level, type Setting } from '../lib/tablesettings';
 
   let { onclose, ondone }: { onclose: () => void; ondone: (seeAll: boolean) => void } = $props();
 
@@ -41,7 +41,15 @@
     house = reg.house_rules ?? '';
     level = reg.new_level ?? 'assisted';
     values = draftFor(reg, level);
+    // an adventure's author may suggest how a table runs it: offered first, only a suggestion
+    const suggested = suggestedDraft(reg);
+    if (suggested) {
+      space = suggested.space;
+      level = suggested.level;
+      values = suggested.values;
+    }
   });
+  const suggestion = $derived(suggestionWords(reg));
 
   const asked = $derived(reg ? reg.questions.filter((q) => q.level && q.settings.length) : []);
   const options = $derived(reg ? reg.questions.filter((q) => !q.level && q.settings.length) : []);
@@ -98,6 +106,9 @@
     <p class="dim">Waiting for the table…</p>
   {:else}
     <p class="stepline"><span class="dim">Step {step + 1} of {STEPS.length} ·</span> <strong>{TITLES[name]}</strong></p>
+    {#if suggestion && (name === 'space' || name === 'level')}
+      <p class="suggests" role="note">{suggestion}</p>
+    {/if}
     {#if name === 'space'}
       <p class="dim">Do your fights happen on maps with tokens, or in the theatre of the mind? The rolls work either way.</p>
       <div class="cards" role="radiogroup" aria-label="Where fights happen">
@@ -196,6 +207,13 @@
 </Modal>
 
 <style>
+  .suggests {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--accent-soft);
+    background: var(--accent-bg);
+  }
   .stepline {
     margin: 0 0 6px;
   }

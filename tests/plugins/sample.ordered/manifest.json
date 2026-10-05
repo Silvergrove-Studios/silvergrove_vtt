@@ -14,8 +14,10 @@
       "critical_on": {"type": "integer", "minimum": 1, "maximum": 20, "title": "Natural roll that is a critical",
         "x-question": "rules", "x-notice": "everyone"},
       "armour_reduces": {"type": "integer", "title": "What a marked armour slot takes off a hit",
-        "x-question": "outcomes", "x-levels": {"bookkeeping": 0, "rolling": 0, "assisted": 2, "automated": 2}, "x-notice": "everyone"}}},
-    "defaults": {"critical_on": 20, "armour_reduces": 2}
+        "x-question": "outcomes", "x-levels": {"bookkeeping": 0, "rolling": 0, "assisted": 2, "automated": 2}, "x-notice": "everyone", "x-per-fight": true},
+      "reach_checked": {"type": "boolean", "title": "Check reach",
+        "x-question": "checks", "x-notice": "dm", "x-per-fight": true, "x-mind": false}}},
+    "defaults": {"critical_on": 20, "armour_reduces": 2, "reach_checked": true}
   },
   "tests": true
 }

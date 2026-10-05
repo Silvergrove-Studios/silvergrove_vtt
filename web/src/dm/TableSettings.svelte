@@ -13,12 +13,14 @@
   import {
     badgeWords,
     changeWords,
+    fightWhyWords,
     levelChanges,
     levelTitle,
     noticeWords,
     registryOf,
     sectionReset,
     sections,
+    thisFightWords,
     valueWords,
     type Level,
     type Setting,
@@ -86,6 +88,8 @@
       </div>
       <span class="badge" class:custom={reg.customized} data-testid="level-badge">{badgeWords(reg)}</span>
     </div>
+    <!-- the fight running now, where it runs otherwise: its own settings, or the theatre of the mind's -->
+    {#if thisFightWords(reg)}<p class="fightnote" role="note">{thisFightWords(reg)}</p>{/if}
     {#if asking}
       <div class="preview" role="region" aria-label="What switching changes">
         <p><strong>Switch to {levelTitle(reg, asking)}?</strong> <span class="dim">{reg.levels.find((l) => l.id === asking)?.tagline}</span></p>
@@ -152,6 +156,7 @@
                 {#if s.description}<span class="dim small">{s.description}</span>{/if}
                 <span class="tags">
                   {#if s.next_fight}<span class="tag">{nextFightWords()}</span>{/if}
+                  {#if s.fight_value !== undefined}<span class="tag fight">{fightWhyWords(s)}</span>{/if}
                   {#if s.notice}<span class="dim small">{noticeWords(s.notice)}</span>{/if}
                   {#if s.differs && s.level_value !== undefined}<span class="dim small">· {levelTitle(reg, reg.level)} has it {valueWords(s, s.level_value)}</span>{/if}
                   {#if reg.plugins.length > 1}<span class="dim small">· {s.plugin_name}</span>{/if}
@@ -212,6 +217,16 @@
 </Modal>
 
 <style>
+  .fightnote {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(227, 107, 91, 0.45);
+    background: color-mix(in srgb, #e36b5b 10%, var(--panel));
+  }
+  .tag.fight {
+    border-color: rgba(227, 107, 91, 0.55);
+  }
   .lead {
     margin: 0 0 12px;
   }

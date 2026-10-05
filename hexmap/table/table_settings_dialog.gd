@@ -188,6 +188,14 @@ func refresh() -> void:
 	for c in _body.get_children():
 		_body.remove_child(c)
 		c.queue_free()
+	# the fight running now, where it runs otherwise: its own settings, or the theatre of the mind's
+	var fight_words := TableSettings.this_fight_words(reg)
+	if fight_words != "":
+		var fl := Label.new()
+		fl.name = "FightNote"
+		fl.text = fight_words
+		fl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_body.add_child(fl)
 	var words := _search.text.strip_edges().to_lower()
 	var level := str(reg.level)
 	var level_title := str(TableSettings.LEVEL_INFO[level].title)
@@ -325,6 +333,8 @@ func _setting_row(it: Dictionary, fight: bool, level_title: String) -> Control:
 		bits.append(str(TableSettings.NOTICE_WORDS[it.notice]).to_lower())
 	if bool(it.differs):
 		bits.append("%s has it %s" % [level_title, TableSettings.value_words(it, it.level_value)])
+	if it.has("fight_value"):
+		bits.append(TableSettings.fight_why_words(it))
 	if str(it.description) != "" or not bits.is_empty():
 		var d := Label.new()
 		d.text = ("%s%s" % [str(it.description), ("  ·  " if str(it.description) != "" and not bits.is_empty() else "") + "  ·  ".join(bits)]).strip_edges()

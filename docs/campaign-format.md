@@ -93,7 +93,9 @@ party is), `sessions` and `runtime`. Every other field is as before.
   (made with New campaign, or started from a package); the DM's screens
   offer it until it is. A campaign from before has no `table`: it runs
   as Automated (`TableSettings.EXISTING_LEVEL`), its settings as they
-  were.
+  were. A campaign started from a package keeps its author's suggestion
+  of how a table runs it in `package.recommended` (a `level`, a `space`,
+  `answers`, a `note`): the walkthrough offers it, and that is all.
 - `players`: the group. A session's encounter gets them on start and
   gives back any it added.
 - `actors`: the persistent ones — player characters, companions,
@@ -145,7 +147,20 @@ party is), `sessions` and `runtime`. Every other field is as before.
   level, creatures by compendium entry with a count, a cell and whether
   they start hidden, the DM's notes, the sessions it was `played` in, and
   optionally its `light` (`daylight`, `dim` or `dark`), given to the
-  scene when it starts (absent: the map's).
+  scene when it starts (absent: the map's). Where the table leaves it to
+  each fight (`table.space: "per_fight"`), its `space` (`maps` or `mind`)
+  is where the DM prepared it to be fought — the DM's choice as it starts
+  goes over it, and with neither a fight with a map is fought on it, one
+  with none in the theatre of the mind; a table whose fights are all in
+  the mind needs no map for any (`map: ""`). `settings` are its own for
+  that fight alone (`{"<plugin>/<key>": value}`, only settings a ruleset
+  marks `x-per-fight`), over the campaign's while it runs. A running
+  fight's `live` says where it is (`scene`), what it made (`actors`),
+  the scene before (`previous`), whether it is `staged`, and its `space`.
+  A fight in the theatre of the mind is a scene with no map and `space:
+  "mind"` (Encounter.new_mind_scene): its tokens are only who is in the
+  fight, each far from the rest; the screens list them instead of drawing
+  a map, and range, sight and movement are the DM's to judge there.
 - `places`: markers on a regional map (`map`, `cell`, `name`) of a
   `kind`: `place` (somewhere to be: a village, an inn — its card opens),
   or a link to an `encounter`, another `map`, or a journal `note`. A

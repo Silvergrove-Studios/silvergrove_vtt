@@ -154,7 +154,7 @@ export function feetBetween(grid: Grid, a: Dict, b: Dict): number {
 /** The intent as it goes, without what only the pick needed. */
 function sendable(payload: Dict): Dict {
   const out = clone(payload);
-  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead', 'friendly', 'range', 'sight', 'walls']) delete out[k];
+  for (const k of ['pick', 'picks', 'area', 'label', 'each', 'dead', 'friendly', 'range', 'sight', 'walls', 'what', 'caught']) delete out[k];
   if (!out.ctx || typeof out.ctx !== 'object') out.ctx = {};
   return out;
 }
@@ -185,9 +185,10 @@ export function offersNoTarget(payload: Dict): boolean {
 }
 
 /** Whether the scene on a screen is a battle map to pick on: not a region
- *  (the table says which each map is), and not no scene at all. */
+ *  (the table says which each map is), not a fight in the theatre of the
+ *  mind (no map: its creatures are a list), and not no scene at all. */
 export function onBattleMap(scene: Dict): boolean {
-  return !!scene?.id && String(scene.role ?? '') !== 'regional';
+  return !!scene?.id && String(scene.role ?? '') !== 'regional' && String(scene.space ?? '') !== 'mind';
 }
 
 /** Where a tap sends a token armed to move (tap it, then where it goes: a

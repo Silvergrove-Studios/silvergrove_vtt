@@ -552,7 +552,9 @@ func move(scene_id: String, id: String, to: Vector2) -> Dictionary:
 			left.append(rid)
 	entered.sort()
 	left.sort()
-	return {"events": events, "entered": entered, "left": left, "from": [from.x, from.y], "to": [to.x, to.y], "cells": grid(scene_id).steps(cell_of(scene_id, from), cell_of(scene_id, to))}
+	# (a scene with no map — a fight in the theatre of the mind — counts no cells: nobody goes anywhere measured)
+	var g := grid(scene_id)
+	return {"events": events, "entered": entered, "left": left, "from": [from.x, from.y], "to": [to.x, to.y], "cells": g.steps(cell_of(scene_id, from), cell_of(scene_id, to)) if g != null else 0}
 
 
 ## The cells a region attached to a token covers once the token has gone

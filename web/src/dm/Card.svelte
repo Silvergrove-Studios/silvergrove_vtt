@@ -15,6 +15,7 @@
   import TokenPicture from '../common/TokenPicture.svelte';
   import { cardData, cardSchema } from '../lib/views/viewlib';
   import { audienceWords, folderChoices, kindWord, layout } from './contents';
+  import { registryOf } from '../lib/tablesettings';
 
   let starting = $state(false);
   let { ref, onopen, onclose, popout }: { ref: string; onopen: (ref: string) => void; onclose?: () => void; popout?: () => void } = $props();
@@ -78,12 +79,14 @@
   });
 
   // the place's fight started: busy until the table has it (the card then gives way to the fight's map)
-  async function startHere(): Promise<void> {
+  // (`space`: where the table leaves it to each fight, the DM's choice as it starts)
+  async function startHere(space = ''): Promise<void> {
     if (starting) return;
     starting = true;
-    const r = await submit({ kind: 'dm', op: 'go_place', place: id });
+    const r = space && encounter ? await submit({ kind: 'dm', op: 'launch', encounter: String(encounter.id), space }) : await submit({ kind: 'dm', op: 'go_place', place: id });
     setTimeout(() => (starting = false), r.ok ? 5000 : 0);
   }
+  const perFight = $derived(String(registryOf(dm)?.space ?? 'maps') === 'per_fight');
 
   function show(audience: string): void {
     if (!share) return;
@@ -180,9 +183,19 @@
             <!-- (one press: the fight takes a moment to set up, and a second press started it
                  twice; busy till the table has it, and something moves meanwhile: a playtest's
                  DM watched "Starting…" three seconds and nearly pressed again) -->
-            <button type="button" class="accent" disabled={starting} aria-busy={starting ? 'true' : undefined} onclick={startHere}>
+            {#if perFight && encounter}
+              <!-- where the table leaves it to each fight: chosen as it starts -->
+              {#if String(encounter.map ?? '') !== ''}
+                <button type="button" class="accent" disabled={starting} aria-busy={starting ? 'true' : undefined} onclick={() => startHere('maps')}>
+                  {#if starting}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start on its map{/if}
+                </button>
+              {/if}
+              <button type="button" class={String(encounter.map ?? '') !== '' ? '' : 'accent'} disabled={starting} onclick={() => startHere('mind')}>Start in the theatre of the mind</button>
+            {:else}
+            <button type="button" class="accent" disabled={starting} aria-busy={starting ? 'true' : undefined} onclick={() => startHere()}>
               {#if starting}Starting…<span class="spin" aria-hidden="true"></span>{:else}Start the fight{/if}
             </button>
+            {/if}
           {/if}
           {#if encounter}<button type="button" class="quiet" onclick={() => onopen(`fight:${encounter.id}`)}>Its creatures and map</button>{/if}
         </div>
