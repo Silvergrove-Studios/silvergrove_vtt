@@ -129,7 +129,9 @@ rule, a summary that says Bookkeeping; then Table settings: "As Bookkeeping
 has it", a switch to Automated that says what it would change and is
 cancelled, a setting changed by hand ("Customized") and its section's
 Reset. A player joins and is shown How this table runs, and finds it again
-in the ⋯ menu.
+in the ⋯ menu; the DM changes the house rules, and she is shown it again,
+saying so. (Every other journey's pages put How this table runs away as it
+comes up: a player joining a campaign from before levels is shown it too.)
 
 `tests/e2e/overrides.mjs <host.json> <out>` (host with `--party --wizard
 --seed 12`): the DM's hand on anything. In the chapel fight the DM opens a
@@ -139,6 +141,11 @@ the other goblins keep 15; a goblin's hit on Sela puts a Shield card on
 Ana's phone, she casts it and her reaction is spent, and the DM gives it
 back from Sela's Adjust tab (said to everyone); on her turn her Fire Bolt at
 the goblin is rolled against AC 17 (the DM's log says so; Ana's doesn't).
+Then the DM turns on *Players may change the numbers on their own sheets*:
+Ana's own sheet has the Adjust tab, she sets Sela's AC ("AC 15 · 17
+computed, set by its player", said at the table as her player's), and the
+DM's view of Sela says so. (As they join, each player is told how this
+table runs: a campaign from before levels runs as Automated.)
 
 `tests/e2e/rulings.mjs <host.json> <out>` (host with `--party --seed 12`,
 on a package built on the rules being tried: `tools/package.py --out` and

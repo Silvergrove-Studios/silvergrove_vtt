@@ -5,8 +5,12 @@
 // and the stat block say "AC 17 · 15 computed, set by the DM", the log says
 // so to the DM alone — and a player's attack meets 17; a goblin's hit on Ana's
 // wizard puts a Shield card on her phone, she casts it and her reaction is
-// spent, and the DM gives it back from her Adjust tab. Screenshots of each step
-// go to the output folder; a step that does not happen fails the run.
+// spent, and the DM gives it back from her Adjust tab; then the DM turns on
+// "Players may change the numbers on their own sheets" and Ana sets Sela's AC
+// on her own Adjust tab, marked as her player's, the DM seeing it so. (As they
+// join, each player is told how this table runs: a campaign from before levels
+// runs as Automated.) Screenshots of each step go to the output folder; a step
+// that does not happen fails the run.
 //
 //   node tests/e2e/overrides.mjs <host.json> <out dir>
 //
@@ -119,11 +123,21 @@ async function choose(name, tab) {
   return chosen;
 }
 
-let ok = await step('the DM’s screen opens; Ana (a phone) and Ben (a laptop) join', async () => {
+let ok = await step('the DM’s screen opens; Ana (a phone) and Ben (a laptop) join, each told how this table runs', async () => {
   await dm.getByText('Invite players').first().waitFor({ timeout: 10000 });
   await ana.getByRole('button', { name: 'Ana' }).click({ timeout: 10000 });
+  // a campaign from before levels runs as Automated: a player joining is told so
+  const runs = ana.getByRole('dialog', { name: 'How this table runs' });
+  await runs.waitFor({ timeout: 10000 });
+  await runs.getByText('Automated', { exact: true }).waitFor({ timeout: 5000 });
+  await shot(ana, 'ana_how_this_table_runs');
+  await runs.getByRole('button', { name: 'Got it' }).click();
+  await runs.waitFor({ state: 'detached', timeout: 5000 });
   await ana.getByRole('tab', { name: /Character/ }).waitFor({ timeout: 10000 });
   await ben.getByRole('button', { name: 'Ben' }).click({ timeout: 10000 });
+  const bens = ben.getByRole('dialog', { name: 'How this table runs' });
+  await bens.waitFor({ timeout: 10000 });
+  await bens.getByRole('button', { name: 'Got it' }).click();
   await ben.getByRole('tab', { name: /Character/ }).waitFor({ timeout: 10000 });
   // a player's own sheet has no Adjust tab (the table's setting is off)
   await ana.getByRole('tab', { name: /Character/ }).click();
@@ -284,6 +298,37 @@ ok = ok && (await step('on Sela’s turn Ana’s Fire Bolt at the goblin is roll
   await ana.getByText(/Sela casts Fire Bolt at/).first().waitFor({ timeout: 8000 });
   expect(!(await logWords(ana)).some((w) => /against AC 17/.test(w)), 'Ana’s log says the goblin’s AC');
   await shot(ana, 'ana_fire_bolt');
+}));
+
+ok = ok && (await step('the DM lets players change their own sheets: Ana sets Sela’s AC on her own Adjust tab, marked as her player’s, and the DM sees it', async () => {
+  await dm.getByRole('button', { name: /^Table settings/ }).click();
+  const settings = dm.getByRole('dialog', { name: 'Table settings' });
+  await settings.waitFor({ timeout: 5000 });
+  await settings.getByRole('checkbox', { name: 'Players may change the numbers on their own sheets' }).check();
+  await dm.waitForTimeout(600);
+  await settings.getByRole('button', { name: 'Done' }).click();
+  // her own sheet has the tab now; Ben's view of her sheet doesn't (it isn't his)
+  await ana.getByRole('tab', { name: /Character/ }).click();
+  const adjust = ana.getByRole('tab', { name: 'Adjust', exact: true });
+  await adjust.waitFor({ timeout: 10000 });
+  await adjust.click();
+  await ana.getByRole('combobox', { name: 'Number' }).selectOption({ label: 'AC' });
+  await ana.getByRole('combobox', { name: 'How' }).first().selectOption({ label: 'Set it to' });
+  await ana.getByRole('spinbutton', { name: 'Value' }).fill('15');
+  await ana.getByRole('textbox', { name: 'Why (said in the log)' }).first().fill('a ring of protection');
+  await ana.getByRole('button', { name: 'Change it' }).first().click();
+  // (the number set; the rules' own effects still go on top of it: her Shield's +5, if it's up)
+  await ana.getByText(/^AC 15 · \d+ computed, set by its player$/).first().waitFor({ timeout: 8000 });
+  const s = await creature(ana, 'Sela');
+  expect(s.ac === 15 || s.ac === 20, `her AC: ${s.ac}`);
+  await shot(ana, 'ana_sets_her_own_ac');
+  // said at the table, as hers
+  await dm.waitForFunction(() => (window.hexmap.game.view.log ?? []).some((e) => /^Sela's player sets Sela's AC to 15 \(\d+ computed\): a ring of protection\.$/.test(String(e.text ?? ''))), null, { timeout: 8000 });
+  // the DM's view of her: marked as her player's, the DM's to clear
+  await dm.getByRole('tab', { name: 'Fight' }).click();
+  const chosen = await choose('Sela', 'Adjust');
+  await chosen.getByText(/AC 15 · \d+ computed, set by its player/).first().waitFor({ timeout: 8000 });
+  await shot(dm, 'dm_sees_selas_own_ac');
 }));
 
 for (const [, p] of pages) await p.context().close();
