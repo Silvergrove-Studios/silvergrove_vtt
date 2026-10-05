@@ -104,6 +104,14 @@ var _known_was: Array = []
 ## A Godot player's document is to be sent again (a creature's name revealed,
 ## the creatures the players don't know numbered afresh): at the next poll.
 var _docs_dirty := false
+## What the players may see of a map changed (a prop revealed, a door found):
+## the maps players hold are sent again at the next poll (_push_player_maps).
+var _maps_dirty := false
+## The maps as players are sent them, by "map|scene|godot": made once a change.
+var _player_maps: Dictionary = {}
+## This hosting's own secret, for the addresses that are leave to fetch
+## something (_cap): never sent.
+var _secret := Crypto.new().generate_random_bytes(32)
 
 ## Colours given to players who join by name, in turn. None is red: red is
 ## the creatures' (a playtest's player in red read as a goblin).
@@ -139,9 +147,10 @@ func start(p_port := Protocol.DEFAULT_PORT, announce := true, web_port := WebSer
 			if packs == null or packs.pack_dir(pack) == "" or not packs.pack_files(pack).has(file):
 				return PackedByteArray()
 			return FileAccess.get_file_as_bytes(packs.pack_dir(pack).path_join(file))
-		web.map_file_source = func(mid: String, file: String) -> PackedByteArray:
+		# (a map's own files by an address only those sent the map know: its key)
+		web.map_file_source = func(mid: String, file: String, key: String) -> PackedByteArray:
 			var m: HexMap = state.maps.get(mid)
-			return m.asset_bytes(file) if m != null and m.asset_refs().has(file) else PackedByteArray()
+			return m.asset_bytes(file) if m != null and key == _cap("map", mid) and m.asset_refs().has(file) else PackedByteArray()
 		web.config_source = func() -> Dictionary:
 			return {"ws_port": port, "name": announcer.name, "protocol": Protocol.VERSION}
 		web.upload_source = func(id: String) -> PackedByteArray:
@@ -235,7 +244,8 @@ func _welcome(c: Dictionary) -> Dictionary:
 	var held := {}
 	for tk in (doc.scenes[0].tokens if not (doc.scenes as Array).is_empty() else []):
 		held[str(tk.id)] = tk
-	c["held"] = {"scene": sid, "tokens": held, "turns": JsonDoc.deep(doc.turns)}
+	c["held"] = {"scene": sid, "tokens": held, "turns": JsonDoc.deep(doc.turns),
+		"overrides": JsonDoc.deep(doc.scenes[0].overrides) if not (doc.scenes as Array).is_empty() else {}}
 	c["doc_due"] = false
 	return Protocol.player_welcome(doc)
 
@@ -305,6 +315,21 @@ func _sync_player(c: Dictionary) -> void:
 				whole[k] = null
 		_send(c, Protocol.event({"t": "turns.set", "changes": whole}))
 		held.turns = turns
+	# the scene's overrides of its map's elements, as the players may know them
+	# (a door opened, a secret one found, a light lit: Protocol.player_overrides)
+	var ovs := Protocol.player_overrides(state.encounter.scene(sid).get("overrides", {}), state.level_for(sid))
+	var had_ov: Dictionary = held.get("overrides", {})
+	for ref in had_ov.keys() + ovs.keys():
+		var was: Dictionary = had_ov.get(ref, {})
+		var now_ov: Dictionary = ovs.get(ref, {})
+		if JsonDoc.same(was, now_ov):
+			continue
+		var changes: Dictionary = now_ov.duplicate(true)
+		for k in was:
+			if not now_ov.has(k):
+				changes[k] = null
+		_send(c, Protocol.event({"t": "element.set", "scene": sid, "ref": str(ref), "changes": changes}))
+	held.overrides = ovs
 
 
 ## Is the client on this machine (the DM's own browser)?
@@ -421,6 +446,9 @@ func poll(delta := 0.0) -> void:
 	# the players don't know numbered afresh), once however many changes did it
 	if _docs_dirty:
 		_send_docs()
+	# the maps players hold, where what they may see of them changed
+	if _maps_dirty:
+		_push_player_maps()
 	# web clients get the scene whole, a few times a second at most (a Godot
 	# player's what changed of what its screen shows)
 	if _scenes_dirty and Time.get_ticks_msec() - _last_scene_ms >= 50:
@@ -526,13 +554,11 @@ func _on_applied(ev: Dictionary, inv: Dictionary) -> void:
 				continue
 			for out in _player_events(c, ev, inv):
 				_send(c, Protocol.event(out))
-		# a note on the map shown to the players (or hidden again): their
-		# devices get the map again, with it (or without it)
-		if t == "element.set" and str(ev.get("ref", "")).begins_with("notes:"):
-			var mid := str(state.encounter.scene(str(ev.get("scene", ""))).get("map", ""))
-			for c in _clients:
-				if c.hello and c.joined and not _is_gm(c) and not bool(c.web) and state.maps.has(mid):
-					_send(c, _map_msg(c, mid))
+		# what the players may see of a map changed (a note or a prop shown or
+		# hidden again, a secret door found), or another scene shown: the maps
+		# players hold, again as they may have them (_push_player_maps)
+		if t in ["element.set", "scene.activate", "scene.set", "scene.add", "scene.remove"]:
+			_maps_dirty = true
 	if Protocol.SCENE_EVENTS.has(t) or Protocol.AUDIENCE_EVENTS.has(t) or t.begins_with("token.") or t == "checkpoint.restore":
 		_scenes_dirty = true
 	# a creature's hit points, on its token where the players see them exactly
@@ -600,7 +626,10 @@ func _player_events(c: Dictionary, ev: Dictionary, inv: Dictionary) -> Array:
 			return []
 		"clock.set":
 			return [ev]
-		"element.set", "fog.set", "fog.reveal", "fog.hide":
+		# (what a map's elements are to the players: kept in step, as they may know it)
+		"element.set":
+			return []
+		"fog.set", "fog.reveal", "fog.hide":
 			return [ev] if str(ev.get("scene", "")) == sid else []
 	if Protocol.AUDIENCE_EVENTS.has(t) and str(ev.get("scene", "")) == sid:
 		return _audience_events(ev, inv)
@@ -1503,7 +1532,8 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 			var mid := str(msg.get("map", ""))
 			var file := str(msg.get("file", ""))
 			var m: HexMap = state.maps.get(mid)
-			if m == null or not m.asset_refs().has(file):
+			# (a player's: only of a map they may have, as _map_msg says)
+			if m == null or not m.asset_refs().has(file) or str(_map_msg(c, mid).get("t", "")) != "map":
 				_send(c, Protocol.error("no asset %s in map %s" % [file, mid]))
 				return
 			var bytes := m.asset_bytes(file)
@@ -1539,24 +1569,51 @@ func _serve(c: Dictionary, msg: Dictionary) -> void:
 
 
 ## A map as this client may have it: whole for a GM (the DM's screen, a
-## co-GM), and for anyone else without the DM's notes on it
-## (Protocol.player_map; those a scene has shown stay). A screen asks for
-## its maps before it joins, so until then it is anyone else.
+## co-GM); for a player (a display) only the map of the scene the players
+## see, as they may see it under that scene (Protocol.player_map: no DM's
+## note, nothing hidden, a secret door a wall — a Godot client's with the
+## hidden walls that stop its sight), and nothing before it has joined.
+## `key`: what its own files are fetched with over HTTP (/mapfile, _cap).
 func _map_msg(c: Dictionary, map_id: String) -> Dictionary:
 	var m: HexMap = state.maps.get(map_id)
 	if m == null:
 		return Protocol.error("no map " + map_id)
-	if _is_gm(c):
-		return {"t": "map", "id": map_id, "doc": m.doc}
-	var shown := {}
-	for sc in state.encounter.scenes:
-		if str(sc.get("map", "")) != map_id:
+	if _is_gm(c) and bool(c.get("joined", false)):
+		return {"t": "map", "id": map_id, "doc": m.doc, "key": _cap("map", map_id)}
+	var sc := state.encounter.scene(state.encounter.active_scene_id)
+	if not bool(c.get("joined", false)) or str(sc.get("map", "")) != map_id:
+		return Protocol.error("no map " + map_id)
+	var godot := not bool(c.get("web", false))
+	var ck := "%s|%s|%s" % [map_id, str(sc.id), godot]
+	if not _player_maps.has(ck):
+		var doc := Protocol.player_map(m.doc, sc.get("overrides", {}), godot, str(sc.get("level", "")))
+		_player_maps[ck] = {"doc": doc, "hash": JSON.stringify(doc).hash()}
+	if not c.has("maps_sent"):
+		c["maps_sent"] = {}
+	c.maps_sent[map_id] = _player_maps[ck].hash
+	return {"t": "map", "id": map_id, "doc": _player_maps[ck].doc, "key": _cap("map", map_id)}
+
+
+## A player's maps again where what they may see of them changed (a prop
+## revealed or hidden again, a secret door found, a note shown): to each
+## screen that holds one, as it may have it now.
+func _push_player_maps() -> void:
+	_maps_dirty = false
+	_player_maps.clear()
+	for c in _clients:
+		if not c.joined or _is_gm(c) or not c.has("maps_sent"):
 			continue
-		var ovs: Dictionary = sc.get("overrides", {})
-		for ref in ovs:
-			if str(ref).begins_with("notes:") and ovs[ref] is Dictionary and ovs[ref].get("gm_only", true) == false:
-				shown[str(ref)] = true
-	return {"t": "map", "id": map_id, "doc": Protocol.player_map(m.doc, shown)}
+		for mid in (c.maps_sent as Dictionary).keys():
+			var was: Variant = c.maps_sent[mid]
+			var msg := _map_msg(c, str(mid))
+			if str(msg.get("t", "")) == "map" and c.maps_sent.get(mid) != was:
+				_send(c, msg)
+
+
+## What only this hosting can make, for an address that is its own leave to
+## fetch something (a map's files): a keyed hash of what it is.
+func _cap(kind: String, what: String) -> String:
+	return Crypto.new().hmac_digest(HashingContext.HASH_SHA256, _secret, (kind + "\n" + what).to_utf8_buffer()).hex_encode().left(32)
 
 
 ## The packs the encounter's maps use, and the packs holding the pictures

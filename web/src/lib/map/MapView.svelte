@@ -12,7 +12,7 @@
   import { onMount, untrack, type Snippet } from 'svelte';
   import { cellKey, type Cell, type Vec } from '../grid';
   import { onArt } from '../art';
-  import { game, type Dict } from '../game.svelte';
+  import { game, mapFileUrl, type Dict } from '../game.svelte';
   import { drawFrame, drawTerrain, layout, prepare, tokenAt, tokenPos, type Camera, type TerrainCache } from './render';
   import MapTools from './MapTools.svelte';
   import { gridless, ruleOf } from './measure';
@@ -142,7 +142,8 @@
     const key = `${scene.level}|${artTick}|${Object.keys(game.packs).sort().join(',')}`;
     if (terrain && terrainFor === map && terrainKey === key) return;
     const mid = String(map.id ?? scene.map ?? '');
-    terrain = drawTerrain(map, prep.lvl, prep.grid, (file) => `/mapfile/${encodeURIComponent(mid)}/${encodeURIComponent(file)}`);
+    // (a map's own files by the key the table sent with it)
+    terrain = drawTerrain(map, prep.lvl, prep.grid, (file) => mapFileUrl(mid, file));
     terrainFor = map;
     terrainKey = key;
   }

@@ -235,7 +235,7 @@ static func player_scene(state: EncounterState, sc: Dictionary, player_id: Strin
 		if sc.has(k):
 			out[k] = JsonDoc.deep(sc[k])
 	out.tokens = player_tokens(state, str(sc.get("id", "")), player_id, seen, known).values()
-	out.overrides = JsonDoc.deep(sc.get("overrides", {}))
+	out.overrides = player_overrides(sc.get("overrides", {}), state.level_for(str(sc.get("id", ""))))
 	var regions := {}
 	for id in sc.get("regions", {}):
 		if str(sc.regions[id].get("audience", "all")) != "gm":
@@ -290,24 +290,108 @@ static func public_players(players: Array) -> Array:
 	return out
 
 
-## A map as a player's screen is sent it: without the DM's notes on it
-## (`gm_only`), but for those `shown` ("notes:<id>" refs a scene's
-## overrides reveal). The walls stay whole — a Godot client works out its
-## own sight from them, so the secret doors and the hidden walls that
-## block it must be there; the screens draw a closed secret door as a
-## plain wall and leave hidden walls out.
-static func player_map(doc: Dictionary, shown: Dictionary = {}) -> Dictionary:
+## A map as a player's screen is sent it, under the scene's `overrides` (the
+## scene the players see on it): nothing on it the players aren't shown —
+## no DM's note (`gm_only`, unless the scene shows it), no prop or light the
+## DM hides (`hidden`, the map's or the scene's) or on a layer not shown; a
+## secret door is the wall it looks like (`door` "none", no state: the scene
+## makes it a door once it opens — player_overrides); a locked door just a
+## closed one (a locked door is found by trying it). A hidden wall (one drawn
+## by a prop, a pillar's) is left out — but for a client that works out its
+## own sight (`sight_walls`: a Godot one), which keeps those that block sight
+## as no more than where sight stops, still hidden (not drawn). With
+## `level_id`, the scene's level alone: not the crypt below the chapel.
+static func player_map(doc: Dictionary, overrides: Dictionary = {}, sight_walls := false, level_id := "") -> Dictionary:
 	var out: Dictionary = JsonDoc.deep(doc)
+	if level_id != "" and out.get("levels") is Array:
+		out.levels = (out.levels as Array).filter(func(l: Variant) -> bool: return l is Dictionary and str(l.get("id", "")) == level_id)
 	for lvl in out.get("levels", []):
 		if not (lvl is Dictionary):
 			continue
-		var kept := []
-		for n in lvl.get("notes", []):
-			if n is Dictionary and (not bool(n.get("gm_only", false)) or shown.has(LayerTree.ref("notes", str(n.get("id", ""))))):
-				kept.append(n)
-		lvl.notes = kept
+		var visible := LayerTree.visible_refs(lvl)
+		for coll in ["notes", "props", "lights", "walls"]:
+			var kept := []
+			for o in lvl.get(coll, []):
+				if not (o is Dictionary):
+					continue
+				var ref := LayerTree.ref(coll, str(o.get("id", "")))
+				var ov: Dictionary = overrides.get(ref, {}) if overrides.get(ref) is Dictionary else {}
+				var eff: Dictionary = (o as Dictionary).duplicate()
+				for k in ov:
+					eff[k] = ov[k]
+				var unseen := not bool(visible.get(ref, true))
+				match coll:
+					"notes":
+						if bool(eff.get("gm_only", false)) or unseen:
+							continue
+						o.erase("gm_only")
+					"props", "lights":
+						if bool(eff.get("hidden", false)) or unseen:
+							continue
+					"walls":
+						if bool(eff.get("hidden", false)) or unseen:
+							var blocks: Dictionary = o.get("blocks", {}) if o.get("blocks") is Dictionary else {}
+							if not sight_walls or not bool(blocks.get("sight", true)):
+								continue
+							o = {"id": o.get("id", ""), "points": o.get("points", []), "blocks": blocks, "hidden": true}
+						else:
+							_as_seen_door(o)
+				kept.append(o)
+			lvl[coll] = kept
 		# (and their leaves in the layer tree)
 		LayerTree.ensure(lvl)
+	return out
+
+
+## A wall as a player knows it: a secret door the wall it looks like, a
+## locked door closed. In place.
+static func _as_seen_door(w: Dictionary) -> void:
+	if str(w.get("door", "none")) == "secret":
+		w.door = "none"
+		w.erase("state")
+	elif str(w.get("state", "")) == "locked":
+		w.state = "closed"
+
+
+## A scene's overrides of its map's elements as a player's screen is sent
+## them (`level`: the scene's level of its map, as stored): none for what
+## player_map leaves out; a secret door, found open, a door then (`door`
+## "door"), else nothing; a locked door closed; no `hidden` (what they have
+## isn't), a note's `gm_only` only where it shows the note.
+static func player_overrides(overrides: Dictionary, level: Dictionary) -> Dictionary:
+	var out := {}
+	var visible := LayerTree.visible_refs(level)
+	for ref in overrides:
+		if not (overrides[ref] is Dictionary):
+			continue
+		var parts := LayerTree.split(str(ref))
+		if parts.size() != 2:
+			continue
+		var base := {}
+		for o in level.get(parts[0], []):
+			if o is Dictionary and str(o.get("id", "")) == parts[1]:
+				base = o
+				break
+		if base.is_empty() or not bool(visible.get(str(ref), true)):
+			continue
+		var ov: Dictionary = JsonDoc.deep(overrides[ref])
+		var eff := base.duplicate()
+		for k in ov:
+			eff[k] = ov[k]
+		if bool(eff.get("hidden", false)) or (parts[0] == "notes" and bool(eff.get("gm_only", false))):
+			continue
+		ov.erase("hidden")
+		if parts[0] == "notes":
+			ov.erase("gm_only")
+			if bool(base.get("gm_only", false)):
+				ov.gm_only = false
+		elif parts[0] == "walls":
+			if str(base.get("door", "none")) == "secret":
+				ov = {"door": "door", "state": "open"} if str(eff.get("state", "closed")) == "open" else {}
+			elif str(ov.get("state", "")) == "locked":
+				ov.state = "closed"
+		if not ov.is_empty():
+			out[str(ref)] = ov
 	return out
 
 

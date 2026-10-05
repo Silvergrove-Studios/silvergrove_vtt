@@ -21,8 +21,8 @@ func test_web_server() -> void:
 	w.root = _webroot()
 	w.art_source = func(pack: String, file: String) -> PackedByteArray:
 		return "<svg/>".to_utf8_buffer() if pack == "woodland" and file == "terrain/grass_1.svg" else PackedByteArray()
-	w.map_file_source = func(mid: String, file: String) -> PackedByteArray:
-		return PackedByteArray([1, 2, 3]) if mid == "m1" and file == "ground.png" else PackedByteArray()
+	w.map_file_source = func(mid: String, file: String, key: String) -> PackedByteArray:
+		return PackedByteArray([1, 2, 3]) if mid == "m1" and file == "ground.png" and key == "k1" else PackedByteArray()
 	w.config_source = func() -> Dictionary: return {"ws_port": 47777, "name": "Our Chapel"}
 	var get := func(path: String, method := "GET") -> String:
 		return w.respond("%s %s HTTP/1.1\r\nHost: table\r\n\r\n" % [method, path]).get_string_from_utf8()
@@ -35,7 +35,8 @@ func test_web_server() -> void:
 	var art: String = get.call("/art/woodland/terrain/grass_1.svg")
 	check(art.contains("image/svg+xml") and art.ends_with("<svg/>"), "a pack's art")
 	check(str(get.call("/art/woodland/secret.txt")).begins_with("HTTP/1.1 404"), "only what the pack has")
-	check(w.respond("GET /mapfile/m1/ground.png HTTP/1.1\r\n\r\n").size() > 3 and str(get.call("/mapfile/m1/ground.png")).contains("image/png"), "a map's own file")
+	check(w.respond("GET /mapfile/m1/k1/ground.png HTTP/1.1\r\n\r\n").size() > 3 and str(get.call("/mapfile/m1/k1/ground.png")).contains("image/png"), "a map's own file, by its key")
+	check(str(get.call("/mapfile/m1/ground.png")).begins_with("HTTP/1.1 404") and str(get.call("/mapfile/m1/k2/ground.png")).begins_with("HTTP/1.1 404"), "not without it, nor with another")
 	for bad in ["/../project.godot", "/assets/../../project.godot", "/assets/%2e%2e/%2e%2e/project.godot", "/assets/x%00.js", "/nothing"]:
 		check(str(get.call(bad)).begins_with("HTTP/1.1 404"), "nothing outside its roots: %s" % bad)
 	check(str(get.call("/", "POST")).begins_with("HTTP/1.1 405"), "only GET and HEAD")

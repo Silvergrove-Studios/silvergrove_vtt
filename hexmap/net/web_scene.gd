@@ -71,7 +71,7 @@ static func build(state: EncounterState, scene_id: String, player_id: String, gm
 	var light := state.light_level(scene_id)
 	var out := {"id": str(sc.id), "name": str(sc.get("name", "")), "map": str(sc.get("map", "")), "level": str(sc.get("level", "")),
 		"active": e.active_scene_id == scene_id, "fog": fog, "light": light, "darkness": Vision.darkness(light, gm),
-		"overrides": JsonDoc.deep(sc.get("overrides", {})), "tokens": tokens,
+		"overrides": JsonDoc.deep(sc.get("overrides", {})) if gm else Protocol.player_overrides(sc.get("overrides", {}), state.level_for(scene_id)), "tokens": tokens,
 		"explored": state.explored(scene_id).keys() if fog else [],
 		"visible": (sight.polygons as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)),
 		"los": (sight.los as Array).map(func(p: PackedVector2Array) -> Array: return _points(p)) if light == "dark" else [],

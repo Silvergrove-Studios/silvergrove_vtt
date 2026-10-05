@@ -51,6 +51,8 @@ export const game = $state({
   previewMarks: null as Record<string, Dict> | null,
   clock: {} as Dict,
   maps: {} as Record<string, Dict>,
+  /** Each map's key, sent with it: what its own files (a backdrop) are fetched by. */
+  mapKeys: {} as Record<string, string>,
   packs: {} as Record<string, Dict>,
   dm: {} as Dict,
   notices: [] as { id: number; text: string; kind: 'info' | 'error' }[],
@@ -282,8 +284,10 @@ function handle(m: Msg): void {
       }
       break;
     case 'map': {
+      // (sent again where what this screen may see of it changed: a door found)
       const doc = (m.doc as Dict) ?? {};
       game.maps[String(m.id)] = doc;
+      game.mapKeys[String(m.id)] = String(m.key ?? '');
       // a map shown later (a fight's) may draw with packs this screen has not had yet
       if (Object.keys(doc.packs ?? {}).some((p) => !game.packs[p])) conn?.send({ t: 'need', kind: 'packs' });
       break;
@@ -361,6 +365,12 @@ export function marksById(list: unknown): Record<string, Dict> {
 /** For tests: the socket drops as a phone's does (in another app, a Wi-Fi blip); the page reconnects by itself. */
 export function dropConnection(): void {
   conn?.ws?.close();
+}
+
+/** A map's own file (a backdrop), at the address its key opens (the table
+ *  serves it to no one who hasn't been sent the map). */
+export function mapFileUrl(mid: string, file: string): string {
+  return `/mapfile/${encodeURIComponent(mid)}/${encodeURIComponent(game.mapKeys[mid] ?? '')}/${encodeURIComponent(file)}`;
 }
 
 export function wantMap(id: string): void {

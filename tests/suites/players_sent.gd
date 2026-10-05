@@ -415,3 +415,101 @@ static func _tok_in(doc: Dictionary, id: String) -> Dictionary:
 			if str(tk.id) == id:
 				return tk
 	return {}
+
+
+# ------------------------------------------------------------------- maps --
+
+static func _el(lvl: Dictionary, coll: String, id: String) -> Dictionary:
+	for o in lvl.get(coll, []):
+		if str(o.get("id", "")) == id:
+			return o
+	return {}
+
+
+## A map as a player is sent it has nothing on it the players aren't shown:
+## no DM's note, no prop or light the DM hides, a secret door the wall it
+## looks like (a door once it's found open), a locked door just closed, no
+## hidden wall (but where a Godot client's own sight stops: a pillar's, kept
+## hidden), and of the map only the scene's level (not the crypt below).
+## Only the map of the scene the players see is served to a player, and its
+## files only by the key that comes with it; what they may see of it
+## changing (a prop revealed, a door found) brings it again.
+func test_maps_as_players_may_see_them() -> void:
+	var st := _chapel_state()
+	var sid := st.encounter.active_scene_id
+	var crypt := str(st.encounter.scenes.filter(func(s: Dictionary) -> bool: return str(s.id) != sid)[0].id)
+	var m := st.map_for(sid)
+	var mid := str(m.doc.id)
+	var ground: Dictionary = m.level_by_id("ground")
+	var door := "w_2bf8ecbc"
+	var pillar := "w_8abf465d"
+	var prop := str(ground.props[0].id)
+	var light := str(ground.lights[0].id)
+	ground.props[0].hidden = true
+	ground.lights[0].hidden = true
+	ground.walls.append({"id": "w_ghost", "points": [[1.0, 1.0], [2.0, 1.0]], "blocks": {"move": true, "sight": false, "light": false, "sound": false}, "hidden": true})
+	m.add_asset("ground.png", PackedByteArray([137, 80, 78, 71]))
+	ground.backdrop = {"image": "local:ground.png", "pos": [0.0, 0.0]}
+	var gnote := str(ground.notes[0].id)
+	var note_text := str(ground.notes[0].text)
+	# the DM locks the chapel's door
+	st.apply({"t": "element.set", "scene": sid, "ref": "walls:" + door, "changes": {"state": "locked"}})
+	var web := Protocol.player_map(m.doc, st.encounter.scene(sid).overrides, false, "ground")
+	var wl: Dictionary = web.levels[0]
+	check((web.levels as Array).size() == 1 and str(wl.id) == "ground", "the scene's level alone: no crypt")
+	check(_el(wl, "props", prop).is_empty() and _el(wl, "lights", light).is_empty() and _el(wl, "notes", gnote).is_empty(), "no hidden prop, no hidden light, no DM's note")
+	check(_el(wl, "walls", pillar).is_empty() and _el(wl, "walls", "w_ghost").is_empty(), "a web screen: no hidden wall at all")
+	check(str(_el(wl, "walls", door).get("state", "")) != "locked", "the door: not locked to her")
+	var ov := Protocol.player_overrides(st.encounter.scene(sid).overrides, ground)
+	check(str(ov.get("walls:" + door, {}).get("state", "")) == "closed", "the scene's override: closed, not locked: %s" % [ov])
+	var godot := Protocol.player_map(m.doc, st.encounter.scene(sid).overrides, true, "ground")
+	var pw := _el(godot.levels[0], "walls", pillar)
+	check(not pw.is_empty() and bool(pw.get("hidden", false)) and pw.keys().size() == 4 and _el(godot.levels[0], "walls", "w_ghost").is_empty(), "a Godot client's: the pillar's wall where its sight stops, hidden, no more; not the one that stops no sight")
+	# the crypt: its secret door the wall it looks like, a door once found open
+	var crypt_lvl: Dictionary = m.level_by_id("crypt")
+	var secret := "w_5aaab580"
+	var cm := Protocol.player_map(m.doc, {}, false, "crypt")
+	check(str(_el(cm.levels[0], "walls", secret).get("door", "")) == "none" and not _el(cm.levels[0], "walls", secret).has("state"), "the crypt's secret door: a wall")
+	check(not JSON.stringify(cm).contains("secret"), "nothing in it says secret")
+	var found := Protocol.player_overrides({"walls:" + secret: {"state": "open"}}, crypt_lvl)
+	check(found == {"walls:" + secret: {"door": "door", "state": "open"}}, "found open: a door: %s" % [found])
+	check(Protocol.player_overrides({"walls:" + secret: {"state": "closed"}}, crypt_lvl).is_empty(), "closed again: the wall it looks like")
+	# hosted: what is served, and to whom
+	var other := HexMap.load_file(example("forest_road.hexmap"))
+	st.attach_map(other)
+	var road := Encounter.new_scene(other, str(other.levels[0].id), "The road ahead", "")
+	st.apply({"t": "scene.add", "scene": road})
+	var kernel := RulesKernel.new(st)
+	var host := _host(st, kernel)
+	var ana := _web_player(host, ANA)
+	ana.send({"t": "need", "kind": "map", "id": mid})
+	check(_pump(host, [ana], func() -> bool: return not ana.last("map").is_empty()), "her screen asks for the chapel: it comes")
+	var key := str(ana.last("map").get("key", ""))
+	check(key.length() == 32 and _el(ana.last("map").doc.levels[0], "props", prop).is_empty(), "with its key, and as she may see it")
+	ana.send({"t": "need", "kind": "map", "id": str(other.doc.id)})
+	check(_pump(host, [ana], func() -> bool: return str(ana.last("error").get("why", "")).contains("no map")), "the road ahead, a scene she isn't shown: no")
+	check(not host.web.map_file_source.call(mid, "ground.png", key).is_empty(), "its backdrop by its key")
+	check(host.web.map_file_source.call(mid, "ground.png", "0".repeat(32)).is_empty() and str(host.web.respond("GET /mapfile/%s/ground.png HTTP/1.1\r\n\r\n" % mid).get_string_from_utf8()).begins_with("HTTP/1.1 404"), "not without it")
+	# the DM reveals the prop: her map again, with it; a Godot client's too
+	var ben := _godot(host, BEN, [ana])
+	ben.send({"t": "need", "kind": "map", "id": mid})
+	check(_pump(host, [ana, ben], func() -> bool: return not ben.last("map").is_empty()), "Ben's Godot client has the map")
+	var maps_a := ana.count("map")
+	var maps_b := ben.count("map")
+	kernel.commit([{"t": "element.set", "scene": sid, "ref": "props:" + prop, "changes": {"hidden": false}}], "Reveal the prop")
+	check(_pump(host, [ana, ben], func() -> bool: return ana.count("map") > maps_a and ben.count("map") > maps_b), "the prop revealed: both sent the map again")
+	check(not _el(ana.last("map").doc.levels[0], "props", prop).is_empty() and not _el(ben.last("map").doc.levels[0], "props", prop).is_empty(), "with the prop")
+	# the DM unlocks and opens the door: an override as hers
+	kernel.commit([{"t": "element.set", "scene": sid, "ref": "walls:" + door, "changes": {"state": "open"}}], "Open")
+	check(_pump(host, [ana, ben], func() -> bool: return str(ana.last("scene").get("scene", {}).get("overrides", {}).get("walls:" + door, {}).get("state", "")) == "open" and str(_held(ben).scenes[0].overrides.get("walls:" + door, {}).get("state", "")) == "open"), "the door open on her screen and his client")
+	# the players are shown the crypt; the DM finds the secret door for them
+	kernel.commit([{"t": "scene.activate", "id": crypt}], "The crypt")
+	check(_pump(host, [ana, ben], func() -> bool: return str(ana.last("map").get("doc", {}).get("levels", [{}])[0].get("id", "")) == "crypt"), "shown the crypt: her map again, its level")
+	kernel.commit([{"t": "element.set", "scene": crypt, "ref": "walls:" + secret, "changes": {"state": "open"}}], "Found")
+	check(_pump(host, [ana, ben], func() -> bool: return str(ana.last("scene").get("scene", {}).get("overrides", {}).get("walls:" + secret, {}).get("door", "")) == "door" and str(_held(ben).scenes[0].overrides.get("walls:" + secret, {}).get("door", "")) == "door"), "found: a door on her screen and his client")
+	for w in [ana, ben]:
+		var raw := JSON.stringify((w as Web.WebClient).raw)
+		for said in ["\"secret\"", "\"state\":\"locked\"", note_text.left(30), "w_ghost"]:
+			var at := raw.find(said)
+			check(at < 0, "nothing sent says %s: %s" % [said, raw.substr(maxi(0, at - 200), 300) if at >= 0 else ""])
+	host.stop()
