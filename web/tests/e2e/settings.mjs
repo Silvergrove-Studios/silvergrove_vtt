@@ -4,7 +4,8 @@
 // Bookkeeping picked (its three lines on what the players will notice); the
 // table's questions, each with a line of its answer, one opened with Change;
 // the rules options and a house rule; a summary that says Bookkeeping and
-// that any of it can change later in Table settings. Then Table settings:
+// that any of it can change later in Table settings, each of its lines a
+// press back to where it's set (a dice answer, the house rule). Then Table settings:
 // "As Bookkeeping has it"; a switch to Automated says what it would change
 // before it does, and is cancelled; a setting changed by hand makes the table
 // "Customized", and its section's Reset puts it back. A player joins and is
@@ -118,6 +119,19 @@ await step('the summary, then Done: the table is set up at Bookkeeping', async (
   await walk.getByText('Change any of this later in Table settings.').waitFor({ timeout: 5000 });
   expect((await walk.getByRole('button', { name: 'See every setting' }).count()) === 1, 'and See every setting');
   await shot(dm, 'dm_walkthrough_summary');
+  // each line goes back to where it's set: a dice answer to its question, opened there
+  await walk.getByRole('button', { name: /^Players roll their own initiative: On/ }).click();
+  await walk.getByText('Step 3 of 5').waitFor({ timeout: 5000 });
+  await walk.getByRole('region', { name: 'Dice' }).getByRole('checkbox', { name: /^Players roll their own saves/ }).waitFor({ timeout: 5000 });
+  await next();
+  await next();
+  await walk.getByText('Step 5 of 5').waitFor({ timeout: 5000 });
+  // and the house rule to the rules options, the words still there
+  await walk.getByRole('button', { name: 'Drinking a potion is a bonus action.' }).click();
+  await walk.getByText('Step 4 of 5').waitFor({ timeout: 5000 });
+  expect((await walk.getByLabel(/^House rules/).inputValue()) === 'Drinking a potion is a bonus action.', 'the house rule kept');
+  await next();
+  await walk.getByText('Step 5 of 5').waitFor({ timeout: 5000 });
   await walk.getByRole('button', { name: 'Done', exact: true }).click();
   await walk.waitFor({ state: 'detached', timeout: 8000 });
   await dm.getByRole('button', { name: /^Table settings Bookkeeping$/ }).waitFor({ timeout: 8000 });

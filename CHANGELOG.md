@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The walkthrough's summary goes back to each setting.** Each line of
+  "Your table" is a press back to where it is set — where fights happen,
+  the level, a question's answer (opened there), the rules options and
+  the house rules — on the Table and the DM's web screen alike, nothing
+  of the answers lost on the way.
 - **How this table runs, again when it changes.** A player is shown how
   the table runs as they join a campaign from before levels too (it runs
   as Automated) — not one whose DM hasn't set it up yet — and again when

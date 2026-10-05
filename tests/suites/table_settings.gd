@@ -252,6 +252,20 @@ func test_the_walkthrough_on_a_new_campaign() -> void:
 	var summary := w.summary_text()
 	check(w.step_name() == "summary" and summary.contains("How much the app does: Bookkeeping") and summary.contains("Where fights happen: In the theatre of the mind") and summary.contains("House rules: No flanking.") and summary.begins_with("Change any of this later in Table settings."), "a summary: %s" % summary)
 	check(w._see_all.visible and w.get_ok_button().text == "Done", "with See every setting, and Done")
+	# each line of the summary goes back to where it's set
+	var link := w._body.find_child("Link_questions_outcomes", true, false) as Button
+	check(link != null and link.text.begins_with("What a roll does: "), "a question's line is a press: %s" % [link.text if link != null else "none"])
+	if link != null:
+		link.pressed.emit()
+	check(w.step_name() == "questions" and w.opened == "outcomes" and w._body.find_child("Setting_armour_reduces", true, false) != null, "back to its question, opened")
+	w.go_to("summary")
+	var space := w._body.find_child("Link_space", true, false) as Button
+	if space != null:
+		space.pressed.emit()
+	check(w.step_name() == "space", "where fights happen: back to its step")
+	w.go_to("summary")
+	check(w._body.find_child("Link_level", true, false) != null and w._body.find_child("Link_rules", true, false) != null, "the level's line and the house rules' go back to theirs")
+	check(w.draft.house_rules == "No flanking." and str(w.draft.space) == "mind", "nothing lost on the way")
 	var depth := win.ctx.history.undo_depth()
 	w.next()
 	await tree.process_frame

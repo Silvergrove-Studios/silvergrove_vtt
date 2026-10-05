@@ -305,6 +305,12 @@ export function summaryOf(view: Dict): PlayerSummary | null {
   return t && typeof t === 'object' && typeof t.title === 'string' && Array.isArray(t.lines) ? (t as PlayerSummary) : null;
 }
 
+/** Where a walkthrough summary's line for a question goes back to: the
+ *  table's questions, that one opened (a level's), or the rules options. */
+export function summaryStep(q: Pick<Question, 'id' | 'level'>): { step: 'questions' | 'rules'; opened: string } {
+  return q.level ? { step: 'questions', opened: q.id } : { step: 'rules', opened: '' };
+}
+
 /** The key a browser keeps, a table's and a player's, what it last showed
  *  them of how the table runs (`RunsSeen`). The key before it kept a "1" a
  *  level (`<key>/<level>`): read as seen, as the house rules are now. */

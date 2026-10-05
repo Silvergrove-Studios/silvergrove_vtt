@@ -19,6 +19,7 @@ import {
   sections,
   summaryOf,
   summarySeenKey,
+  summaryStep,
   valueWords,
   type PlayerSummary,
   type Pref,
@@ -172,6 +173,11 @@ describe('how a table runs, as the DM’s screen works it out', () => {
     expect(summarySeenKey('c1', 'pl_2')).not.toBe(summarySeenKey('c1', 'pl_1'));
     expect(noticeWords('players')).toBe('players notice');
     expect(noticeWords('')).toBe('');
+  });
+
+  it('takes a walkthrough summary’s line back to where it is set', () => {
+    expect(summaryStep({ id: 'dice', level: true })).toEqual({ step: 'questions', opened: 'dice' });
+    expect(summaryStep({ id: 'rules', level: false })).toEqual({ step: 'rules', opened: '' });
   });
 
   it('shows how the table runs on joining, and again when its level or its house rules change', () => {
