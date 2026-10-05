@@ -776,8 +776,11 @@ func _on_view() -> void:
 		if not _seen_prompts.has(str(p.get("id", ""))):
 			fresh = true
 			_seen_prompts[str(p.get("id", ""))] = true
+	# a card for me (a choice, a roll, what we know of a creature tapped): the
+	# Table pane in front, at its top where "For you" is
 	if fresh and pane_mode != "table" and not display_mode:
 		set_pane("table")
+		_pane.scroll_vertical = 0
 		return
 	# joined with no character: straight to where one is made
 	if not _greeted and not display_mode and not v.is_empty():
@@ -787,6 +790,8 @@ func _on_view() -> void:
 			return
 	_render_pane()
 	_refresh_bars()
+	if fresh and pane_mode == "table":
+		_pane.scroll_vertical = 0
 
 
 func _render_pane() -> void:

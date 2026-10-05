@@ -638,14 +638,17 @@ false` (its creature needn't be seen: the dark is no bar) and `walls =
 false` (nor is a wall: where the table doesn't check line of sight).
 
 **A tap on a creature.** An action registered with `tap = "creature"` (and
-`target = "token"`) is what a player's screen sends as they pick out the
-token of a creature no player owns — not their own, the party's or a
-thing's: `{ kind = "action", plugin, action, ctx = { target = "token:<id>",
-scene } }`, checked like any token target (one hidden from them is refused).
-A ruleset answers with what the party knows of it: a card of its own
-(`hm.prompt_open` to `ctx.player`, nothing waiting on it), its words marked
-so each screen reads what it may know. Where no ruleset registers one, a tap
-only picks the token out.
+`target = "token"`) is what a player's screen sends (a web screen's, and the
+Godot player client's) as they pick out the token of a creature no player
+owns — not their own, the party's or a thing's, nor one they don't see:
+`{ kind = "action", plugin, action, ctx = { target = "token:<id>", scene } }`,
+checked like any token target (one hidden from them is refused). With
+several, the first by plugin id and then by action name is sent. The same
+creature tapped again is let go, asking nothing; a press that wanders off
+it (a drag, a pinch) is no tap. A ruleset answers with what the party knows
+of it: a card of its own (`hm.prompt_open` to `ctx.player`, nothing waiting
+on it), its words marked so each screen reads what it may know. Where no
+ruleset registers one, a tap only picks the token out.
 
 ### Turns
 
@@ -1178,7 +1181,9 @@ does, so a `late = true` there comes only with a deadline's answer or the
 DM's Go on (the web once sent it with every button pressed: a player's "No
 reaction" was said as "No answer in time"). A form's
 `heading` is what the screens call the card, on its window and its pill
-("Your hit", "Your choice": srd5e's); without one, an urgent card is "Your
+(the web's) or above its words (the Godot screens': the Table's Rules
+pane, a player client's Table pane) — "Your hit", "Your choice": srd5e's;
+a card's words wrap there. Without one, an urgent card is "Your
 reaction" ("A reaction" on the DM's screen) and another "The DM asks" ("The
 rules ask you"). `opts.actor` names the character a prompt is
 about, for the screens to say. The Table counts a prompt's `deadline`

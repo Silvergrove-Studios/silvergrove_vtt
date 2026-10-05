@@ -643,7 +643,23 @@ func _prompt(n: Dictionary, ctx: Dictionary) -> Control:
 	if form.get("choices") is Array and not (form.choices as Array).is_empty():
 		node.choices = form.choices
 		node.prompt = str(rec.get("id", ""))
-	return _form(node, ctx)
+	var box := _form(node, ctx)
+	# a card's words wrap: they may be a sentence ("What we know" of a creature,
+	# a hit's choice), and a phone's pane is narrow
+	var title: Label = (box.get_child(0) as Label) if box.get_child_count() > 0 else null
+	if title != null:
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# its heading, as the web's screens show it: whose card it is ("What we
+	# know", "Your choice", "Your hit"; the DM's "A choice")
+	var heading := str(form.get("heading", "")) if form.get("heading") is String else ""
+	if heading != "":
+		var h := Label.new()
+		h.name = "Heading"
+		h.text = heading
+		h.theme_type_variation = "DimLabel"
+		box.add_child(h)
+		box.move_child(h, 0)
+	return box
 
 
 func _form(n: Dictionary, ctx: Dictionary) -> Control:
