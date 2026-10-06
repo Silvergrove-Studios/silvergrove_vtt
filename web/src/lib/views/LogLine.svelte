@@ -32,6 +32,9 @@
   });
   // real dice, typed in by whoever rolled them (the rules mark the roll: `typed`)
   const atTable = $derived(kind === 'roll' && (entry.spec as Dict | undefined)?.typed === true);
+  // a roll that fails by itself, and why ("Dying": a dying character's Dexterity
+  // save), as the rules keep it (`auto_fail`): its total said nothing of it
+  const automatic = $derived(typeof r.auto_fail === 'string' ? r.auto_fail : '');
 </script>
 
 {#if kind === 'roll'}
@@ -54,7 +57,7 @@
     {#if r.outcome || nat}
       <div class="outcome">
         {#if nat === 20}<span class="nat crit">Natural 20!</span>{:else if nat === 1}<span class="nat fumble">Natural 1</span>{/if}
-        {r.outcome ?? ''}
+        {r.outcome ?? ''}{#if automatic}<span class="why">{` (automatic: ${automatic})`}</span>{/if}
       </div>
     {/if}
     {#if edge}<div class="edge">{edge}</div>{/if}

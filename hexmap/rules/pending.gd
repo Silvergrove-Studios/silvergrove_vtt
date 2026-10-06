@@ -8,7 +8,7 @@ extends RefCounted
 ##
 ## A prompt: { id, to: player id | "gm", form, default, deadline (s; 0 or
 ##             less: none), by (plugin), title, opened (seq), context, actor,
-##             urgent, public }
+##             urgent, public, holds_turn }
 ##   `actor` (opts.actor) names the character a prompt is about, for the
 ##   screens to say ("for Ada Vex"); a form's `choices` ([{id, label,
 ##   intent?}]) draw as a button each (docs/plugin-authoring.md).
@@ -16,6 +16,9 @@ extends RefCounted
 ##   screens put it in front of anything else. `public` (opts.public): what
 ##   everyone is told the table waits on ("a reaction (Ilvara)"), listed in
 ##   every viewer's projection under `waiting` (Views.project).
+##   `holds_turn` (opts.holds_turn): while the turns run, they wait on it as
+##   on a card a turn's start or end opened — a save a player owes on
+##   someone else's action: Next is refused until it's answered (TurnRunner).
 ##   A prompt opened without anything waiting on it (`hm.prompt_open`)
 ##   carries `context.hook = true`: its answer fires the `prompt_answered`
 ##   hook instead of resuming a continuation. A group of prompts opened
@@ -73,6 +76,9 @@ func open_prompt(request: Dictionary, by: String, continuation: Callable, contex
 	if str(opts.get("public", "")).strip_edges() != "":
 		# (120 characters as they read: a creature's name marked whole, Knowledge)
 		rec.public = Knowledge.cut(str(opts.public).strip_edges(), 120)
+	# the turns wait on it while they run, as on a card a turn's step opened
+	if bool(opts.get("holds_turn", false)):
+		rec.holds_turn = true
 	if rec.to == "":
 		rec.to = "gm"
 	var why := kernel.commit([{"t": "pending.open", "kind": "prompts", "record": rec}], "Prompt", {"by": by}, "owner:" + rec.to if rec.to != "gm" else "gm")

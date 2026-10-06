@@ -283,6 +283,47 @@ func test_a_turn_waits_on_a_card_as_it_starts() -> void:
 	k.hooks.off("wait")
 
 
+## A card opened outside the turns' steps that holds them (`holds_turn`: a
+## save a player owes on someone else's action, which nothing waits on): while
+## the turns run, Next, Back and a player's End turn wait on it as on a turn's
+## own card, the table is told on whom, and once it's answered they go on.
+## Outside a fight it holds nothing; ending the fight lets it go, the card
+## staying (the owner: those saves "should also make the turn wait").
+func test_a_card_can_hold_the_turn() -> void:
+	var parts := _party()
+	var k: RulesKernel = parts[0]
+	var st := k.state
+	k.commit([{"t": "player.add", "player": {"id": "pl_c", "name": "Cy", "color": "#fff"}},
+		{"t": "player.add", "player": {"id": "pl_b", "name": "Bo", "color": "#fff"}}], "Players")
+	var save := func() -> String:
+		return k.pending.open_prompt_unattended({"to": "pl_c", "form": {"title": "Fireball: a Dexterity save", "choices": [{"id": "save:dex", "label": "Roll a Dexterity save"}]},
+			"opts": {"default": {"choice": "save:dex"}, "deadline": 0, "actor": "a_c", "public": "a save (C)", "holds_turn": true}}, "test", {"request": "r_1"})
+	# outside a fight it holds nothing
+	var early: String = save.call()
+	check(k.pending.prompts()[early].get("holds_turn") == true and k.turns.waiting() == "", "the record keeps it; no turns run, nothing waits")
+	check(k.pending.answer(early, {"choice": "save:dex"}, "pl_c") == "", "Cy rolls it")
+	check(k.turns.start("s_1", "sample") == "" and st.current_turn_token() == "t_a", "the fight starts: A's turn")
+	# on A's turn, Cy owes a save: the turns wait on it
+	var card: String = save.call()
+	var plain := k.pending.open_prompt_unattended({"to": "pl_b", "form": {"title": "Take the dare?"}, "opts": {"default": {}, "deadline": 0}}, "test", {})
+	var why := k.turns.waiting()
+	check(why == "The turn is waiting on Cy: a save (C). It goes on once that's answered.", "on whom, and for what (a card that doesn't hold the turn isn't said): " + why)
+	var bo := Views.project(k, null, "pl_b", Views.ROLE_PLAYER)
+	var listed: Array = bo.waiting.filter(func(w: Dictionary) -> bool: return str(w.get("id", "")) == card)
+	check(listed.size() == 1 and listed[0].get("turn") == true and listed[0].get("who") == "Cy", "Bo's screen: the turn waits on Cy: %s" % [bo.waiting])
+	var before := JsonDoc.sans_modified(st.encounter.to_json())
+	check(k.turns.next() == why and k.turns.next({"by": "pl_a", "expect": {"round": 1, "turn": 0}}) == why and k.turns.previous() == why, "Next, A's End turn and Back are refused, saying why")
+	check(JsonDoc.sans_modified(st.encounter.to_json()) == before, "and nothing changed")
+	# Cy rolls: the turns go on
+	check(k.pending.answer(card, {"choice": "save:dex"}, "pl_c") == "" and k.turns.waiting() == "", "answered: nothing waits")
+	check(k.turns.next() == "" and st.current_turn_token() == "t_c", "Next goes on: C's turn")
+	# ending the fight lets a card that holds the turn go; the card stays
+	var late: String = save.call()
+	check(k.turns.next() != "", "it holds again")
+	check(k.turns.stop() == "" and not k.turns.running() and k.turns.waiting() == "" and k.pending.prompts().has(late), "the fight ends: nothing waits, and the card is still Cy's to roll")
+	check(k.pending.prompts().has(plain), "the other card was never the turns'")
+
+
 ## A turn's end that waits: the turn stays the ending one's until it's
 ## answered (what ends with it, and the order, wait too), then moves on.
 func test_a_turn_end_that_waits_keeps_the_turn_until_answered() -> void:

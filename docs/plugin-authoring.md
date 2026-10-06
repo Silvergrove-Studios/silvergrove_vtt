@@ -179,6 +179,14 @@ the DM is told why. While it waits:
   is still its roller's), and what its hook brings still lands when it's
   answered; nothing after it runs.
 
+A card opened anywhere else can hold the turns the same way: open it with
+`holds_turn = true` (`hm.prompt` or `hm.prompt_open`) — a save a player owes
+on someone else's action, or as their character walks into an area, which
+nothing waits on. While the turns run, it's in everyone's waiting list with
+`turn = true`, and Next (a player's End turn too), Back and a focus given are
+refused, saying on whom the turn waits, until it's answered or the DM goes
+on; ending the turns lets it go (the card stays, and still lands).
+
 A step whose first moment waits never moved: a turn's end that waits keeps
 the turn the ending participant's until it's answered. The order moves on
 from the turn that ended as the order stands then (one that left the order

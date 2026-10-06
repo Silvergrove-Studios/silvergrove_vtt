@@ -4,8 +4,10 @@
 // saving throw, asked on Ana's phone for its d20, and the turn waits on it —
 // the DM's fight bar says the turn is waiting on Ana and holds Next and Back,
 // Ben's header says so too. Ana types her d20: the save is made, the waiting
-// goes from every screen, and Next goes on. Screenshots of each step go to the
-// output folder; a step that does not happen fails the run.
+// goes from every screen, and Next goes on. Then the DM's fire trap catches
+// Brakka: a save owed on someone else's doing holds the turn too, until Ben
+// presses Roll and types his d20. Screenshots of each step go to the output
+// folder; a step that does not happen fails the run.
 //
 //   node tests/e2e/waiting.mjs <host.json> <out dir>
 //
@@ -86,6 +88,9 @@ const wren = () =>
     const r = a?.resources?.srd5e ?? {};
     return t ? { id: t.id, actor: t.actor, hp: r.hp?.current, saves: (r.death_success?.current ?? 0) + (r.death_fail?.current ?? 0) } : null;
   });
+
+// Where a token is on the DM's map (client pixels).
+const screenOf = (page, id) => page.evaluate((tid) => document.querySelector('.mapholder canvas')?.screenOf?.(tid) ?? null, id);
 
 // Whose turn it is, by the token up now.
 const upNow = () =>
@@ -185,10 +190,72 @@ ok = ok && (await step('Ana types her d20: the death save is made, the waiting g
   await shot(dm, 'dm_the_turn_goes_on');
 }));
 
+// (the owner: a save owed on someone else's action "should also make the turn wait")
+ok = ok && (await step('the DM’s fire trap catches Brakka: his Dexterity save holds the turn — the fight bar says it waits on Ben and holds Next — until Ben presses Roll and types his d20', async () => {
+  const brakka = await dm.evaluate(() => {
+    const g = window.hexmap.game;
+    const t = (g.scene.tokens ?? []).find((x) => x.name === 'Brakka');
+    return t ? { id: t.id, actor: t.actor, hp: g.view.actors?.[t.actor]?.resources?.srd5e?.hp?.current } : null;
+  });
+  expect(brakka && brakka.hp > 3, `Brakka on the map: ${JSON.stringify(brakka)}`);
+  // the DM's template on Brakka, and its Damage those caught: a Dexterity save, DC 40
+  await dm.getByRole('button', { name: 'Template' }).click();
+  const banner = dm.getByRole('group', { name: 'Template' });
+  await banner.getByText('Tap where it goes').waitFor({ timeout: 4000 });
+  await banner.getByRole('spinbutton', { name: 'Radius in feet' }).fill('5');
+  await banner.getByRole('spinbutton', { name: 'Radius in feet' }).dispatchEvent('change');
+  const at = await screenOf(dm, brakka.id);
+  expect(at, 'Brakka isn’t on the DM’s map');
+  await dm.mouse.click(at.x, at.y);
+  await banner.getByText(/catches \d+:/).waitFor({ timeout: 4000 });
+  await banner.getByRole('button', { name: 'Damage those caught' }).click();
+  const trap = dm.getByRole('dialog', { name: 'Damage those caught' });
+  await trap.waitFor({ timeout: 6000 });
+  await trap.getByRole('textbox', { name: /^What it is/ }).fill('Fire trap');
+  await trap.getByRole('textbox', { name: /^Damage: dice/ }).fill('3');
+  await trap.getByRole('combobox', { name: 'Damage type' }).selectOption({ label: 'Fire' });
+  await trap.getByRole('spinbutton', { name: 'Its DC' }).fill('40');
+  await trap.getByRole('button', { name: 'Roll it' }).click();
+  await trap.waitFor({ state: 'detached', timeout: 8000 });
+  await banner.getByRole('button', { name: 'Done' }).click();
+  // Ben's card: his save, his to roll; the turn waits on it (Wren, dying, fails hers by
+  // herself: nobody is asked for it)
+  const bar = dm.locator('.fightbar');
+  await bar.locator('.waits').filter({ hasText: /waiting on .*Ben: a save \(Brakka\)/ }).waitFor({ timeout: 8000 });
+  expect(await bar.getByRole('button', { name: 'Next turn ›' }).isDisabled(), 'Next waits on his save');
+  await shot(dm, 'dm_turn_waits_on_bens_save');
+  expect((await dm.evaluate((aid) => window.hexmap.game.view.actors?.[aid]?.resources?.srd5e?.hp?.current, brakka.actor)) === brakka.hp, 'nothing rolled for him yet');
+  const anaAsked = await ana.evaluate(() => (window.hexmap.game.view.prompts ?? []).some((p) => /Fire trap/.test(JSON.stringify(p))));
+  expect(!anaAsked, 'Ana was asked for Wren’s save, which fails by itself');
+  // (her roll says why it failed, whatever it came to)
+  await dm.locator('.line.roll').filter({ hasText: /Wren/ }).filter({ hasText: /Fire trap/ }).filter({ hasText: /automatic: Dying/ }).first().waitFor({ timeout: 5000 });
+  // (a card the table's settings brought, "How this table runs", put away first)
+  await ben.getByRole('dialog', { name: 'How this table runs' }).getByRole('button', { name: 'Got it' }).click({ timeout: 3000 }).catch(() => {});
+  // he opens his card from its pill and presses Roll, then types his d20 (real dice):
+  // the turn waits on that too, then goes on
+  const ask = ben.getByRole('dialog').filter({ hasText: /Fire trap/ }).first();
+  if (!(await ask.isVisible().catch(() => false))) await ben.getByRole('button', { name: /Fire trap/ }).first().click({ timeout: 8000 });
+  await ask.waitFor({ timeout: 8000 });
+  await shot(ben, 'ben_save_against_the_trap');
+  await ask.getByRole('button', { name: /^Roll a Dexterity save/ }).click();
+  const card = ben.getByRole('dialog', { name: 'Your roll' });
+  const box = card.locator('input.die').first();
+  await box.waitFor({ timeout: 8000 });
+  await ben.waitForTimeout(700);
+  await box.click();
+  await box.pressSequentially('4', { delay: 40 });
+  await card.getByRole('button', { name: /^Done/ }).click();
+  await card.waitFor({ state: 'detached', timeout: 8000 });
+  await dm.waitForFunction(([aid, hp]) => (window.hexmap.game.view.actors?.[aid]?.resources?.srd5e?.hp?.current ?? hp) < hp, [brakka.actor, brakka.hp], { timeout: 8000 });
+  await bar.locator('.waits').waitFor({ state: 'detached', timeout: 8000 });
+  expect(!(await bar.getByRole('button', { name: 'Next turn ›' }).isDisabled()), 'Next is the DM’s again');
+  await shot(dm, 'dm_the_turn_goes_on_after_the_trap');
+}));
+
 await browser.close();
 if (problems.length) {
   console.log(`\n${problems.length} problem(s):`);
   for (const p of problems) console.log(`  - ${p}`);
   process.exit(1);
 }
-console.log(`\nthe turn waited on Ana's death save and went on when she rolled; ${n} screenshots in ${out}`);
+console.log(`\nthe turn waited on Ana's death save and on Ben's save against the trap, and went on when they rolled; ${n} screenshots in ${out}`);

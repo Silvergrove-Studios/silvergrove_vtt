@@ -866,7 +866,10 @@ func _begin_turn(ref: String) -> Variant:
 # stops it there, and the DM is told why. While a step waits, the turns
 # wait with it: Next, Back, a focus given or a start is refused, saying on
 # whom it waits; ending the fight gives the rest of it up (the card stays:
-# the roll is still its roller's, and what it brings still lands).
+# the roll is still its roller's, and what it brings still lands). A card
+# opened anywhere else may hold the turns the same way (`holds_turn`: a save
+# a player owes on someone else's action, which nothing waits on): while the
+# turns run, nothing moves them on until it's answered.
 #
 # A stage is a Callable returning "" (go on), why it stopped, an Array of
 # stages to run next, or a hook run that waits ({wait, label, before}).
@@ -995,15 +998,19 @@ func waiting_words() -> String:
 	return "The turn is waiting on %s. It goes on once %s answered." % ["; ".join(PackedStringArray(bits)), "that's" if on.size() == 1 else "they're"]
 
 
-## The cards (prompt records) a step of the turns waits on, oldest first.
+## The cards (prompt records) the turns wait on, oldest first: a waiting
+## step's, and while the turns run, any card that holds them (`holds_turn`).
 func waiting_on() -> Array:
 	var out := []
-	if _step.is_empty():
+	var holding := running()
+	if _step.is_empty() and not holding:
 		return out
 	var prompts := kernel.pending.prompts()
 	for id in prompts:
-		var ctx: Variant = prompts[id].get("context", {})
-		if ctx is Dictionary and str((ctx as Dictionary).get("turn", "")) == str(_step.id):
-			out.append(prompts[id])
+		var rec: Dictionary = prompts[id]
+		var ctx: Variant = rec.get("context", {})
+		var step_card := not _step.is_empty() and ctx is Dictionary and str((ctx as Dictionary).get("turn", "")) == str(_step.id)
+		if step_card or (holding and bool(rec.get("holds_turn", false))):
+			out.append(rec)
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a.get("opened", 0)) < int(b.get("opened", 0)))
 	return out

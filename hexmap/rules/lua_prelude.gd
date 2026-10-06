@@ -356,7 +356,8 @@ end
 
 -- Ask without waiting: the answer arrives as the `prompt_answered` hook
 -- ({prompt, answer, by, timed_out, plugin, context}). Returns the prompt id.
--- opts.context travels to the hook untouched.
+-- opts.context travels to the hook untouched. opts.holds_turn (here or on
+-- hm.prompt): while the turns run, they wait on the card until it's answered.
 function hm.prompt_open(to, form, opts)
 	return call(host.prompt_open, to, form, opts or {})
 end

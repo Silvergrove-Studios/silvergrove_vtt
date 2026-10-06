@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **A roll that fails by itself says why.** Where a ruleset marks a roll's
+  result `auto_fail` with its reason (a dying character's Dexterity save),
+  the chat's roll card says it after the outcome: "failure (automatic:
+  Dying)", whatever the total came to.
+
+- **A card can hold the turn.** A ruleset opens a card with `holds_turn`
+  (`hm.prompt` or `hm.prompt_open`) — a save a player owes on someone else's
+  action, or as their character walks into an area — and while the turns
+  run, they wait on it as on a card a turn's start or end opened: Next, Back
+  and a player's End turn are refused, saying on whom the turn waits, the
+  table's waiting list marks it as the turn's, and the DM's Go on answers it
+  for them. Outside a fight it holds nothing; ending the fight lets it go,
+  the card staying its player's.
+
 - **The DM's list finds a creature on the map.** A creature chosen in the
   fight's turn order (or opened from the book) is brought into view on the
   DM's map if it isn't well inside it, and pulses a moment, so the DM sees
