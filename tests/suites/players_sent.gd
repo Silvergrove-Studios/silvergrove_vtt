@@ -94,14 +94,16 @@ func test_dice_from_a_secret_stream() -> void:
 	f.close()
 	var loaded := Encounter.load_file(path)
 	check(Dice.is_key(loaded.doc.rng.get("key")) and not loaded.doc.rng.has("seed") and int(loaded.doc.rng.index) == 12, "read from a file to play: a key in its place, where it had got to kept: %s" % [loaded.doc.rng.keys()])
+	# (the old seed's stream would guess every one of 40; chance alone, about 2 —
+	# 10 rolls with a bar of 5 failed by chance once, in CI: 1 in 16,000)
 	var guessed := 0
 	var st := EncounterState.new(loaded)
 	var k := RulesKernel.new(st)
-	for i in 10:
+	for i in 40:
 		var r := k.roll("1d20", {}, "d20")
 		if int(r.result.dice[0].face) == Dice.face(425830988, 12 + i, 20):
 			guessed += 1
-	check(guessed < 5, "a player who had the old seed guesses no die: %d of 10" % guessed)
+	check(guessed < 20, "a player who had the old seed guesses no die: %d of 40" % guessed)
 	# a roll: where it drew is the entry's, never the key; the result has no draw
 	var st2 := EncounterState.new(Encounter.create("Rolls"))
 	var k2 := RulesKernel.new(st2)
